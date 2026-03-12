@@ -1,0 +1,17 @@
+.drag-ghost {
+  padding: 4px 6px;
+  background: oklch(28.822% 0.022 277.508);
+  color: oklch(97.747% 0.007 106.545);
+  border-radius: 0px;
+  border: 1px solid oklch(39.445% 0.032 275.524);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  position: absolute;
+  z-index: 100000;
+  font-size: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  max-width: 500px;
+}

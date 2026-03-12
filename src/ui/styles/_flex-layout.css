@@ -1,0 +1,734 @@
+.flexlayout__layout_overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* Tab strip padding and gap for join styling */
+.flexlayout__tabset_tabbar_inner {
+  padding: 0;
+  gap: 0;
+}
+
+/* Remove margins and padding from tabs */
+.flexlayout__tab {
+  margin: 0;
+  padding: 0;
+}
+
+.flexlayout__tab_button {
+  padding: 0 !important;
+  margin: 0;
+  gap: 0 !important;
+}
+
+/* Tab button content container */
+.flexlayout__tab_button_content {
+  padding: 0;
+  height: 100%;
+}
+
+/* Close button styling - hidden since we use custom Button component */
+.flexlayout__tab_button_trailing {
+  display: none !important;
+}
+
+.flexlayout__splitter:hover {
+  @apply bg-base-200;
+}
+
+.flexlayout__splitter_drag {
+  @apply bg-primary;
+}
+
+.flexlayout__splitter_handle {
+  background-color: #ccc;
+}
+
+.flexlayout__splitter_handle_horz {
+  width: 3px;
+  height: 30px;
+}
+
+.flexlayout__splitter_handle_vert {
+  width: 30px;
+  height: 3px;
+}
+
+/* Toolbar - reset library styles */
+.flexlayout__tab_toolbar_button {
+  all: unset;
+  display: inline-flex;
+}
+
+/* Directory tabset styling - has the marker class */
+.flexlayout__tabset_tabbar_outer {
+  @apply border-b border-base-300 h-10;
+}
+/* .flexlayout__tabset_tabbar_outer {
+  @apply bg-base-200 border-b border-base-300 rounded-sm;
+} */
+
+/* Drag and drop indicators with theme colors */
+.flexlayout__outline_rect {
+  background: rgba(96, 165, 250, 0.15);
+  border: 3px dashed rgba(96, 165, 250, 0.6);
+  border-radius: 8px;
+}
+
+.flexlayout__outline_rect_edge {
+  background: rgba(96, 165, 250, 0.25);
+  border: 3px solid rgba(96, 165, 250, 0.8);
+  border-radius: 6px;
+}
+
+.flexlayout__edge_rect {
+  background: rgba(96, 165, 250, 0.5);
+  min-width: 50px;
+  min-height: 50px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(96, 165, 250, 0.4);
+}
+
+.flexlayout__edge_rect svg {
+  width: 32px;
+  height: 32px;
+  fill: white;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.flexlayout__drag_rect {
+  background: rgba(96, 165, 250, 0.95);
+  border: 2px solid rgb(96, 165, 250);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Tabset toolbar buttons (maximize, etc) */
+.flexlayout__tabset_button {
+  opacity: 0.6;
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  transition: all 0.2s;
+  border: none;
+  background: transparent;
+}
+
+.flexlayout__tabset_button:hover {
+  background: rgba(128, 128, 128, 0.15);
+  opacity: 1;
+}
+
+.flexlayout__tabset_button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Tab overflow button (dropdown for excess tabs) */
+.flexlayout__tab_button_overflow {
+  background: transparent;
+  transition: all 0.2s;
+  cursor: pointer;
+  min-width: 2rem;
+  width: auto;
+  border: 1px solid transparent;
+  color: oklch(88.263% 0.093 212.846);
+  font-family: var(--default-font-family);
+  @apply h-full px-2 flex gap-1 items-center text-xs;
+}
+
+.flexlayout__tab_button_overflow:hover {
+  background: oklch(88.263% 0.093 212.846);
+  color: color-mix(in oklab, var(--btn-color, var(--color-base-200)), #000 7%);
+  opacity: 1;
+}
+
+.flexlayout__tab_button_overflow svg {
+  fill: currentColor;
+}
+
+/* Overflow popup menu styling */
+.flexlayout__popup_menu {
+  background: #282a36;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 0.25rem;
+}
+
+.flexlayout__popup_menu_item {
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.flexlayout__popup_menu_item:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.flexlayout__popup_menu_item--selected {
+  background: rgba(128, 128, 128, 0.15);
+  font-weight: 600;
+}
+
+/* Tab overlay slightly transparent */
+.flexlayout__tab_overlay {
+  background-color: rgba(0, 0, 0, 0.24);
+}
+
+/* Ensure tab content is clipped but overlay is not */
+.flexlayout__tabset_content {
+  overflow: hidden;
+}
+
+.flexlayout__tab_content {
+  overflow: hidden;
+}
+
+/* flexlayout-react base classes */
+.flexlayout__layout {
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  position: absolute;
+  display: flex;
+}
+.flexlayout__layout_overlay {
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  position: absolute;
+  z-index: 1000;
+}
+.flexlayout__layout_tab_stamps {
+  position: absolute;
+  top: -10000px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+}
+.flexlayout__layout_moveables {
+  visibility: hidden;
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  top: -20000px;
+}
+.flexlayout__layout_main {
+  display: flex;
+  flex-basis: 0px;
+  min-width: 0;
+  min-height: 0;
+  flex-grow: 1;
+  position: relative;
+}
+.flexlayout__layout_border_container {
+  display: flex;
+  flex-basis: 0px;
+  min-width: 0;
+  min-height: 0;
+  flex-grow: 1;
+}
+.flexlayout__layout_border_container_inner {
+  display: flex;
+  flex-basis: 0px;
+  min-width: 0;
+  min-height: 0;
+  flex-grow: 1;
+}
+.flexlayout__splitter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  z-index: 10;
+  @apply bg-base-200;
+}
+@media (hover: hover) {
+  .flexlayout__splitter:hover {
+    transition: background-color ease-in 0.1s;
+    transition-delay: 0.05s;
+    border-radius: 5px;
+  }
+}
+.flexlayout__splitter_drag {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  border-radius: 5px;
+}
+
+.flexlayout__splitter_extra {
+  touch-action: none;
+}
+.flexlayout__outline_rect {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  border-radius: 5px;
+  z-index: 1000;
+}
+.flexlayout__outline_rect_edge {
+  pointer-events: none;
+  border-radius: 5px;
+  z-index: 1000;
+  box-sizing: border-box;
+}
+.flexlayout__edge_rect {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flexlayout__drag_rect {
+  border-radius: 5px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.3em 0.8em;
+  word-wrap: break-word;
+  font-size: var(--font-size);
+  font-family: var(--font-family);
+}
+.flexlayout__row {
+  display: flex;
+  flex-basis: 0px;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.flexlayout__tabset {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-sizing: border-box;
+  font-family: var(--font-family);
+  overflow: hidden;
+  flex-grow: 1;
+}
+.flexlayout__tabset_container {
+  display: flex;
+  flex-basis: 0px;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  flex-grow: 1;
+}
+/* .flexlayout__tabset_tab_divider { */
+/*   width: 4px; */
+/* } */
+.flexlayout__tabset_content {
+  display: flex;
+  flex-basis: 0px;
+  min-width: 0;
+  min-height: 0;
+  flex-grow: 1;
+  box-sizing: border-box;
+  position: relative;
+}
+.flexlayout__tabset_leading {
+  display: flex;
+}
+.flexlayout__tabset_header {
+  display: flex;
+  align-items: center;
+  padding: 3px 3px 3px 5px;
+  box-sizing: border-box;
+  font-size: var(--font-size);
+}
+.flexlayout__tabset_header_content {
+  flex-grow: 1;
+}
+.flexlayout__tabset_tabbar_outer {
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  font-size: var(--font-size);
+}
+.flexlayout__tabset_tabbar_inner {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-grow: 1;
+  scrollbar-width: none;
+}
+.flexlayout__tabset_tabbar_inner::-webkit-scrollbar {
+  display: none;
+}
+.flexlayout__tabset_tabbar_inner_tab_container {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.flexlayout__tabset_tabbar_inner_tab_container:has(.dir-marker) {
+  /* @apply gap-2; */
+}
+.flexlayout__tabset_tabbar_inner_tab_container_top {
+}
+.flexlayout__tabset_tabbar_inner_tab_container_bottom {
+  border-bottom: 2px solid transparent;
+}
+.flexlayout__tab_button_stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.flexlayout__tab {
+  overflow: hidden;
+  box-sizing: border-box;
+  position: relative;
+}
+.flexlayout__tab_moveable {
+  position: relative;
+  height: 100%;
+  min-width: 1px;
+  min-height: 1px;
+  overflow: auto;
+  box-sizing: border-box;
+}
+.flexlayout__tab_overlay {
+  z-index: 20;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.flexlayout__tab_button {
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 3px 0.5em;
+  cursor: pointer;
+}
+.flexlayout__tab_button_stretch {
+  width: 100%;
+  padding: 3px 0em;
+  text-wrap: nowrap;
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.flexlayout__tab_button_leading {
+  display: flex;
+}
+.flexlayout__tab_button_content {
+  display: flex;
+  text-wrap: nowrap;
+}
+.flexlayout__tab_button_textbox {
+  border: none;
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  border-radius: 3px;
+  width: 10em;
+}
+.flexlayout__tab_button_textbox:focus {
+  outline: none;
+}
+.flexlayout__tab_button_trailing {
+  display: flex;
+  visibility: hidden;
+  border-radius: 4px;
+}
+@media (hover: hover) {
+  .flexlayout__tab_button:hover .flexlayout__tab_button_trailing {
+    visibility: visible;
+  }
+}
+.flexlayout__tab_button--selected .flexlayout__tab_button_trailing {
+  visibility: visible;
+}
+.flexlayout__tab_button_overflow {
+  display: flex;
+  align-items: center;
+  border: none;
+  font-size: inherit;
+  overflow: hidden;
+}
+.flexlayout__tab_toolbar {
+  display: flex;
+  align-items: center;
+}
+.flexlayout__tab_toolbar_icon {
+  border: none;
+  outline: none;
+  font-size: inherit;
+  margin: 0px;
+  padding: 1px;
+}
+.flexlayout__tab_toolbar_button {
+  border: none;
+  outline: none;
+  font-size: inherit;
+  margin: 0px;
+  @apply text-sm;
+}
+.flexlayout__tab_toolbar_sticky_buttons_container {
+  display: flex;
+  gap: 0.3em;
+  padding-left: 5px;
+  align-items: center;
+}
+.flexlayout__border {
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  font-size: var(--font-size);
+  font-family: var(--font-family);
+}
+.flexlayout__border_tab_contents {
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.flexlayout__border_leading {
+  display: flex;
+}
+.flexlayout__border_top {
+  align-items: center;
+}
+.flexlayout__border_bottom {
+  align-items: center;
+}
+.flexlayout__border_left {
+  align-content: center;
+  flex-direction: column;
+}
+.flexlayout__border_right {
+  align-content: center;
+  flex-direction: column;
+}
+.flexlayout__border_inner {
+  position: relative;
+  box-sizing: border-box;
+  align-items: center;
+  display: flex;
+  flex-grow: 1;
+  scrollbar-width: none;
+}
+.flexlayout__border_inner::-webkit-scrollbar {
+  display: none;
+}
+.flexlayout__border_inner_tab_container {
+  white-space: nowrap;
+  display: flex;
+  padding-left: 2px;
+  padding-right: 2px;
+  box-sizing: border-box;
+  position: absolute;
+}
+.flexlayout__border_inner_tab_container_right {
+  transform-origin: top left;
+  transform: rotate(90deg);
+}
+.flexlayout__border_inner_tab_container_left {
+  flex-direction: row-reverse;
+  transform-origin: top right;
+  transform: rotate(-90deg);
+}
+.flexlayout__border_tab_divider {
+  width: 4px;
+}
+.flexlayout__border_button {
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+  cursor: pointer;
+  padding: 3px 0.5em;
+  margin: 2px 0px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.flexlayout__border_button_leading {
+  display: flex;
+}
+.flexlayout__border_button_content {
+  display: flex;
+}
+.flexlayout__border_button_trailing {
+  display: flex;
+  border-radius: 4px;
+  visibility: hidden;
+}
+@media (hover: hover) {
+  .flexlayout__border_button:hover .flexlayout__border_button_trailing {
+    visibility: visible;
+  }
+}
+.flexlayout__border_button--selected .flexlayout__border_button_trailing {
+  visibility: visible;
+}
+.flexlayout__border_toolbar {
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+}
+.flexlayout__border_toolbar_left,
+.flexlayout__border_toolbar_right {
+  flex-direction: column;
+  padding-top: 0.5em;
+  padding-bottom: 0.3em;
+}
+.flexlayout__border_toolbar_top,
+.flexlayout__border_toolbar_bottom {
+  padding-left: 0.5em;
+  padding-right: 0.3em;
+}
+.flexlayout__border_toolbar_button {
+  border: none;
+  outline: none;
+  font-size: inherit;
+  border-radius: 4px;
+  padding: 1px;
+}
+.flexlayout__border_toolbar_button_overflow {
+  display: flex;
+  align-items: center;
+  border: none;
+  font-size: inherit;
+  width: 1.5em;
+}
+.flexlayout__popup_menu {
+  font-size: var(--font-size);
+  font-family: var(--font-family);
+}
+.flexlayout__popup_menu_item {
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.flexlayout__popup_menu_item--selected {
+  font-weight: 500;
+}
+.flexlayout__popup_menu_container {
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  position: absolute;
+  z-index: 1000;
+  max-height: 50%;
+  min-width: 100px;
+  overflow: auto;
+  padding: 2px;
+}
+.flexlayout__floating_window_body {
+  height: 100%;
+}
+.flexlayout__floating_window_content {
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  position: absolute;
+}
+.flexlayout__error_boundary_container {
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  position: absolute;
+  display: flex;
+  justify-content: center;
+}
+.flexlayout__error_boundary_content {
+  display: flex;
+  align-items: center;
+}
+.flexlayout__border_sizer {
+  position: absolute;
+  top: -30000px;
+  padding-top: 6px;
+  padding-bottom: 5px;
+  font-size: var(--font-size);
+  font-family: var(--font-family);
+}
+.flexlayout__mini_scrollbar {
+  position: absolute;
+  border-radius: 5px;
+  width: var(--size-mini-scroll-indicator);
+  height: var(--size-mini-scroll-indicator);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 0.3s ease-in-out,
+    visibility 0.3s ease-in-out;
+}
+.flexlayout__mini_scrollbar_container {
+  position: relative;
+  display: flex;
+  flex-grow: 1;
+  overflow: hidden;
+}
+@media (hover: hover) {
+  .flexlayout__mini_scrollbar_container:hover .flexlayout__mini_scrollbar {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+/* ======================== End of Base Classes =========================== */
+
+/* Layout Preview Styling */
+.layout-preview-container {
+  position: relative;
+}
+
+.layout-preview-container .flexlayout__layout {
+  font-size: 8px;
+}
+
+.layout-preview-container .flexlayout__tabset_tabbar_outer {
+  height: 16px;
+  min-height: 16px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.layout-preview-container .flexlayout__tab_button {
+  padding: 2px 4px;
+  font-size: 8px;
+}
+
+.layout-preview-container .flexlayout__splitter {
+  background: rgba(128, 128, 128, 0.3);
+}
+
+.layout-preview-container .flexlayout__tabset_header {
+  display: none;
+}
+
+.layout-preview-container .flexlayout__tabset_button {
+  display: none;
+}
+
+.layout-preview-container .flexlayout__tab_toolbar {
+  display: none;
+}
+
+.layout-preview-container .flexlayout__tab_button_trailing {
+  display: none !important;
+}

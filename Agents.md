@@ -1,0 +1,4 @@
+- Do not use forwardRef. Our react version allows refs as props.
+- `npm run check:frontend` to check frontend build if frontend code is changed.
+- `npm run check:backend` to check backend build if backend code is changed.
+- Do not use the typescript 'any' unless completely necessary.
