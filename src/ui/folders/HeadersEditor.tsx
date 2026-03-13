@@ -30,15 +30,20 @@ export function HeadersEditor({ value, onChange }: { value: string; onChange: (v
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => (
-              <tr key={row.id} className="border-b border-base-content/10 last:border-b-0">
+            {rows.map((row, index) => {
+              const isCreateRow = index === rows.length - 1
+
+              return (
+              <tr key={index} className="border-b border-base-content/10 last:border-b-0">
                 <td className="p-0 align-middle text-center">
-                  <input
-                    type="checkbox"
-                    className="checkbox checkbox-sm rounded-none border-none"
-                    checked={row.enabled}
-                    onChange={event => updateRow(row.id, { enabled: event.target.checked })}
-                  />
+                  {!isCreateRow ? (
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-sm rounded-none border-none"
+                      checked={row.enabled}
+                      onChange={event => updateRow(row.id, { enabled: event.target.checked })}
+                    />
+                  ) : null}
                 </td>
                 <td className="p-0 px-2 align-middle">
                   <input
@@ -65,18 +70,21 @@ export function HeadersEditor({ value, onChange }: { value: string; onChange: (v
                   />
                 </td>
                 <td className="p-0 align-middle text-center">
-                  <button
-                    type="button"
-                    className="flex size-8 items-center justify-center border-none bg-base-100/70 text-base-content/55 transition hover:bg-base-100 hover:text-base-content"
-                    onClick={() => removeRow(row.id)}
-                    aria-label="Remove header"
-                    title="Remove header"
-                  >
-                    <Trash2Icon className="size-4" />
-                  </button>
+                  {!isCreateRow ? (
+                    <button
+                      type="button"
+                      className="flex size-8 items-center justify-center border-none bg-base-100/70 text-base-content/55 transition hover:bg-base-100 hover:text-base-content"
+                      onClick={() => removeRow(row.id)}
+                      aria-label="Remove header"
+                      title="Remove header"
+                    >
+                      <Trash2Icon className="size-4" />
+                    </button>
+                  ) : null}
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
