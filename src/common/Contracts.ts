@@ -8,6 +8,12 @@ import {
   type UpdateFolderInput,
 } from './Folders.js'
 import {
+  type CreateEnvironmentInput,
+  type DeleteEnvironmentInput,
+  type EnvironmentRecord,
+  type UpdateEnvironmentInput,
+} from './Environments.js'
+import {
   type CreateRequestInput,
   type DeleteRequestInput,
   type GetRequestInput,
@@ -45,6 +51,10 @@ export type EventResponseMapping = {
   getRequest: Promise<GenericResult<HttpRequestRecord>>
   updateRequest: Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: Promise<GenericResult<void>>
+  listEnvironments: Promise<EnvironmentRecord[]>
+  createEnvironment: Promise<GenericResult<EnvironmentRecord>>
+  updateEnvironment: Promise<GenericResult<EnvironmentRecord>>
+  deleteEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
 }
@@ -69,6 +79,10 @@ export type EventRequestMapping = {
   getRequest: GetRequestInput
   updateRequest: UpdateRequestInput
   deleteRequest: DeleteRequestInput
+  listEnvironments: void
+  createEnvironment: CreateEnvironmentInput
+  updateEnvironment: UpdateEnvironmentInput
+  deleteEnvironment: DeleteEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
 }
@@ -103,6 +117,10 @@ export type WindowElectron = {
   getRequest: (input: GetRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   updateRequest: (input: UpdateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<void>>
+  listEnvironments: () => Promise<EnvironmentRecord[]>
+  createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
+  updateEnvironment: (input: UpdateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
+  deleteEnvironment: (input: DeleteEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
 }

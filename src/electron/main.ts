@@ -8,6 +8,7 @@ import { TaskManager } from './TaskManager.js'
 import { initializeDatabase } from './db/index.js'
 import { listExplorerItems } from './db/explorer.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
+import { createEnvironment, deleteEnvironment, listEnvironments, updateEnvironment } from './db/environments.js'
 import { createRequest, deleteRequest, getRequest, updateRequest } from './db/requests.js'
 import { moveExplorerItem } from './db/tree-items.js'
 import { sendRequest } from './send-request.js'
@@ -265,6 +266,22 @@ app.on('ready', () => {
 
   ipcHandle('deleteRequest', async input => {
     return deleteRequest(input)
+  })
+
+  ipcHandle('listEnvironments', async () => {
+    return listEnvironments()
+  })
+
+  ipcHandle('createEnvironment', async input => {
+    return createEnvironment(input)
+  })
+
+  ipcHandle('updateEnvironment', async input => {
+    return updateEnvironment(input)
+  })
+
+  ipcHandle('deleteEnvironment', async input => {
+    return deleteEnvironment(input)
   })
 
   ipcHandle('moveExplorerItem', async input => {

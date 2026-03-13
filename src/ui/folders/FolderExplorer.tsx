@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { FileCode2Icon, FolderIcon, SearchIcon } from 'lucide-react'
+import { Clock3Icon, FileCode2Icon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
 import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
+import { EnvironmentCoordinator } from './environmentCoordinator'
+import { EnvironmentsPanel } from './EnvironmentsPanel'
 import { buildTree, filterTree, toSelectionKey } from './folderExplorerUtils'
+import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 
 type DropPlacement = ExplorerDropTarget['placement']
@@ -14,11 +17,13 @@ export function FolderExplorer() {
   const items = useSelector(folderExplorerTreeStore, state => state.context.items)
   const searchQuery = useSelector(folderExplorerTreeStore, state => state.context.searchQuery)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
+  const sidebarTab = useSelector(folderExplorerEditorStore, state => state.context.sidebarTab)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
 
   useEffect(() => {
     void FolderExplorerCoordinator.loadItems()
+    void EnvironmentCoordinator.loadEnvironments()
   }, [])
 
   const { roots, itemMap } = useMemo(() => buildTree(items), [items])
@@ -123,96 +128,152 @@ export function FolderExplorer() {
 
   return (
     <div className="flex min-h-0 flex-1 bg-base-100">
-      <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--color-base-200)_86%,black)_0%,color-mix(in_oklch,var(--color-base-100)_94%,black)_100%)]">
-        <div className="border-b border-base-content/10 px-4 py-4">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
-              onClick={() => FolderExplorerCoordinator.startCreate('folder', null)}
-              aria-label="Add folder"
-              title="Add folder"
-            >
-              <FolderIcon className="size-4" />
-            </button>
+      <SidebarTabs sidebarTab={sidebarTab} />
 
-            <button
-              type="button"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
-              onClick={() => FolderExplorerCoordinator.startCreate('request', null)}
-              aria-label="Add request"
-              title="Add request"
-            >
-              <FileCode2Icon className="size-4" />
-            </button>
+      {sidebarTab === 'requests' ? (
+        <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-100">
+          <div className="border-b border-base-content/10 px-4 py-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
+                onClick={() => FolderExplorerCoordinator.startCreate('folder', null)}
+                aria-label="Add folder"
+                title="Add folder"
+              >
+                <FolderIcon className="size-4" />
+              </button>
 
-            <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
-              <SearchIcon className="size-4 shrink-0" />
-              <input
-                type="text"
-                className="w-full bg-transparent outline-none placeholder:text-base-content/35"
-                placeholder="Search folders and requests"
-                value={searchQuery}
-                onChange={event => FolderExplorerCoordinator.updateTreeSearchQuery(event.target.value)}
-              />
-            </label>
-          </div>
-        </div>
+              <button
+                type="button"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
+                onClick={() => FolderExplorerCoordinator.startCreate('request', null)}
+                aria-label="Add request"
+                title="Add request"
+              >
+                <FileCode2Icon className="size-4" />
+              </button>
 
-        <div className="min-h-0 flex-1 overflow-auto py-3">
-          {createDraft?.parentFolderId === null ? (
-            <DraftRow
-              value={createDraft.name}
-              depth={0}
-              icon={createDraft.itemType}
-              onChange={FolderExplorerCoordinator.changeCreateName}
-              onSubmit={() => void FolderExplorerCoordinator.submitCreate()}
-              onCancel={FolderExplorerCoordinator.cancelCreate}
-            />
-          ) : null}
-
-          {items.length === 0 ? (
-            <EmptyState title="No items yet" description="Create your first folder or request to get started." />
-          ) : visibleRoots.length === 0 ? (
-            <EmptyState title="No matches" description="Try a different item name." />
-          ) : (
-            <div>
-              {visibleRoots.map(node => (
-                <ExplorerRow
-                  key={`${node.itemType}:${node.id}`}
-                  node={node}
-                  depth={0}
-                  forceExpanded={normalizedSearch.length > 0}
-                  canDrag={canDrag}
-                  draggedItem={draggedItem}
-                  dropTarget={dropTarget}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onRowDragOver={handleRowDragOver}
-                  onRowDrop={handleRowDrop}
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
+                <SearchIcon className="size-4 shrink-0" />
+                <input
+                  type="text"
+                  className="w-full bg-transparent outline-none placeholder:text-base-content/35"
+                  placeholder="Search folders and requests"
+                  value={searchQuery}
+                  onChange={event => FolderExplorerCoordinator.updateTreeSearchQuery(event.target.value)}
                 />
-              ))}
-
-              {canDrag && draggedItem ? (
-                <div
-                  className={[
-                    'mx-3 mt-1 h-5 rounded-lg transition',
-                    dropTarget?.indicatorId === 'root:end' ? 'bg-base-content/8' : 'bg-transparent',
-                  ].join(' ')}
-                  onDragOver={handleRootEndDragOver}
-                  onDrop={event => void handleRootEndDrop(event)}
-                >
-                  {dropTarget?.indicatorId === 'root:end' ? <div className="translate-y-[9px] border-t border-primary" /> : null}
-                </div>
-              ) : null}
+              </label>
             </div>
-          )}
-        </div>
-      </aside>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-auto py-3">
+            {createDraft?.parentFolderId === null ? (
+              <DraftRow
+                value={createDraft.name}
+                depth={0}
+                icon={createDraft.itemType}
+                onChange={FolderExplorerCoordinator.changeCreateName}
+                onSubmit={() => void FolderExplorerCoordinator.submitCreate()}
+                onCancel={FolderExplorerCoordinator.cancelCreate}
+              />
+            ) : null}
+
+            {items.length === 0 ? (
+              <EmptyState title="No items yet" description="Create your first folder or request to get started." />
+            ) : visibleRoots.length === 0 ? (
+              <EmptyState title="No matches" description="Try a different item name." />
+            ) : (
+              <div>
+                {visibleRoots.map(node => (
+                  <ExplorerRow
+                    key={`${node.itemType}:${node.id}`}
+                    node={node}
+                    depth={0}
+                    forceExpanded={normalizedSearch.length > 0}
+                    canDrag={canDrag}
+                    draggedItem={draggedItem}
+                    dropTarget={dropTarget}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onRowDragOver={handleRowDragOver}
+                    onRowDrop={handleRowDrop}
+                  />
+                ))}
+
+                {canDrag && draggedItem ? (
+                  <div
+                    className={[
+                      'mx-3 mt-1 h-5 rounded-lg transition',
+                      dropTarget?.indicatorId === 'root:end' ? 'bg-base-content/8' : 'bg-transparent',
+                    ].join(' ')}
+                    onDragOver={handleRootEndDragOver}
+                    onDrop={event => void handleRootEndDrop(event)}
+                  >
+                    {dropTarget?.indicatorId === 'root:end' ? <div className="translate-y-[9px] border-t border-primary" /> : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </aside>
+      ) : null}
 
       <main className="flex min-h-0 flex-1 flex-col bg-base-100">
-        <DetailsPanel />
+        {sidebarTab === 'requests' ? <DetailsPanel /> : null}
+        {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
+        {sidebarTab === 'history' ? <HistoryPlaceholder /> : null}
       </main>
+    </div>
+  )
+}
+
+function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
+  const tabs = [
+    { id: 'requests', label: 'Requests', icon: FileCode2Icon, disabled: false },
+    { id: 'environments', label: 'Envs', icon: FlaskConicalIcon, disabled: false },
+    { id: 'history', label: 'History', icon: Clock3Icon, disabled: true },
+  ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
+
+  return (
+    <aside className="flex h-full w-[84px] min-w-[84px] flex-col items-center gap-3 border-r border-base-content/10 bg-base-100 px-3 py-4">
+      {tabs.map(tab => {
+        const Icon = tab.icon
+        const isActive = tab.id === sidebarTab
+
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            className={[
+              'flex w-full flex-col items-center gap-2 rounded-2xl px-2 py-3 text-center text-xs font-medium transition',
+              tab.disabled ? 'cursor-not-allowed text-base-content/30' : '',
+              !tab.disabled && isActive ? 'bg-primary/16 text-primary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--color-primary)_24%,transparent)]' : '',
+              !tab.disabled && !isActive ? 'text-base-content/62 hover:bg-base-100/60 hover:text-base-content' : '',
+            ].join(' ')}
+            onClick={() => {
+              if (!tab.disabled) {
+                EnvironmentCoordinator.setSidebarTab(tab.id)
+              }
+            }}
+            disabled={tab.disabled}
+            aria-current={isActive ? 'page' : undefined}
+            title={tab.disabled ? `${tab.label} (coming soon)` : tab.label}
+          >
+            <Icon className="size-4" />
+            <span className="leading-4">{tab.label}</span>
+          </button>
+        )
+      })}
+    </aside>
+  )
+}
+
+function HistoryPlaceholder() {
+  return (
+    <div className="flex h-full flex-col px-6 py-6">
+      <div className="text-sm font-semibold text-base-content">History</div>
+      <div className="mt-2 text-sm leading-6 text-base-content/45">Request history is not implemented yet.</div>
     </div>
   )
 }

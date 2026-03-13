@@ -13,6 +13,8 @@ import {
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 
+export type SidebarTab = 'requests' | 'environments' | 'history'
+
 const selectionSchema = z.object({
   itemType: z.union([z.literal('folder'), z.literal('request')]),
   id: z.string(),
@@ -21,6 +23,8 @@ const selectionSchema = z.object({
 const persistedUiStateSchema = z.object({
   selected: selectionSchema.nullable(),
   expandedIds: z.array(z.string()),
+  activeEnvironmentIds: z.array(z.string()),
+  sidebarTab: z.union([z.literal('requests'), z.literal('environments'), z.literal('history')]),
 })
 
 const folderDetailsDraftSchema = z.object({
@@ -61,6 +65,8 @@ export type EditorEntry = {
 type FolderExplorerEditorContext = {
   selected: Selection | null
   expandedIds: string[]
+  activeEnvironmentIds: string[]
+  sidebarTab: SidebarTab
   entries: Record<string, EditorEntry>
 }
 
@@ -86,6 +92,8 @@ export const folderExplorerEditorStore = createStore({
   context: {
     selected: persistedUiState.selected,
     expandedIds: persistedUiState.expandedIds,
+    activeEnvironmentIds: persistedUiState.activeEnvironmentIds,
+    sidebarTab: persistedUiState.sidebarTab,
     entries: initialEntries,
   } as FolderExplorerEditorContext,
   on: {
@@ -106,6 +114,20 @@ export const folderExplorerEditorStore = createStore({
     expandedIdsReconciled: (context, event: { items: ExplorerItem[] }) => ({
       ...context,
       expandedIds: getNextExpandedIds(context.expandedIds, event.items),
+    }),
+    sidebarTabChanged: (context, event: { sidebarTab: SidebarTab }) => ({
+      ...context,
+      sidebarTab: event.sidebarTab,
+    }),
+    activeEnvironmentToggled: (context, event: { id: string }) => ({
+      ...context,
+      activeEnvironmentIds: context.activeEnvironmentIds.includes(event.id)
+        ? context.activeEnvironmentIds.filter(value => value !== event.id)
+        : [...context.activeEnvironmentIds, event.id],
+    }),
+    activeEnvironmentIdsReconciled: (context, event: { ids: string[] }) => ({
+      ...context,
+      activeEnvironmentIds: context.activeEnvironmentIds.filter(id => event.ids.includes(id)),
     }),
     entryLoadingStarted: (context, event: { key: string }) => ({
       ...context,
@@ -238,21 +260,32 @@ export function getSelectedEntry() {
 }
 
 export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {
+  const { activeEnvironmentIds, sidebarTab } = folderExplorerEditorStore.getSnapshot().context
   try {
-    localStorage.setItem(PERSISTED_UI_STATE_KEY, JSON.stringify({ selected: selection, expandedIds }))
+    localStorage.setItem(
+      PERSISTED_UI_STATE_KEY,
+      JSON.stringify({ selected: selection, expandedIds, activeEnvironmentIds, sidebarTab })
+    )
   } catch {
     return
   }
 }
 
-function loadFolderExplorerUiState(): { selected: Selection | null; expandedIds: string[] } {
+function loadFolderExplorerUiState(): {
+  selected: Selection | null
+  expandedIds: string[]
+  activeEnvironmentIds: string[]
+  sidebarTab: SidebarTab
+} {
   try {
     const value = localStorage.getItem(PERSISTED_UI_STATE_KEY)
-    if (!value) return { selected: null, expandedIds: [] }
+    if (!value) return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
     const parsed = persistedUiStateSchema.safeParse(JSON.parse(value))
-    return parsed.success ? parsed.data : { selected: null, expandedIds: [] }
+    return parsed.success
+      ? parsed.data
+      : { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
   } catch {
-    return { selected: null, expandedIds: [] }
+    return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
   }
 }
 

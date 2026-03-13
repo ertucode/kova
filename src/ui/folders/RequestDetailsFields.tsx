@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useSelector } from '@xstate/store/react'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
+import { extractTemplateVariables } from '@common/RequestVariables'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import { HeadersEditor } from './HeadersEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { KeyValueEditor } from './KeyValueEditor'
+import { environmentEditorStore } from './environmentEditorStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
+import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
@@ -14,6 +18,25 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const [isSending, setIsSending] = useState(false)
   const [responsePaneHeight, setResponsePaneHeight] = useState(320)
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
+  const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const environments = useSelector(environmentEditorStore, state => state.context.items)
+
+  const activeEnvironmentNames = useMemo(
+    () => environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+    [activeEnvironmentIds, environments]
+  )
+
+  const referencedVariables = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...extractTemplateVariables(draft.url),
+          ...extractTemplateVariables(draft.headers),
+          ...extractTemplateVariables(draft.body),
+        ])
+      ),
+    [draft.body, draft.headers, draft.url]
+  )
 
   const formattedResponseBody = useMemo(() => {
     if (!response) return ''
@@ -59,6 +82,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       body: draft.body,
       bodyType: draft.bodyType,
       rawType: draft.rawType,
+      activeEnvironmentIds,
     })
 
     setIsSending(false)
@@ -115,6 +139,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             {isSending ? 'Sending...' : 'Send'}
           </button>
         </div>
+
+        <VariableUsageBanner activeEnvironmentNames={activeEnvironmentNames} referencedVariables={referencedVariables} />
       </section>
 
       <section className="grid min-h-0 flex-1 w-full border-b border-base-content/10 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
@@ -234,6 +260,21 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           </div>
         </div>
       </section>
+    </div>
+  )
+}
+
+function VariableUsageBanner({
+  activeEnvironmentNames,
+  referencedVariables,
+}: {
+  activeEnvironmentNames: string[]
+  referencedVariables: string[]
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-x border-b border-base-content/10 bg-base-100/35 px-3 py-2 text-xs text-base-content/50">
+      <span>{activeEnvironmentNames.length > 0 ? `Active: ${activeEnvironmentNames.join(', ')}` : 'No active environments'}</span>
+      {referencedVariables.length > 0 ? <span>Variables: {referencedVariables.join(', ')}</span> : null}
     </div>
   )
 }

@@ -1,30 +1,35 @@
 import { GenericError, type GenericResult } from '../common/GenericError.js'
+import { buildEnvironmentVariableMap, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type { SendRequestInput, SendRequestResponse } from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
+import { getEnvironmentsByIds } from './db/environments.js'
 
 export async function sendRequest(input: SendRequestInput): Promise<GenericResult<SendRequestResponse>> {
-  const url = input.url.trim()
-
-  if (!url) {
-    return GenericError.Message('Request URL is required')
-  }
-
-  let parsedUrl: URL
   try {
-    parsedUrl = new URL(url)
-  } catch {
-    return GenericError.Message('Request URL is invalid')
-  }
+    const activeEnvironments = await getEnvironmentsByIds(input.activeEnvironmentIds)
+    const variables = buildEnvironmentVariableMap(activeEnvironments)
+    const url = resolveTemplateVariables(input.url, variables).trim()
 
-  try {
-    const headers = new Headers()
-    for (const row of parseKeyValueRows(input.headers)) {
-      if (!row.enabled || !row.key.trim()) continue
-      headers.append(row.key.trim(), row.value)
+    if (!url) {
+      return GenericError.Message('Request URL is required')
     }
 
-    const body = buildRequestBody(input, headers)
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(url)
+    } catch {
+      return GenericError.Message('Request URL is invalid')
+    }
+
+    const headers = new Headers()
+    for (const row of parseKeyValueRows(input.headers)) {
+      const key = resolveTemplateVariables(row.key, variables).trim()
+      if (!row.enabled || !key) continue
+      headers.append(key, resolveTemplateVariables(row.value, variables))
+    }
+
+    const body = buildRequestBody(input, headers, variables)
     const startedAt = Date.now()
     const response = await fetch(parsedUrl, {
       method: input.method,
@@ -49,7 +54,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
   }
 }
 
-function buildRequestBody(input: SendRequestInput, headers: Headers) {
+function buildRequestBody(input: SendRequestInput, headers: Headers, variables: Record<string, string>) {
   switch (input.bodyType) {
     case 'none':
       return undefined
@@ -57,21 +62,23 @@ function buildRequestBody(input: SendRequestInput, headers: Headers) {
       if (input.body && !headers.has('content-type')) {
         headers.set('content-type', input.rawType === 'json' ? 'application/json' : 'text/plain')
       }
-      return input.body
+      return resolveTemplateVariables(input.body, variables)
     }
     case 'form-data': {
       const formData = new FormData()
       for (const row of parseKeyValueRows(input.body)) {
-        if (!row.enabled || !row.key.trim()) continue
-        formData.append(row.key.trim(), row.value)
+        const key = resolveTemplateVariables(row.key, variables).trim()
+        if (!row.enabled || !key) continue
+        formData.append(key, resolveTemplateVariables(row.value, variables))
       }
       return formData
     }
     case 'x-www-form-urlencoded': {
       const searchParams = new URLSearchParams()
       for (const row of parseKeyValueRows(input.body)) {
-        if (!row.enabled || !row.key.trim()) continue
-        searchParams.append(row.key.trim(), row.value)
+        const key = resolveTemplateVariables(row.key, variables).trim()
+        if (!row.enabled || !key) continue
+        searchParams.append(key, resolveTemplateVariables(row.value, variables))
       }
       if (!headers.has('content-type')) {
         headers.set('content-type', 'application/x-www-form-urlencoded')

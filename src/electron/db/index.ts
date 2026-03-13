@@ -18,6 +18,19 @@ export function initializeDatabase(options: { dbPath: string; migrationsPath: st
     migrate(drizzleDb, { migrationsFolder: migrationsPath });
   }
 
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS environments (
+      id text PRIMARY KEY NOT NULL,
+      name text NOT NULL,
+      variables text NOT NULL DEFAULT '',
+      priority integer NOT NULL DEFAULT 0,
+      created_at integer NOT NULL,
+      deleted_at integer
+    );
+    CREATE INDEX IF NOT EXISTS environments_deleted_at_idx ON environments (deleted_at);
+    CREATE INDEX IF NOT EXISTS environments_priority_idx ON environments (priority);
+  `)
+
   db = drizzleDb;
   return db;
 }

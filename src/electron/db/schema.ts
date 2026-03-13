@@ -50,6 +50,19 @@ export const requests = sqliteTable(
   ]
 )
 
+export const environments = sqliteTable(
+  'environments',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    variables: text('variables').notNull().default(''),
+    priority: integer('priority').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [index('environments_deleted_at_idx').on(table.deletedAt), index('environments_priority_idx').on(table.priority)]
+)
+
 export const treeItems = sqliteTable(
   'tree_items',
   {

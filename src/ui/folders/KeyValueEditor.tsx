@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Trash2Icon } from 'lucide-react'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 
 type KeyValueEditorProps = {
-  label: string
+  label: string | null
   value: string
   onChange: (value: string) => void
   keyPlaceholder: string
@@ -20,19 +20,37 @@ export function KeyValueEditor({
   valuePlaceholder,
   descriptionPlaceholder = 'Optional note',
 }: KeyValueEditorProps) {
-  const rows = useMemo(() => [...parseKeyValueRows(value), createEmptyKeyValueRow()], [value])
+  const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
+
+  useEffect(() => {
+    setRows(currentRows => buildRows(value, currentRows))
+  }, [value])
 
   const updateRow = (id: string, patch: Partial<KeyValueRow>) => {
-    onChange(stringifyKeyValueRows(rows.map(row => (row.id === id ? { ...row, ...patch } : row))))
+    setRows(currentRows => {
+      const nextRows = currentRows.map(row => (row.id === id ? { ...row, ...patch } : row))
+      const lastRow = nextRows[nextRows.length - 1]
+
+      if (lastRow && hasKeyValueContent(lastRow)) {
+        nextRows.push(createEmptyKeyValueRow())
+      }
+
+      onChange(stringifyKeyValueRows(nextRows))
+      return nextRows
+    })
   }
 
   const removeRow = (id: string) => {
-    onChange(stringifyKeyValueRows(rows.filter(row => row.id !== id)))
+    setRows(currentRows => {
+      const nextRows = ensureTrailingEmptyRow(currentRows.filter(row => row.id !== id))
+      onChange(stringifyKeyValueRows(nextRows))
+      return nextRows
+    })
   }
 
   return (
     <section className="w-full border-b border-base-content/10">
-      <div className="pl-2 py-2 text-sm text-base-content/55">{label}</div>
+      {label ? <div className="pl-2 py-2 text-sm text-base-content/55">{label}</div> : null}
 
       <div className="overflow-hidden border border-base-content/10 bg-base-100/35">
         <table className="table w-full table-fixed border-collapse text-sm">
@@ -106,4 +124,27 @@ export function KeyValueEditor({
       </div>
     </section>
   )
+}
+
+function buildRows(value: string, currentRows: KeyValueRow[]) {
+  const parsedRows = parseKeyValueRows(value)
+  const existingRows = currentRows.filter(row => row !== currentRows[currentRows.length - 1])
+  const nextRows = parsedRows.map((row, index) => ({
+    ...row,
+    id: existingRows[index]?.id ?? row.id,
+  }))
+
+  return ensureTrailingEmptyRow(nextRows)
+}
+
+function ensureTrailingEmptyRow(rows: KeyValueRow[]) {
+  if (rows.length === 0 || hasKeyValueContent(rows[rows.length - 1])) {
+    return [...rows, createEmptyKeyValueRow()]
+  }
+
+  return rows
+}
+
+function hasKeyValueContent(row: KeyValueRow) {
+  return row.key.trim() !== '' || row.value.trim() !== '' || row.description.trim() !== ''
 }

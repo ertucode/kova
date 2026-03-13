@@ -52,6 +52,7 @@ export type SendRequestInput = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  activeEnvironmentIds: string[]
 }
 
 export type SendRequestResponse = {
