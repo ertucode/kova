@@ -22,6 +22,13 @@
       "when": 1773402154490,
       "tag": "0002_cold_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1773433978635,
+      "tag": "0003_large_valeria_richards",
+      "breakpoints": true
     }
   ]
 }

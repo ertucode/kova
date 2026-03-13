@@ -41,7 +41,7 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         url: '',
         preRequestScript: '',
         postRequestScript: '',
-        headers: '[]',
+        headers: '',
         body: '',
         bodyType: 'none',
         rawType: 'json',
