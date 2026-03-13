@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSelector } from '@xstate/store/react'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -10,45 +11,37 @@ import {
   XIcon,
 } from 'lucide-react'
 import type { ExplorerItem } from '@common/Explorer'
-import type { CreateDraft, Selection, TreeNode } from './folderExplorerTypes'
+import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
+import type { TreeNode } from './folderExplorerTypes'
 import { toSelectionKey } from './folderExplorerUtils'
+import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorStore'
+import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 
 export function ExplorerRow({
   node,
   depth,
-  expandedIds,
-  selected,
-  dirtyRequestIds,
-  createDraft,
   forceExpanded,
-  onSelect,
-  onToggleExpanded,
-  onStartCreate,
-  onCreateNameChange,
-  onSubmitCreate,
-  onCancelCreate,
-  onDelete,
 }: {
   node: TreeNode
   depth: number
-  expandedIds: Set<string>
-  selected: Selection | null
-  dirtyRequestIds: Set<string>
-  createDraft: CreateDraft | null
   forceExpanded: boolean
-  onSelect: (selection: Selection) => void
-  onToggleExpanded: (id: string) => void
-  onStartCreate: (itemType: ExplorerItem['itemType'], parentFolderId: string | null) => void
-  onCreateNameChange: (value: string) => void
-  onSubmitCreate: () => void
-  onCancelCreate: () => void
-  onDelete: (item: ExplorerItem) => void
 }) {
+  const expandedIds = useSelector(folderExplorerTreeStore, state => state.context.expandedIds)
+  const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
+  const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const isRequestDirty = useSelector(folderExplorerEditorStore, state => {
+    const entry = state.context.entries[`request:${node.id}`]
+    if (node.itemType !== 'request' || !entry?.current) {
+      return false
+    }
+
+    return isEntryDirty(entry)
+  })
+
   const hasChildren = node.itemType === 'folder' && node.children.length > 0
-  const isExpanded = forceExpanded || expandedIds.has(node.id)
+  const isExpanded = forceExpanded || expandedIds.includes(node.id)
   const isSelected = selected?.id === node.id && selected.itemType === node.itemType
   const isCreateOpen = createDraft?.parentFolderId === node.id
-  const isRequestDirty = node.itemType === 'request' && dirtyRequestIds.has(node.id)
 
   return (
     <div>
@@ -67,7 +60,7 @@ export function ExplorerRow({
           onClick={event => {
             event.stopPropagation()
             if (node.itemType === 'folder' && hasChildren) {
-              onToggleExpanded(node.id)
+              FolderExplorerCoordinator.toggleExpanded(node.id)
             }
           }}
           aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
@@ -83,7 +76,7 @@ export function ExplorerRow({
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          onClick={() => onSelect({ itemType: node.itemType, id: node.id })}
+          onClick={() => FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id })}
         >
           {node.itemType === 'folder' ? (
             <FolderIcon className="size-4 shrink-0 text-base-content/55" />
@@ -102,9 +95,9 @@ export function ExplorerRow({
 
         <ExplorerMenu
           itemType={node.itemType}
-          onAddFolder={node.itemType === 'folder' ? () => onStartCreate('folder', node.id) : undefined}
-          onAddRequest={node.itemType === 'folder' ? () => onStartCreate('request', node.id) : undefined}
-          onDelete={() => onDelete(node)}
+          onAddFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined}
+          onAddRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id) : undefined}
+          onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
         />
       </div>
 
@@ -113,32 +106,16 @@ export function ExplorerRow({
           value={createDraft.name}
           depth={depth + 1}
           icon={createDraft.itemType}
-          onChange={onCreateNameChange}
-          onSubmit={onSubmitCreate}
-          onCancel={onCancelCreate}
+          onChange={FolderExplorerCoordinator.changeCreateName}
+          onSubmit={() => void FolderExplorerCoordinator.submitCreate()}
+          onCancel={FolderExplorerCoordinator.cancelCreate}
         />
       ) : null}
 
       {node.itemType === 'folder' && hasChildren && isExpanded ? (
         <div className="space-y-0.5">
           {node.children.map(child => (
-            <ExplorerRow
-              key={toSelectionKey(child)}
-              node={child}
-              depth={depth + 1}
-              expandedIds={expandedIds}
-              selected={selected}
-              dirtyRequestIds={dirtyRequestIds}
-              createDraft={createDraft}
-              forceExpanded={forceExpanded}
-              onSelect={onSelect}
-              onToggleExpanded={onToggleExpanded}
-              onStartCreate={onStartCreate}
-              onCreateNameChange={onCreateNameChange}
-              onSubmitCreate={onSubmitCreate}
-              onCancelCreate={onCancelCreate}
-              onDelete={onDelete}
-            />
+            <ExplorerRow key={toSelectionKey(child)} node={child} depth={depth + 1} forceExpanded={forceExpanded} />
           ))}
         </div>
       ) : null}

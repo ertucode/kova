@@ -1,505 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo } from 'react'
+import { useSelector } from '@xstate/store/react'
 import { FileCode2Icon, FolderIcon, SearchIcon } from 'lucide-react'
-import { z } from 'zod'
-import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
-import type { ExplorerItem } from '@common/Explorer'
-import type { FolderRecord } from '@common/Folders'
-import { getWindowElectron } from '@/getWindowElectron'
-import { confirmation } from '@/lib/components/confirmation'
-import { toast } from '@/lib/components/toast'
-import { useAsyncStorage } from '@/lib/hooks/useAsyncStorage'
 import { DetailsPanel } from './DetailsPanel'
 import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
-import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type CreateDraft, type DetailsDraft, type Selection } from './folderExplorerTypes'
-import { buildTree, filterTree, serializeDetails, toDetailsDraft, toFolderDetailsDraft, toRequestDetailsDraft, toSelectionKey } from './folderExplorerUtils'
-
-const LAST_SELECTED_TREE_ITEM_KEY = 'folderExplorer:lastSelectedTreeItem'
-
-const folderDetailsDraftSchema = z.object({
-  itemType: z.literal('folder'),
-  name: z.string(),
-  description: z.string(),
-  preRequestScript: z.string(),
-  postRequestScript: z.string(),
-})
-
-const requestDetailsDraftSchema = z.object({
-  itemType: z.literal('request'),
-  name: z.string(),
-  method: z.enum(REQUEST_METHODS),
-  url: z.string(),
-  preRequestScript: z.string(),
-  postRequestScript: z.string(),
-  headers: z.string(),
-  body: z.string(),
-  bodyType: z.enum(REQUEST_BODY_TYPES),
-  rawType: z.enum(REQUEST_RAW_TYPES),
-})
-
-const persistedDraftsSchema = z.record(z.string(), z.discriminatedUnion('itemType', [folderDetailsDraftSchema, requestDetailsDraftSchema]))
-
-type DraftSaveStatus = 'idle' | 'saving' | 'error'
+import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
+import { buildTree, filterTree } from './folderExplorerUtils'
+import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 
 export function FolderExplorer() {
-  const [items, setItems] = useState<ExplorerItem[]>([])
-  const [selected, setSelected] = useState<Selection | null>(() => loadLastSelectedTreeItem())
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-  const [createDraft, setCreateDraft] = useState<CreateDraft | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [folderDetails, setFolderDetails] = useState<FolderRecord | null>(null)
-  const [persistedDrafts, setPersistedDrafts] = useAsyncStorage(
-    AsyncStorageKeys.folderExplorerDrafts,
-    persistedDraftsSchema,
-    {}
-  )
-  const [detailsDraft, setDetailsDraft] = useState<DetailsDraft | null>(null)
-  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
-  const [draftSaveStatuses, setDraftSaveStatuses] = useState<Record<string, DraftSaveStatus>>({})
-  const [isDetailsDirty, setIsDetailsDirty] = useState(false)
-  const detailsDraftRef = useRef<DetailsDraft | null>(null)
-  const persistedDraftsRef = useRef<Record<string, DetailsDraft>>(persistedDrafts)
-  const isDetailsDirtyRef = useRef(false)
-  const draftVersionsRef = useRef<Record<string, number>>({})
-  const latestSaveTokensRef = useRef<Record<string, number>>({})
-  const loadRequestRef = useRef(0)
-
-  const selectedKey = selected ? toSelectionKey(selected) : null
-  const isSavingDetails = selectedKey ? draftSaveStatuses[selectedKey] === 'saving' : false
-  const dirtyRequestIds = useMemo(
-    () =>
-      new Set(
-        Object.keys(persistedDrafts)
-          .filter(key => key.startsWith('request:'))
-          .map(key => key.slice('request:'.length))
-      ),
-    [persistedDrafts]
-  )
+  const items = useSelector(folderExplorerTreeStore, state => state.context.items)
+  const searchQuery = useSelector(folderExplorerTreeStore, state => state.context.searchQuery)
+  const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
 
   useEffect(() => {
-    detailsDraftRef.current = detailsDraft
-  }, [detailsDraft])
-
-  useEffect(() => {
-    persistedDraftsRef.current = persistedDrafts
-  }, [persistedDrafts])
-
-  useEffect(() => {
-    isDetailsDirtyRef.current = isDetailsDirty
-  }, [isDetailsDirty])
-
-  useEffect(() => {
-    saveLastSelectedTreeItem(selected)
-  }, [selected])
-
-  const loadExplorerItems = useCallback(async () => {
-    try {
-      const nextItems = await getWindowElectron().listExplorerItems()
-      setItems(nextItems)
-
-      setExpandedIds(prev => {
-        const validFolderIds = new Set(nextItems.filter(item => item.itemType === 'folder').map(item => item.id))
-        const next = new Set([...prev].filter(id => validFolderIds.has(id)))
-
-        if (next.size === 0) {
-          nextItems.forEach(item => {
-            if (item.itemType === 'folder' && item.parentFolderId === null) {
-              next.add(item.id)
-            }
-          })
-        }
-
-        return next
-      })
-
-      setSelected(prev => {
-        if (prev && nextItems.some(item => item.id === prev.id && item.itemType === prev.itemType)) {
-          return prev
-        }
-
-        const first = nextItems[0]
-        return first ? { itemType: first.itemType, id: first.id } : null
-      })
-    } catch (error) {
-      toast.show({
-        severity: 'error',
-        title: 'Failed to load explorer items',
-        message: error instanceof Error ? error.message : String(error),
-      })
-    }
+    void FolderExplorerCoordinator.loadItems()
   }, [])
 
-  const updateItemNameInList = useCallback((selection: Selection, name: string) => {
-    setItems(prev =>
-      prev.map(item =>
-        item.id === selection.id && item.itemType === selection.itemType ? { ...item, name } : item
-      )
-    )
-  }, [])
-
-  const removePersistedDraft = useCallback(
-    (selection: Selection) => {
-      const key = toSelectionKey(selection)
-      setPersistedDrafts(current => {
-        if (!(key in current)) {
-          return current
-        }
-
-        const { [key]: _removed, ...rest } = current
-        return rest
-      })
-    },
-    [setPersistedDrafts]
-  )
-
-  const loadSelectedDetails = useCallback(
-    async (selection: Selection) => {
-      const requestId = ++loadRequestRef.current
-      const selectionKey = toSelectionKey(selection)
-      setIsLoadingDetails(true)
-
-      if (selection.itemType === 'folder') {
-        const result = await getWindowElectron().getFolder({ id: selection.id })
-        if (requestId !== loadRequestRef.current) return
-
-        setIsLoadingDetails(false)
-        if (!result.success) {
-          setFolderDetails(null)
-          setDetailsDraft(null)
-          toast.show(result)
-          return
-        }
-
-        const nextDraft = toFolderDetailsDraft(result.data)
-        const persistedDraft = persistedDraftsRef.current[selectionKey]
-        const hasUnsavedDraft = persistedDraft && serializeDetails(persistedDraft) !== serializeDetails(nextDraft)
-
-        setFolderDetails(result.data)
-        setDetailsDraft(hasUnsavedDraft ? persistedDraft : nextDraft)
-        setIsDetailsDirty(Boolean(hasUnsavedDraft))
-        draftVersionsRef.current[selectionKey] = hasUnsavedDraft ? 1 : 0
-        setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
-
-        if (!hasUnsavedDraft && persistedDraft) {
-          removePersistedDraft(selection)
-        }
-
-        updateItemNameInList(selection, result.data.name)
-        return
-      }
-
-      const result = await getWindowElectron().getRequest({ id: selection.id })
-      if (requestId !== loadRequestRef.current) return
-
-      setIsLoadingDetails(false)
-      if (!result.success) {
-        setFolderDetails(null)
-        setDetailsDraft(null)
-        toast.show(result)
-        return
-      }
-
-      const nextDraft = toRequestDetailsDraft(result.data)
-      const persistedDraft = persistedDraftsRef.current[selectionKey]
-      const hasUnsavedDraft = persistedDraft && serializeDetails(persistedDraft) !== serializeDetails(nextDraft)
-
-      setFolderDetails(null)
-      setDetailsDraft(hasUnsavedDraft ? persistedDraft : nextDraft)
-      setIsDetailsDirty(Boolean(hasUnsavedDraft))
-      draftVersionsRef.current[selectionKey] = hasUnsavedDraft ? 1 : 0
-      setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
-
-      if (!hasUnsavedDraft && persistedDraft) {
-        removePersistedDraft(selection)
-      }
-
-      updateItemNameInList(selection, result.data.name)
-    },
-    [removePersistedDraft, updateItemNameInList]
-  )
-
-  const saveDetails = useCallback(
-    async (selection: Selection, draft: DetailsDraft) => {
-      const selectionKey = toSelectionKey(selection)
-      const version = draftVersionsRef.current[selectionKey] ?? 0
-      const nextSaveToken = (latestSaveTokensRef.current[selectionKey] ?? 0) + 1
-      latestSaveTokensRef.current[selectionKey] = nextSaveToken
-      setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'saving' }))
-
-      if (draft.itemType === 'folder') {
-        const result = await getWindowElectron().updateFolder({
-          id: selection.id,
-          name: draft.name,
-          description: draft.description,
-          preRequestScript: draft.preRequestScript,
-          postRequestScript: draft.postRequestScript,
-        })
-
-        if (latestSaveTokensRef.current[selectionKey] !== nextSaveToken) return
-
-        if (!result.success) {
-          setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'error' }))
-          toast.show(result)
-          return
-        }
-
-        setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
-
-        if ((draftVersionsRef.current[selectionKey] ?? 0) !== version) {
-          return
-        }
-
-        const nextDraft = toFolderDetailsDraft(result.data)
-        updateItemNameInList(selection, result.data.name)
-        removePersistedDraft(selection)
-
-        if (selected?.id === selection.id && selected.itemType === selection.itemType) {
-          setIsDetailsDirty(false)
-          setFolderDetails(result.data)
-          if (serializeDetails(detailsDraftRef.current) === serializeDetails(draft)) {
-            setDetailsDraft(nextDraft)
-          }
-        }
-        return
-      }
-
-      const result = await getWindowElectron().updateRequest({
-        id: selection.id,
-        name: draft.name,
-        method: draft.method,
-        url: draft.url,
-        preRequestScript: draft.preRequestScript,
-        postRequestScript: draft.postRequestScript,
-        headers: draft.headers,
-        body: draft.body,
-        bodyType: draft.bodyType,
-        rawType: draft.rawType,
-      })
-
-      if (latestSaveTokensRef.current[selectionKey] !== nextSaveToken) return
-
-      if (!result.success) {
-        setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'error' }))
-        toast.show(result)
-        return
-      }
-
-      setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
-
-      if ((draftVersionsRef.current[selectionKey] ?? 0) !== version) {
-        return
-      }
-
-      const nextDraft = toRequestDetailsDraft(result.data)
-      updateItemNameInList(selection, result.data.name)
-      removePersistedDraft(selection)
-
-      if (selected?.id === selection.id && selected.itemType === selection.itemType) {
-        setIsDetailsDirty(false)
-        if (serializeDetails(detailsDraftRef.current) === serializeDetails(draft)) {
-          setDetailsDraft(nextDraft)
-        }
-      }
-    },
-    [removePersistedDraft, selected, updateItemNameInList]
-  )
-
-  useEffect(() => {
-    void loadExplorerItems()
-  }, [loadExplorerItems])
-
-  useEffect(() => {
-    if (!selected) {
-      setFolderDetails(null)
-      setDetailsDraft(null)
-      setIsLoadingDetails(false)
-      setIsDetailsDirty(false)
-      return
-    }
-
-    setFolderDetails(null)
-    setDetailsDraft(null)
-    void loadSelectedDetails(selected)
-  }, [loadSelectedDetails, selected])
-
-  useEffect(() => {
-    if (!selected || selected.itemType !== 'request') {
-      return
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault()
-
-        const draft = detailsDraftRef.current
-        if (!draft || draft.itemType !== 'request' || !isDetailsDirtyRef.current) {
-          return
-        }
-
-        void saveDetails(selected, draft)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [saveDetails, selected])
-
-  const flushDetails = useCallback(() => {
-    if (!selected || !detailsDraft || !isDetailsDirtyRef.current || detailsDraft.itemType === 'request') {
-      return
-    }
-
-    const baseDetails = folderDetails
-    if (!baseDetails) {
-      return
-    }
-
-    if (serializeDetails(detailsDraft) === serializeDetails(toDetailsDraft(baseDetails))) {
-      return
-    }
-
-    void saveDetails(selected, detailsDraft)
-  }, [detailsDraft, folderDetails, saveDetails, selected])
-
-  const handleDetailsChange = useCallback((value: DetailsDraft | null) => {
-    if (!selected || !value) {
-      setDetailsDraft(value)
-      return
-    }
-
-    const selectionKey = toSelectionKey(selected)
-    draftVersionsRef.current[selectionKey] = (draftVersionsRef.current[selectionKey] ?? 0) + 1
-    setPersistedDrafts(current => ({
-      ...current,
-      [selectionKey]: value,
-    }))
-    setDetailsDraft(value)
-    setIsDetailsDirty(true)
-    setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
-  }, [selected, setPersistedDrafts])
-
-  const setExpanded = useCallback((id: string, value: boolean) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev)
-      if (value) {
-        next.add(id)
-      } else {
-        next.delete(id)
-      }
-      return next
-    })
-  }, [])
-
-  const startCreate = useCallback(
-    (itemType: ExplorerItem['itemType'], parentFolderId: string | null) => {
-      setCreateDraft({ itemType, parentFolderId, name: '' })
-
-      if (parentFolderId) {
-        setExpanded(parentFolderId, true)
-        setSelected({ itemType: 'folder', id: parentFolderId })
-      }
-    },
-    [setExpanded]
-  )
-
-  const cancelCreate = useCallback(() => {
-    setCreateDraft(null)
-  }, [])
-
-  const submitCreate = useCallback(async () => {
-    if (!createDraft) return
-
-    if (createDraft.itemType === 'folder') {
-      const result = await getWindowElectron().createFolder({
-        parentFolderId: createDraft.parentFolderId,
-        name: createDraft.name,
-      })
-
-      if (!result.success) {
-        toast.show(result)
-        return
-      }
-
-      setCreateDraft(null)
-      if (createDraft.parentFolderId) {
-        setExpanded(createDraft.parentFolderId, true)
-      }
-
-      await loadExplorerItems()
-      setSelected({ itemType: 'folder', id: result.data.id })
-      return
-    }
-
-    const result = await getWindowElectron().createRequest({
-      parentFolderId: createDraft.parentFolderId,
-      name: createDraft.name,
-    })
-
-    if (!result.success) {
-      toast.show(result)
-      return
-    }
-
-    setCreateDraft(null)
-    if (createDraft.parentFolderId) {
-      setExpanded(createDraft.parentFolderId, true)
-    }
-
-    await loadExplorerItems()
-    setSelected({ itemType: 'request', id: result.data.id })
-  }, [createDraft, loadExplorerItems, setExpanded])
-
-  const deleteItem = useCallback(
-    (item: ExplorerItem) => {
-      const title = item.itemType === 'folder' ? 'Delete folder?' : 'Delete request?'
-      const message =
-        item.itemType === 'folder'
-          ? `"${item.name}" and all nested items will be deleted.`
-          : `"${item.name}" will be deleted.`
-
-      confirmation.trigger.confirm({
-        title,
-        message,
-        confirmText: 'Delete',
-        onConfirm: async () => {
-          const result =
-            item.itemType === 'folder'
-              ? await getWindowElectron().deleteFolder({ id: item.id })
-              : await getWindowElectron().deleteRequest({ id: item.id })
-
-          if (!result.success) {
-            toast.show(result)
-            return
-          }
-
-          removePersistedDraft({ itemType: item.itemType, id: item.id })
-          setDraftSaveStatuses(prev => {
-            const key = toSelectionKey(item)
-            if (!(key in prev)) {
-              return prev
-            }
-
-            const { [key]: _removed, ...rest } = prev
-            return rest
-          })
-
-          if (selected?.id === item.id && selected.itemType === item.itemType) {
-            setFolderDetails(null)
-            setDetailsDraft(null)
-          }
-
-          if (createDraft?.parentFolderId === item.id) {
-            cancelCreate()
-          }
-
-          await loadExplorerItems()
-        },
-      })
-    },
-    [cancelCreate, createDraft?.parentFolderId, loadExplorerItems, removePersistedDraft, selected]
-  )
-
-  const { roots, itemMap } = useMemo(() => buildTree(items), [items])
-  const selectedItem = selected ? (itemMap.get(toSelectionKey(selected)) ?? null) : null
+  const { roots } = useMemo(() => buildTree(items), [items])
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const visibleRoots = useMemo(() => filterTree(roots, normalizedSearch), [roots, normalizedSearch])
 
@@ -511,7 +28,7 @@ export function FolderExplorer() {
             <button
               type="button"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
-              onClick={() => startCreate('folder', null)}
+              onClick={() => FolderExplorerCoordinator.startCreate('folder', null)}
               aria-label="Add folder"
               title="Add folder"
             >
@@ -521,7 +38,7 @@ export function FolderExplorer() {
             <button
               type="button"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
-              onClick={() => startCreate('request', null)}
+              onClick={() => FolderExplorerCoordinator.startCreate('request', null)}
               aria-label="Add request"
               title="Add request"
             >
@@ -535,7 +52,7 @@ export function FolderExplorer() {
                 className="w-full bg-transparent outline-none placeholder:text-base-content/35"
                 placeholder="Search folders and requests"
                 value={searchQuery}
-                onChange={event => setSearchQuery(event.target.value)}
+                onChange={event => FolderExplorerCoordinator.updateTreeSearchQuery(event.target.value)}
               />
             </label>
           </div>
@@ -547,9 +64,9 @@ export function FolderExplorer() {
               value={createDraft.name}
               depth={0}
               icon={createDraft.itemType}
-              onChange={value => setCreateDraft(prev => (prev ? { ...prev, name: value } : prev))}
-              onSubmit={() => void submitCreate()}
-              onCancel={cancelCreate}
+              onChange={FolderExplorerCoordinator.changeCreateName}
+              onSubmit={() => void FolderExplorerCoordinator.submitCreate()}
+              onCancel={FolderExplorerCoordinator.cancelCreate}
             />
           ) : null}
 
@@ -560,23 +77,7 @@ export function FolderExplorer() {
           ) : (
             <div className="space-y-0.5">
               {visibleRoots.map(node => (
-                <ExplorerRow
-                  key={toSelectionKey(node)}
-                  node={node}
-                  depth={0}
-                  expandedIds={expandedIds}
-                  selected={selected}
-                  dirtyRequestIds={dirtyRequestIds}
-                  createDraft={createDraft}
-                  forceExpanded={normalizedSearch.length > 0}
-                  onSelect={setSelected}
-                  onToggleExpanded={id => setExpanded(id, !expandedIds.has(id))}
-                  onStartCreate={startCreate}
-                  onCreateNameChange={value => setCreateDraft(prev => (prev ? { ...prev, name: value } : prev))}
-                  onSubmitCreate={() => void submitCreate()}
-                  onCancelCreate={cancelCreate}
-                  onDelete={deleteItem}
-                />
+                <ExplorerRow key={`${node.itemType}:${node.id}`} node={node} depth={0} forceExpanded={normalizedSearch.length > 0} />
               ))}
             </div>
           )}
@@ -584,56 +85,8 @@ export function FolderExplorer() {
       </aside>
 
       <main className="flex min-h-0 flex-1 flex-col bg-base-100">
-        {selectedItem ? (
-          <DetailsPanel
-            item={selectedItem}
-            draft={detailsDraft}
-            isDirty={isDetailsDirty}
-            isLoading={isLoadingDetails}
-            isSaving={isSavingDetails}
-            onChange={handleDetailsChange}
-            onBlur={flushDetails}
-          />
-        ) : (
-          <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-sm text-base-content/45">
-            Select a folder or request
-          </div>
-        )}
+        <DetailsPanel />
       </main>
     </div>
   )
-}
-
-function loadLastSelectedTreeItem(): Selection | null {
-  try {
-    const value = localStorage.getItem(LAST_SELECTED_TREE_ITEM_KEY)
-    if (!value) {
-      return null
-    }
-
-    const parsed = JSON.parse(value) as Partial<Selection>
-    if ((parsed.itemType === 'folder' || parsed.itemType === 'request') && typeof parsed.id === 'string') {
-      return {
-        itemType: parsed.itemType,
-        id: parsed.id,
-      }
-    }
-  } catch {
-    return null
-  }
-
-  return null
-}
-
-function saveLastSelectedTreeItem(selection: Selection | null) {
-  try {
-    if (!selection) {
-      localStorage.removeItem(LAST_SELECTED_TREE_ITEM_KEY)
-      return
-    }
-
-    localStorage.setItem(LAST_SELECTED_TREE_ITEM_KEY, JSON.stringify(selection))
-  } catch {
-    return
-  }
 }

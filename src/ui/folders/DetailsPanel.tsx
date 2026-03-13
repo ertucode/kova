@@ -1,26 +1,55 @@
+import { useEffect } from 'react'
+import { useSelector } from '@xstate/store/react'
 import { FileCode2Icon, FolderIcon } from 'lucide-react'
-import type { ExplorerItem } from '@common/Explorer'
 import type { RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
 import { HeadersEditor } from './HeadersEditor'
-import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type DetailsDraft, type FolderDetailsDraft, type RequestDetailsDraft } from './folderExplorerTypes'
+import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
+import {
+  REQUEST_BODY_TYPES,
+  REQUEST_METHODS,
+  REQUEST_RAW_TYPES,
+  type FolderDetailsDraft,
+  type RequestDetailsDraft,
+} from './folderExplorerTypes'
+import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
+import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 
-export function DetailsPanel({
-  item,
-  draft,
-  isDirty,
-  isLoading,
-  isSaving,
-  onChange,
-  onBlur,
-}: {
-  item: ExplorerItem
-  draft: DetailsDraft | null
-  isDirty: boolean
-  isLoading: boolean
-  isSaving: boolean
-  onChange: (value: DetailsDraft | null) => void
-  onBlur: () => void
-}) {
+export function DetailsPanel() {
+  const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const entry = useSelector(folderExplorerEditorStore, state => {
+    const currentSelected = state.context.selected
+    return currentSelected ? state.context.entries[toSelectionKey(currentSelected)] ?? null : null
+  })
+
+  const draft = entry?.current ?? null
+  const isLoading = Boolean(selected && (!entry || entry.loading))
+  const isSaving = Boolean(entry?.saving)
+  const isDirty = Boolean(entry?.current && (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base)))
+
+  useEffect(() => {
+    if (!selected || selected.itemType !== 'request') {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        void FolderExplorerCoordinator.saveSelectedItem()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selected])
+
+  if (!selected) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-sm text-base-content/45">
+        Select a folder or request
+      </div>
+    )
+  }
+
   if (isLoading || !draft) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-sm text-base-content/45">
@@ -35,7 +64,7 @@ export function DetailsPanel({
         <div className="w-full px-8 py-8">
           <div className="flex items-center gap-4">
             <div className="shrink-0 rounded-2xl border border-base-content/10 bg-base-100/60 p-3 text-base-content/60">
-              {item.itemType === 'folder' ? <FolderIcon className="size-5" /> : <FileCode2Icon className="size-5" />}
+              {selected.itemType === 'folder' ? <FolderIcon className="size-5" /> : <FileCode2Icon className="size-5" />}
             </div>
 
             <div className="min-w-0 flex-1">
@@ -43,9 +72,9 @@ export function DetailsPanel({
                 <input
                   className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
                   value={draft.name}
-                  placeholder={item.itemType === 'folder' ? 'Folder name' : 'Request name'}
-                  onChange={event => onChange({ ...draft, name: event.target.value })}
-                  onBlur={onBlur}
+                  placeholder={selected.itemType === 'folder' ? 'Folder name' : 'Request name'}
+                  onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, name: event.target.value })}
+                  onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
                 />
 
                 {draft.itemType === 'request' ? <SaveIndicator isDirty={isDirty} isSaving={isSaving} /> : null}
@@ -58,11 +87,7 @@ export function DetailsPanel({
           </div>
         </div>
 
-        {draft.itemType === 'folder' ? (
-          <FolderDetailsFields draft={draft} onChange={onChange} onBlur={onBlur} />
-        ) : (
-          <RequestDetailsFields draft={draft} onChange={onChange} />
-        )}
+        {draft.itemType === 'folder' ? <FolderDetailsFields draft={draft} /> : <RequestDetailsFields draft={draft} />}
       </div>
     </div>
   )
@@ -83,15 +108,7 @@ function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: bool
   )
 }
 
-function FolderDetailsFields({
-  draft,
-  onChange,
-  onBlur,
-}: {
-  draft: FolderDetailsDraft
-  onChange: (value: DetailsDraft | null) => void
-  onBlur: () => void
-}) {
+function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   return (
     <>
       <DetailsTextArea
@@ -99,36 +116,30 @@ function FolderDetailsFields({
         value={draft.description}
         minHeightClassName="min-h-28"
         placeholder="Describe what this folder is for"
-        onChange={value => onChange({ ...draft, description: value })}
-        onBlur={onBlur}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, description: value })}
+        onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
       />
 
       <DetailsTextArea
         label="Pre-request Script"
         value={draft.preRequestScript}
         minHeightClassName="min-h-40"
-        onChange={value => onChange({ ...draft, preRequestScript: value })}
-        onBlur={onBlur}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
+        onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
       />
 
       <DetailsTextArea
         label="Post-request Script"
         value={draft.postRequestScript}
         minHeightClassName="min-h-40"
-        onChange={value => onChange({ ...draft, postRequestScript: value })}
-        onBlur={onBlur}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
+        onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
       />
     </>
   )
 }
 
-function RequestDetailsFields({
-  draft,
-  onChange,
-}: {
-  draft: RequestDetailsDraft
-  onChange: (value: DetailsDraft | null) => void
-}) {
+function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   return (
     <>
       <section className="w-full border-b border-base-content/10 px-8 pb-6">
@@ -136,7 +147,7 @@ function RequestDetailsFields({
           <select
             className="w-[118px] shrink-0 border-0 border-r border-base-content/10 bg-transparent px-3 py-4 text-sm font-semibold outline-none"
             value={draft.method}
-            onChange={event => onChange({ ...draft, method: event.target.value as RequestMethod })}
+            onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, method: event.target.value as RequestMethod })}
           >
             {REQUEST_METHODS.map(option => (
               <option key={option} value={option}>
@@ -149,7 +160,7 @@ function RequestDetailsFields({
             className="min-w-0 flex-1 border-0 bg-transparent px-4 py-4 text-sm outline-none"
             value={draft.url}
             placeholder="https://api.example.com/resource"
-            onChange={event => onChange({ ...draft, url: event.target.value })}
+            onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, url: event.target.value })}
           />
 
           <button
@@ -169,7 +180,7 @@ function RequestDetailsFields({
               <select
                 className="select select-sm w-auto rounded-none border-base-content/10 bg-base-100/70"
                 value={draft.bodyType}
-                onChange={event => onChange({ ...draft, bodyType: event.target.value as RequestBodyType })}
+                onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, bodyType: event.target.value as RequestBodyType })}
               >
                 {REQUEST_BODY_TYPES.map(option => (
                   <option key={option} value={option}>
@@ -180,7 +191,7 @@ function RequestDetailsFields({
               <select
                 className="select select-sm w-auto rounded-none border-base-content/10 bg-base-100/70"
                 value={draft.rawType}
-                onChange={event => onChange({ ...draft, rawType: event.target.value as RequestRawType })}
+                onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, rawType: event.target.value as RequestRawType })}
                 disabled={draft.bodyType !== 'raw'}
               >
                 {REQUEST_RAW_TYPES.map(option => (
@@ -195,19 +206,19 @@ function RequestDetailsFields({
               className="textarea min-h-[360px] w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6"
               value={draft.body}
               placeholder={draft.bodyType === 'raw' ? '{\n  "hello": "world"\n}' : ''}
-              onChange={event => onChange({ ...draft, body: event.target.value })}
+              onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: event.target.value })}
             />
           </div>
         </div>
 
         <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <HeadersEditor value={draft.headers} onChange={value => onChange({ ...draft, headers: value })} />
+          <HeadersEditor value={draft.headers} onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })} />
 
           <DetailsTextArea
             label="Pre-request Script"
             value={draft.preRequestScript}
             minHeightClassName="min-h-[180px]"
-            onChange={value => onChange({ ...draft, preRequestScript: value })}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
             onBlur={() => undefined}
           />
 
@@ -215,7 +226,7 @@ function RequestDetailsFields({
             label="Post-request Script"
             value={draft.postRequestScript}
             minHeightClassName="min-h-[180px]"
-            onChange={value => onChange({ ...draft, postRequestScript: value })}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
           />
         </div>
@@ -261,10 +272,7 @@ function DetailsTextArea({
     <section className="w-full border-b border-base-content/10 px-8 py-6">
       {label ? <div className="mb-2 text-sm text-base-content/55">{label}</div> : null}
       <textarea
-        className={[
-          'textarea w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6',
-          minHeightClassName,
-        ].join(' ')}
+        className={['textarea w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6', minHeightClassName].join(' ')}
         value={value}
         placeholder={placeholder}
         onChange={event => onChange(event.target.value)}
