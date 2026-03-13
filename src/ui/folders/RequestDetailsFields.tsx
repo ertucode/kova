@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
@@ -6,17 +6,14 @@ import { HeadersEditor } from './HeadersEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { KeyValueEditor } from './KeyValueEditor'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
-import {
-  REQUEST_BODY_TYPES,
-  REQUEST_METHODS,
-  REQUEST_RAW_TYPES,
-  type RequestDetailsDraft,
-} from './folderExplorerTypes'
+import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [response, setResponse] = useState<SendRequestResponse | null>(null)
   const [responseError, setResponseError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const [responsePaneHeight, setResponsePaneHeight] = useState(320)
+  const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
 
   const formattedResponseBody = useMemo(() => {
     if (!response) return ''
@@ -24,6 +21,32 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   }, [response])
 
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const resizeState = resizeStateRef.current
+      if (!resizeState) {
+        return
+      }
+
+      const deltaY = resizeState.startY - event.clientY
+      setResponsePaneHeight(clampResponsePaneHeight(resizeState.startHeight + deltaY))
+    }
+
+    const handlePointerUp = () => {
+      resizeStateRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [])
 
   const sendRequest = async () => {
     setIsSending(true)
@@ -49,9 +72,18 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     setResponse(result.data)
   }
 
+  const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    resizeStateRef.current = {
+      startY: event.clientY,
+      startHeight: responsePaneHeight,
+    }
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+  }
+
   return (
-    <>
-      <section className="w-full border-b border-base-content/10 px-8 pb-6">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <section className="w-full border-b border-base-content/10">
         <div className="flex w-full overflow-hidden border border-base-content/10 bg-base-100/70">
           <select
             className="w-[118px] shrink-0 border-0 border-r border-base-content/10 bg-transparent px-3 py-4 text-sm font-semibold outline-none"
@@ -85,11 +117,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </div>
       </section>
 
-      <section className="grid w-full border-b border-base-content/10 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
-        <div className="border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
-          <div className="border-b border-base-content/10 px-8 py-4">
-            <div className="mb-3 flex items-center gap-3">
-              <div className="text-sm text-base-content/55">Body</div>
+      <section className="grid min-h-0 flex-1 w-full border-b border-base-content/10 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+        <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
+          <div className="flex h-full min-h-0 flex-col border-b border-base-content/10">
+            <div className="flex items-center gap-3">
+              <div className="text-sm text-base-content/55 pl-2">Body</div>
               <select
                 className="select select-sm w-auto rounded-none border-base-content/10 bg-base-100/70"
                 value={draft.bodyType}
@@ -127,10 +159,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
             {draft.bodyType === 'raw' ? (
               <textarea
-                className="textarea min-h-[360px] w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6"
+                className="textarea min-h-0 h-full w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6"
                 value={draft.body}
                 placeholder={'{\n  "hello": "world"\n}'}
-                onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: event.target.value })}
+                onChange={event =>
+                  FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: event.target.value })
+                }
               />
             ) : null}
 
@@ -145,14 +179,14 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             ) : null}
 
             {draft.bodyType === 'none' ? (
-              <div className="flex min-h-[360px] items-center justify-center border border-base-content/10 bg-base-100/35 text-sm text-base-content/45">
+              <div className="flex min-h-0 h-full items-center justify-center border border-base-content/10 bg-base-100/35 text-sm text-base-content/45">
                 No request body
               </div>
             ) : null}
           </div>
         </div>
 
-        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="min-h-0 overflow-auto md:border-l md:border-base-content/10">
           <HeadersEditor
             value={draft.headers}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
@@ -176,21 +210,31 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </div>
       </section>
 
-      <section className="w-full px-8 py-6">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div className="text-sm text-base-content/55">Response</div>
-          <ResponseStatusSummary response={response} responseError={responseError} />
-        </div>
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
-          <ResponseBodyPanel
-            value={formattedResponseBody}
-            description="Response body will appear here."
-            contentType={responseContentType}
-          />
-          <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
+      <section className="shrink-0 bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
+        <button
+          type="button"
+          className="block h-px w-full cursor-ns-resize bg-base-content/10"
+          onPointerDown={startResize}
+          aria-label="Resize response panel"
+          title="Resize response panel"
+        />
+
+        <div className="h-[calc(100%-1px)] overflow-auto px-8 py-6">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div className="text-sm text-base-content/55">Response</div>
+            <ResponseStatusSummary response={response} responseError={responseError} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
+            <ResponseBodyPanel
+              value={formattedResponseBody}
+              description="Response body will appear here."
+              contentType={responseContentType}
+            />
+            <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
+          </div>
         </div>
       </section>
-    </>
+    </div>
   )
 }
 
@@ -258,7 +302,9 @@ function ResponseStatusSummary({
   const statusTone = getStatusTone(response?.status)
 
   if (responseError) {
-    return <div className="max-w-[420px] text-right whitespace-pre-wrap break-words text-sm text-error">{responseError}</div>
+    return (
+      <div className="max-w-[420px] text-right whitespace-pre-wrap break-words text-sm text-error">{responseError}</div>
+    )
   }
 
   if (!response) {
@@ -297,13 +343,15 @@ function formatResponseBody(body: string, headers: string) {
 }
 
 function getResponseContentType(headers: string) {
-  return headers
-    .split('\n')
-    .find(line => line.toLowerCase().startsWith('content-type:'))
-    ?.split(':')
-    .slice(1)
-    .join(':')
-    .trim() ?? null
+  return (
+    headers
+      .split('\n')
+      .find(line => line.toLowerCase().startsWith('content-type:'))
+      ?.split(':')
+      .slice(1)
+      .join(':')
+      .trim() ?? null
+  )
 }
 
 function parseResponseHeaders(value: string) {
@@ -321,7 +369,9 @@ function parseResponseHeaders(value: string) {
         value: line.slice(separatorIndex + 1).trim(),
       }
     })
-    .filter((row): row is { id: string; key: string; value: string } => row !== null && (row.key !== '' || row.value !== ''))
+    .filter(
+      (row): row is { id: string; key: string; value: string } => row !== null && (row.key !== '' || row.value !== '')
+    )
 }
 
 function getStatusTone(status: number | undefined) {
@@ -342,4 +392,9 @@ function getStatusTone(status: number | undefined) {
   }
 
   return { className: 'text-error' }
+}
+
+function clampResponsePaneHeight(height: number) {
+  const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight
+  return Math.max(180, Math.min(height, Math.floor(viewportHeight * 0.8)))
 }

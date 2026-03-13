@@ -54,9 +54,15 @@ export function DetailsPanel() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
-      <div className="flex w-full flex-col items-stretch">
-        <div className="w-full px-8 py-8">
+    <div className={draft.itemType === 'request' ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-auto'}>
+      <div
+        className={
+          draft.itemType === 'request'
+            ? 'flex h-full w-full flex-col items-stretch'
+            : 'flex w-full flex-col items-stretch'
+        }
+      >
+        <div className="w-full px-2 py-2">
           <div className="flex items-center gap-4">
             <div className="shrink-0 rounded-2xl border border-base-content/10 bg-base-100/60 p-3 text-base-content/60">
               {selected.itemType === 'folder' ? (
@@ -98,7 +104,7 @@ function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: bool
   return (
     <div
       className={[
-        'size-2.5 shrink-0 rounded-full transition',
+        'size-2.5 shrink-0 rounded-full transition mr-4',
         isSaving ? 'bg-info shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-info)_18%,transparent)]' : '',
         !isSaving && isDirty
           ? 'bg-warning shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-warning)_18%,transparent)]'
