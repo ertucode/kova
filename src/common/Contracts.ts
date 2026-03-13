@@ -2,16 +2,22 @@ import { type GenericResult } from './GenericError.js'
 import {
   type CreateFolderInput,
   type DeleteFolderInput,
-  type FolderListItem,
   type FolderRecord,
   type GetFolderInput,
-  type MoveFolderInput,
   type RenameFolderInput,
   type UpdateFolderInput,
 } from './Folders.js'
+import {
+  type CreateRequestInput,
+  type DeleteRequestInput,
+  type GetRequestInput,
+  type HttpRequestRecord,
+  type UpdateRequestInput,
+} from './Requests.js'
 import { TaskEvents } from './Tasks.js'
 import { GenericEvent } from './GenericEvent.js'
 import { type AsyncStorageKey } from './AsyncStorageKeys.js'
+import { type ExplorerItem } from './Explorer.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -27,13 +33,16 @@ export type EventResponseMapping = {
   restoreWindowSize: Promise<void>
   getIsCompactWindowSize: Promise<boolean>
   setAsyncStorageValue: void
-  listFolders: Promise<FolderListItem[]>
+  listExplorerItems: Promise<ExplorerItem[]>
   createFolder: Promise<GenericResult<FolderRecord>>
   getFolder: Promise<GenericResult<FolderRecord>>
   renameFolder: Promise<GenericResult<void>>
   updateFolder: Promise<GenericResult<FolderRecord>>
   deleteFolder: Promise<GenericResult<void>>
-  moveFolder: Promise<GenericResult<void>>
+  createRequest: Promise<GenericResult<HttpRequestRecord>>
+  getRequest: Promise<GenericResult<HttpRequestRecord>>
+  updateRequest: Promise<GenericResult<HttpRequestRecord>>
+  deleteRequest: Promise<GenericResult<void>>
 }
 
 export type EventRequestMapping = {
@@ -46,13 +55,16 @@ export type EventRequestMapping = {
   restoreWindowSize: void
   getIsCompactWindowSize: void
   setAsyncStorageValue: { key: AsyncStorageKey; value: $Maybe<string> }
-  listFolders: void
+  listExplorerItems: void
   createFolder: CreateFolderInput
   getFolder: GetFolderInput
   renameFolder: RenameFolderInput
   updateFolder: UpdateFolderInput
   deleteFolder: DeleteFolderInput
-  moveFolder: MoveFolderInput
+  createRequest: CreateRequestInput
+  getRequest: GetRequestInput
+  updateRequest: UpdateRequestInput
+  deleteRequest: DeleteRequestInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -75,11 +87,14 @@ export type WindowElectron = {
   setCompactWindowSize: () => Promise<void>
   restoreWindowSize: () => Promise<void>
   getIsCompactWindowSize: () => Promise<boolean>
-  listFolders: () => Promise<FolderListItem[]>
+  listExplorerItems: () => Promise<ExplorerItem[]>
   createFolder: (input: CreateFolderInput) => Promise<GenericResult<FolderRecord>>
   getFolder: (input: GetFolderInput) => Promise<GenericResult<FolderRecord>>
   renameFolder: (input: RenameFolderInput) => Promise<GenericResult<void>>
   updateFolder: (input: UpdateFolderInput) => Promise<GenericResult<FolderRecord>>
   deleteFolder: (input: DeleteFolderInput) => Promise<GenericResult<void>>
-  moveFolder: (input: MoveFolderInput) => Promise<GenericResult<void>>
+  createRequest: (input: CreateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
+  getRequest: (input: GetRequestInput) => Promise<GenericResult<HttpRequestRecord>>
+  updateRequest: (input: UpdateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
+  deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<void>>
 }

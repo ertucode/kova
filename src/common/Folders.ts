@@ -1,20 +1,15 @@
-export type FolderListItem = {
+export type FolderRecord = {
   id: string
-  parentId: string | null
   name: string
-  position: number
+  description: string
+  preRequestScript: string
+  postRequestScript: string
   createdAt: number
   deletedAt: number | null
 }
 
-export type FolderRecord = FolderListItem & {
-  description: string
-  preRequestScript: string
-  postRequestScript: string
-}
-
 export type CreateFolderInput = {
-  parentId: string | null
+  parentFolderId: string | null
   name: string
 }
 
@@ -37,10 +32,4 @@ export type UpdateFolderInput = {
 
 export type DeleteFolderInput = {
   id: string
-}
-
-export type MoveFolderInput = {
-  id: string
-  parentId: string | null
-  position: number
 }

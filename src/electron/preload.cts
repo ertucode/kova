@@ -30,13 +30,16 @@ electron.contextBridge.exposeInMainWorld('electron', {
   setCompactWindowSize: () => ipcInvoke('setCompactWindowSize', undefined),
   restoreWindowSize: () => ipcInvoke('restoreWindowSize', undefined),
   getIsCompactWindowSize: () => ipcInvoke('getIsCompactWindowSize', undefined),
-  listFolders: () => ipcInvoke('listFolders', undefined),
+  listExplorerItems: () => ipcInvoke('listExplorerItems', undefined),
   createFolder: input => ipcInvoke('createFolder', input),
   getFolder: input => ipcInvoke('getFolder', input),
   renameFolder: input => ipcInvoke('renameFolder', input),
   updateFolder: input => ipcInvoke('updateFolder', input),
   deleteFolder: input => ipcInvoke('deleteFolder', input),
-  moveFolder: input => ipcInvoke('moveFolder', input),
+  createRequest: input => ipcInvoke('createRequest', input),
+  getRequest: input => ipcInvoke('getRequest', input),
+  updateRequest: input => ipcInvoke('updateRequest', input),
+  deleteRequest: input => ipcInvoke('deleteRequest', input),
 } satisfies WindowElectron)
 
 function ipcInvoke<Key extends keyof EventResponseMapping>(

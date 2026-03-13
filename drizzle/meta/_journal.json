@@ -15,6 +15,13 @@
       "when": 1773399479135,
       "tag": "0001_awesome_nuke",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773402154490,
+      "tag": "0002_cold_forgotten_one",
+      "breakpoints": true
     }
   ]
 }

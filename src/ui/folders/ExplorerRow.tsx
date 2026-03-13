@@ -1,0 +1,283 @@
+import { useEffect, useRef, useState } from 'react'
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FileCode2Icon,
+  FolderIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  Trash2Icon,
+  XIcon,
+} from 'lucide-react'
+import type { ExplorerItem } from '@common/Explorer'
+import type { CreateDraft, Selection, TreeNode } from './folderExplorerTypes'
+import { toSelectionKey } from './folderExplorerUtils'
+
+export function ExplorerRow({
+  node,
+  depth,
+  expandedIds,
+  selected,
+  createDraft,
+  forceExpanded,
+  onSelect,
+  onToggleExpanded,
+  onStartCreate,
+  onCreateNameChange,
+  onSubmitCreate,
+  onCancelCreate,
+  onDelete,
+}: {
+  node: TreeNode
+  depth: number
+  expandedIds: Set<string>
+  selected: Selection | null
+  createDraft: CreateDraft | null
+  forceExpanded: boolean
+  onSelect: (selection: Selection) => void
+  onToggleExpanded: (id: string) => void
+  onStartCreate: (itemType: ExplorerItem['itemType'], parentFolderId: string | null) => void
+  onCreateNameChange: (value: string) => void
+  onSubmitCreate: () => void
+  onCancelCreate: () => void
+  onDelete: (item: ExplorerItem) => void
+}) {
+  const hasChildren = node.itemType === 'folder' && node.children.length > 0
+  const isExpanded = forceExpanded || expandedIds.has(node.id)
+  const isSelected = selected?.id === node.id && selected.itemType === node.itemType
+  const isCreateOpen = createDraft?.parentFolderId === node.id
+
+  return (
+    <div>
+      <div
+        className={[
+          'group flex h-8 items-center gap-1 border border-transparent pr-1 transition',
+          isSelected
+            ? 'border-base-content/10 bg-base-100/95 shadow-[0_10px_28px_rgba(0,0,0,0.12)]'
+            : 'hover:border-base-content/8 hover:bg-base-100/55',
+        ].join(' ')}
+        style={{ paddingLeft: depth * 18 }}
+      >
+        <button
+          type="button"
+          className="flex size-7 shrink-0 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content disabled:cursor-default disabled:hover:bg-transparent"
+          onClick={event => {
+            event.stopPropagation()
+            if (node.itemType === 'folder' && hasChildren) {
+              onToggleExpanded(node.id)
+            }
+          }}
+          aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
+          disabled={node.itemType !== 'folder' || !hasChildren}
+        >
+          {node.itemType === 'folder' && hasChildren ? (
+            isExpanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />
+          ) : (
+            <span className="size-4" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          onClick={() => onSelect({ itemType: node.itemType, id: node.id })}
+        >
+          {node.itemType === 'folder' ? (
+            <FolderIcon className="size-4 shrink-0 text-base-content/55" />
+          ) : (
+            <FileCode2Icon className="size-4 shrink-0 text-base-content/55" />
+          )}
+          <div className="min-w-0 flex-1 truncate px-1 text-sm text-base-content">{node.name}</div>
+        </button>
+
+        <ExplorerMenu
+          itemType={node.itemType}
+          onAddFolder={node.itemType === 'folder' ? () => onStartCreate('folder', node.id) : undefined}
+          onAddRequest={node.itemType === 'folder' ? () => onStartCreate('request', node.id) : undefined}
+          onDelete={() => onDelete(node)}
+        />
+      </div>
+
+      {isCreateOpen ? (
+        <DraftRow
+          value={createDraft.name}
+          depth={depth + 1}
+          icon={createDraft.itemType}
+          onChange={onCreateNameChange}
+          onSubmit={onSubmitCreate}
+          onCancel={onCancelCreate}
+        />
+      ) : null}
+
+      {node.itemType === 'folder' && hasChildren && isExpanded ? (
+        <div className="space-y-0.5">
+          {node.children.map(child => (
+            <ExplorerRow
+              key={toSelectionKey(child)}
+              node={child}
+              depth={depth + 1}
+              expandedIds={expandedIds}
+              selected={selected}
+              createDraft={createDraft}
+              forceExpanded={forceExpanded}
+              onSelect={onSelect}
+              onToggleExpanded={onToggleExpanded}
+              onStartCreate={onStartCreate}
+              onCreateNameChange={onCreateNameChange}
+              onSubmitCreate={onSubmitCreate}
+              onCancelCreate={onCancelCreate}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function DraftRow({
+  value,
+  depth,
+  icon,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  value: string
+  depth: number
+  icon: ExplorerItem['itemType']
+  onChange: (value: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="py-1" style={{ paddingLeft: depth * 18 }}>
+      <div className="flex items-center gap-2 border border-base-content/10 bg-base-100/90 px-2 pr-1">
+        {icon === 'folder' ? <FolderIcon className="size-4 text-base-content/55" /> : <FileCode2Icon className="size-4 text-base-content/55" />}
+        <input
+          autoFocus
+          className="h-8 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-base-content/35"
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              onSubmit()
+            }
+
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onCancel()
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="flex size-7 shrink-0 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content"
+          onClick={onCancel}
+          aria-label="Cancel new item"
+          title="Cancel"
+        >
+          <XIcon className="size-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function EmptyState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="mx-4 rounded-[24px] border border-dashed border-base-content/12 bg-base-100/35 px-5 py-8 text-center">
+      <div className="text-sm font-medium text-base-content">{title}</div>
+      <div className="mt-1 text-sm text-base-content/50">{description}</div>
+    </div>
+  )
+}
+
+function ExplorerMenu({
+  itemType,
+  onAddFolder,
+  onAddRequest,
+  onDelete,
+}: {
+  itemType: ExplorerItem['itemType']
+  onAddFolder?: () => void
+  onAddRequest?: () => void
+  onDelete: () => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
+  const runAction = (action: () => void) => {
+    setIsOpen(false)
+    action()
+  }
+
+  return (
+    <div ref={containerRef} className="relative flex shrink-0 items-center">
+      <button
+        type="button"
+        title="Item actions"
+        aria-label="Item actions"
+        className="flex size-7 items-center justify-center text-base-content/45 opacity-0 transition hover:bg-base-200/80 hover:text-base-content group-hover:opacity-100 focus:opacity-100"
+        onClick={event => {
+          event.stopPropagation()
+          setIsOpen(prev => !prev)
+        }}
+      >
+        <MoreHorizontalIcon className="size-4" />
+      </button>
+
+      {isOpen ? (
+        <ul className="menu absolute right-0 top-full z-20 mt-1 w-44 border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
+          {itemType === 'folder' && onAddFolder ? (
+            <li>
+              <button type="button" onClick={() => runAction(onAddFolder)}>
+                <FolderIcon className="size-4" />
+                Add Folder
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'folder' && onAddRequest ? (
+            <li>
+              <button type="button" onClick={() => runAction(onAddRequest)}>
+                <PlusIcon className="size-4" />
+                Add Request
+              </button>
+            </li>
+          ) : null}
+          <li>
+            <button type="button" onClick={() => runAction(onDelete)} className="text-error hover:text-error">
+              <Trash2Icon className="size-4" />
+              Delete
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
+  )
+}

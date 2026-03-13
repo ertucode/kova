@@ -6,7 +6,9 @@ import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { xlsxWorkerPool } from './utils/xlsx-worker-pool.js'
 import { TaskManager } from './TaskManager.js'
 import { initializeDatabase } from './db/index.js'
-import { createFolder, deleteFolder, getFolder, listFolders, moveFolder, renameFolder, updateFolder } from './db/folders.js'
+import { listExplorerItems } from './db/explorer.js'
+import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
+import { createRequest, deleteRequest, getRequest, updateRequest } from './db/requests.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
 import { getServerConfig } from './server-config.js'
@@ -223,8 +225,8 @@ app.on('ready', () => {
     return originalWindowBounds.has(windowId)
   })
 
-  ipcHandle('listFolders', async () => {
-    return listFolders()
+  ipcHandle('listExplorerItems', async () => {
+    return listExplorerItems()
   })
 
   ipcHandle('createFolder', async input => {
@@ -247,8 +249,20 @@ app.on('ready', () => {
     return deleteFolder(input)
   })
 
-  ipcHandle('moveFolder', async input => {
-    return moveFolder(input)
+  ipcHandle('createRequest', async input => {
+    return createRequest(input)
+  })
+
+  ipcHandle('getRequest', async input => {
+    return getRequest(input)
+  })
+
+  ipcHandle('updateRequest', async input => {
+    return updateRequest(input)
+  })
+
+  ipcHandle('deleteRequest', async input => {
+    return deleteRequest(input)
   })
 
   TaskManager.addListener(e => {
