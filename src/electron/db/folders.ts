@@ -2,10 +2,13 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
   CreateFolderInput,
+  FolderListItem,
   DeleteFolderInput,
   FolderRecord,
+  GetFolderInput,
   MoveFolderInput,
   RenameFolderInput,
+  UpdateFolderInput,
 } from '../../common/Folders.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
@@ -14,7 +17,7 @@ import { folders } from './schema.js'
 type Db = ReturnType<typeof getDb>
 type FolderRow = typeof folders.$inferSelect
 
-export async function listFolders(): Promise<FolderRecord[]> {
+export async function listFolders(): Promise<FolderListItem[]> {
   const db = getDb()
   const rows = await db
     .select()
@@ -22,7 +25,7 @@ export async function listFolders(): Promise<FolderRecord[]> {
     .where(isNull(folders.deletedAt))
     .orderBy(folders.parentId, folders.position, folders.createdAt)
 
-  return rows.map(toFolderRecord)
+  return rows.map(toFolderListItem)
 }
 
 export async function createFolder(input: CreateFolderInput): Promise<GenericResult<FolderRecord>> {
@@ -59,6 +62,9 @@ export async function createFolder(input: CreateFolderInput): Promise<GenericRes
         id: crypto.randomUUID(),
         parentId: input.parentId,
         name,
+        description: '',
+        preRequestScript: '',
+        postRequestScript: '',
         position: siblings.length,
         createdAt: now,
         deletedAt: null,
@@ -94,6 +100,66 @@ export async function renameFolder(input: RenameFolderInput): Promise<GenericRes
     }
 
     return Result.Success(undefined)
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
+export async function getFolder(input: GetFolderInput): Promise<GenericResult<FolderRecord>> {
+  const db = getDb()
+
+  try {
+    const folder = db
+      .select()
+      .from(folders)
+      .where(and(eq(folders.id, input.id), isNull(folders.deletedAt)))
+      .get()
+
+    if (!folder) {
+      return GenericError.Message('Folder not found')
+    }
+
+    return Result.Success(toFolderRecord(folder))
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
+export async function updateFolder(input: UpdateFolderInput): Promise<GenericResult<FolderRecord>> {
+  const db = getDb()
+  const name = input.name.trim()
+
+  if (!name) {
+    return GenericError.Message('Folder name is required')
+  }
+
+  try {
+    const result = db
+      .update(folders)
+      .set({
+        name,
+        description: input.description,
+        preRequestScript: input.preRequestScript,
+        postRequestScript: input.postRequestScript,
+      })
+      .where(and(eq(folders.id, input.id), isNull(folders.deletedAt)))
+      .run()
+
+    if (result.changes === 0) {
+      return GenericError.Message('Folder not found')
+    }
+
+    const folder = db
+      .select()
+      .from(folders)
+      .where(and(eq(folders.id, input.id), isNull(folders.deletedAt)))
+      .get()
+
+    if (!folder) {
+      return GenericError.Message('Folder not found')
+    }
+
+    return Result.Success(toFolderRecord(folder))
   } catch (error) {
     return GenericError.Unknown(error)
   }
@@ -206,6 +272,20 @@ export async function moveFolder(input: MoveFolderInput): Promise<GenericResult<
 }
 
 function toFolderRecord(folder: FolderRow): FolderRecord {
+  return {
+    id: folder.id,
+    parentId: folder.parentId,
+    name: folder.name,
+    description: folder.description,
+    preRequestScript: folder.preRequestScript,
+    postRequestScript: folder.postRequestScript,
+    position: folder.position,
+    createdAt: folder.createdAt,
+    deletedAt: folder.deletedAt,
+  }
+}
+
+function toFolderListItem(folder: FolderRow): FolderListItem {
   return {
     id: folder.id,
     parentId: folder.parentId,

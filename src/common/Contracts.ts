@@ -1,5 +1,14 @@
 import { type GenericResult } from './GenericError.js'
-import { type CreateFolderInput, type DeleteFolderInput, type FolderRecord, type MoveFolderInput, type RenameFolderInput } from './Folders.js'
+import {
+  type CreateFolderInput,
+  type DeleteFolderInput,
+  type FolderListItem,
+  type FolderRecord,
+  type GetFolderInput,
+  type MoveFolderInput,
+  type RenameFolderInput,
+  type UpdateFolderInput,
+} from './Folders.js'
 import { TaskEvents } from './Tasks.js'
 import { GenericEvent } from './GenericEvent.js'
 import { type AsyncStorageKey } from './AsyncStorageKeys.js'
@@ -18,9 +27,11 @@ export type EventResponseMapping = {
   restoreWindowSize: Promise<void>
   getIsCompactWindowSize: Promise<boolean>
   setAsyncStorageValue: void
-  listFolders: Promise<FolderRecord[]>
+  listFolders: Promise<FolderListItem[]>
   createFolder: Promise<GenericResult<FolderRecord>>
+  getFolder: Promise<GenericResult<FolderRecord>>
   renameFolder: Promise<GenericResult<void>>
+  updateFolder: Promise<GenericResult<FolderRecord>>
   deleteFolder: Promise<GenericResult<void>>
   moveFolder: Promise<GenericResult<void>>
 }
@@ -37,7 +48,9 @@ export type EventRequestMapping = {
   setAsyncStorageValue: { key: AsyncStorageKey; value: $Maybe<string> }
   listFolders: void
   createFolder: CreateFolderInput
+  getFolder: GetFolderInput
   renameFolder: RenameFolderInput
+  updateFolder: UpdateFolderInput
   deleteFolder: DeleteFolderInput
   moveFolder: MoveFolderInput
 }
@@ -62,9 +75,11 @@ export type WindowElectron = {
   setCompactWindowSize: () => Promise<void>
   restoreWindowSize: () => Promise<void>
   getIsCompactWindowSize: () => Promise<boolean>
-  listFolders: () => Promise<FolderRecord[]>
+  listFolders: () => Promise<FolderListItem[]>
   createFolder: (input: CreateFolderInput) => Promise<GenericResult<FolderRecord>>
+  getFolder: (input: GetFolderInput) => Promise<GenericResult<FolderRecord>>
   renameFolder: (input: RenameFolderInput) => Promise<GenericResult<void>>
+  updateFolder: (input: UpdateFolderInput) => Promise<GenericResult<FolderRecord>>
   deleteFolder: (input: DeleteFolderInput) => Promise<GenericResult<void>>
   moveFolder: (input: MoveFolderInput) => Promise<GenericResult<void>>
 }

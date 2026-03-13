@@ -32,7 +32,9 @@ electron.contextBridge.exposeInMainWorld('electron', {
   getIsCompactWindowSize: () => ipcInvoke('getIsCompactWindowSize', undefined),
   listFolders: () => ipcInvoke('listFolders', undefined),
   createFolder: input => ipcInvoke('createFolder', input),
+  getFolder: input => ipcInvoke('getFolder', input),
   renameFolder: input => ipcInvoke('renameFolder', input),
+  updateFolder: input => ipcInvoke('updateFolder', input),
   deleteFolder: input => ipcInvoke('deleteFolder', input),
   moveFolder: input => ipcInvoke('moveFolder', input),
 } satisfies WindowElectron)

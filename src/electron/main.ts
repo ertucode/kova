@@ -6,7 +6,7 @@ import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { xlsxWorkerPool } from './utils/xlsx-worker-pool.js'
 import { TaskManager } from './TaskManager.js'
 import { initializeDatabase } from './db/index.js'
-import { createFolder, deleteFolder, listFolders, moveFolder, renameFolder } from './db/folders.js'
+import { createFolder, deleteFolder, getFolder, listFolders, moveFolder, renameFolder, updateFolder } from './db/folders.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
 import { getServerConfig } from './server-config.js'
@@ -231,8 +231,16 @@ app.on('ready', () => {
     return createFolder(input)
   })
 
+  ipcHandle('getFolder', async input => {
+    return getFolder(input)
+  })
+
   ipcHandle('renameFolder', async input => {
     return renameFolder(input)
+  })
+
+  ipcHandle('updateFolder', async input => {
+    return updateFolder(input)
   })
 
   ipcHandle('deleteFolder', async input => {

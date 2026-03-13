@@ -6,15 +6,16 @@ import {
   PencilIcon,
   PlusIcon,
   SearchIcon,
-  XIcon,
   Trash2Icon,
+  XIcon,
 } from 'lucide-react'
 import { getWindowElectron } from '@/getWindowElectron'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
-import type { FolderRecord } from '@common/Folders'
+import { useDebounce } from '@/lib/hooks/useDebounce'
+import type { FolderListItem, FolderRecord } from '@common/Folders'
 
-type TreeNode = FolderRecord & {
+type TreeNode = FolderListItem & {
   children: TreeNode[]
 }
 
@@ -23,14 +24,41 @@ type DraftState = {
   name: string
 }
 
+type FolderDetailsDraft = {
+  name: string
+  description: string
+  preRequestScript: string
+  postRequestScript: string
+}
+
 export function FolderExplorer() {
-  const [folders, setFolders] = useState<FolderRecord[]>([])
+  const [folders, setFolders] = useState<FolderListItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [createDraft, setCreateDraft] = useState<DraftState | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [folderDetails, setFolderDetails] = useState<FolderRecord | null>(null)
+  const [detailsDraft, setDetailsDraft] = useState<FolderDetailsDraft | null>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const [isSavingDetails, setIsSavingDetails] = useState(false)
+  const [isDetailsDirty, setIsDetailsDirty] = useState(false)
+  const [headerEditingId, setHeaderEditingId] = useState<string | null>(null)
+  const [headerEditingName, setHeaderEditingName] = useState('')
+  const debouncedDetailsDraft = useDebounce(detailsDraft, 500)
+  const detailsDraftRef = useRef<FolderDetailsDraft | null>(null)
+  const isDetailsDirtyRef = useRef(false)
+  const loadRequestRef = useRef(0)
+  const saveRequestRef = useRef(0)
+
+  useEffect(() => {
+    detailsDraftRef.current = detailsDraft
+  }, [detailsDraft])
+
+  useEffect(() => {
+    isDetailsDirtyRef.current = isDetailsDirty
+  }, [isDetailsDirty])
 
   const loadFolders = useCallback(async () => {
     try {
@@ -56,6 +84,7 @@ export function FolderExplorer() {
         if (prev && nextFolders.some(folder => folder.id === prev)) {
           return prev
         }
+
         return nextFolders[0]?.id ?? null
       })
     } catch (error) {
@@ -67,19 +96,59 @@ export function FolderExplorer() {
     }
   }, [])
 
+  const updateFolderNameInList = useCallback((id: string, name: string) => {
+    setFolders(prev => prev.map(folder => (folder.id === id ? { ...folder, name } : folder)))
+  }, [])
+
+  const loadFolderDetails = useCallback(
+    async (id: string) => {
+      const requestId = ++loadRequestRef.current
+      setIsLoadingDetails(true)
+
+      const result = await getWindowElectron().getFolder({ id })
+      if (requestId !== loadRequestRef.current) return
+
+      setIsLoadingDetails(false)
+
+      if (!result.success) {
+        setFolderDetails(null)
+        setDetailsDraft(null)
+        toast.show(result)
+        return
+      }
+
+      setFolderDetails(result.data)
+      setDetailsDraft(toFolderDetailsDraft(result.data))
+      setIsDetailsDirty(false)
+      updateFolderNameInList(result.data.id, result.data.name)
+    },
+    [updateFolderNameInList]
+  )
+
   useEffect(() => {
     void loadFolders()
   }, [loadFolders])
 
+  useEffect(() => {
+    if (!selectedId) {
+      setFolderDetails(null)
+      setDetailsDraft(null)
+      setIsLoadingDetails(false)
+      setIsDetailsDirty(false)
+      setHeaderEditingId(null)
+      setHeaderEditingName('')
+      return
+    }
+
+    setFolderDetails(null)
+    setDetailsDraft(null)
+    void loadFolderDetails(selectedId)
+  }, [loadFolderDetails, selectedId])
+
   const { roots, folderMap } = useMemo(() => buildTree(folders), [folders])
   const selectedFolder = selectedId ? folderMap.get(selectedId) ?? null : null
   const normalizedSearch = searchQuery.trim().toLowerCase()
-  const hasSearch = normalizedSearch.length > 0
-
-  const visibleRoots = useMemo(
-    () => filterTree(roots, normalizedSearch),
-    [roots, normalizedSearch]
-  )
+  const visibleRoots = useMemo(() => filterTree(roots, normalizedSearch), [roots, normalizedSearch])
 
   const setExpanded = useCallback((id: string, value: boolean) => {
     setExpandedIds(prev => {
@@ -98,6 +167,7 @@ export function FolderExplorer() {
       setEditingId(null)
       setEditingName('')
       setCreateDraft({ parentId, name: '' })
+
       if (parentId) {
         setExpanded(parentId, true)
         setSelectedId(parentId)
@@ -120,14 +190,16 @@ export function FolderExplorer() {
     }
 
     setCreateDraft(null)
+
     if (createDraft.parentId) {
       setExpanded(createDraft.parentId, true)
     }
+
     await loadFolders()
     setSelectedId(result.data.id)
   }, [createDraft, loadFolders, setExpanded])
 
-  const startRename = useCallback((folder: FolderRecord) => {
+  const startRename = useCallback((folder: FolderListItem) => {
     setCreateDraft(null)
     setEditingId(folder.id)
     setEditingName(folder.name)
@@ -148,13 +220,45 @@ export function FolderExplorer() {
       return
     }
 
+    updateFolderNameInList(editingId, editingName.trim())
+
+    setFolderDetails(prev => (prev && prev.id === editingId ? { ...prev, name: editingName.trim() } : prev))
+    setDetailsDraft(prev => (prev && editingId === selectedId ? { ...prev, name: editingName.trim() } : prev))
     setEditingId(null)
     setEditingName('')
     await loadFolders()
-  }, [editingId, editingName, loadFolders])
+  }, [editingId, editingName, loadFolders, selectedId, updateFolderNameInList])
+
+  const startHeaderRename = useCallback((folder: FolderListItem) => {
+    setHeaderEditingId(folder.id)
+    setHeaderEditingName(folder.name)
+  }, [])
+
+  const cancelHeaderRename = useCallback(() => {
+    setHeaderEditingId(null)
+    setHeaderEditingName('')
+  }, [])
+
+  const submitHeaderRename = useCallback(async () => {
+    if (!headerEditingId) return
+
+    const result = await getWindowElectron().renameFolder({ id: headerEditingId, name: headerEditingName })
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    const nextName = headerEditingName.trim()
+    updateFolderNameInList(headerEditingId, nextName)
+    setFolderDetails(prev => (prev && prev.id === headerEditingId ? { ...prev, name: nextName } : prev))
+    setDetailsDraft(prev => (prev && headerEditingId === selectedId ? { ...prev, name: nextName } : prev))
+    setHeaderEditingId(null)
+    setHeaderEditingName('')
+    await loadFolders()
+  }, [headerEditingId, headerEditingName, loadFolders, selectedId, updateFolderNameInList])
 
   const deleteFolder = useCallback(
-    (folder: FolderRecord) => {
+    (folder: FolderListItem) => {
       confirmation.trigger.confirm({
         title: 'Delete folder?',
         message: `"${folder.name}" and all nested folders will be deleted.`,
@@ -169,15 +273,88 @@ export function FolderExplorer() {
           if (editingId === folder.id) {
             cancelRename()
           }
+
           if (createDraft?.parentId === folder.id) {
             cancelCreate()
           }
+
+          if (selectedId === folder.id) {
+            setFolderDetails(null)
+            setDetailsDraft(null)
+          }
+
           await loadFolders()
         },
       })
     },
-    [cancelCreate, cancelRename, createDraft?.parentId, editingId, loadFolders]
+    [cancelCreate, cancelRename, createDraft?.parentId, editingId, loadFolders, selectedId]
   )
+
+  const saveFolderDetails = useCallback(
+    async (draft: FolderDetailsDraft) => {
+      if (!selectedId) return
+
+      const requestId = ++saveRequestRef.current
+      setIsSavingDetails(true)
+
+      const result = await getWindowElectron().updateFolder({
+        id: selectedId,
+        name: draft.name,
+        description: draft.description,
+        preRequestScript: draft.preRequestScript,
+        postRequestScript: draft.postRequestScript,
+      })
+
+      if (requestId !== saveRequestRef.current) {
+        return
+      }
+
+      setIsSavingDetails(false)
+
+      if (!result.success) {
+        toast.show(result)
+        return
+      }
+
+      setFolderDetails(result.data)
+      updateFolderNameInList(result.data.id, result.data.name)
+      setIsDetailsDirty(false)
+
+      if (serializeDetails(detailsDraftRef.current) === serializeDetails(draft)) {
+        setDetailsDraft(toFolderDetailsDraft(result.data))
+      }
+    },
+    [selectedId, updateFolderNameInList]
+  )
+
+  useEffect(() => {
+    if (!folderDetails || !debouncedDetailsDraft || !selectedId || !isDetailsDirty) {
+      return
+    }
+
+    if (serializeDetails(debouncedDetailsDraft) === serializeDetails(toFolderDetailsDraft(folderDetails))) {
+      return
+    }
+
+    void saveFolderDetails(debouncedDetailsDraft)
+  }, [debouncedDetailsDraft, folderDetails, isDetailsDirty, saveFolderDetails, selectedId])
+
+  const flushFolderDetails = useCallback(() => {
+    if (!folderDetails || !detailsDraft || !isDetailsDirtyRef.current) {
+      return
+    }
+
+    if (serializeDetails(detailsDraft) === serializeDetails(toFolderDetailsDraft(folderDetails))) {
+      return
+    }
+
+    void saveFolderDetails(detailsDraft)
+  }, [detailsDraft, folderDetails, saveFolderDetails])
+
+  const handleDetailsChange = useCallback((value: FolderDetailsDraft | null) => {
+    setDetailsDraft(value)
+    setIsDetailsDirty(true)
+  }, [])
 
   return (
     <div className="flex min-h-0 flex-1 bg-base-100">
@@ -235,7 +412,7 @@ export function FolderExplorer() {
                   editingId={editingId}
                   editingName={editingName}
                   createDraft={createDraft}
-                  forceExpanded={hasSearch}
+                  forceExpanded={normalizedSearch.length > 0}
                   onSelect={setSelectedId}
                   onToggleExpanded={id => setExpanded(id, !expandedIds.has(id))}
                   onRenameChange={setEditingName}
@@ -254,13 +431,27 @@ export function FolderExplorer() {
         </div>
       </aside>
 
-      <main className="flex min-h-0 flex-1 items-center justify-center bg-[radial-gradient(circle_at_top_left,color-mix(in_oklch,var(--color-primary)_14%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--color-base-100)_96%,white)_0%,color-mix(in_oklch,var(--color-base-100)_90%,black)_100%)] px-8 py-10">
-        <div className="w-full max-w-3xl rounded-[28px] border border-base-content/10 bg-base-100/60 px-8 py-10 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-sm">
-          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-base-content/40">Selected Folder</div>
-          <div className="mt-4 text-4xl font-semibold tracking-tight text-base-content">
-            {selectedFolder?.name ?? 'Choose a folder'}
+      <main className="flex min-h-0 flex-1 flex-col bg-base-100">
+        {selectedFolder ? (
+          <FolderDetailsPanel
+            folderName={selectedFolder.name}
+            draft={detailsDraft}
+            editingId={headerEditingId}
+            editingName={headerEditingName}
+            isLoading={isLoadingDetails}
+            isSaving={isSavingDetails}
+            onChange={handleDetailsChange}
+            onBlur={flushFolderDetails}
+            onStartRename={() => startHeaderRename(selectedFolder)}
+            onRenameChange={setHeaderEditingName}
+            onSubmitRename={() => void submitHeaderRename()}
+            onCancelRename={cancelHeaderRename}
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-sm text-base-content/45">
+            Select a folder
           </div>
-        </div>
+        )}
       </main>
     </div>
   )
@@ -300,12 +491,12 @@ function FolderRow({
   onRenameChange: (value: string) => void
   onSubmitRename: () => void
   onCancelRename: () => void
-  onStartRename: (folder: FolderRecord) => void
+  onStartRename: (folder: FolderListItem) => void
   onStartCreate: (parentId: string | null) => void
   onCreateNameChange: (value: string) => void
   onSubmitCreate: () => void
   onCancelCreate: () => void
-  onDelete: (folder: FolderRecord) => void
+  onDelete: (folder: FolderListItem) => void
 }) {
   const hasChildren = node.children.length > 0
   const isExpanded = forceExpanded || expandedIds.has(node.id)
@@ -319,7 +510,7 @@ function FolderRow({
         className={[
           'group flex h-8 items-center gap-1 border border-transparent pr-1 transition',
           isSelected
-            ? 'bg-base-100/95 shadow-[0_10px_28px_rgba(0,0,0,0.12)] border-base-content/10'
+            ? 'bg-base-100/95 border-base-content/10 shadow-[0_10px_28px_rgba(0,0,0,0.12)]'
             : 'hover:bg-base-100/55 hover:border-base-content/8',
         ].join(' ')}
         style={{ paddingLeft: depth * 18 }}
@@ -343,32 +534,38 @@ function FolderRow({
           )}
         </button>
 
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center text-left"
-          onClick={() => onSelect(node.id)}
-        >
-          {isEditing ? (
-            <input
-              autoFocus
-              className="h-7 min-w-0 flex-1 border border-base-content/10 bg-base-100 px-2 text-sm outline-none focus:border-base-content/25"
-              value={editingName}
-              onChange={event => onRenameChange(event.target.value)}
-              onClick={event => event.stopPropagation()}
-              onKeyDown={event => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  onSubmitRename()
-                }
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  onCancelRename()
-                }
-              }}
-            />
-          ) : (
-            <span className="truncate text-sm text-base-content">{node.name}</span>
-          )}
+        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onSelect(node.id)}>
+          <div className="relative h-7 w-full">
+            <span
+              className={[
+                'block truncate px-2 py-1.5 text-sm text-base-content transition',
+                isEditing ? 'pointer-events-none opacity-0' : 'opacity-100',
+              ].join(' ')}
+            >
+              {node.name}
+            </span>
+
+            {isEditing ? (
+              <input
+                autoFocus
+                className="absolute inset-0 h-7 w-full border border-base-content/10 bg-base-100 px-2 text-sm outline-none focus:border-base-content/25"
+                value={editingName}
+                onChange={event => onRenameChange(event.target.value)}
+                onClick={event => event.stopPropagation()}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    onSubmitRename()
+                  }
+
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    onCancelRename()
+                  }
+                }}
+              />
+            ) : null}
+          </div>
         </button>
 
         {!isEditing ? (
@@ -422,6 +619,156 @@ function FolderRow({
   )
 }
 
+function FolderDetailsPanel({
+  folderName,
+  draft,
+  editingId,
+  editingName,
+  isLoading,
+  isSaving,
+  onChange,
+  onBlur,
+  onStartRename,
+  onRenameChange,
+  onSubmitRename,
+  onCancelRename,
+}: {
+  folderName: string
+  draft: FolderDetailsDraft | null
+  editingId: string | null
+  editingName: string
+  isLoading: boolean
+  isSaving: boolean
+  onChange: (value: FolderDetailsDraft | null) => void
+  onBlur: () => void
+  onStartRename: () => void
+  onRenameChange: (value: string) => void
+  onSubmitRename: () => void
+  onCancelRename: () => void
+}) {
+  if (isLoading || !draft) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-sm text-base-content/45">
+        Loading folder details...
+      </div>
+    )
+  }
+
+  const isRenaming = editingId !== null
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto">
+      <div className="flex w-full max-w-4xl flex-col items-start">
+        <div className="w-full px-8 py-8">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <div
+                className={[
+                  'truncate py-0.5 text-3xl font-semibold tracking-tight text-base-content transition',
+                  isRenaming ? 'pointer-events-none opacity-0' : 'opacity-100',
+                ].join(' ')}
+              >
+                {folderName}
+              </div>
+
+              {isRenaming ? (
+                <input
+                  autoFocus
+                  className="absolute inset-0 h-full w-full border border-base-content/10 bg-base-100 px-3 text-3xl font-semibold tracking-tight text-base-content outline-none"
+                  value={editingName}
+                  onChange={event => onRenameChange(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      onSubmitRename()
+                    }
+
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      onCancelRename()
+                    }
+                  }}
+                  onBlur={onSubmitRename}
+                />
+              ) : null}
+            </div>
+
+            {!isRenaming ? (
+              <button
+                type="button"
+                className="flex size-7 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content"
+                onClick={onStartRename}
+                aria-label="Rename folder"
+                title="Rename folder"
+              >
+                <PencilIcon className="size-4" />
+              </button>
+            ) : null}
+          </div>
+          {isSaving ? <div className="mt-2 text-sm text-base-content/45">Saving...</div> : null}
+        </div>
+
+        <DetailsTextArea
+          label={null}
+          value={draft.description}
+          minHeightClassName="min-h-28"
+          placeholder="Describe what this folder is for"
+          onChange={value => onChange({ ...draft, description: value })}
+          onBlur={onBlur}
+        />
+
+        <DetailsTextArea
+          label="Pre-request Script"
+          value={draft.preRequestScript}
+          minHeightClassName="min-h-40"
+          onChange={value => onChange({ ...draft, preRequestScript: value })}
+          onBlur={onBlur}
+        />
+
+        <DetailsTextArea
+          label="Post-request Script"
+          value={draft.postRequestScript}
+          minHeightClassName="min-h-40"
+          onChange={value => onChange({ ...draft, postRequestScript: value })}
+          onBlur={onBlur}
+        />
+      </div>
+    </div>
+  )
+}
+
+function DetailsTextArea({
+  label,
+  value,
+  minHeightClassName,
+  placeholder,
+  onChange,
+  onBlur,
+}: {
+  label: string | null
+  value: string
+  minHeightClassName: string
+  placeholder?: string
+  onChange: (value: string) => void
+  onBlur: () => void
+}) {
+  return (
+    <section className="w-full border-b border-base-content/10 px-8 py-6">
+      {label ? <div className="mb-2 text-sm text-base-content/55">{label}</div> : null}
+      <textarea
+        className={[
+          'textarea w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6',
+          minHeightClassName,
+        ].join(' ')}
+        value={value}
+        placeholder={placeholder}
+        onChange={event => onChange(event.target.value)}
+        onBlur={onBlur}
+      />
+    </section>
+  )
+}
+
 function DraftRow({
   value,
   depth,
@@ -442,13 +789,13 @@ function DraftRow({
           autoFocus
           className="h-8 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-base-content/35"
           value={value}
-          placeholder="Folder name"
           onChange={event => onChange(event.target.value)}
           onKeyDown={event => {
             if (event.key === 'Enter') {
               event.preventDefault()
               onSubmit()
             }
+
             if (event.key === 'Escape') {
               event.preventDefault()
               onCancel()
@@ -553,14 +900,14 @@ function FolderMenu({
 
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-[24px] border border-dashed border-base-content/12 bg-base-100/35 px-5 py-8 text-center">
+    <div className="mx-4 rounded-[24px] border border-dashed border-base-content/12 bg-base-100/35 px-5 py-8 text-center">
       <div className="text-sm font-medium text-base-content">{title}</div>
       <div className="mt-1 text-sm text-base-content/50">{description}</div>
     </div>
   )
 }
 
-function buildTree(folders: FolderRecord[]) {
+function buildTree(folders: FolderListItem[]) {
   const nodes = folders
     .slice()
     .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt)
@@ -603,4 +950,19 @@ function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
 
     return [{ ...node, children: filteredChildren }]
   })
+}
+
+function toFolderDetailsDraft(folder: FolderRecord): FolderDetailsDraft {
+  return {
+    name: folder.name,
+    description: folder.description,
+    preRequestScript: folder.preRequestScript,
+    postRequestScript: folder.postRequestScript,
+  }
+}
+
+function serializeDetails(value: FolderDetailsDraft | null) {
+  if (!value) return ''
+
+  return JSON.stringify(value)
 }
