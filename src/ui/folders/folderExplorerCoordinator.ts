@@ -17,6 +17,7 @@ import {
 } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore, getDeletedItemKeys } from './folderExplorerTreeStore'
 import { serializeDetails, toFolderDetailsDraft, toRequestDetailsDraft, toSelectionKey } from './folderExplorerUtils'
+import type { MoveExplorerItemInput } from '@common/Explorer'
 
 const loadTokens: Record<string, number> = {}
 const saveTokens: Record<string, number> = {}
@@ -183,6 +184,23 @@ export namespace FolderExplorerCoordinator {
   export function toggleExpanded(id: string) {
     folderExplorerEditorStore.trigger.expandedToggled({ id })
     persistUiState()
+  }
+
+  export async function moveItem(input: MoveExplorerItemInput) {
+    const result = await getWindowElectron().moveExplorerItem(input)
+
+    if (!result.success) {
+      toast.show(result)
+      return false
+    }
+
+    if (input.targetParentFolderId) {
+      folderExplorerEditorStore.trigger.expandedEnsured({ id: input.targetParentFolderId })
+      persistUiState()
+    }
+
+    await loadItems()
+    return true
   }
 }
 

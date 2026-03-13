@@ -20,3 +20,10 @@ export type ExplorerRequestItem = ExplorerItemBase & {
 }
 
 export type ExplorerItem = ExplorerFolderItem | ExplorerRequestItem
+
+export type MoveExplorerItemInput = {
+  itemType: ExplorerItemType
+  id: string
+  targetParentFolderId: string | null
+  targetPosition: number
+}

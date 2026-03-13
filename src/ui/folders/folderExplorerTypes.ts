@@ -7,6 +7,13 @@ export type TreeNode = ExplorerItem & {
   children: TreeNode[]
 }
 
+export type ExplorerDropTarget = {
+  targetParentFolderId: string | null
+  targetPosition: number
+  placement: 'before' | 'after' | 'inside'
+  indicatorId: string
+}
+
 export type Selection = {
   itemType: ExplorerItem['itemType']
   id: string

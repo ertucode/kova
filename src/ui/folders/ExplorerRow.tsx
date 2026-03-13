@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import {
   ChevronDownIcon,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import type { ExplorerItem } from '@common/Explorer'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
-import type { TreeNode } from './folderExplorerTypes'
+import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -21,10 +21,24 @@ export function ExplorerRow({
   node,
   depth,
   forceExpanded,
+  canDrag,
+  draggedItem,
+  dropTarget,
+  onDragStart,
+  onDragEnd,
+  onRowDragOver,
+  onRowDrop,
 }: {
   node: TreeNode
   depth: number
   forceExpanded: boolean
+  canDrag: boolean
+  draggedItem: Selection | null
+  dropTarget: ExplorerDropTarget | null
+  onDragStart: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
+  onDragEnd: () => void
+  onRowDragOver: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
+  onRowDrop: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
 }) {
   const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
@@ -42,17 +56,27 @@ export function ExplorerRow({
   const isExpanded = forceExpanded || expandedIds.includes(node.id)
   const isSelected = selected?.id === node.id && selected.itemType === node.itemType
   const isCreateOpen = createDraft?.parentFolderId === node.id
+  const rowKey = toSelectionKey(node)
+  const isDragged = draggedItem?.id === node.id && draggedItem.itemType === node.itemType
+  const showDropBefore = dropTarget?.indicatorId === `${rowKey}:before`
+  const showDropAfter = dropTarget?.indicatorId === `${rowKey}:after`
+  const showDropInside = dropTarget?.indicatorId === `${rowKey}:inside`
 
   return (
-    <div>
+    <div className="relative">
+      {showDropBefore ? <div className="pointer-events-none absolute inset-x-3 top-0 z-10 h-0.5 bg-primary" /> : null}
       <div
         className={[
-          'group flex h-8 items-center gap-1 border border-transparent pr-1 transition',
+          'group flex h-8 items-center gap-1 border pr-1 transition',
           isSelected
             ? 'border-base-content/10 bg-base-100/95 shadow-[0_10px_28px_rgba(0,0,0,0.12)]'
-            : 'hover:border-base-content/8 hover:bg-base-100/55',
+            : 'border-transparent hover:border-base-content/8 hover:bg-base-100/55',
+          canDrag ? 'cursor-grab active:cursor-grabbing' : '',
+          isDragged ? 'opacity-45' : '',
+          showDropInside ? 'border-primary/50 bg-primary/8' : '',
         ].join(' ')}
         style={{ paddingLeft: depth * 18 }}
+        draggable={canDrag}
         onPointerDown={event => {
           if (event.button !== 0) {
             return
@@ -60,9 +84,14 @@ export function ExplorerRow({
 
           FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id })
         }}
+        onDragStart={event => onDragStart(node, event)}
+        onDragEnd={onDragEnd}
+        onDragOver={event => onRowDragOver(node, event)}
+        onDrop={event => void onRowDrop(node, event)}
       >
         <button
           type="button"
+          draggable={false}
           className="flex size-7 shrink-0 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content disabled:cursor-default disabled:hover:bg-transparent"
           onClick={event => {
             event.stopPropagation()
@@ -118,10 +147,24 @@ export function ExplorerRow({
       {node.itemType === 'folder' && hasChildren && isExpanded ? (
         <div>
           {node.children.map(child => (
-            <ExplorerRow key={toSelectionKey(child)} node={child} depth={depth + 1} forceExpanded={forceExpanded} />
+            <ExplorerRow
+              key={toSelectionKey(child)}
+              node={child}
+              depth={depth + 1}
+              forceExpanded={forceExpanded}
+              canDrag={canDrag}
+              draggedItem={draggedItem}
+              dropTarget={dropTarget}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onRowDragOver={onRowDragOver}
+              onRowDrop={onRowDrop}
+            />
           ))}
         </div>
       ) : null}
+
+      {showDropAfter ? <div className="pointer-events-none absolute inset-x-3 bottom-0 z-10 h-0.5 bg-primary" /> : null}
     </div>
   )
 }
@@ -234,6 +277,7 @@ function ExplorerMenu({
         type="button"
         title="Item actions"
         aria-label="Item actions"
+        draggable={false}
         className="flex size-7 items-center justify-center text-base-content/45 opacity-0 transition hover:bg-base-200/80 hover:text-base-content group-hover:opacity-100 focus:opacity-100"
         onClick={event => {
           event.stopPropagation()

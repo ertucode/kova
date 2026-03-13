@@ -40,6 +40,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   getRequest: input => ipcInvoke('getRequest', input),
   updateRequest: input => ipcInvoke('updateRequest', input),
   deleteRequest: input => ipcInvoke('deleteRequest', input),
+  moveExplorerItem: input => ipcInvoke('moveExplorerItem', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
 } satisfies WindowElectron)
 

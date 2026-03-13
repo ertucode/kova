@@ -9,6 +9,7 @@ import { initializeDatabase } from './db/index.js'
 import { listExplorerItems } from './db/explorer.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
 import { createRequest, deleteRequest, getRequest, updateRequest } from './db/requests.js'
+import { moveExplorerItem } from './db/tree-items.js'
 import { sendRequest } from './send-request.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
@@ -264,6 +265,10 @@ app.on('ready', () => {
 
   ipcHandle('deleteRequest', async input => {
     return deleteRequest(input)
+  })
+
+  ipcHandle('moveExplorerItem', async input => {
+    return moveExplorerItem(input)
   })
 
   ipcHandle('sendRequest', async input => {

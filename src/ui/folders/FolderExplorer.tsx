@@ -1,24 +1,125 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { FileCode2Icon, FolderIcon, SearchIcon } from 'lucide-react'
+import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
 import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
-import { buildTree, filterTree } from './folderExplorerUtils'
+import { buildTree, filterTree, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+
+type DropPlacement = ExplorerDropTarget['placement']
 
 export function FolderExplorer() {
   const items = useSelector(folderExplorerTreeStore, state => state.context.items)
   const searchQuery = useSelector(folderExplorerTreeStore, state => state.context.searchQuery)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
+  const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
+  const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
 
   useEffect(() => {
     void FolderExplorerCoordinator.loadItems()
   }, [])
 
-  const { roots } = useMemo(() => buildTree(items), [items])
+  const { roots, itemMap } = useMemo(() => buildTree(items), [items])
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const visibleRoots = useMemo(() => filterTree(roots, normalizedSearch), [roots, normalizedSearch])
+  const canDrag = normalizedSearch.length === 0 && createDraft === null
+
+  const clearDragState = () => {
+    setDraggedItem(null)
+    setDropTarget(null)
+  }
+
+  const handleDragStart = (node: TreeNode, event: DragEvent<HTMLDivElement>) => {
+    if (!canDrag) {
+      event.preventDefault()
+      return
+    }
+
+    const selection = { itemType: node.itemType, id: node.id } satisfies Selection
+    setDraggedItem(selection)
+    setDropTarget(null)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', toSelectionKey(selection))
+  }
+
+  const handleDragEnd = () => {
+    clearDragState()
+  }
+
+  const handleRowDragOver = (node: TreeNode, event: DragEvent<HTMLDivElement>) => {
+    if (!canDrag || !draggedItem) {
+      return
+    }
+
+    const nextDropTarget = getRowDropTarget({ draggedItem, itemMap, roots, node, event })
+    if (!nextDropTarget) {
+      setDropTarget(null)
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDropTarget(current => (isSameDropTarget(current, nextDropTarget) ? current : nextDropTarget))
+  }
+
+  const handleRowDrop = async (node: TreeNode, event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!canDrag || !draggedItem) {
+      clearDragState()
+      return
+    }
+
+    const nextDropTarget = dropTarget ?? getRowDropTarget({ draggedItem, itemMap, roots, node, event })
+    const itemToMove = draggedItem
+    clearDragState()
+
+    if (!nextDropTarget) {
+      return
+    }
+
+    await FolderExplorerCoordinator.moveItem({
+      itemType: itemToMove.itemType,
+      id: itemToMove.id,
+      targetParentFolderId: nextDropTarget.targetParentFolderId,
+      targetPosition: nextDropTarget.targetPosition,
+    })
+  }
+
+  const handleRootEndDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!canDrag || !draggedItem) {
+      return
+    }
+
+    const nextDropTarget = getRootEndDropTarget(roots, draggedItem)
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDropTarget(current => (isSameDropTarget(current, nextDropTarget) ? current : nextDropTarget))
+  }
+
+  const handleRootEndDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!canDrag || !draggedItem) {
+      clearDragState()
+      return
+    }
+
+    const nextDropTarget = getRootEndDropTarget(roots, draggedItem)
+    const itemToMove = draggedItem
+    clearDragState()
+
+    await FolderExplorerCoordinator.moveItem({
+      itemType: itemToMove.itemType,
+      id: itemToMove.id,
+      targetParentFolderId: nextDropTarget.targetParentFolderId,
+      targetPosition: nextDropTarget.targetPosition,
+    })
+  }
 
   return (
     <div className="flex min-h-0 flex-1 bg-base-100">
@@ -77,8 +178,33 @@ export function FolderExplorer() {
           ) : (
             <div>
               {visibleRoots.map(node => (
-                <ExplorerRow key={`${node.itemType}:${node.id}`} node={node} depth={0} forceExpanded={normalizedSearch.length > 0} />
+                <ExplorerRow
+                  key={`${node.itemType}:${node.id}`}
+                  node={node}
+                  depth={0}
+                  forceExpanded={normalizedSearch.length > 0}
+                  canDrag={canDrag}
+                  draggedItem={draggedItem}
+                  dropTarget={dropTarget}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onRowDragOver={handleRowDragOver}
+                  onRowDrop={handleRowDrop}
+                />
               ))}
+
+              {canDrag && draggedItem ? (
+                <div
+                  className={[
+                    'mx-3 mt-1 h-5 rounded-lg transition',
+                    dropTarget?.indicatorId === 'root:end' ? 'bg-base-content/8' : 'bg-transparent',
+                  ].join(' ')}
+                  onDragOver={handleRootEndDragOver}
+                  onDrop={event => void handleRootEndDrop(event)}
+                >
+                  {dropTarget?.indicatorId === 'root:end' ? <div className="translate-y-[9px] border-t border-primary" /> : null}
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -88,5 +214,106 @@ export function FolderExplorer() {
         <DetailsPanel />
       </main>
     </div>
+  )
+}
+
+function getRowDropTarget({
+  draggedItem,
+  itemMap,
+  roots,
+  node,
+  event,
+}: {
+  draggedItem: Selection
+  itemMap: Map<string, TreeNode>
+  roots: TreeNode[]
+  node: TreeNode
+  event: DragEvent<HTMLDivElement>
+}): ExplorerDropTarget | null {
+  if (draggedItem.id === node.id && draggedItem.itemType === node.itemType) {
+    return null
+  }
+
+  const rect = event.currentTarget.getBoundingClientRect()
+  const ratio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5
+  const placement: DropPlacement = node.itemType === 'folder' && ratio > 0.28 && ratio < 0.72 ? 'inside' : ratio < 0.5 ? 'before' : 'after'
+
+  if (placement === 'inside') {
+    if (draggedItem.itemType === 'folder' && isFolderAncestor(itemMap, draggedItem.id, node.id)) {
+      return null
+    }
+
+    const children = node.children.filter(child => !isSameSelection(child, draggedItem))
+    return {
+      targetParentFolderId: node.id,
+      targetPosition: children.length,
+      placement,
+      indicatorId: `${toSelectionKey(node)}:${placement}`,
+    }
+  }
+
+  const siblings = getSiblingNodes(roots, itemMap, node).filter(sibling => !isSameSelection(sibling, draggedItem))
+  const targetIndex = siblings.findIndex(sibling => isSameSelection(sibling, node))
+  if (targetIndex < 0) {
+    return null
+  }
+
+  return {
+    targetParentFolderId: node.parentFolderId,
+    targetPosition: placement === 'before' ? targetIndex : targetIndex + 1,
+    placement,
+    indicatorId: `${toSelectionKey(node)}:${placement}`,
+  }
+}
+
+function getRootEndDropTarget(roots: TreeNode[], draggedItem: Selection): ExplorerDropTarget {
+  return {
+    targetParentFolderId: null,
+    targetPosition: roots.filter(root => !isSameSelection(root, draggedItem)).length,
+    placement: 'after',
+    indicatorId: 'root:end',
+  }
+}
+
+function getSiblingNodes(roots: TreeNode[], itemMap: Map<string, TreeNode>, node: TreeNode) {
+  if (!node.parentFolderId) {
+    return roots
+  }
+
+  return itemMap.get(`folder:${node.parentFolderId}`)?.children ?? roots
+}
+
+function isFolderAncestor(itemMap: Map<string, TreeNode>, folderId: string, candidateChildId: string) {
+  let currentFolderId: string | null = candidateChildId
+
+  while (currentFolderId) {
+    if (currentFolderId === folderId) {
+      return true
+    }
+
+    currentFolderId = itemMap.get(`folder:${currentFolderId}`)?.parentFolderId ?? null
+  }
+
+  return false
+}
+
+function isSameSelection(left: Selection | TreeNode | null, right: Selection | TreeNode | null) {
+  if (!left || !right) {
+    return left === right
+  }
+
+  return left.id === right.id && left.itemType === right.itemType
+}
+
+function isSameDropTarget(left: ExplorerDropTarget | null, right: ExplorerDropTarget | null) {
+  if (!left || !right) {
+    return left === right
+  }
+
+  return (
+    left.targetParentFolderId === right.targetParentFolderId &&
+    left.targetPosition === right.targetPosition &&
+    left.placement === right.placement &&
+    left.indicatorId === right.indicatorId
   )
 }

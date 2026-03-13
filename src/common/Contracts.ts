@@ -19,7 +19,7 @@ import {
 import { TaskEvents } from './Tasks.js'
 import { GenericEvent } from './GenericEvent.js'
 import { type AsyncStorageKey } from './AsyncStorageKeys.js'
-import { type ExplorerItem } from './Explorer.js'
+import { type ExplorerItem, type MoveExplorerItemInput } from './Explorer.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -45,6 +45,7 @@ export type EventResponseMapping = {
   getRequest: Promise<GenericResult<HttpRequestRecord>>
   updateRequest: Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: Promise<GenericResult<void>>
+  moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
 }
 
@@ -68,6 +69,7 @@ export type EventRequestMapping = {
   getRequest: GetRequestInput
   updateRequest: UpdateRequestInput
   deleteRequest: DeleteRequestInput
+  moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
 }
 
@@ -101,5 +103,6 @@ export type WindowElectron = {
   getRequest: (input: GetRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   updateRequest: (input: UpdateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<void>>
+  moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
 }
