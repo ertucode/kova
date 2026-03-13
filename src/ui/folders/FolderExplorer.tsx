@@ -1,16 +1,44 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileCode2Icon, FolderIcon, SearchIcon } from 'lucide-react'
+import { z } from 'zod'
+import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import type { ExplorerItem } from '@common/Explorer'
 import type { FolderRecord } from '@common/Folders'
 import { getWindowElectron } from '@/getWindowElectron'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
+import { useAsyncStorage } from '@/lib/hooks/useAsyncStorage'
 import { DetailsPanel } from './DetailsPanel'
 import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
-import type { CreateDraft, DetailsDraft, Selection } from './folderExplorerTypes'
+import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type CreateDraft, type DetailsDraft, type Selection } from './folderExplorerTypes'
 import { buildTree, filterTree, serializeDetails, toDetailsDraft, toFolderDetailsDraft, toRequestDetailsDraft, toSelectionKey } from './folderExplorerUtils'
 
 const LAST_SELECTED_TREE_ITEM_KEY = 'folderExplorer:lastSelectedTreeItem'
+
+const folderDetailsDraftSchema = z.object({
+  itemType: z.literal('folder'),
+  name: z.string(),
+  description: z.string(),
+  preRequestScript: z.string(),
+  postRequestScript: z.string(),
+})
+
+const requestDetailsDraftSchema = z.object({
+  itemType: z.literal('request'),
+  name: z.string(),
+  method: z.enum(REQUEST_METHODS),
+  url: z.string(),
+  preRequestScript: z.string(),
+  postRequestScript: z.string(),
+  headers: z.string(),
+  body: z.string(),
+  bodyType: z.enum(REQUEST_BODY_TYPES),
+  rawType: z.enum(REQUEST_RAW_TYPES),
+})
+
+const persistedDraftsSchema = z.record(z.string(), z.discriminatedUnion('itemType', [folderDetailsDraftSchema, requestDetailsDraftSchema]))
+
+type DraftSaveStatus = 'idle' | 'saving' | 'error'
 
 export function FolderExplorer() {
   const [items, setItems] = useState<ExplorerItem[]>([])
@@ -19,18 +47,41 @@ export function FolderExplorer() {
   const [createDraft, setCreateDraft] = useState<CreateDraft | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [folderDetails, setFolderDetails] = useState<FolderRecord | null>(null)
+  const [persistedDrafts, setPersistedDrafts] = useAsyncStorage(
+    AsyncStorageKeys.folderExplorerDrafts,
+    persistedDraftsSchema,
+    {}
+  )
   const [detailsDraft, setDetailsDraft] = useState<DetailsDraft | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
-  const [isSavingDetails, setIsSavingDetails] = useState(false)
+  const [draftSaveStatuses, setDraftSaveStatuses] = useState<Record<string, DraftSaveStatus>>({})
   const [isDetailsDirty, setIsDetailsDirty] = useState(false)
   const detailsDraftRef = useRef<DetailsDraft | null>(null)
+  const persistedDraftsRef = useRef<Record<string, DetailsDraft>>(persistedDrafts)
   const isDetailsDirtyRef = useRef(false)
+  const draftVersionsRef = useRef<Record<string, number>>({})
+  const latestSaveTokensRef = useRef<Record<string, number>>({})
   const loadRequestRef = useRef(0)
-  const saveRequestRef = useRef(0)
+
+  const selectedKey = selected ? toSelectionKey(selected) : null
+  const isSavingDetails = selectedKey ? draftSaveStatuses[selectedKey] === 'saving' : false
+  const dirtyRequestIds = useMemo(
+    () =>
+      new Set(
+        Object.keys(persistedDrafts)
+          .filter(key => key.startsWith('request:'))
+          .map(key => key.slice('request:'.length))
+      ),
+    [persistedDrafts]
+  )
 
   useEffect(() => {
     detailsDraftRef.current = detailsDraft
   }, [detailsDraft])
+
+  useEffect(() => {
+    persistedDraftsRef.current = persistedDrafts
+  }, [persistedDrafts])
 
   useEffect(() => {
     isDetailsDirtyRef.current = isDetailsDirty
@@ -85,9 +136,25 @@ export function FolderExplorer() {
     )
   }, [])
 
+  const removePersistedDraft = useCallback(
+    (selection: Selection) => {
+      const key = toSelectionKey(selection)
+      setPersistedDrafts(current => {
+        if (!(key in current)) {
+          return current
+        }
+
+        const { [key]: _removed, ...rest } = current
+        return rest
+      })
+    },
+    [setPersistedDrafts]
+  )
+
   const loadSelectedDetails = useCallback(
     async (selection: Selection) => {
       const requestId = ++loadRequestRef.current
+      const selectionKey = toSelectionKey(selection)
       setIsLoadingDetails(true)
 
       if (selection.itemType === 'folder') {
@@ -102,9 +169,20 @@ export function FolderExplorer() {
           return
         }
 
+        const nextDraft = toFolderDetailsDraft(result.data)
+        const persistedDraft = persistedDraftsRef.current[selectionKey]
+        const hasUnsavedDraft = persistedDraft && serializeDetails(persistedDraft) !== serializeDetails(nextDraft)
+
         setFolderDetails(result.data)
-        setDetailsDraft(toFolderDetailsDraft(result.data))
-        setIsDetailsDirty(false)
+        setDetailsDraft(hasUnsavedDraft ? persistedDraft : nextDraft)
+        setIsDetailsDirty(Boolean(hasUnsavedDraft))
+        draftVersionsRef.current[selectionKey] = hasUnsavedDraft ? 1 : 0
+        setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
+
+        if (!hasUnsavedDraft && persistedDraft) {
+          removePersistedDraft(selection)
+        }
+
         updateItemNameInList(selection, result.data.name)
         return
       }
@@ -120,49 +198,72 @@ export function FolderExplorer() {
         return
       }
 
+      const nextDraft = toRequestDetailsDraft(result.data)
+      const persistedDraft = persistedDraftsRef.current[selectionKey]
+      const hasUnsavedDraft = persistedDraft && serializeDetails(persistedDraft) !== serializeDetails(nextDraft)
+
       setFolderDetails(null)
-      setDetailsDraft(toRequestDetailsDraft(result.data))
-      setIsDetailsDirty(false)
+      setDetailsDraft(hasUnsavedDraft ? persistedDraft : nextDraft)
+      setIsDetailsDirty(Boolean(hasUnsavedDraft))
+      draftVersionsRef.current[selectionKey] = hasUnsavedDraft ? 1 : 0
+      setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
+
+      if (!hasUnsavedDraft && persistedDraft) {
+        removePersistedDraft(selection)
+      }
+
       updateItemNameInList(selection, result.data.name)
     },
-    [updateItemNameInList]
+    [removePersistedDraft, updateItemNameInList]
   )
 
   const saveDetails = useCallback(
-    async (draft: DetailsDraft) => {
-      if (!selected) return
-
-      const requestId = ++saveRequestRef.current
-      setIsSavingDetails(true)
+    async (selection: Selection, draft: DetailsDraft) => {
+      const selectionKey = toSelectionKey(selection)
+      const version = draftVersionsRef.current[selectionKey] ?? 0
+      const nextSaveToken = (latestSaveTokensRef.current[selectionKey] ?? 0) + 1
+      latestSaveTokensRef.current[selectionKey] = nextSaveToken
+      setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'saving' }))
 
       if (draft.itemType === 'folder') {
         const result = await getWindowElectron().updateFolder({
-          id: selected.id,
+          id: selection.id,
           name: draft.name,
           description: draft.description,
           preRequestScript: draft.preRequestScript,
           postRequestScript: draft.postRequestScript,
         })
 
-        if (requestId !== saveRequestRef.current) return
+        if (latestSaveTokensRef.current[selectionKey] !== nextSaveToken) return
 
-        setIsSavingDetails(false)
         if (!result.success) {
+          setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'error' }))
           toast.show(result)
           return
         }
 
-        updateItemNameInList(selected, result.data.name)
-        setIsDetailsDirty(false)
-        setFolderDetails(result.data)
-        if (serializeDetails(detailsDraftRef.current) === serializeDetails(draft)) {
-          setDetailsDraft(toFolderDetailsDraft(result.data))
+        setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
+
+        if ((draftVersionsRef.current[selectionKey] ?? 0) !== version) {
+          return
+        }
+
+        const nextDraft = toFolderDetailsDraft(result.data)
+        updateItemNameInList(selection, result.data.name)
+        removePersistedDraft(selection)
+
+        if (selected?.id === selection.id && selected.itemType === selection.itemType) {
+          setIsDetailsDirty(false)
+          setFolderDetails(result.data)
+          if (serializeDetails(detailsDraftRef.current) === serializeDetails(draft)) {
+            setDetailsDraft(nextDraft)
+          }
         }
         return
       }
 
       const result = await getWindowElectron().updateRequest({
-        id: selected.id,
+        id: selection.id,
         name: draft.name,
         method: draft.method,
         url: draft.url,
@@ -174,21 +275,32 @@ export function FolderExplorer() {
         rawType: draft.rawType,
       })
 
-      if (requestId !== saveRequestRef.current) return
+      if (latestSaveTokensRef.current[selectionKey] !== nextSaveToken) return
 
-      setIsSavingDetails(false)
       if (!result.success) {
+        setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'error' }))
         toast.show(result)
         return
       }
 
-      updateItemNameInList(selected, result.data.name)
-      setIsDetailsDirty(false)
-      if (serializeDetails(detailsDraftRef.current) === serializeDetails(draft)) {
-        setDetailsDraft(toRequestDetailsDraft(result.data))
+      setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
+
+      if ((draftVersionsRef.current[selectionKey] ?? 0) !== version) {
+        return
+      }
+
+      const nextDraft = toRequestDetailsDraft(result.data)
+      updateItemNameInList(selection, result.data.name)
+      removePersistedDraft(selection)
+
+      if (selected?.id === selection.id && selected.itemType === selection.itemType) {
+        setIsDetailsDirty(false)
+        if (serializeDetails(detailsDraftRef.current) === serializeDetails(draft)) {
+          setDetailsDraft(nextDraft)
+        }
       }
     },
-    [selected, updateItemNameInList]
+    [removePersistedDraft, selected, updateItemNameInList]
   )
 
   useEffect(() => {
@@ -223,7 +335,7 @@ export function FolderExplorer() {
           return
         }
 
-        void saveDetails(draft)
+        void saveDetails(selected, draft)
       }
     }
 
@@ -232,7 +344,7 @@ export function FolderExplorer() {
   }, [saveDetails, selected])
 
   const flushDetails = useCallback(() => {
-    if (!detailsDraft || !isDetailsDirtyRef.current || detailsDraft.itemType === 'request') {
+    if (!selected || !detailsDraft || !isDetailsDirtyRef.current || detailsDraft.itemType === 'request') {
       return
     }
 
@@ -245,13 +357,25 @@ export function FolderExplorer() {
       return
     }
 
-    void saveDetails(detailsDraft)
-  }, [detailsDraft, folderDetails, saveDetails])
+    void saveDetails(selected, detailsDraft)
+  }, [detailsDraft, folderDetails, saveDetails, selected])
 
   const handleDetailsChange = useCallback((value: DetailsDraft | null) => {
+    if (!selected || !value) {
+      setDetailsDraft(value)
+      return
+    }
+
+    const selectionKey = toSelectionKey(selected)
+    draftVersionsRef.current[selectionKey] = (draftVersionsRef.current[selectionKey] ?? 0) + 1
+    setPersistedDrafts(current => ({
+      ...current,
+      [selectionKey]: value,
+    }))
     setDetailsDraft(value)
     setIsDetailsDirty(true)
-  }, [])
+    setDraftSaveStatuses(prev => ({ ...prev, [selectionKey]: 'idle' }))
+  }, [selected, setPersistedDrafts])
 
   const setExpanded = useCallback((id: string, value: boolean) => {
     setExpandedIds(prev => {
@@ -347,6 +471,17 @@ export function FolderExplorer() {
             return
           }
 
+          removePersistedDraft({ itemType: item.itemType, id: item.id })
+          setDraftSaveStatuses(prev => {
+            const key = toSelectionKey(item)
+            if (!(key in prev)) {
+              return prev
+            }
+
+            const { [key]: _removed, ...rest } = prev
+            return rest
+          })
+
           if (selected?.id === item.id && selected.itemType === item.itemType) {
             setFolderDetails(null)
             setDetailsDraft(null)
@@ -360,7 +495,7 @@ export function FolderExplorer() {
         },
       })
     },
-    [cancelCreate, createDraft?.parentFolderId, loadExplorerItems, selected]
+    [cancelCreate, createDraft?.parentFolderId, loadExplorerItems, removePersistedDraft, selected]
   )
 
   const { roots, itemMap } = useMemo(() => buildTree(items), [items])
@@ -431,6 +566,7 @@ export function FolderExplorer() {
                   depth={0}
                   expandedIds={expandedIds}
                   selected={selected}
+                  dirtyRequestIds={dirtyRequestIds}
                   createDraft={createDraft}
                   forceExpanded={normalizedSearch.length > 0}
                   onSelect={setSelected}

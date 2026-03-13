@@ -1,6 +1,6 @@
 import { loadFromAsyncStorage, saveToAsyncStorage } from '@/utils/asyncStorage'
 import { AsyncStorageKey } from '@common/AsyncStorageKeys'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ZodType } from 'zod'
 
 export function useAsyncStorage<T>(
@@ -19,18 +19,21 @@ export function useAsyncStorage<T>(
     }
   })
 
-  const setValue = (value: T | ((val: T) => T)) => {
-    setStoredValue(storedValue => {
-      try {
-        const valueToStore = value instanceof Function ? value(storedValue) : value
-        saveToAsyncStorage(key, schema, valueToStore)
-        return valueToStore
-      } catch (error) {
-        console.error(error)
-        return storedValue
-      }
-    })
-  }
+  const setValue = useCallback(
+    (value: T | ((val: T) => T)) => {
+      setStoredValue(storedValue => {
+        try {
+          const valueToStore = value instanceof Function ? value(storedValue) : value
+          saveToAsyncStorage(key, schema, valueToStore)
+          return valueToStore
+        } catch (error) {
+          console.error(error)
+          return storedValue
+        }
+      })
+    },
+    [key, schema]
+  )
 
   return [storedValue, setValue] as const
 }

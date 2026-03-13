@@ -39,15 +39,20 @@ export function DetailsPanel({
             </div>
 
             <div className="min-w-0 flex-1">
-              <input
-                className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
-                value={draft.name}
-                placeholder={item.itemType === 'folder' ? 'Folder name' : 'Request name'}
-                onChange={event => onChange({ ...draft, name: event.target.value })}
-                onBlur={onBlur}
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
+                  value={draft.name}
+                  placeholder={item.itemType === 'folder' ? 'Folder name' : 'Request name'}
+                  onChange={event => onChange({ ...draft, name: event.target.value })}
+                  onBlur={onBlur}
+                />
+
+                {draft.itemType === 'request' ? <SaveIndicator isDirty={isDirty} isSaving={isSaving} /> : null}
+              </div>
+
               <div className="mt-2 h-5 text-sm text-base-content/45">
-                {isSaving ? 'Saving...' : draft.itemType === 'request' && isDirty ? 'Press Cmd+S to save' : ' '}
+                {isSaving && draft.itemType === 'folder' ? 'Saving...' : ' '}
               </div>
             </div>
           </div>
@@ -60,6 +65,21 @@ export function DetailsPanel({
         )}
       </div>
     </div>
+  )
+}
+
+function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: boolean }) {
+  return (
+    <div
+      className={[
+        'size-2.5 shrink-0 rounded-full transition',
+        isSaving ? 'bg-info shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-info)_18%,transparent)]' : '',
+        !isSaving && isDirty ? 'bg-warning shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-warning)_18%,transparent)]' : '',
+        !isSaving && !isDirty ? 'bg-base-content/12' : '',
+      ].join(' ')}
+      aria-label={isSaving ? 'Saving request' : isDirty ? 'Request has unsaved changes' : 'Request is saved'}
+      title={isSaving ? 'Saving request' : isDirty ? 'Request has unsaved changes' : 'Request is saved'}
+    />
   )
 }
 

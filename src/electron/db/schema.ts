@@ -36,7 +36,7 @@ export const requests = sqliteTable(
     url: text('url').notNull().default(''),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
-    headers: text('headers').notNull().default('[]'),
+    headers: text('headers').notNull().default(''),
     body: text('body').notNull().default(''),
     bodyType: text('body_type').notNull().default('none'),
     rawType: text('raw_type').notNull().default('json'),
@@ -45,10 +45,7 @@ export const requests = sqliteTable(
   },
   table => [
     index('requests_deleted_at_idx').on(table.deletedAt),
-    check(
-      'requests_body_type_check',
-      sql`${table.bodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`
-    ),
+    check('requests_body_type_check', sql`${table.bodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`),
     check('requests_raw_type_check', sql`${table.rawType} in ('json', 'text')`),
   ]
 )

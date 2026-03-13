@@ -3,6 +3,7 @@ export const AsyncStorageKeys = {
   recents: 'recents',
   settings: 'settings',
   tags: 'tags',
+  folderExplorerDrafts: 'folderExplorerDrafts',
   oneTimeLayoutModel: 'oneTimeLayoutModel',
   customLayouts: 'customLayouts',
   columnPrefs: 'columnPrefs',

@@ -18,6 +18,7 @@ export function ExplorerRow({
   depth,
   expandedIds,
   selected,
+  dirtyRequestIds,
   createDraft,
   forceExpanded,
   onSelect,
@@ -32,6 +33,7 @@ export function ExplorerRow({
   depth: number
   expandedIds: Set<string>
   selected: Selection | null
+  dirtyRequestIds: Set<string>
   createDraft: CreateDraft | null
   forceExpanded: boolean
   onSelect: (selection: Selection) => void
@@ -46,6 +48,7 @@ export function ExplorerRow({
   const isExpanded = forceExpanded || expandedIds.has(node.id)
   const isSelected = selected?.id === node.id && selected.itemType === node.itemType
   const isCreateOpen = createDraft?.parentFolderId === node.id
+  const isRequestDirty = node.itemType === 'request' && dirtyRequestIds.has(node.id)
 
   return (
     <div>
@@ -88,6 +91,13 @@ export function ExplorerRow({
             <FileCode2Icon className="size-4 shrink-0 text-base-content/55" />
           )}
           <div className="min-w-0 flex-1 truncate px-1 text-sm text-base-content">{node.name}</div>
+          {isRequestDirty ? (
+            <div
+              className="size-2 shrink-0 rounded-full bg-warning"
+              aria-label="Request has unsaved changes"
+              title="Request has unsaved changes"
+            />
+          ) : null}
         </button>
 
         <ExplorerMenu
@@ -118,6 +128,7 @@ export function ExplorerRow({
               depth={depth + 1}
               expandedIds={expandedIds}
               selected={selected}
+              dirtyRequestIds={dirtyRequestIds}
               createDraft={createDraft}
               forceExpanded={forceExpanded}
               onSelect={onSelect}
