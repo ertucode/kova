@@ -1,5 +1,6 @@
 import type { ExplorerItem } from '@common/Explorer'
 import type { FolderRecord } from '@common/Folders'
+import type { KeyValueRow } from '@common/KeyValueRows'
 import type { HttpRequestRecord, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
 
 export type TreeNode = ExplorerItem & {
@@ -40,13 +41,7 @@ export type RequestDetailsDraft = {
 
 export type DetailsDraft = FolderDetailsDraft | RequestDetailsDraft
 
-export type HeaderRow = {
-  id: string
-  enabled: boolean
-  key: string
-  value: string
-  description: string
-}
+export type HeaderRow = KeyValueRow
 
 export const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 

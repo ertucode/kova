@@ -12,6 +12,8 @@ import {
   type DeleteRequestInput,
   type GetRequestInput,
   type HttpRequestRecord,
+  type SendRequestInput,
+  type SendRequestResponse,
   type UpdateRequestInput,
 } from './Requests.js'
 import { TaskEvents } from './Tasks.js'
@@ -43,6 +45,7 @@ export type EventResponseMapping = {
   getRequest: Promise<GenericResult<HttpRequestRecord>>
   updateRequest: Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: Promise<GenericResult<void>>
+  sendRequest: Promise<GenericResult<SendRequestResponse>>
 }
 
 export type EventRequestMapping = {
@@ -65,6 +68,7 @@ export type EventRequestMapping = {
   getRequest: GetRequestInput
   updateRequest: UpdateRequestInput
   deleteRequest: DeleteRequestInput
+  sendRequest: SendRequestInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -97,4 +101,5 @@ export type WindowElectron = {
   getRequest: (input: GetRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   updateRequest: (input: UpdateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<void>>
+  sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
 }

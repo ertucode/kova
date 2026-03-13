@@ -44,3 +44,20 @@ export type UpdateRequestInput = {
 export type DeleteRequestInput = {
   id: string
 }
+
+export type SendRequestInput = {
+  method: RequestMethod
+  url: string
+  headers: string
+  body: string
+  bodyType: RequestBodyType
+  rawType: RequestRawType
+}
+
+export type SendRequestResponse = {
+  status: number
+  statusText: string
+  headers: string
+  body: string
+  durationMs: number
+}

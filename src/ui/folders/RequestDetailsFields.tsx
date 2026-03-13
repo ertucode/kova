@@ -1,6 +1,10 @@
-import type { RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
+import { useMemo, useState } from 'react'
+import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
+import { getWindowElectron } from '@/getWindowElectron'
+import { errorResponseToMessage } from '@common/GenericError'
 import { HeadersEditor } from './HeadersEditor'
 import { DetailsTextArea } from './DetailsTextArea'
+import { KeyValueEditor } from './KeyValueEditor'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import {
   REQUEST_BODY_TYPES,
@@ -10,6 +14,41 @@ import {
 } from './folderExplorerTypes'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
+  const [response, setResponse] = useState<SendRequestResponse | null>(null)
+  const [responseError, setResponseError] = useState<string | null>(null)
+  const [isSending, setIsSending] = useState(false)
+
+  const formattedResponseBody = useMemo(() => {
+    if (!response) return ''
+    return formatResponseBody(response.body, response.headers)
+  }, [response])
+
+  const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
+
+  const sendRequest = async () => {
+    setIsSending(true)
+    setResponseError(null)
+
+    const result = await getWindowElectron().sendRequest({
+      method: draft.method,
+      url: draft.url,
+      headers: draft.headers,
+      body: draft.body,
+      bodyType: draft.bodyType,
+      rawType: draft.rawType,
+    })
+
+    setIsSending(false)
+
+    if (!result.success) {
+      setResponse(null)
+      setResponseError(errorResponseToMessage(result.error))
+      return
+    }
+
+    setResponse(result.data)
+  }
+
   return (
     <>
       <section className="w-full border-b border-base-content/10 px-8 pb-6">
@@ -38,8 +77,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           <button
             type="button"
             className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-6 py-4 text-sm font-medium text-base-content transition hover:bg-base-300"
+            onClick={() => void sendRequest()}
+            disabled={isSending}
           >
-            Send
+            {isSending ? 'Sending...' : 'Send'}
           </button>
         </div>
       </section>
@@ -84,12 +125,30 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               </select>
             </div>
 
-            <textarea
-              className="textarea min-h-[360px] w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6"
-              value={draft.body}
-              placeholder={draft.bodyType === 'raw' ? '{\n  "hello": "world"\n}' : ''}
-              onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: event.target.value })}
-            />
+            {draft.bodyType === 'raw' ? (
+              <textarea
+                className="textarea min-h-[360px] w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6"
+                value={draft.body}
+                placeholder={'{\n  "hello": "world"\n}'}
+                onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: event.target.value })}
+              />
+            ) : null}
+
+            {isParamBodyType(draft.bodyType) ? (
+              <KeyValueEditor
+                label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
+                value={draft.body}
+                onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
+                keyPlaceholder="key"
+                valuePlaceholder="value"
+              />
+            ) : null}
+
+            {draft.bodyType === 'none' ? (
+              <div className="flex min-h-[360px] items-center justify-center border border-base-content/10 bg-base-100/35 text-sm text-base-content/45">
+                No request body
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -118,22 +177,169 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       </section>
 
       <section className="w-full px-8 py-6">
-        <div className="mb-4 text-sm text-base-content/55">Response</div>
-        <div className="grid gap-4 md:grid-cols-3">
-          <EmptyPanel title="Status" description="Response status will appear here." />
-          <EmptyPanel title="Headers" description="Response headers will appear here." />
-          <EmptyPanel title="Body" description="Response body will appear here." />
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="text-sm text-base-content/55">Response</div>
+          <ResponseStatusSummary response={response} responseError={responseError} />
+        </div>
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
+          <ResponseBodyPanel
+            value={formattedResponseBody}
+            description="Response body will appear here."
+            contentType={responseContentType}
+          />
+          <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
         </div>
       </section>
     </>
   )
 }
 
-function EmptyPanel({ title, description }: { title: string; description: string }) {
+function ResponseBodyPanel({
+  value,
+  description,
+  contentType,
+}: {
+  value: string
+  description: string
+  contentType: string | null
+}) {
   return (
     <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 px-4 py-4">
-      <div className="text-sm font-medium text-base-content">{title}</div>
-      <div className="mt-2 text-sm text-base-content/50">{description}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-sm font-medium text-base-content">Body</div>
+        {contentType ? <div className="text-xs text-base-content/45">{contentType}</div> : null}
+      </div>
+
+      {value ? (
+        <pre className="mt-2 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-base-content">
+          {value}
+        </pre>
+      ) : (
+        <div className="mt-2 text-sm text-base-content/50">{description}</div>
+      )}
     </div>
   )
+}
+
+function ResponseHeadersPanel({ value, description }: { value: string; description: string }) {
+  const rows = parseResponseHeaders(value)
+
+  return (
+    <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 px-4 py-4">
+      <div className="text-sm font-medium text-base-content">Headers</div>
+
+      {rows.length > 0 ? (
+        <div className="mt-3 overflow-auto">
+          <table className="w-full table-fixed border-collapse text-sm">
+            <tbody>
+              {rows.map(row => (
+                <tr key={row.id} className="align-top">
+                  <td className="w-[42%] pr-4 py-1.5 text-base-content/55">{row.key}</td>
+                  <td className="py-1.5 break-words text-base-content">{row.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="mt-2 text-sm text-base-content/50">{description}</div>
+      )}
+    </div>
+  )
+}
+
+function ResponseStatusSummary({
+  response,
+  responseError,
+}: {
+  response: SendRequestResponse | null
+  responseError: string | null
+}) {
+  const statusTone = getStatusTone(response?.status)
+
+  if (responseError) {
+    return <div className="max-w-[420px] text-right whitespace-pre-wrap break-words text-sm text-error">{responseError}</div>
+  }
+
+  if (!response) {
+    return null
+  }
+
+  return (
+    <div className="text-right">
+      <div className={`text-sm font-semibold ${statusTone.className}`}>
+        {response.status} {response.statusText}
+      </div>
+      <div className="mt-1 text-xs text-base-content/45">{response.durationMs} ms</div>
+    </div>
+  )
+}
+
+function isParamBodyType(bodyType: RequestBodyType) {
+  return bodyType === 'form-data' || bodyType === 'x-www-form-urlencoded'
+}
+
+function formatResponseBody(body: string, headers: string) {
+  if (!body.trim()) return ''
+
+  const contentType = getResponseContentType(headers)?.toLowerCase()
+
+  const looksJson = contentType?.includes('json') || /^[\[{]/.test(body.trim())
+  if (!looksJson) {
+    return body
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(body), null, 2)
+  } catch {
+    return body
+  }
+}
+
+function getResponseContentType(headers: string) {
+  return headers
+    .split('\n')
+    .find(line => line.toLowerCase().startsWith('content-type:'))
+    ?.split(':')
+    .slice(1)
+    .join(':')
+    .trim() ?? null
+}
+
+function parseResponseHeaders(value: string) {
+  return value
+    .split('\n')
+    .map((line, index) => {
+      const separatorIndex = line.indexOf(':')
+      if (separatorIndex < 0) {
+        return null
+      }
+
+      return {
+        id: `response-header-${index}`,
+        key: line.slice(0, separatorIndex).trim(),
+        value: line.slice(separatorIndex + 1).trim(),
+      }
+    })
+    .filter((row): row is { id: string; key: string; value: string } => row !== null && (row.key !== '' || row.value !== ''))
+}
+
+function getStatusTone(status: number | undefined) {
+  if (!status) {
+    return { className: 'text-base-content' }
+  }
+
+  if (status >= 200 && status < 300) {
+    return { className: 'text-success' }
+  }
+
+  if (status >= 300 && status < 400) {
+    return { className: 'text-info' }
+  }
+
+  if (status >= 400 && status < 500) {
+    return { className: 'text-warning' }
+  }
+
+  return { className: 'text-error' }
 }

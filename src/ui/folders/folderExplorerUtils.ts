@@ -1,5 +1,6 @@
 import type { ExplorerItem } from '@common/Explorer'
 import type { FolderRecord } from '@common/Folders'
+import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import type { HttpRequestRecord } from '@common/Requests'
 import type {
   DetailsDraft,
@@ -100,69 +101,13 @@ export function toSelectionKey(value: Selection | ExplorerItem) {
 }
 
 export function parseHeaderRows(value: string): HeaderRow[] {
-  return value
-    .split('\n')
-    .map((line, index) => parseHeaderRow(line, index))
-    .filter((row): row is HeaderRow => row !== null)
+  return parseKeyValueRows(value)
 }
 
 export function stringifyHeaderRows(rows: HeaderRow[]) {
-  const populatedRows = rows.filter(hasHeaderContent)
-  if (populatedRows.length === 0) {
-    return ''
-  }
-
-  return populatedRows
-    .map(row => {
-      const prefix = row.enabled ? '' : '//'
-      const description = row.description.trim() ? ` // ${row.description.trim()}` : ''
-      return `${prefix}${row.key.trim()}:${row.value.trim()}${description}`
-    })
-    .join('\n')
+  return stringifyKeyValueRows(rows)
 }
 
 export function createEmptyHeaderRow(): HeaderRow {
-  return {
-    id: crypto.randomUUID(),
-    enabled: true,
-    key: '',
-    value: '',
-    description: '',
-  }
-}
-
-function parseHeaderRow(line: string, index: number): HeaderRow | null {
-  const trimmedLine = line.trim()
-  if (!trimmedLine) {
-    return null
-  }
-
-  const enabled = !trimmedLine.startsWith('//')
-  const content = enabled ? trimmedLine : trimmedLine.slice(2)
-  const descriptionIndex = content.indexOf(' // ')
-  const entry = descriptionIndex >= 0 ? content.slice(0, descriptionIndex) : content
-  const description = descriptionIndex >= 0 ? content.slice(descriptionIndex + 4) : ''
-  const separatorIndex = entry.indexOf(':')
-
-  if (separatorIndex < 0) {
-    return {
-      id: `header-${index}`,
-      enabled,
-      key: entry.trim(),
-      value: '',
-      description,
-    }
-  }
-
-  return {
-    id: `header-${index}`,
-    enabled,
-    key: entry.slice(0, separatorIndex).trim(),
-    value: entry.slice(separatorIndex + 1).trim(),
-    description,
-  }
-}
-
-function hasHeaderContent(row: HeaderRow) {
-  return row.key.trim() !== '' || row.value.trim() !== '' || row.description.trim() !== ''
+  return createEmptyKeyValueRow()
 }
