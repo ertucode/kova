@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "npm-run-all --parallel dev:react dev:electron",
     "dev:react": "vite",
-    "dev:electron": "npm run transpile:electron; cross-env NODE_ENV=development electron .",
+    "dev:electron": "npm run transpile:electron && cross-env NODE_ENV=development electron .",
     "build:react": "tsc -b && vite build",
     "check:frontend": "tsc -b",
     "check:backend": "tsc -p ./src/electron/tsconfig.json",
@@ -25,7 +25,7 @@
     "preview": "vite preview",
     "transpile:electron": "tsc -p ./src/electron/tsconfig.json",
     "build-code": "npm run transpile:electron && npm run build:react",
-    "build": "npm run build-code && CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON_BUILDER_ASAR=false electron-builder --mac --arm64 --dir --config.mac.target=dir --config.npmRebuild=false",
+    "build": "npm run build-code && electron-builder --mac dmg --arm64",
     "build-distributable": "npm run build-code && electron-builder --mac --arm64",
     "build-vendor": "node scripts/build-all.mjs",
     "build-everything": "npm run build-vendor && npm run build",

@@ -1,12 +1,12 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  FolderIcon,
-  FolderOpenIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
+  SearchIcon,
+  XIcon,
   Trash2Icon,
 } from 'lucide-react'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -30,6 +30,7 @@ export function FolderExplorer() {
   const [createDraft, setCreateDraft] = useState<DraftState | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const loadFolders = useCallback(async () => {
     try {
@@ -37,8 +38,8 @@ export function FolderExplorer() {
       setFolders(nextFolders)
 
       setExpandedIds(prev => {
-        const ids = new Set(nextFolders.map(folder => folder.id))
-        const next = new Set([...prev].filter(id => ids.has(id)))
+        const validIds = new Set(nextFolders.map(folder => folder.id))
+        const next = new Set([...prev].filter(id => validIds.has(id)))
 
         if (next.size === 0) {
           nextFolders.forEach(folder => {
@@ -70,9 +71,15 @@ export function FolderExplorer() {
     void loadFolders()
   }, [loadFolders])
 
-  const { roots, folderMap, treeMap } = useMemo(() => buildTree(folders), [folders])
+  const { roots, folderMap } = useMemo(() => buildTree(folders), [folders])
   const selectedFolder = selectedId ? folderMap.get(selectedId) ?? null : null
-  const selectedTreeNode = selectedId ? treeMap.get(selectedId) ?? null : null
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const hasSearch = normalizedSearch.length > 0
+
+  const visibleRoots = useMemo(
+    () => filterTree(roots, normalizedSearch),
+    [roots, normalizedSearch]
+  )
 
   const setExpanded = useCallback((id: string, value: boolean) => {
     setExpandedIds(prev => {
@@ -86,15 +93,18 @@ export function FolderExplorer() {
     })
   }, [])
 
-  const startCreate = useCallback((parentId: string | null) => {
-    setEditingId(null)
-    setEditingName('')
-    setCreateDraft({ parentId, name: '' })
-    if (parentId) {
-      setExpanded(parentId, true)
-      setSelectedId(parentId)
-    }
-  }, [setExpanded])
+  const startCreate = useCallback(
+    (parentId: string | null) => {
+      setEditingId(null)
+      setEditingName('')
+      setCreateDraft({ parentId, name: '' })
+      if (parentId) {
+        setExpanded(parentId, true)
+        setSelectedId(parentId)
+      }
+    },
+    [setExpanded]
+  )
 
   const cancelCreate = useCallback(() => {
     setCreateDraft(null)
@@ -143,129 +153,128 @@ export function FolderExplorer() {
     await loadFolders()
   }, [editingId, editingName, loadFolders])
 
-  const deleteFolder = useCallback((folder: FolderRecord) => {
-    confirmation.trigger.confirm({
-      title: 'Delete folder?',
-      message: `"${folder.name}" and all nested folders will be deleted.`,
-      confirmText: 'Delete',
-      onConfirm: async () => {
-        const result = await getWindowElectron().deleteFolder({ id: folder.id })
-        if (!result.success) {
-          toast.show(result)
-          return
-        }
+  const deleteFolder = useCallback(
+    (folder: FolderRecord) => {
+      confirmation.trigger.confirm({
+        title: 'Delete folder?',
+        message: `"${folder.name}" and all nested folders will be deleted.`,
+        confirmText: 'Delete',
+        onConfirm: async () => {
+          const result = await getWindowElectron().deleteFolder({ id: folder.id })
+          if (!result.success) {
+            toast.show(result)
+            return
+          }
 
-        if (editingId === folder.id) {
-          cancelRename()
-        }
-        if (createDraft?.parentId === folder.id) {
-          cancelCreate()
-        }
-        await loadFolders()
-      },
-    })
-  }, [cancelCreate, cancelRename, createDraft?.parentId, editingId, loadFolders])
-
-  const moveFolder = useCallback(async (id: string, parentId: string | null, position: number) => {
-    const result = await getWindowElectron().moveFolder({ id, parentId, position })
-    if (!result.success) {
-      toast.show(result)
-      return
-    }
-
-    if (parentId) {
-      setExpanded(parentId, true)
-    }
-    await loadFolders()
-  }, [loadFolders, setExpanded])
+          if (editingId === folder.id) {
+            cancelRename()
+          }
+          if (createDraft?.parentId === folder.id) {
+            cancelCreate()
+          }
+          await loadFolders()
+        },
+      })
+    },
+    [cancelCreate, cancelRename, createDraft?.parentId, editingId, loadFolders]
+  )
 
   return (
     <div className="flex min-h-0 flex-1 bg-base-100">
-      <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-200/35">
-        <div className="flex items-center justify-between border-b border-base-content/10 px-4 py-3">
-          <div className="text-sm font-medium text-base-content">Folders</div>
-          <button className="btn btn-ghost btn-sm" onClick={() => startCreate(null)}>
-            <PlusIcon className="size-4" />
-          </button>
+      <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--color-base-200)_86%,black)_0%,color-mix(in_oklch,var(--color-base-100)_94%,black)_100%)]">
+        <div className="border-b border-base-content/10 px-4 py-4">
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">Folders</div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
+              onClick={() => startCreate(null)}
+              aria-label="Add folder"
+              title="Add folder"
+            >
+              <PlusIcon className="size-4" />
+            </button>
+
+            <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
+              <SearchIcon className="size-4 shrink-0" />
+              <input
+                type="text"
+                className="w-full bg-transparent outline-none placeholder:text-base-content/35"
+                placeholder="Search folders"
+                value={searchQuery}
+                onChange={event => setSearchQuery(event.target.value)}
+              />
+            </label>
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto px-2 py-2">
+        <div className="min-h-0 flex-1 overflow-auto py-3">
           {createDraft?.parentId === null ? (
             <DraftRow
               value={createDraft.name}
+              depth={0}
               onChange={value => setCreateDraft({ parentId: null, name: value })}
               onSubmit={() => void submitCreate()}
               onCancel={cancelCreate}
             />
           ) : null}
 
-          {roots.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-base-content/45">No folders</div>
+          {folders.length === 0 ? (
+            <EmptyState title="No folders yet" description="Create your first folder to get started." />
+          ) : visibleRoots.length === 0 ? (
+            <EmptyState title="No matches" description="Try a different folder name." />
           ) : (
-            roots.map(node => (
-              <FolderNode
-                key={node.id}
-                node={node}
-                depth={0}
-                treeMap={treeMap}
-                expandedIds={expandedIds}
-                selectedId={selectedId}
-                editingId={editingId}
-                editingName={editingName}
-                createDraft={createDraft}
-                onSelect={setSelectedId}
-                onToggleExpanded={id => setExpanded(id, !expandedIds.has(id))}
-                onRenameChange={setEditingName}
-                onSubmitRename={() => void submitRename()}
-                onCancelRename={cancelRename}
-                onStartRename={startRename}
-                onStartCreate={startCreate}
-                onCreateNameChange={value => setCreateDraft(prev => (prev ? { ...prev, name: value } : prev))}
-                onSubmitCreate={() => void submitCreate()}
-                onCancelCreate={cancelCreate}
-                onDelete={deleteFolder}
-                onMove={moveFolder}
-              />
-            ))
+            <div className="space-y-0.5">
+              {visibleRoots.map(node => (
+                <FolderRow
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  expandedIds={expandedIds}
+                  selectedId={selectedId}
+                  editingId={editingId}
+                  editingName={editingName}
+                  createDraft={createDraft}
+                  forceExpanded={hasSearch}
+                  onSelect={setSelectedId}
+                  onToggleExpanded={id => setExpanded(id, !expandedIds.has(id))}
+                  onRenameChange={setEditingName}
+                  onSubmitRename={() => void submitRename()}
+                  onCancelRename={cancelRename}
+                  onStartRename={startRename}
+                  onStartCreate={startCreate}
+                  onCreateNameChange={value => setCreateDraft(prev => (prev ? { ...prev, name: value } : prev))}
+                  onSubmitCreate={() => void submitCreate()}
+                  onCancelCreate={cancelCreate}
+                  onDelete={deleteFolder}
+                />
+              ))}
+            </div>
           )}
         </div>
       </aside>
 
-      <main className="flex min-h-0 flex-1 flex-col bg-base-100">
-        <div className="border-b border-base-content/10 px-6 py-4">
-          <div className="text-sm font-medium text-base-content">{selectedFolder?.name ?? 'Folders'}</div>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col px-6 py-5 text-sm text-base-content/60">
-          {selectedFolder ? (
-            <div className="space-y-4">
-              <div className="grid max-w-xl grid-cols-[140px_1fr] gap-y-3">
-                <div className="text-base-content/45">Name</div>
-                <div className="text-base-content">{selectedFolder.name}</div>
-                <div className="text-base-content/45">Children</div>
-                <div className="text-base-content">{selectedTreeNode?.children.length ?? 0}</div>
-                <div className="text-base-content/45">Created</div>
-                <div className="text-base-content">{new Date(selectedFolder.createdAt).toLocaleString()}</div>
-              </div>
-            </div>
-          ) : (
-            <div>Select a folder</div>
-          )}
+      <main className="flex min-h-0 flex-1 items-center justify-center bg-[radial-gradient(circle_at_top_left,color-mix(in_oklch,var(--color-primary)_14%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--color-base-100)_96%,white)_0%,color-mix(in_oklch,var(--color-base-100)_90%,black)_100%)] px-8 py-10">
+        <div className="w-full max-w-3xl rounded-[28px] border border-base-content/10 bg-base-100/60 px-8 py-10 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-base-content/40">Selected Folder</div>
+          <div className="mt-4 text-4xl font-semibold tracking-tight text-base-content">
+            {selectedFolder?.name ?? 'Choose a folder'}
+          </div>
         </div>
       </main>
     </div>
   )
 }
 
-function FolderNode({
+function FolderRow({
   node,
   depth,
-  treeMap,
   expandedIds,
   selectedId,
   editingId,
   editingName,
   createDraft,
+  forceExpanded,
   onSelect,
   onToggleExpanded,
   onRenameChange,
@@ -277,16 +286,15 @@ function FolderNode({
   onSubmitCreate,
   onCancelCreate,
   onDelete,
-  onMove,
 }: {
   node: TreeNode
   depth: number
-  treeMap: Map<string, TreeNode>
   expandedIds: Set<string>
   selectedId: string | null
   editingId: string | null
   editingName: string
   createDraft: DraftState | null
+  forceExpanded: boolean
   onSelect: (id: string) => void
   onToggleExpanded: (id: string) => void
   onRenameChange: (value: string) => void
@@ -298,59 +306,52 @@ function FolderNode({
   onSubmitCreate: () => void
   onCancelCreate: () => void
   onDelete: (folder: FolderRecord) => void
-  onMove: (id: string, parentId: string | null, position: number) => Promise<void>
 }) {
-  const isExpanded = expandedIds.has(node.id)
+  const hasChildren = node.children.length > 0
+  const isExpanded = forceExpanded || expandedIds.has(node.id)
   const isSelected = selectedId === node.id
   const isEditing = editingId === node.id
   const isCreateOpen = createDraft?.parentId === node.id
-  const siblingIds = node.parentId ? treeMap.get(node.parentId)?.children.map(child => child.id) ?? [] : []
-  const rootIds = !node.parentId ? Array.from(treeMap.values()).filter(item => item.parentId === null).map(item => item.id) : []
-  const currentSiblingIds = node.parentId ? siblingIds : rootIds
-  const index = currentSiblingIds.indexOf(node.id)
-  const hasChildren = node.children.length > 0
-
-  const moveIn = async () => {
-    if (index <= 0) return
-    const prevSibling = treeMap.get(currentSiblingIds[index - 1])
-    if (!prevSibling) return
-    await onMove(node.id, prevSibling.id, prevSibling.children.length)
-  }
-
-  const moveOut = async () => {
-    if (!node.parentId) return
-    const parent = treeMap.get(node.parentId)
-    if (!parent) return
-    await onMove(node.id, parent.parentId, parent.position + 1)
-  }
 
   return (
     <div>
       <div
         className={[
-          'group flex items-center gap-1 rounded-md px-2 py-1 text-sm',
-          isSelected ? 'bg-primary/14 text-base-content' : 'text-base-content/78 hover:bg-base-300/35',
+          'group flex h-8 items-center gap-1 border border-transparent pr-1 transition',
+          isSelected
+            ? 'bg-base-100/95 shadow-[0_10px_28px_rgba(0,0,0,0.12)] border-base-content/10'
+            : 'hover:bg-base-100/55 hover:border-base-content/8',
         ].join(' ')}
-        style={{ paddingLeft: 8 + depth * 18 }}
+        style={{ paddingLeft: depth * 18 }}
       >
         <button
-          className="flex size-5 items-center justify-center rounded text-base-content/45 hover:bg-base-300/40 hover:text-base-content"
-          onClick={() => (hasChildren ? onToggleExpanded(node.id) : undefined)}
           type="button"
+          className="flex size-7 shrink-0 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content disabled:cursor-default disabled:hover:bg-transparent"
+          onClick={event => {
+            event.stopPropagation()
+            if (hasChildren) {
+              onToggleExpanded(node.id)
+            }
+          }}
+          aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
+          disabled={!hasChildren}
         >
-          {hasChildren ? (isExpanded ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />) : null}
+          {hasChildren ? (
+            isExpanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />
+          ) : (
+            <span className="size-4" />
+          )}
         </button>
 
         <button
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
           type="button"
+          className="flex min-w-0 flex-1 items-center text-left"
           onClick={() => onSelect(node.id)}
         >
-          {isExpanded ? <FolderOpenIcon className="size-4 shrink-0 text-base-content/55" /> : <FolderIcon className="size-4 shrink-0 text-base-content/55" />}
           {isEditing ? (
             <input
               autoFocus
-              className="input input-xs h-7 min-w-0 flex-1"
+              className="h-7 min-w-0 flex-1 border border-base-content/10 bg-base-100 px-2 text-sm outline-none focus:border-base-content/25"
               value={editingName}
               onChange={event => onRenameChange(event.target.value)}
               onClick={event => event.stopPropagation()}
@@ -366,38 +367,42 @@ function FolderNode({
               }}
             />
           ) : (
-            <span className="truncate">{node.name}</span>
+            <span className="truncate text-sm text-base-content">{node.name}</span>
           )}
         </button>
 
         {!isEditing ? (
-          <div className="flex items-center opacity-0 transition group-hover:opacity-100">
-            <ActionButton label="Add child" icon={<PlusIcon className="size-3.5" />} onClick={() => onStartCreate(node.id)} />
-            <ActionButton label="Rename" icon={<PencilIcon className="size-3.5" />} onClick={() => onStartRename(node)} />
-            <ActionButton label="Delete" icon={<Trash2Icon className="size-3.5" />} danger onClick={() => onDelete(node)} />
-            <MenuButton onMoveIn={() => void moveIn()} onMoveOut={() => void moveOut()} canMoveIn={index > 0} canMoveOut={!!node.parentId} />
-          </div>
+          <FolderMenu
+            onAddFolder={() => onStartCreate(node.id)}
+            onRename={() => onStartRename(node)}
+            onDelete={() => onDelete(node)}
+          />
         ) : null}
       </div>
 
       {isCreateOpen ? (
-        <div style={{ paddingLeft: 26 + depth * 18 }}>
-          <DraftRow value={createDraft.name} onChange={onCreateNameChange} onSubmit={onSubmitCreate} onCancel={onCancelCreate} />
-        </div>
+        <DraftRow
+          value={createDraft.name}
+          depth={depth + 1}
+          onChange={onCreateNameChange}
+          onSubmit={onSubmitCreate}
+          onCancel={onCancelCreate}
+        />
       ) : null}
 
-      {hasChildren && isExpanded
-        ? node.children.map(child => (
-            <FolderNode
+      {hasChildren && isExpanded ? (
+        <div className="space-y-0.5">
+          {node.children.map(child => (
+            <FolderRow
               key={child.id}
               node={child}
               depth={depth + 1}
-              treeMap={treeMap}
               expandedIds={expandedIds}
               selectedId={selectedId}
               editingId={editingId}
               editingName={editingName}
               createDraft={createDraft}
+              forceExpanded={forceExpanded}
               onSelect={onSelect}
               onToggleExpanded={onToggleExpanded}
               onRenameChange={onRenameChange}
@@ -409,113 +414,148 @@ function FolderNode({
               onSubmitCreate={onSubmitCreate}
               onCancelCreate={onCancelCreate}
               onDelete={onDelete}
-              onMove={onMove}
             />
-          ))
-        : null}
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
 
 function DraftRow({
   value,
+  depth,
   onChange,
   onSubmit,
   onCancel,
 }: {
   value: string
+  depth: number
   onChange: (value: string) => void
   onSubmit: () => void
   onCancel: () => void
 }) {
   return (
-    <div className="my-1 rounded-md border border-base-content/10 bg-base-100 p-2">
-      <input
-        autoFocus
-        className="input input-sm h-8 w-full"
-        value={value}
-        placeholder="Folder name"
-        onChange={event => onChange(event.target.value)}
-        onKeyDown={event => {
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            onSubmit()
-          }
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            onCancel()
-          }
-        }}
-      />
+    <div className="py-1" style={{ paddingLeft: depth * 18 }}>
+      <div className="flex items-center gap-1 border border-base-content/10 bg-base-100/90 pr-1">
+        <input
+          autoFocus
+          className="h-8 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-base-content/35"
+          value={value}
+          placeholder="Folder name"
+          onChange={event => onChange(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              onSubmit()
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onCancel()
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="flex size-7 shrink-0 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content"
+          onClick={onCancel}
+          aria-label="Cancel new folder"
+          title="Cancel"
+        >
+          <XIcon className="size-4" />
+        </button>
+      </div>
     </div>
   )
 }
 
-function ActionButton({
-  label,
-  icon,
-  onClick,
-  danger = false,
+function FolderMenu({
+  onAddFolder,
+  onRename,
+  onDelete,
 }: {
-  label: string
-  icon: ReactNode
-  onClick: () => void
-  danger?: boolean
+  onAddFolder: () => void
+  onRename: () => void
+  onDelete: () => void
 }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
+  const runAction = (action: () => void) => {
+    setIsOpen(false)
+    action()
+  }
+
   return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      className={[
-        'flex size-6 items-center justify-center rounded text-base-content/45 hover:bg-base-300/45 hover:text-base-content',
-        danger ? 'hover:text-error' : '',
-      ].join(' ')}
-      onClick={event => {
-        event.stopPropagation()
-        onClick()
-      }}
-    >
-      {icon}
-    </button>
+    <div ref={containerRef} className="relative flex shrink-0 items-center">
+      <button
+        type="button"
+        title="Folder actions"
+        aria-label="Folder actions"
+        className="flex size-7 items-center justify-center text-base-content/45 opacity-0 transition hover:bg-base-200/80 hover:text-base-content group-hover:opacity-100 focus:opacity-100"
+        onClick={event => {
+          event.stopPropagation()
+          setIsOpen(prev => !prev)
+        }}
+      >
+        <MoreHorizontalIcon className="size-4" />
+      </button>
+
+      {isOpen ? (
+        <ul className="menu absolute right-0 top-full z-20 mt-1 w-44 border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
+          <li>
+            <button type="button" onClick={() => runAction(onAddFolder)}>
+              <PlusIcon className="size-4" />
+              Add Folder
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={() => runAction(onRename)}>
+              <PencilIcon className="size-4" />
+              Rename
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={() => runAction(onDelete)} className="text-error hover:text-error">
+              <Trash2Icon className="size-4" />
+              Delete
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
   )
 }
 
-function MenuButton({
-  onMoveIn,
-  onMoveOut,
-  canMoveIn,
-  canMoveOut,
-}: {
-  onMoveIn: () => void
-  onMoveOut: () => void
-  canMoveIn: boolean
-  canMoveOut: boolean
-}) {
+function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="dropdown dropdown-end">
-      <button
-        type="button"
-        tabIndex={0}
-        title="More"
-        aria-label="More"
-        className="flex size-6 items-center justify-center rounded text-base-content/45 hover:bg-base-300/45 hover:text-base-content"
-        onClick={event => event.stopPropagation()}
-      >
-        <MoreHorizontalIcon className="size-3.5" />
-      </button>
-      <ul tabIndex={0} className="menu dropdown-content z-10 mt-1 w-40 rounded-box border border-base-content/10 bg-base-100 p-1 shadow-lg">
-        <li>
-          <button type="button" disabled={!canMoveIn} onClick={onMoveIn}>
-            Nest into previous
-          </button>
-        </li>
-        <li>
-          <button type="button" disabled={!canMoveOut} onClick={onMoveOut}>
-            Move after parent
-          </button>
-        </li>
-      </ul>
+    <div className="rounded-[24px] border border-dashed border-base-content/12 bg-base-100/35 px-5 py-8 text-center">
+      <div className="text-sm font-medium text-base-content">{title}</div>
+      <div className="mt-1 text-sm text-base-content/50">{description}</div>
     </div>
   )
 }
@@ -538,14 +578,29 @@ function buildTree(folders: FolderRecord[]) {
     const parent = treeMap.get(node.parentId)
     if (parent) {
       parent.children.push(node)
-    } else {
-      roots.push(node)
+      return
     }
+
+    roots.push(node)
   })
 
   return {
     roots,
-    treeMap,
     folderMap: new Map(folders.map(folder => [folder.id, folder])),
   }
+}
+
+function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+  if (!query) return nodes
+
+  return nodes.flatMap(node => {
+    const filteredChildren = filterTree(node.children, query)
+    const isMatch = node.name.toLowerCase().includes(query)
+
+    if (!isMatch && filteredChildren.length === 0) {
+      return []
+    }
+
+    return [{ ...node, children: filteredChildren }]
+  })
 }
