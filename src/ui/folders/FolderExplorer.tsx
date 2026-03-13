@@ -146,7 +146,7 @@ export function FolderExplorer() {
   }, [loadFolderDetails, selectedId])
 
   const { roots, folderMap } = useMemo(() => buildTree(folders), [folders])
-  const selectedFolder = selectedId ? folderMap.get(selectedId) ?? null : null
+  const selectedFolder = selectedId ? (folderMap.get(selectedId) ?? null) : null
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const visibleRoots = useMemo(() => filterTree(roots, normalizedSearch), [roots, normalizedSearch])
 
@@ -360,7 +360,6 @@ export function FolderExplorer() {
     <div className="flex min-h-0 flex-1 bg-base-100">
       <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--color-base-200)_86%,black)_0%,color-mix(in_oklch,var(--color-base-100)_94%,black)_100%)]">
         <div className="border-b border-base-content/10 px-4 py-4">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">Folders</div>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -528,7 +527,11 @@ function FolderRow({
           disabled={!hasChildren}
         >
           {hasChildren ? (
-            isExpanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />
+            isExpanded ? (
+              <ChevronDownIcon className="size-4" />
+            ) : (
+              <ChevronRightIcon className="size-4" />
+            )
           ) : (
             <span className="size-4" />
           )}
