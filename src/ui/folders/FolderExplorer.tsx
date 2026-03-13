@@ -75,7 +75,7 @@ export function FolderExplorer() {
           ) : visibleRoots.length === 0 ? (
             <EmptyState title="No matches" description="Try a different item name." />
           ) : (
-            <div className="space-y-0.5">
+            <div>
               {visibleRoots.map(node => (
                 <ExplorerRow key={`${node.itemType}:${node.id}`} node={node} depth={0} forceExpanded={normalizedSearch.length > 0} />
               ))}

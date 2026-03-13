@@ -1,6 +1,7 @@
 import { createStore } from '@xstate/store'
 import { z } from 'zod'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
+import type { ExplorerItem } from '@common/Explorer'
 import type { DetailsDraft, Selection } from './folderExplorerTypes'
 import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
 import { loadFromAsyncStorage } from '@/utils/asyncStorage'
@@ -10,11 +11,16 @@ import {
   REQUEST_RAW_TYPES,
 } from './folderExplorerTypes'
 
-const LAST_SELECTED_TREE_ITEM_KEY = 'folderExplorer:lastSelectedTreeItem'
+const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 
 const selectionSchema = z.object({
   itemType: z.union([z.literal('folder'), z.literal('request')]),
   id: z.string(),
+})
+
+const persistedUiStateSchema = z.object({
+  selected: selectionSchema.nullable(),
+  expandedIds: z.array(z.string()),
 })
 
 const folderDetailsDraftSchema = z.object({
@@ -54,8 +60,11 @@ export type EditorEntry = {
 
 type FolderExplorerEditorContext = {
   selected: Selection | null
+  expandedIds: string[]
   entries: Record<string, EditorEntry>
 }
+
+const persistedUiState = loadFolderExplorerUiState()
 
 const persistedDrafts = loadFromAsyncStorage(AsyncStorageKeys.folderExplorerDrafts, persistedDraftsSchema, {})
 
@@ -75,13 +84,28 @@ const initialEntries = Object.fromEntries(
 
 export const folderExplorerEditorStore = createStore({
   context: {
-    selected: loadLastSelectedTreeItem(),
+    selected: persistedUiState.selected,
+    expandedIds: persistedUiState.expandedIds,
     entries: initialEntries,
   } as FolderExplorerEditorContext,
   on: {
     selectionChanged: (context, event: { selection: Selection | null }) => ({
       ...context,
       selected: event.selection,
+    }),
+    expandedToggled: (context, event: { id: string }) => ({
+      ...context,
+      expandedIds: context.expandedIds.includes(event.id)
+        ? context.expandedIds.filter(value => value !== event.id)
+        : [...context.expandedIds, event.id],
+    }),
+    expandedEnsured: (context, event: { id: string }) => ({
+      ...context,
+      expandedIds: context.expandedIds.includes(event.id) ? context.expandedIds : [...context.expandedIds, event.id],
+    }),
+    expandedIdsReconciled: (context, event: { items: ExplorerItem[] }) => ({
+      ...context,
+      expandedIds: getNextExpandedIds(context.expandedIds, event.items),
     }),
     entryLoadingStarted: (context, event: { key: string }) => ({
       ...context,
@@ -213,26 +237,34 @@ export function getSelectedEntry() {
   return state.entries[toSelectionKey(state.selected)] ?? createEmptyEntry()
 }
 
-function loadLastSelectedTreeItem(): Selection | null {
+export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {
   try {
-    const value = localStorage.getItem(LAST_SELECTED_TREE_ITEM_KEY)
-    if (!value) return null
-    const parsed = selectionSchema.safeParse(JSON.parse(value))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
-}
-
-export function saveLastSelectedTreeItem(selection: Selection | null) {
-  try {
-    if (!selection) {
-      localStorage.removeItem(LAST_SELECTED_TREE_ITEM_KEY)
-      return
-    }
-
-    localStorage.setItem(LAST_SELECTED_TREE_ITEM_KEY, JSON.stringify(selection))
+    localStorage.setItem(PERSISTED_UI_STATE_KEY, JSON.stringify({ selected: selection, expandedIds }))
   } catch {
     return
   }
+}
+
+function loadFolderExplorerUiState(): { selected: Selection | null; expandedIds: string[] } {
+  try {
+    const value = localStorage.getItem(PERSISTED_UI_STATE_KEY)
+    if (!value) return { selected: null, expandedIds: [] }
+    const parsed = persistedUiStateSchema.safeParse(JSON.parse(value))
+    return parsed.success ? parsed.data : { selected: null, expandedIds: [] }
+  } catch {
+    return { selected: null, expandedIds: [] }
+  }
+}
+
+function getNextExpandedIds(previousExpandedIds: string[], items: ExplorerItem[]) {
+  const validFolderIds = new Set(items.filter(item => item.itemType === 'folder').map(item => item.id))
+  const nextExpandedIds = previousExpandedIds.filter(id => validFolderIds.has(id))
+
+  if (nextExpandedIds.length > 0) {
+    return nextExpandedIds
+  }
+
+  return items
+    .filter(item => item.itemType === 'folder' && item.parentFolderId === null)
+    .map(item => item.id)
 }

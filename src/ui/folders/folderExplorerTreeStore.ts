@@ -5,7 +5,6 @@ import { toSelectionKey } from './folderExplorerUtils'
 
 export type FolderExplorerTreeContext = {
   items: ExplorerItem[]
-  expandedIds: string[]
   searchQuery: string
   createDraft: CreateDraft | null
   isLoading: boolean
@@ -14,7 +13,6 @@ export type FolderExplorerTreeContext = {
 export const folderExplorerTreeStore = createStore({
   context: {
     items: [],
-    expandedIds: [],
     searchQuery: '',
     createDraft: null,
     isLoading: false,
@@ -31,22 +29,11 @@ export const folderExplorerTreeStore = createStore({
     itemsLoaded: (context, event: { items: ExplorerItem[] }) => ({
       ...context,
       items: event.items,
-      expandedIds: getNextExpandedIds(context.expandedIds, event.items),
       isLoading: false,
     }),
     searchQueryChanged: (context, event: { searchQuery: string }) => ({
       ...context,
       searchQuery: event.searchQuery,
-    }),
-    expandedToggled: (context, event: { id: string }) => ({
-      ...context,
-      expandedIds: context.expandedIds.includes(event.id)
-        ? context.expandedIds.filter(value => value !== event.id)
-        : [...context.expandedIds, event.id],
-    }),
-    expandedEnsured: (context, event: { id: string }) => ({
-      ...context,
-      expandedIds: context.expandedIds.includes(event.id) ? context.expandedIds : [...context.expandedIds, event.id],
     }),
     createStarted: (context, event: { itemType: ExplorerItem['itemType']; parentFolderId: string | null }) => ({
       ...context,
@@ -104,17 +91,4 @@ export function getDeletedItemKeys(items: ExplorerItem[], item: ExplorerItem) {
         : currentItem.parentFolderId !== null && descendantFolderIds.has(currentItem.parentFolderId)
     )
     .map(currentItem => toSelectionKey(currentItem))
-}
-
-function getNextExpandedIds(previousExpandedIds: string[], items: ExplorerItem[]) {
-  const validFolderIds = new Set(items.filter(item => item.itemType === 'folder').map(item => item.id))
-  const nextExpandedIds = previousExpandedIds.filter(id => validFolderIds.has(id))
-
-  if (nextExpandedIds.length > 0) {
-    return nextExpandedIds
-  }
-
-  return items
-    .filter(item => item.itemType === 'folder' && item.parentFolderId === null)
-    .map(item => item.id)
 }

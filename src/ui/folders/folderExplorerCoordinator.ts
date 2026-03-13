@@ -13,7 +13,7 @@ import {
   folderExplorerEditorStore,
   isEntryDirty,
   persistedDraftsSchema,
-  saveLastSelectedTreeItem,
+  saveFolderExplorerUiState,
 } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore, getDeletedItemKeys } from './folderExplorerTreeStore'
 import { serializeDetails, toFolderDetailsDraft, toRequestDetailsDraft, toSelectionKey } from './folderExplorerUtils'
@@ -28,6 +28,8 @@ export namespace FolderExplorerCoordinator {
     try {
       const items = await getWindowElectron().listExplorerItems()
       folderExplorerTreeStore.trigger.itemsLoaded({ items })
+      folderExplorerEditorStore.trigger.expandedIdsReconciled({ items })
+      persistUiState()
 
       const selected = folderExplorerEditorStore.getSnapshot().context.selected
       const nextSelection =
@@ -64,7 +66,7 @@ export namespace FolderExplorerCoordinator {
     }
 
     folderExplorerEditorStore.trigger.selectionChanged({ selection })
-    saveLastSelectedTreeItem(selection)
+    persistUiState()
 
     if (selection) {
       void loadItem(selection)
@@ -97,7 +99,8 @@ export namespace FolderExplorerCoordinator {
   export function startCreate(itemType: ExplorerItem['itemType'], parentFolderId: string | null) {
     folderExplorerTreeStore.trigger.createStarted({ itemType, parentFolderId })
     if (parentFolderId) {
-      folderExplorerTreeStore.trigger.expandedEnsured({ id: parentFolderId })
+      folderExplorerEditorStore.trigger.expandedEnsured({ id: parentFolderId })
+      persistUiState()
       selectItem({ itemType: 'folder', id: parentFolderId })
     }
   }
@@ -132,7 +135,8 @@ export namespace FolderExplorerCoordinator {
 
     cancelCreate()
     if (createDraft.parentFolderId) {
-      folderExplorerTreeStore.trigger.expandedEnsured({ id: createDraft.parentFolderId })
+      folderExplorerEditorStore.trigger.expandedEnsured({ id: createDraft.parentFolderId })
+      persistUiState()
     }
 
     await loadItems()
@@ -165,9 +169,7 @@ export namespace FolderExplorerCoordinator {
 
         const affectedKeys = getDeletedItemKeys(treeState.items, item)
         folderExplorerEditorStore.trigger.itemStatesCleared({ keys: affectedKeys })
-        if (folderExplorerEditorStore.getSnapshot().context.selected === null) {
-          saveLastSelectedTreeItem(null)
-        }
+        persistUiState()
         persistUnsavedDrafts()
         await loadItems()
       },
@@ -179,7 +181,8 @@ export namespace FolderExplorerCoordinator {
   }
 
   export function toggleExpanded(id: string) {
-    folderExplorerTreeStore.trigger.expandedToggled({ id })
+    folderExplorerEditorStore.trigger.expandedToggled({ id })
+    persistUiState()
   }
 }
 
@@ -274,6 +277,11 @@ function persistUnsavedDrafts() {
   )
 
   void saveToAsyncStorage(AsyncStorageKeys.folderExplorerDrafts, persistedDraftsSchema, nextPersistedDrafts)
+}
+
+function persistUiState() {
+  const { selected, expandedIds } = folderExplorerEditorStore.getSnapshot().context
+  saveFolderExplorerUiState(selected, expandedIds)
 }
 
 function isSameSelection(left: Selection | null, right: Selection | null) {

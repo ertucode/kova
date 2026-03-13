@@ -26,7 +26,7 @@ export function ExplorerRow({
   depth: number
   forceExpanded: boolean
 }) {
-  const expandedIds = useSelector(folderExplorerTreeStore, state => state.context.expandedIds)
+  const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const isRequestDirty = useSelector(folderExplorerEditorStore, state => {
@@ -53,6 +53,13 @@ export function ExplorerRow({
             : 'hover:border-base-content/8 hover:bg-base-100/55',
         ].join(' ')}
         style={{ paddingLeft: depth * 18 }}
+        onPointerDown={event => {
+          if (event.button !== 0) {
+            return
+          }
+
+          FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id })
+        }}
       >
         <button
           type="button"
@@ -73,11 +80,7 @@ export function ExplorerRow({
           )}
         </button>
 
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          onClick={() => FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id })}
-        >
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
           {node.itemType === 'folder' ? (
             <FolderIcon className="size-4 shrink-0 text-base-content/55" />
           ) : (
@@ -91,7 +94,7 @@ export function ExplorerRow({
               title="Request has unsaved changes"
             />
           ) : null}
-        </button>
+        </div>
 
         <ExplorerMenu
           itemType={node.itemType}
@@ -113,7 +116,7 @@ export function ExplorerRow({
       ) : null}
 
       {node.itemType === 'folder' && hasChildren && isExpanded ? (
-        <div className="space-y-0.5">
+        <div>
           {node.children.map(child => (
             <ExplorerRow key={toSelectionKey(child)} node={child} depth={depth + 1} forceExpanded={forceExpanded} />
           ))}
