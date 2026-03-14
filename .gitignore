@@ -27,3 +27,4 @@ vendor-bin/**
 *.njsproj
 *.sln
 *.sw?
+ORTAKAPP.postman_collection.json
