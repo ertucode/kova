@@ -81,6 +81,8 @@ export function variableHighlightExtension({
           isActive: environment.isActive,
           value: environment.valueByVariableName.get(match.variableName) ?? '',
           isEffective: isEffectiveVariableSource(getEnvironments(), environment.id, match.variableName),
+          priority: environment.priority,
+          createdAt: environment.createdAt,
         }))
 
         return {

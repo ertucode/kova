@@ -34,6 +34,7 @@
     "upload-mas": "xcrun altool --upload-app --type osx --file \"dist/mas/Kova.pkg\" --bundle-id com.ertucode.kova"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/state": "^6.6.0",

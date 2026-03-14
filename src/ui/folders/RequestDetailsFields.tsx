@@ -14,6 +14,7 @@ import { EnvironmentCoordinator } from './environmentCoordinator'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
+import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
@@ -67,13 +68,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [activeEnvironmentIds, environmentEntries, environments]
   )
 
+  const variableAutocompleteItems = useMemo(() => buildVariableAutocompleteItems(variableTooltipRows), [variableTooltipRows])
+
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
+  const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
 
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
+  variableAutocompleteItemsRef.current = variableAutocompleteItems
 
-  const variableHighlightExtensions = useMemo(
+  const variableEditorExtensions = useMemo(
     () => [
       variableHighlightExtension({
         getDefinedVariableNames: () => activeEnvironmentVariableNamesRef.current,
@@ -83,21 +88,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current),
     ],
     []
-  )
-
-  const variableHighlightRefreshKey = useMemo(
-    () =>
-      JSON.stringify({
-        activeEnvironmentVariableNames,
-        rows: variableTooltipRows.map(row => ({
-          id: row.id,
-          isActive: row.isActive,
-          values: Array.from(row.valueByVariableName.entries()),
-        })),
-      }),
-    [activeEnvironmentVariableNames, variableTooltipRows]
   )
 
   const referencedVariables = useMemo(
@@ -203,8 +196,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             singleLine
             className="min-w-0 flex-1 border-0"
             placeholder="https://api.example.com/resource"
-            extensions={variableHighlightExtensions}
-            refreshKey={variableHighlightRefreshKey}
+            extensions={variableEditorExtensions}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, url: value })}
           />
 
@@ -268,8 +260,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                 minHeightClassName="min-h-0 h-full"
                 className="border-x-0 border-b-0"
                 placeholder={'{\n  "hello": "world"\n}'}
-                extensions={variableHighlightExtensions}
-                refreshKey={variableHighlightRefreshKey}
+                extensions={variableEditorExtensions}
                 onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
               />
             ) : null}
@@ -485,6 +476,64 @@ function upsertVariableValue(variables: string, variableName: string, value: str
   nextRow.value = value
 
   return stringifyKeyValueRows([...rows, nextRow])
+}
+
+function buildVariableAutocompleteItems(
+  rows: Array<{
+    name: string
+    isActive: boolean
+    priority: number
+    createdAt: number
+    valueByVariableName: Map<string, string>
+  }>
+): VariableAutocompleteItem[] {
+  const items = new Map<
+    string,
+    {
+      name: string
+      effectiveEnvironmentName: string | null
+      activeEnvironmentNames: string[]
+      inactiveEnvironmentNames: string[]
+    }
+  >()
+
+  const activeRowsByPriority = rows
+    .filter(row => row.isActive)
+    .slice()
+    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)
+
+  for (const row of rows) {
+    for (const variableName of row.valueByVariableName.keys()) {
+      if (variableName.trim() === '') {
+        continue
+      }
+
+      const current = items.get(variableName) ?? {
+        name: variableName,
+        effectiveEnvironmentName: null,
+        activeEnvironmentNames: [],
+        inactiveEnvironmentNames: [],
+      }
+
+      if (row.isActive) {
+        current.activeEnvironmentNames.push(row.name)
+      } else {
+        current.inactiveEnvironmentNames.push(row.name)
+      }
+
+      items.set(variableName, current)
+    }
+  }
+
+  for (const [variableName, item] of items) {
+    const effectiveRow = activeRowsByPriority.find(row => row.valueByVariableName.has(variableName))
+    item.effectiveEnvironmentName = effectiveRow?.name ?? null
+    item.activeEnvironmentNames.sort((left, right) => left.localeCompare(right))
+    item.inactiveEnvironmentNames.sort((left, right) => left.localeCompare(right))
+    items.set(variableName, item)
+  }
+
+  return Array.from(items.values())
 }
 
 function formatResponseBody(body: string, headers: string) {

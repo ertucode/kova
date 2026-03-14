@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { EditorState, StateEffect, type Extension } from '@codemirror/state'
+import { useMemo, useRef } from 'react'
+import { EditorState, type Extension } from '@codemirror/state'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { json } from '@codemirror/lang-json'
@@ -8,8 +8,6 @@ import CodeMirror from '@uiw/react-codemirror'
 import { tags } from '@lezer/highlight'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'javascript'
-
-const refreshEffect = StateEffect.define<void>()
 
 const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
@@ -32,6 +30,8 @@ const editorTheme = EditorView.theme({
   '&.cm-editor': {
     height: '100%',
     backgroundColor: 'transparent !important',
+    overflow: 'visible',
+    position: 'relative',
   },
   '&.cm-focused': {
     outline: '2px solid var(--color-base-content)',
@@ -39,6 +39,10 @@ const editorTheme = EditorView.theme({
   },
   '.cm-scroller, .cm-gutters, .cm-layer': {
     backgroundColor: 'transparent !important',
+  },
+  '.cm-tooltipLayer': {
+    overflow: 'visible',
+    zIndex: '9999',
   },
   '.cm-scroller': {
     height: '100%',
@@ -74,6 +78,33 @@ const editorTheme = EditorView.theme({
     pointerEvents: 'auto',
     padding: '0',
     overflow: 'hidden',
+    zIndex: '9999',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul': {
+    maxWidth: '34rem',
+    fontFamily: 'inherit',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete ul li': {
+    borderTop: '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
+    padding: '0.5rem 0.75rem',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete ul li:first-child': {
+    borderTop: '0',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected]': {
+    backgroundColor: 'color-mix(in oklab, var(--color-info) 16%, transparent)',
+    color: 'var(--color-base-content)',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete ul li .cm-completionLabel': {
+    fontWeight: '600',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete ul li .cm-completionIcon': {
+    display: 'none',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete ul li .cm-completionDetail': {
+    color: 'color-mix(in oklab, var(--color-base-content) 58%, transparent)',
+    fontStyle: 'normal',
+    marginLeft: '0.75rem',
   },
   '.cm-activeLine, .cm-activeLineGutter': {
     backgroundColor: 'color-mix(in oklab, var(--color-base-content) 5%, transparent)',
@@ -94,7 +125,6 @@ export function CodeEditor({
   className,
   extensions,
   singleLine,
-  refreshKey,
   onChange,
   onBlur,
 }: {
@@ -105,7 +135,6 @@ export function CodeEditor({
   className?: string
   extensions?: Extension[]
   singleLine?: boolean
-  refreshKey?: string
   onChange: (value: string) => void
   onBlur?: () => void
 }) {
@@ -154,18 +183,10 @@ export function CodeEditor({
     return nextExtensions
   }, [extensions, language, placeholder, singleLine])
 
-  useEffect(() => {
-    if (!editorViewRef.current) {
-      return
-    }
-
-    editorViewRef.current.dispatch({ effects: refreshEffect.of() })
-  }, [refreshKey])
-
   return (
     <div
-      className={[
-        'flex w-full min-h-0 flex-1 overflow-hidden rounded-none border border-base-content/10 bg-base-100/70 text-base-content',
+        className={[
+        'flex w-full min-h-0 flex-1 overflow-visible rounded-none border border-base-content/10 bg-base-100/70 text-base-content',
         minHeightClassName,
         className,
       ]

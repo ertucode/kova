@@ -7,6 +7,8 @@ export type VariableTooltipEnvironmentRow = {
   isActive: boolean
   value: string
   isEffective: boolean
+  priority: number
+  createdAt: number
 }
 
 export function VariableHoverTooltip({
@@ -31,6 +33,15 @@ export function VariableHoverTooltip({
     setDraftRows(rows)
   }, [rows])
 
+  const commitValue = (environmentId: string) => {
+    const nextValue = draftRows.find(row => row.id === environmentId)?.value ?? ''
+
+    window.setTimeout(() => {
+      onChangeValue(environmentId, nextValue)
+      void onSaveValue(environmentId)
+    }, 0)
+  }
+
   return (
     <div className="w-[560px] overflow-hidden rounded-2xl border border-base-content/10 bg-base-200/95 shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-sm">
       <div className="border-b border-base-content/10 px-4 py-3">
@@ -41,7 +52,10 @@ export function VariableHoverTooltip({
       </div>
 
       <div className="max-h-[320px] overflow-auto">
-        {draftRows.map(row => (
+        {draftRows.map(row => {
+          const isEffective = getEffectiveEnvironmentId(draftRows) === row.id
+
+          return (
           <div key={row.id} className="grid grid-cols-[auto_minmax(0,120px)_minmax(0,2fr)_auto] items-center gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0">
             <label className="flex items-center justify-center px-1">
               <input
@@ -68,7 +82,7 @@ export function VariableHoverTooltip({
             >
               <div className="flex items-center gap-2">
                 <div className="truncate text-sm font-medium text-base-content">{row.name}</div>
-                {row.isEffective ? (
+                {isEffective ? (
                   <span
                     className="size-2 shrink-0 rounded-full bg-info shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-info)_16%,transparent)]"
                     aria-label="Effective environment"
@@ -89,14 +103,12 @@ export function VariableHoverTooltip({
                 )
               }}
               onBlur={() => {
-                onChangeValue(row.id, row.value)
-                void onSaveValue(row.id)
+                commitValue(row.id)
               }}
               onKeyDown={event => {
                 if (event.key === 'Enter') {
                   event.preventDefault()
-                  onChangeValue(row.id, row.value)
-                  void onSaveValue(row.id)
+                  commitValue(row.id)
                 }
               }}
             />
@@ -111,8 +123,15 @@ export function VariableHoverTooltip({
               <ArrowUpRightIcon className="size-4" />
             </button>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
+}
+
+function getEffectiveEnvironmentId(rows: VariableTooltipEnvironmentRow[]) {
+  return rows
+    .filter(row => row.isActive && row.value.trim() !== '')
+    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)[0]?.id ?? null
 }
