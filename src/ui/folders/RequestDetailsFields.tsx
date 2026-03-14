@@ -113,6 +113,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!isSending) {
+          void sendRequest()
+        }
+      }
+    }
+
     const handlePointerMove = (event: PointerEvent) => {
       const resizeState = resizeStateRef.current
       if (!resizeState) {
@@ -129,14 +139,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       document.body.style.userSelect = ''
     }
 
+    window.addEventListener('keydown', handleKeyDown, true)
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
 
     return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [])
+  }, [isSending])
 
   const sendRequest = async () => {
     setIsSending(true)
@@ -286,6 +298,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         <div className="flex min-h-0 flex-col md:border-l md:border-base-content/10">
           <HeadersEditor
             value={draft.headers}
+            valueEditorExtensions={variableEditorExtensions}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
           />
 

@@ -31,6 +31,10 @@ export function resolveTemplateVariables(value: string, variables: Record<string
   })
 }
 
+export function findMissingTemplateVariables(value: string, variables: Record<string, string>) {
+  return extractTemplateVariables(value).filter(variableName => !(variableName in variables))
+}
+
 export function buildEnvironmentVariableMap(environments: EnvironmentRecord[]) {
   const variables: Record<string, string> = {}
 

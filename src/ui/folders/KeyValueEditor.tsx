@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Trash2Icon } from 'lucide-react'
+import type { Extension } from '@codemirror/state'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
+import { CodeEditor } from './CodeEditor'
 
 type KeyValueEditorProps = {
   label: string | null
@@ -10,6 +12,8 @@ type KeyValueEditorProps = {
   keyPlaceholder: string
   valuePlaceholder: string
   descriptionPlaceholder?: string
+  valueEditorExtensions?: Extension[]
+  valueEditorAsCode?: boolean
 }
 
 export function KeyValueEditor({
@@ -19,6 +23,8 @@ export function KeyValueEditor({
   keyPlaceholder,
   valuePlaceholder,
   descriptionPlaceholder = 'Optional note',
+  valueEditorExtensions,
+  valueEditorAsCode = false,
 }: KeyValueEditorProps) {
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
 
@@ -88,12 +94,26 @@ export function KeyValueEditor({
                     />
                   </td>
                   <td className="p-0 px-2 align-middle">
-                    <input
-                      className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-sm border-none outline-none"
-                      value={row.value}
-                      placeholder={valuePlaceholder}
-                      onChange={event => updateRow(row.id, { value: event.target.value })}
-                    />
+                    {valueEditorAsCode ? (
+                      <CodeEditor
+                        value={row.value}
+                        language="plain"
+                        singleLine
+                        compact
+                        hideFocusOutline
+                        className="h-9 border-0 bg-transparent"
+                        extensions={valueEditorExtensions}
+                        placeholder={valuePlaceholder}
+                        onChange={nextValue => updateRow(row.id, { value: nextValue })}
+                      />
+                    ) : (
+                      <input
+                        className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-sm border-none outline-none"
+                        value={row.value}
+                        placeholder={valuePlaceholder}
+                        onChange={event => updateRow(row.id, { value: event.target.value })}
+                      />
+                    )}
                   </td>
                   <td className="p-0 px-2 align-middle">
                     <input

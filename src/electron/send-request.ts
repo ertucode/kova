@@ -1,5 +1,5 @@
 import { GenericError, type GenericResult } from '../common/GenericError.js'
-import { buildEnvironmentVariableMap, resolveTemplateVariables } from '../common/RequestVariables.js'
+import { buildEnvironmentVariableMap, findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type { SendRequestInput, SendRequestResponse } from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
@@ -9,6 +9,13 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
   try {
     const activeEnvironments = await getEnvironmentsByIds(input.activeEnvironmentIds)
     const variables = buildEnvironmentVariableMap(activeEnvironments)
+    const missingVariables = collectMissingVariables(input, variables)
+    if (missingVariables.length > 0) {
+      return GenericError.Message(
+        `Missing environment variables: ${missingVariables.join(', ')}. Define them before sending the request.`
+      )
+    }
+
     const url = resolveTemplateVariables(input.url, variables).trim()
 
     if (!url) {
@@ -52,6 +59,52 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
     console.error('sendRequest failed', error)
     return GenericError.Message(formatRequestError(error))
   }
+}
+
+function collectMissingVariables(input: SendRequestInput, variables: Record<string, string>) {
+  const missingVariables = new Set<string>()
+
+  for (const variableName of findMissingTemplateVariables(input.url, variables)) {
+    missingVariables.add(variableName)
+  }
+
+  for (const row of parseKeyValueRows(input.headers)) {
+    if (!row.enabled) {
+      continue
+    }
+
+    for (const variableName of findMissingTemplateVariables(row.key, variables)) {
+      missingVariables.add(variableName)
+    }
+
+    for (const variableName of findMissingTemplateVariables(row.value, variables)) {
+      missingVariables.add(variableName)
+    }
+  }
+
+  if (input.bodyType === 'raw') {
+    for (const variableName of findMissingTemplateVariables(input.body, variables)) {
+      missingVariables.add(variableName)
+    }
+  }
+
+  if (input.bodyType === 'form-data' || input.bodyType === 'x-www-form-urlencoded') {
+    for (const row of parseKeyValueRows(input.body)) {
+      if (!row.enabled) {
+        continue
+      }
+
+      for (const variableName of findMissingTemplateVariables(row.key, variables)) {
+        missingVariables.add(variableName)
+      }
+
+      for (const variableName of findMissingTemplateVariables(row.value, variables)) {
+        missingVariables.add(variableName)
+      }
+    }
+  }
+
+  return Array.from(missingVariables).sort((left, right) => left.localeCompare(right))
 }
 
 function buildRequestBody(input: SendRequestInput, headers: Headers, variables: Record<string, string>) {
