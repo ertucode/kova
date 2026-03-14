@@ -308,7 +308,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col md:border-l md:border-base-content/10">
+        <div className="flex min-h-0 flex-col overflow-y-auto md:border-l md:border-base-content/10">
           <HeadersEditor
             value={draft.headers}
             valueEditorExtensions={variableEditorExtensions}
@@ -318,8 +318,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           <DetailsTextArea
             label="Pre-request Script"
             value={draft.preRequestScript}
-            minHeightClassName="min-h-[180px]"
-            sectionClassName="flex min-h-0 flex-1 flex-col"
+            minHeightClassName="min-h-[100px]"
+            sectionClassName="flex min-h-[100px] flex-1 basis-0 flex-col"
             editorLanguage="javascript"
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
             onBlur={() => undefined}
@@ -328,8 +328,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           <DetailsTextArea
             label="Post-request Script"
             value={draft.postRequestScript}
-            minHeightClassName="min-h-[180px]"
-            sectionClassName="flex min-h-0 flex-1 flex-col"
+            minHeightClassName="min-h-[100px]"
+            sectionClassName="flex min-h-[100px] flex-1 basis-0 flex-col"
             editorLanguage="javascript"
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
