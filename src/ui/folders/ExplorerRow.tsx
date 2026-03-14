@@ -114,7 +114,7 @@ export function ExplorerRow({
           {node.itemType === 'folder' ? (
             <FolderIcon className="size-4 shrink-0 text-base-content/55" />
           ) : node.itemType === 'request' ? (
-            <FileCode2Icon className="size-4 shrink-0 text-base-content/55" />
+            <RequestMethodTag method={node.method} />
           ) : (
             <CopyIcon className="size-4 shrink-0 text-base-content/55" />
           )}
@@ -170,6 +170,43 @@ export function ExplorerRow({
       {showDropAfter ? <div className="pointer-events-none absolute inset-x-3 bottom-0 z-10 h-0.5 bg-primary" /> : null}
     </div>
   )
+}
+
+function RequestMethodTag({ method }: { method: string }) {
+  const tone = getMethodTone(method)
+  const label = method === 'DELETE' ? 'DEL' : method
+
+  return (
+    <div
+      className={[
+        'w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em]',
+        tone,
+      ].join(' ')}
+    >
+      {label}
+    </div>
+  )
+}
+
+function getMethodTone(method: string) {
+  switch (method) {
+    case 'GET':
+      return 'text-success'
+    case 'POST':
+      return 'text-info'
+    case 'PUT':
+      return 'text-warning'
+    case 'PATCH':
+      return 'text-secondary'
+    case 'DELETE':
+      return 'text-error'
+    case 'HEAD':
+      return 'text-accent'
+    case 'OPTIONS':
+      return 'text-base-content/70'
+    default:
+      return 'text-base-content/70'
+  }
 }
 
 export function DraftRow({
