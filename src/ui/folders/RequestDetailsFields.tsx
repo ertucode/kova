@@ -17,7 +17,7 @@ import { KeyValueEditor } from './KeyValueEditor'
 import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
-import { folderExplorerEditorStore } from './folderExplorerEditorStore'
+import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderExplorerEditorStore'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
@@ -29,12 +29,12 @@ import { AuthorizationEditor } from './AuthorizationEditor'
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
-  const [responsePaneHeight, setResponsePaneHeight] = useState(320)
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const responsePaneHeight = useSelector(folderExplorerEditorStore, state => state.context.responsePaneHeight)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
   const response = useSelector(requestExecutionStore, state =>
@@ -185,6 +185,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
 
   useEffect(() => {
+    const clampedHeight = clampResponsePaneHeight(responsePaneHeight)
+    if (clampedHeight !== responsePaneHeight) {
+      folderExplorerEditorStore.trigger.responsePaneHeightChanged({ height: clampedHeight })
+    }
+  }, [responsePaneHeight])
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         event.preventDefault()
@@ -202,14 +209,22 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       }
 
       const deltaY = resizeState.startY - event.clientY
-      setResponsePaneHeight(clampResponsePaneHeight(resizeState.startHeight + deltaY))
+      folderExplorerEditorStore.trigger.responsePaneHeightChanged({
+        height: clampResponsePaneHeight(resizeState.startHeight + deltaY),
+      })
     }
 
     const handlePointerUp = () => {
+      const wasResizing = resizeStateRef.current !== null
       resizeStateRef.current = null
       setIsResizingResponsePane(false)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
+
+      if (wasResizing) {
+        const { selected, expandedIds } = folderExplorerEditorStore.getSnapshot().context
+        saveFolderExplorerUiState(selected, expandedIds)
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
@@ -220,6 +235,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       window.removeEventListener('keydown', handleKeyDown, true)
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
   }, [isSending])
 

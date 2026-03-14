@@ -13,6 +13,7 @@ import {
 } from './folderExplorerTypes'
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
+const DEFAULT_RESPONSE_PANE_HEIGHT = 320
 
 export type SidebarTab = 'requests' | 'environments' | 'history'
 
@@ -26,6 +27,7 @@ const persistedUiStateSchema = z.object({
   expandedIds: z.array(z.string()),
   activeEnvironmentIds: z.array(z.string()),
   sidebarTab: z.union([z.literal('requests'), z.literal('environments'), z.literal('history'), z.literal('console')]),
+  responsePaneHeight: z.number(),
 })
 
 const authSchema = z.discriminatedUnion('type', [
@@ -94,6 +96,7 @@ type FolderExplorerEditorContext = {
   expandedIds: string[]
   activeEnvironmentIds: string[]
   sidebarTab: SidebarTab
+  responsePaneHeight: number
   entries: Record<string, EditorEntry>
 }
 
@@ -121,6 +124,7 @@ export const folderExplorerEditorStore = createStore({
     expandedIds: persistedUiState.expandedIds,
     activeEnvironmentIds: persistedUiState.activeEnvironmentIds,
     sidebarTab: persistedUiState.sidebarTab,
+    responsePaneHeight: persistedUiState.responsePaneHeight,
     entries: initialEntries,
   } as FolderExplorerEditorContext,
   on: {
@@ -145,6 +149,10 @@ export const folderExplorerEditorStore = createStore({
     sidebarTabChanged: (context, event: { sidebarTab: SidebarTab }) => ({
       ...context,
       sidebarTab: event.sidebarTab,
+    }),
+    responsePaneHeightChanged: (context, event: { height: number }) => ({
+      ...context,
+      responsePaneHeight: event.height,
     }),
     activeEnvironmentToggled: (context, event: { id: string }) => ({
       ...context,
@@ -287,11 +295,11 @@ export function getSelectedEntry() {
 }
 
 export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {
-  const { activeEnvironmentIds, sidebarTab } = folderExplorerEditorStore.getSnapshot().context
+  const { activeEnvironmentIds, sidebarTab, responsePaneHeight } = folderExplorerEditorStore.getSnapshot().context
   try {
     localStorage.setItem(
       PERSISTED_UI_STATE_KEY,
-      JSON.stringify({ selected: selection, expandedIds, activeEnvironmentIds, sidebarTab })
+      JSON.stringify({ selected: selection, expandedIds, activeEnvironmentIds, sidebarTab, responsePaneHeight })
     )
   } catch {
     return
@@ -303,13 +311,28 @@ function loadFolderExplorerUiState(): {
   expandedIds: string[]
   activeEnvironmentIds: string[]
   sidebarTab: SidebarTab
+  responsePaneHeight: number
 } {
   try {
     const value = localStorage.getItem(PERSISTED_UI_STATE_KEY)
-    if (!value) return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
+    if (!value) {
+      return {
+        selected: null,
+        expandedIds: [],
+        activeEnvironmentIds: [],
+        sidebarTab: 'requests',
+        responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+      }
+    }
     const parsed = persistedUiStateSchema.safeParse(JSON.parse(value))
     if (!parsed.success) {
-      return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
+      return {
+        selected: null,
+        expandedIds: [],
+        activeEnvironmentIds: [],
+        sidebarTab: 'requests',
+        responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+      }
     }
 
     return {
@@ -317,7 +340,13 @@ function loadFolderExplorerUiState(): {
       sidebarTab: parsed.data.sidebarTab === 'console' ? 'history' : parsed.data.sidebarTab,
     }
   } catch {
-    return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
+    return {
+      selected: null,
+      expandedIds: [],
+      activeEnvironmentIds: [],
+      sidebarTab: 'requests',
+      responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+    }
   }
 }
 
