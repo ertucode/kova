@@ -29,7 +29,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
 
   const activeEnvironmentNames = useMemo(
-    () => environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+    () =>
+      environments
+        .filter(environment => activeEnvironmentIds.includes(environment.id))
+        .map(environment => environment.name),
     [activeEnvironmentIds, environments]
   )
 
@@ -69,7 +72,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [activeEnvironmentIds, environmentEntries, environments]
   )
 
-  const variableAutocompleteItems = useMemo(() => buildVariableAutocompleteItems(variableTooltipRows), [variableTooltipRows])
+  const variableAutocompleteItems = useMemo(
+    () => buildVariableAutocompleteItems(variableTooltipRows),
+    [variableTooltipRows]
+  )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
@@ -86,7 +92,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getEnvironments: () => variableTooltipRowsRef.current,
         onToggleEnvironment: environmentId => EnvironmentCoordinator.toggleActiveEnvironment(environmentId),
         onOpenEnvironment: environmentId => EnvironmentCoordinator.openEnvironmentDetails(environmentId),
-        onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
+        onChangeValue: (environmentId, variableName, value) =>
+          updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current),
@@ -199,7 +206,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               label: <MethodBadge method={option} />,
             }))}
             renderValue={option => option.label}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, method: value as RequestMethod })}
+            onChange={value =>
+              FolderExplorerCoordinator.updateSelectedDraft({ ...draft, method: value as RequestMethod })
+            }
           />
 
           <div className="flex min-w-0 flex-1 overflow-hidden">
@@ -224,7 +233,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           </div>
         </div>
 
-        <VariableUsageBanner activeEnvironmentNames={activeEnvironmentNames} referencedVariables={referencedVariables} />
+        <VariableUsageBanner
+          activeEnvironmentNames={activeEnvironmentNames}
+          referencedVariables={referencedVariables}
+        />
       </section>
 
       <section className="grid min-h-0 flex-1 w-full border-b border-base-content/10 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
@@ -334,12 +346,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           title="Resize response panel"
         />
 
-        <div className="h-[calc(100%-1px)] overflow-auto px-8 py-6">
-          <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="h-[calc(100%-1px)] overflow-auto">
+          <div className="flex items-start justify-between gap-4 p-2 border-b border-base-content/10">
             <div className="text-sm font-semibold text-base-content">Response</div>
             <ResponseStatusSummary response={response} responseError={responseError} />
           </div>
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
+          <div className="grid md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
             <ResponseBodyPanel
               value={formattedResponseBody}
               description="Response body will appear here."
@@ -362,7 +374,9 @@ function VariableUsageBanner({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-x border-b border-base-content/10 bg-base-100/35 px-3 py-2 text-xs text-base-content/50">
-      <span>{activeEnvironmentNames.length > 0 ? `Active: ${activeEnvironmentNames.join(', ')}` : 'No active environments'}</span>
+      <span>
+        {activeEnvironmentNames.length > 0 ? `Active: ${activeEnvironmentNames.join(', ')}` : 'No active environments'}
+      </span>
       {referencedVariables.length > 0 ? <span>Variables: {referencedVariables.join(', ')}</span> : null}
     </div>
   )
@@ -372,7 +386,9 @@ function MethodBadge({ method }: { method: RequestMethod }) {
   const tone = getMethodTone(method)
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.12em] ${tone}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.12em] ${tone}`}
+    >
       {method}
     </span>
   )
@@ -409,7 +425,7 @@ function ResponseBodyPanel({
   contentType: string | null
 }) {
   return (
-    <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 px-4 py-4">
+    <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 p-2">
       <div className="flex items-start justify-between gap-3">
         <div className="text-sm font-medium text-base-content">Body</div>
         {contentType ? <div className="text-xs text-base-content/45">{contentType}</div> : null}
@@ -430,7 +446,7 @@ function ResponseHeadersPanel({ value, description }: { value: string; descripti
   const rows = parseResponseHeaders(value)
 
   return (
-    <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 px-4 py-4">
+    <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 p-2">
       <div className="text-sm font-medium text-base-content">Headers</div>
 
       {rows.length > 0 ? (
