@@ -356,6 +356,22 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     })
   }
 
+  const formatJsonBody = () => {
+    try {
+      const formatted = JSON.stringify(JSON.parse(draft.body), null, 2)
+      FolderExplorerCoordinator.updateSelectedDraft({
+        ...draft,
+        body: formatted,
+      })
+    } catch {
+      toast.show({
+        severity: 'warning',
+        title: 'Invalid JSON',
+        message: 'Fix JSON errors before formatting.',
+      })
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <section className="w-full border-b border-base-content/10">
@@ -440,6 +456,15 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                   })
                 }
               />
+              {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
+                <button
+                  type="button"
+                  className="h-8 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
+                  onClick={formatJsonBody}
+                >
+                  Format
+                </button>
+              ) : null}
             </div>
 
             {draft.bodyType === 'raw' ? (
