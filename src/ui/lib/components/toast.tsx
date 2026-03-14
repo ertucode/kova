@@ -1,4 +1,4 @@
-import React, { useState, useCallback, ReactNode } from "react";
+import React, { useState, useCallback, ReactNode, useRef } from "react";
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from "lucide-react";
 import { errorResponseToMessage, GenericError } from "@common/GenericError";
 
@@ -12,6 +12,7 @@ export type ToastLocation =
   | "bottom-center";
 
 export interface ToastOptions {
+  id?: string;
   title?: ReactNode;
   message?: ReactNode;
   severity: ToastSeverity;
@@ -141,10 +142,38 @@ const ToastItem: React.FC<{ toast: Toast; onClose: (id: string) => void }> = ({
 
 export const ToastRenderer = () => {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timeoutHandlesRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const removeToast = useCallback((id: string) => {
+    const timeoutHandle = timeoutHandlesRef.current.get(id);
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+      timeoutHandlesRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const scheduleToastRemoval = useCallback(
+    (id: string, timeout: number | undefined) => {
+      const existingTimeoutHandle = timeoutHandlesRef.current.get(id);
+      if (existingTimeoutHandle) {
+        clearTimeout(existingTimeoutHandle);
+        timeoutHandlesRef.current.delete(id);
+      }
+
+      if (timeout === Infinity) {
+        return;
+      }
+
+      const duration = timeout ?? 5000;
+      const timeoutHandle = setTimeout(() => {
+        removeToast(id);
+      }, duration);
+
+      timeoutHandlesRef.current.set(id, timeoutHandle);
+    },
+    [removeToast],
+  );
 
   const removeOutsideClosableToasts = useCallback(() => {
     setToasts((prev) => prev.filter((toast) => !toast.closeOnOutsideClick));
@@ -159,25 +188,25 @@ export const ToastRenderer = () => {
               message: errorResponseToMessage(opts.error),
             }
           : opts;
-      const id = Math.random().toString(36).substring(2, 9);
+      const id = options.id ?? Math.random().toString(36).substring(2, 9);
       const newToast: Toast = { ...options, id };
 
-      setToasts((prev) => [...prev, newToast]);
+      setToasts((prev) => {
+        const existingIndex = prev.findIndex((toast) => toast.id === id);
+        if (existingIndex < 0) {
+          return [...prev, newToast];
+        }
 
-      if (options.timeout !== Infinity && options.timeout !== undefined) {
-        setTimeout(() => {
-          removeToast(id);
-        }, options.timeout);
-      } else if (options.timeout === undefined) {
-        // Default timeout: 5 seconds
-        setTimeout(() => {
-          removeToast(id);
-        }, 5000);
-      }
+        const nextToasts = prev.slice();
+        nextToasts[existingIndex] = newToast;
+        return nextToasts;
+      });
+
+      scheduleToastRemoval(id, options.timeout);
 
       return id;
     },
-    [removeToast],
+    [scheduleToastRemoval],
   );
 
   // Register the show function with the global toast manager
@@ -185,6 +214,13 @@ export const ToastRenderer = () => {
     toast.setShowFunction(show);
     toast.setHideFunction(removeToast);
   }, [removeToast, show]);
+
+  React.useEffect(() => {
+    return () => {
+      timeoutHandlesRef.current.forEach(timeoutHandle => clearTimeout(timeoutHandle));
+      timeoutHandlesRef.current.clear();
+    };
+  }, []);
 
   React.useEffect(() => {
     const hasOutsideClosable = toasts.some((item) => item.closeOnOutsideClick);

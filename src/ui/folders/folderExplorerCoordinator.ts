@@ -1,3 +1,4 @@
+import { createElement } from 'react'
 import type { FolderRecord } from '@common/Folders'
 import { errorResponseToMessage } from '@common/GenericError'
 import type { RequestExampleRecord } from '@common/RequestExamples'
@@ -22,6 +23,20 @@ import type { MoveExplorerItemInput } from '@common/Explorer'
 
 const loadTokens: Record<string, number> = {}
 const saveTokens: Record<string, number> = {}
+const MOVE_UNDO_TOAST_ID = 'folder-explorer-move-undo'
+const MOVE_UNDO_TIMEOUT_MS = 5000
+const MAX_MOVE_UNDO_STACK_SIZE = 20
+
+type MoveUndoEntry = {
+  itemType: 'folder' | 'request'
+  id: string
+  name: string
+  targetParentFolderId: string | null
+  targetPosition: number
+}
+
+let isUndoingMove = false
+const moveUndoStack: MoveUndoEntry[] = []
 
 export namespace FolderExplorerCoordinator {
   export async function loadItems() {
@@ -217,6 +232,8 @@ export namespace FolderExplorerCoordinator {
       return true
     }
 
+    const undoEntry = isUndoingMove ? null : createMoveUndoEntry(input)
+
     const result = await getWindowElectron().moveExplorerItem(input)
 
     if (!result.success) {
@@ -230,8 +247,129 @@ export namespace FolderExplorerCoordinator {
     }
 
     await loadItems()
+
+    if (undoEntry) {
+      pushMoveUndoEntry(undoEntry)
+      showMoveUndoToast()
+    }
+
     return true
   }
+}
+
+function createMoveUndoEntry(input: Extract<MoveExplorerItemInput, { itemType: 'folder' | 'request' }>): MoveUndoEntry | null {
+  const items = folderExplorerTreeStore.getSnapshot().context.items
+  const item = items.find(currentItem => currentItem.itemType === input.itemType && currentItem.id === input.id)
+
+  if (!item || item.itemType === 'example') {
+    return null
+  }
+
+  const siblings = getMovableSiblings(items, item.parentFolderId)
+  const targetPosition = siblings.findIndex(sibling => sibling.itemType === item.itemType && sibling.id === item.id)
+
+  if (targetPosition < 0) {
+    return null
+  }
+
+  return {
+    itemType: input.itemType,
+    id: input.id,
+    name: item.name,
+    targetParentFolderId: item.parentFolderId,
+    targetPosition,
+  }
+}
+
+function getMovableSiblings(items: ExplorerItem[], parentFolderId: string | null) {
+  return items
+    .filter(
+      (item): item is Extract<ExplorerItem, { itemType: 'folder' | 'request' }> =>
+        item.itemType !== 'example' && item.parentFolderId === parentFolderId
+    )
+    .slice()
+    .sort((left, right) => left.position - right.position || left.createdAt - right.createdAt)
+}
+
+function pushMoveUndoEntry(entry: MoveUndoEntry) {
+  moveUndoStack.push(entry)
+  if (moveUndoStack.length > MAX_MOVE_UNDO_STACK_SIZE) {
+    moveUndoStack.splice(0, moveUndoStack.length - MAX_MOVE_UNDO_STACK_SIZE)
+  }
+}
+
+function showMoveUndoToast() {
+  if (moveUndoStack.length === 0) {
+    toast.hide(MOVE_UNDO_TOAST_ID)
+    return
+  }
+
+  const latestEntry = moveUndoStack[moveUndoStack.length - 1]
+  const pendingCount = moveUndoStack.length
+  const title = pendingCount === 1 ? 'Item moved' : `${pendingCount} moves available to undo`
+  const label = latestEntry.itemType === 'folder' ? 'Folder' : 'Request'
+  const summary = `${label} \"${latestEntry.name}\" moved.`
+
+  toast.show({
+    id: MOVE_UNDO_TOAST_ID,
+    severity: 'info',
+    title,
+    timeout: MOVE_UNDO_TIMEOUT_MS,
+    message: createElement(
+      'div',
+      { className: 'flex items-center gap-3' },
+      createElement('span', { className: 'min-w-0 flex-1' }, pendingCount === 1 ? summary : `${summary} ${pendingCount - 1} more in stack.`),
+      createElement(
+        'button',
+        {
+          type: 'button',
+          className: 'btn btn-xs',
+          onClick: () => {
+            void undoLastMove()
+          },
+        },
+        'Undo'
+      )
+    ),
+  })
+}
+
+async function undoLastMove() {
+  if (isUndoingMove) {
+    return
+  }
+
+  const undoEntry = moveUndoStack.pop()
+  if (!undoEntry) {
+    toast.hide(MOVE_UNDO_TOAST_ID)
+    return
+  }
+
+  toast.hide(MOVE_UNDO_TOAST_ID)
+  isUndoingMove = true
+
+  const result = await getWindowElectron().moveExplorerItem({
+    itemType: undoEntry.itemType,
+    id: undoEntry.id,
+    targetParentFolderId: undoEntry.targetParentFolderId,
+    targetPosition: undoEntry.targetPosition,
+  })
+
+  isUndoingMove = false
+
+  if (!result.success) {
+    toast.show(result)
+    showMoveUndoToast()
+    return
+  }
+
+  if (undoEntry.targetParentFolderId) {
+    folderExplorerEditorStore.trigger.expandedEnsured({ id: undoEntry.targetParentFolderId })
+    persistUiState()
+  }
+
+  await FolderExplorerCoordinator.loadItems()
+  showMoveUndoToast()
 }
 
 async function loadItem(selection: Selection) {
