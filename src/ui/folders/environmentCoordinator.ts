@@ -107,7 +107,7 @@ export namespace EnvironmentCoordinator {
     persistUiState()
   }
 
-  export function setSidebarTab(sidebarTab: 'requests' | 'environments' | 'history') {
+  export function setSidebarTab(sidebarTab: 'requests' | 'environments' | 'history' | 'console') {
     folderExplorerEditorStore.trigger.sidebarTabChanged({ sidebarTab })
     persistUiState()
   }

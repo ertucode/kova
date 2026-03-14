@@ -13,7 +13,7 @@ import {
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 
-export type SidebarTab = 'requests' | 'environments' | 'history'
+export type SidebarTab = 'requests' | 'environments' | 'history' | 'console'
 
 const selectionSchema = z.object({
   itemType: z.union([z.literal('folder'), z.literal('request')]),
@@ -24,7 +24,7 @@ const persistedUiStateSchema = z.object({
   selected: selectionSchema.nullable(),
   expandedIds: z.array(z.string()),
   activeEnvironmentIds: z.array(z.string()),
-  sidebarTab: z.union([z.literal('requests'), z.literal('environments'), z.literal('history')]),
+  sidebarTab: z.union([z.literal('requests'), z.literal('environments'), z.literal('history'), z.literal('console')]),
 })
 
 const folderDetailsDraftSchema = z.object({

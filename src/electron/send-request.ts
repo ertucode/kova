@@ -1,7 +1,14 @@
 import { GenericError, type GenericResult } from '../common/GenericError.js'
-import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
+import { extractTemplateVariables, findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
-import type { RequestMethod, ScriptResponseBody, SendRequestInput, SendRequestResponse } from '../common/Requests.js'
+import type {
+  ExecutedRequestSnapshot,
+  ReceivedResponseSnapshot,
+  RequestMethod,
+  ScriptResponseBody,
+  SendRequestInput,
+  SendRequestResponse,
+} from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getFolderAncestorChain } from './db/folders.js'
@@ -76,12 +83,23 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       headers.append(key, resolveTemplateVariables(row.value, variables))
     }
 
-    const body = buildRequestBody(runtime.request, headers, variables)
+    const requestBody = buildRequestBody(runtime.request, headers, variables)
+    const sentAt = Date.now()
+    const executedRequest = buildExecutedRequestSnapshot({
+      requestId: input.requestId,
+      requestName: requestResult.data.name,
+      request: runtime.request,
+      url,
+      headers,
+      body: requestBody.preview,
+      variables,
+      sentAt,
+    })
     const startedAt = Date.now()
     const response = await fetch(parsedUrl, {
       method: runtime.request.method,
       headers,
-      body,
+      body: requestBody.body,
     })
     const bodyText = await response.text()
     const durationMs = Date.now() - startedAt
@@ -107,6 +125,15 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
     )
 
     const updatedEnvironments = runtime.getUpdatedEnvironments()
+    const responseSnapshot: ReceivedResponseSnapshot = {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+      body: bodyText,
+      durationMs,
+      receivedAt: sentAt + durationMs,
+    }
+
     if (updatedEnvironments.length > 0) {
       emitGenericEvent({
         type: 'environments-updated',
@@ -122,6 +149,17 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       durationMs,
       scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
       updatedEnvironments,
+      consoleEntries: runtime.getConsoleEntries(),
+      execution: {
+        id: crypto.randomUUID(),
+        requestId: input.requestId,
+        requestName: requestResult.data.name,
+        request: executedRequest,
+        response: responseSnapshot,
+        responseError: null,
+        scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
+        consoleEntries: runtime.getConsoleEntries(),
+      },
     })
   } catch (error) {
     console.error('sendRequest failed', error)
@@ -185,24 +223,28 @@ function buildRequestBody(
 ) {
   switch (input.bodyType) {
     case 'none':
-      return undefined
+      return { body: undefined, preview: '' }
     case 'raw': {
+      const resolvedBody = resolveTemplateVariables(input.body, variables)
       if (input.body && !headers.has('content-type')) {
         headers.set('content-type', input.rawType === 'json' ? 'application/json' : 'text/plain')
       }
-      return resolveTemplateVariables(input.body, variables)
+      return { body: resolvedBody, preview: resolvedBody }
     }
     case 'form-data': {
       const formData = new FormData()
+      const previewRows: string[] = []
       for (const row of parseKeyValueRows(input.body)) {
         const key = resolveTemplateVariables(row.key, variables).trim()
         if (!row.enabled || !key) {
           continue
         }
 
-        formData.append(key, resolveTemplateVariables(row.value, variables))
+        const value = resolveTemplateVariables(row.value, variables)
+        formData.append(key, value)
+        previewRows.push(`${key}: ${value}`)
       }
-      return formData
+      return { body: formData, preview: previewRows.join('\n') }
     }
     case 'x-www-form-urlencoded': {
       const searchParams = new URLSearchParams()
@@ -217,9 +259,92 @@ function buildRequestBody(
       if (!headers.has('content-type')) {
         headers.set('content-type', 'application/x-www-form-urlencoded')
       }
-      return searchParams
+      return { body: searchParams, preview: searchParams.toString() }
     }
   }
+}
+
+function buildExecutedRequestSnapshot(input: {
+  requestId: string
+  requestName: string
+  request: Pick<SendRequestInput, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  url: string
+  headers: Headers
+  body: string
+  variables: Record<string, string>
+  sentAt: number
+}): ExecutedRequestSnapshot {
+  return {
+    requestId: input.requestId,
+    requestName: input.requestName,
+    method: input.request.method,
+    url: input.url,
+    headers: Array.from(input.headers.entries())
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n'),
+    body: input.body,
+    variables: collectUsedVariables(input.request, input.variables),
+    bodyType: input.request.bodyType,
+    rawType: input.request.rawType,
+    sentAt: input.sentAt,
+  }
+}
+
+function collectUsedVariables(
+  input: Pick<SendRequestInput, 'url' | 'headers' | 'body' | 'bodyType'>,
+  variables: Record<string, string>
+) {
+  const variableNames = new Set<string>()
+
+  for (const variableName of extractTemplateVariables(input.url)) {
+    variableNames.add(variableName)
+  }
+
+  for (const row of parseKeyValueRows(input.headers)) {
+    if (!row.enabled) {
+      continue
+    }
+
+    for (const variableName of extractTemplateVariables(row.key)) {
+      variableNames.add(variableName)
+    }
+
+    for (const variableName of extractTemplateVariables(row.value)) {
+      variableNames.add(variableName)
+    }
+  }
+
+  if (input.bodyType === 'raw') {
+    for (const variableName of extractTemplateVariables(input.body)) {
+      variableNames.add(variableName)
+    }
+  }
+
+  if (input.bodyType === 'form-data' || input.bodyType === 'x-www-form-urlencoded') {
+    for (const row of parseKeyValueRows(input.body)) {
+      if (!row.enabled) {
+        continue
+      }
+
+      for (const variableName of extractTemplateVariables(row.key)) {
+        variableNames.add(variableName)
+      }
+
+      for (const variableName of extractTemplateVariables(row.value)) {
+        variableNames.add(variableName)
+      }
+    }
+  }
+
+  return Array.from(variableNames)
+    .sort((left, right) => left.localeCompare(right))
+    .reduce<Record<string, string>>((result, variableName) => {
+      const value = variables[variableName]
+      if (value !== undefined) {
+        result[variableName] = value
+      }
+      return result
+    }, {})
 }
 
 function parseScriptResponseBody(body: string, headers: string): ScriptResponseBody {

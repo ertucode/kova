@@ -14,21 +14,29 @@ import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
+import { requestExecutionStore } from './requestExecutionStore'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
-  const [response, setResponse] = useState<SendRequestResponse | null>(null)
-  const [responseError, setResponseError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
   const [responsePaneHeight, setResponsePaneHeight] = useState(320)
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
+  const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
+    state.context.selected?.itemType === 'request' ? state.context.selected.id : null
+  )
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
+  const response = useSelector(requestExecutionStore, state =>
+    selectedRequestId ? (state.context.responseByRequestId[selectedRequestId] ?? null) : null
+  )
+  const responseError = useSelector(requestExecutionStore, state =>
+    selectedRequestId ? (state.context.errorByRequestId[selectedRequestId] ?? null) : null
+  )
 
   const activeEnvironmentNames = useMemo(
     () =>
@@ -187,21 +195,18 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     const state = folderExplorerEditorStore.getSnapshot().context
     const selected = state.selected
     if (!selected || selected.itemType !== 'request') {
-      setResponse(null)
-      setResponseError('Request selection is missing')
+      requestExecutionStore.trigger.requestFailed({ requestId: 'unknown', error: 'Request selection is missing' })
       return
     }
 
     const entry = state.entries[`request:${selected.id}`]
     const latestDraft = entry?.current
     if (!latestDraft || latestDraft.itemType !== 'request') {
-      setResponse(null)
-      setResponseError('Request draft is missing')
+      requestExecutionStore.trigger.requestFailed({ requestId: selected.id, error: 'Request draft is missing' })
       return
     }
 
     setIsSending(true)
-    setResponseError(null)
 
     const result = await getWindowElectron().sendRequest({
       requestId: selected.id,
@@ -219,12 +224,19 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     setIsSending(false)
 
     if (!result.success) {
-      setResponse(null)
-      setResponseError(errorResponseToMessage(result.error))
+      requestExecutionStore.trigger.requestFailed({
+        requestId: selected.id,
+        error: errorResponseToMessage(result.error),
+      })
       return
     }
 
-    setResponse(result.data)
+    requestExecutionStore.trigger.requestSucceeded({
+      requestId: selected.id,
+      requestName: latestDraft.name,
+      requestDraft: latestDraft,
+      response: result.data,
+    })
   }
 
   const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {

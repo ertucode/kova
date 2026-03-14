@@ -76,6 +76,49 @@ export type RequestScriptError = {
   message: string
 }
 
+export type RequestConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug'
+
+export type RequestConsoleEntry = {
+  id: string
+  timestamp: number
+  level: RequestConsoleLevel
+  sourceName: string
+  message: string
+}
+
+export type ExecutedRequestSnapshot = {
+  requestId: string
+  requestName: string
+  method: RequestMethod
+  url: string
+  headers: string
+  body: string
+  variables: Record<string, string>
+  bodyType: RequestBodyType
+  rawType: RequestRawType
+  sentAt: number
+}
+
+export type ReceivedResponseSnapshot = {
+  status: number
+  statusText: string
+  headers: string
+  body: string
+  durationMs: number
+  receivedAt: number
+}
+
+export type RequestExecutionRecord = {
+  id: string
+  requestId: string
+  requestName: string
+  request: ExecutedRequestSnapshot
+  response: ReceivedResponseSnapshot | null
+  responseError: string | null
+  scriptErrors: RequestScriptError[]
+  consoleEntries: RequestConsoleEntry[]
+}
+
 export type SendRequestResponse = {
   status: number
   statusText: string
@@ -84,4 +127,6 @@ export type SendRequestResponse = {
   durationMs: number
   scriptErrors: RequestScriptError[]
   updatedEnvironments: EnvironmentRecord[]
+  consoleEntries: RequestConsoleEntry[]
+  execution: RequestExecutionRecord
 }

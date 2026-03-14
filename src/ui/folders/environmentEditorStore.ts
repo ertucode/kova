@@ -45,9 +45,7 @@ export const environmentEditorStore = createStore({
         event.items.map(item => {
           const base = toEnvironmentDetailsDraft(item)
           const existing = context.entries[item.id] ?? createEmptyEnvironmentEntry()
-          const current = existing.current && serializeEnvironmentDraft(existing.current) !== serializeEnvironmentDraft(base)
-            ? existing.current
-            : base
+          const current = isEnvironmentEntryDirty(existing) ? existing.current : base
 
           return [
             item.id,

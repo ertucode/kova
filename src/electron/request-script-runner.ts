@@ -2,7 +2,14 @@ import vm from 'node:vm'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
 import { buildEnvironmentVariableMap } from '../common/RequestVariables.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
-import type { RequestBodyType, RequestMethod, RequestRawType, ScriptResponseBody } from '../common/Requests.js'
+import type {
+  RequestBodyType,
+  RequestConsoleEntry,
+  RequestConsoleLevel,
+  RequestMethod,
+  RequestRawType,
+  ScriptResponseBody,
+} from '../common/Requests.js'
 import { updateEnvironmentVariables } from './db/environments.js'
 
 const SCRIPT_TIMEOUT_MS = 500
@@ -50,6 +57,7 @@ export type ScriptRuntime = {
   requestScope: Map<string, string>
   getResolvedVariables: () => Record<string, string>
   getUpdatedEnvironments: () => EnvironmentRecord[]
+  getConsoleEntries: () => RequestConsoleEntry[]
   runPreRequestScripts: (sources: ScriptSource[]) => Promise<void>
   runPostRequestScripts: (
     sources: ScriptSource[],
@@ -71,12 +79,14 @@ export function createRequestScriptRuntime(input: {
   let environmentOwners = buildEffectiveEnvironmentOwners(environments)
   let pendingEnvironmentIds = new Set<string>()
   const updatedEnvironmentIds = new Set<string>()
+  const consoleEntries: RequestConsoleEntry[] = []
 
   return {
     request: runtimeRequest,
     requestScope,
     getResolvedVariables: () => ({ ...environmentValues, ...Object.fromEntries(requestScope.entries()) }),
     getUpdatedEnvironments: () => environments.filter(environment => updatedEnvironmentIds.has(environment.id)),
+    getConsoleEntries: () => consoleEntries.slice(),
     runPreRequestScripts: async sources => {
       try {
         await runScriptPhase({
@@ -85,6 +95,7 @@ export function createRequestScriptRuntime(input: {
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
+          consoleEntries,
         })
       } catch (error) {
         const scriptError = toScriptErrorDetails(error)
@@ -114,6 +125,7 @@ export function createRequestScriptRuntime(input: {
           requestScope,
           response,
           environmentContext: createEnvironmentContext(),
+          consoleEntries,
         })
 
         if (pendingEnvironmentIds.size > 0) {
@@ -199,6 +211,7 @@ async function runScriptPhase(input: {
   requestScope: Map<string, string>
   response: { status: number; statusText: string; headers: string; body: ScriptResponseBody } | null
   environmentContext: EnvironmentContext
+  consoleEntries: RequestConsoleEntry[]
 }) {
   for (const source of input.sources) {
     if (!source.script.trim()) {
@@ -207,7 +220,7 @@ async function runScriptPhase(input: {
 
     const headerEditor = createHeaderEditor(input.runtimeRequest)
     const sandbox = {
-      console,
+      console: createScriptConsole(source.name, input.consoleEntries),
       request: createRequestApi(input.runtimeRequest, headerEditor),
       response: input.response ? createResponseApi(input.response) : undefined,
       env: createEnvironmentApi(input.environmentContext),
@@ -224,6 +237,51 @@ async function runScriptPhase(input: {
       }
     }
   }
+}
+
+function createScriptConsole(sourceName: string, consoleEntries: RequestConsoleEntry[]) {
+  return {
+    log: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'log', values),
+    info: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'info', values),
+    warn: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'warn', values),
+    error: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'error', values),
+    debug: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'debug', values),
+  }
+}
+
+function pushConsoleEntry(
+  consoleEntries: RequestConsoleEntry[],
+  sourceName: string,
+  level: RequestConsoleLevel,
+  values: unknown[]
+) {
+  consoleEntries.push({
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+    level,
+    sourceName,
+    message: values.map(formatConsoleValue).join(' '),
+  })
+}
+
+function formatConsoleValue(value: unknown) {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (value instanceof Error) {
+    return value.stack ?? value.message
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch {
+      return Object.prototype.toString.call(value)
+    }
+  }
+
+  return String(value)
 }
 
 function createRequestApi(runtimeRequest: RuntimeRequestState, headers: HeaderApi) {
