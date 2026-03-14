@@ -56,10 +56,10 @@ export function KeyValueEditor({
 
   return (
     <section className="w-full border-b border-base-content/10">
-      {label ? <div className="pl-2 py-2 text-sm font-semibold text-base-content">{label}</div> : null}
+      {label ? <div className="pl-2 py-2 text-[0.78rem] font-semibold text-base-content">{label}</div> : null}
 
       <div className="overflow-hidden border border-base-content/10 bg-base-100/35">
-        <table className="table w-full table-fixed border-collapse text-sm">
+        <table className="table w-full table-fixed border-collapse text-[0.78rem]">
           <thead>
             <tr className="border-b border-base-content/10 bg-base-100/70 text-left text-base-content/55">
               <th className="w-8 px-2 py-2 font-medium">On</th>
@@ -87,7 +87,7 @@ export function KeyValueEditor({
                   </td>
                   <td className="p-0 px-2 align-middle">
                     <input
-                      className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-sm border-none outline-none"
+                      className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
                       value={row.key}
                       placeholder={keyPlaceholder}
                       onChange={event => updateRow(row.id, { key: event.target.value })}
@@ -100,6 +100,7 @@ export function KeyValueEditor({
                         language="plain"
                         singleLine
                         compact
+                        size="small"
                         hideFocusOutline
                         className="h-9 border-0 bg-transparent"
                         extensions={valueEditorExtensions}
@@ -108,7 +109,7 @@ export function KeyValueEditor({
                       />
                     ) : (
                       <input
-                        className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-sm border-none outline-none"
+                        className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
                         value={row.value}
                         placeholder={valuePlaceholder}
                         onChange={event => updateRow(row.id, { value: event.target.value })}
@@ -117,7 +118,7 @@ export function KeyValueEditor({
                   </td>
                   <td className="p-0 px-2 align-middle">
                     <input
-                      className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-sm border-none outline-none"
+                        className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
                       value={row.description}
                       placeholder={descriptionPlaceholder}
                       onChange={event => updateRow(row.id, { description: event.target.value })}

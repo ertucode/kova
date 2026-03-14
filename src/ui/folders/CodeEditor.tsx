@@ -126,6 +126,7 @@ export function CodeEditor({
   extensions,
   singleLine,
   compact,
+  size = 'normal',
   hideFocusOutline,
   onChange,
   onBlur,
@@ -138,6 +139,7 @@ export function CodeEditor({
   extensions?: Extension[]
   singleLine?: boolean
   compact?: boolean
+  size?: 'normal' | 'small'
   hideFocusOutline?: boolean
   onChange: (value: string) => void
   onBlur?: () => void
@@ -146,6 +148,26 @@ export function CodeEditor({
 
   const resolvedExtensions = useMemo(() => {
     const nextExtensions: Extension[] = [editorTheme, syntaxHighlighting(editorHighlightStyle)]
+
+    if (size === 'small') {
+      nextExtensions.push(
+        EditorView.theme({
+          '&': {
+            fontSize: '0.78rem !important',
+          },
+          '.cm-scroller': {
+            fontSize: '0.78rem !important',
+          },
+          '.cm-content': {
+            fontSize: '0.78rem !important',
+            lineHeight: '1.35rem !important',
+          },
+          '.cm-line': {
+            fontSize: '0.78rem !important',
+          },
+        })
+      )
+    }
 
     if (compact) {
       nextExtensions.push(
@@ -217,7 +239,7 @@ export function CodeEditor({
     }
 
     return nextExtensions
-  }, [compact, extensions, hideFocusOutline, language, placeholder, singleLine])
+  }, [compact, extensions, hideFocusOutline, language, placeholder, singleLine, size])
 
   return (
     <div

@@ -199,6 +199,35 @@ export async function deleteFolder(input: DeleteFolderInput): Promise<GenericRes
   }
 }
 
+export async function getFolderAncestorChain(folderId: string | null): Promise<FolderRecord[]> {
+  if (!folderId) {
+    return []
+  }
+
+  const db = getDb()
+  const foldersById = new Map<string, FolderRow>()
+  let currentFolderId: string | null = folderId
+
+  while (currentFolderId) {
+    const folder = db
+      .select()
+      .from(folders)
+      .where(and(eq(folders.id, currentFolderId), isNull(folders.deletedAt)))
+      .get()
+
+    if (!folder || folder.deletedAt !== null) {
+      break
+    }
+
+    foldersById.set(folder.id, folder)
+    currentFolderId = folder.parentId
+  }
+
+  return Array.from(foldersById.values())
+    .reverse()
+    .map(toFolderRecord)
+}
+
 function toFolderRecord(folder: FolderRow): FolderRecord {
   return {
     id: folder.id,

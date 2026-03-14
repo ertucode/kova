@@ -127,6 +127,27 @@ export async function deleteEnvironment(input: DeleteEnvironmentInput): Promise<
   }
 }
 
+export async function updateEnvironmentVariables(input: { id: string; variables: string }) {
+  const db = getDb()
+
+  const environment = db
+    .select()
+    .from(environments)
+    .where(and(eq(environments.id, input.id), isNull(environments.deletedAt)))
+    .get()
+
+  if (!environment || environment.deletedAt !== null) {
+    throw new Error('Environment not found')
+  }
+
+  db.update(environments)
+    .set({ variables: input.variables })
+    .where(and(eq(environments.id, input.id), isNull(environments.deletedAt)))
+    .run()
+
+  return toEnvironmentRecord({ ...environment, variables: input.variables })
+}
+
 function toEnvironmentRecord(environment: EnvironmentRow): EnvironmentRecord {
   return {
     id: environment.id,

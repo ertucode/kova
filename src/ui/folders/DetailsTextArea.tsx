@@ -1,3 +1,4 @@
+import type { Extension } from '@codemirror/state'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 
 export function DetailsTextArea({
@@ -6,7 +7,9 @@ export function DetailsTextArea({
   minHeightClassName,
   sectionClassName,
   editorLanguage,
+  editorSize,
   placeholder,
+  extensions,
   onChange,
   onBlur,
 }: {
@@ -15,7 +18,9 @@ export function DetailsTextArea({
   minHeightClassName: string
   sectionClassName?: string
   editorLanguage?: CodeEditorLanguage
+  editorSize?: 'normal' | 'small'
   placeholder?: string
+  extensions?: Extension[]
   onChange: (value: string) => void
   onBlur: () => void
 }) {
@@ -26,9 +31,11 @@ export function DetailsTextArea({
         <CodeEditor
           value={value}
           language={editorLanguage}
+          size={editorSize}
           minHeightClassName={minHeightClassName}
           className="flex-1 border-x-0 border-b-0"
           placeholder={placeholder}
+          extensions={extensions}
           onChange={onChange}
           onBlur={onBlur}
         />

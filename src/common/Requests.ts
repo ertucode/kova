@@ -1,3 +1,5 @@
+import type { EnvironmentRecord } from './Environments.js'
+
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
 export type RequestBodyType = 'raw' | 'form-data' | 'x-www-form-urlencoded' | 'none'
@@ -46,13 +48,32 @@ export type DeleteRequestInput = {
 }
 
 export type SendRequestInput = {
+  requestId: string
   method: RequestMethod
   url: string
+  preRequestScript: string
+  postRequestScript: string
   headers: string
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
   activeEnvironmentIds: string[]
+}
+
+export type ScriptResponseBody =
+  | {
+      type: 'json'
+      data: unknown
+    }
+  | {
+      type: 'text'
+      data: string
+    }
+
+export type RequestScriptError = {
+  phase: 'post-request'
+  sourceName: string
+  message: string
 }
 
 export type SendRequestResponse = {
@@ -61,4 +82,6 @@ export type SendRequestResponse = {
   headers: string
   body: string
   durationMs: number
+  scriptErrors: RequestScriptError[]
+  updatedEnvironments: EnvironmentRecord[]
 }

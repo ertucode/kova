@@ -17,6 +17,7 @@ import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
+import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [response, setResponse] = useState<SendRequestResponse | null>(null)
@@ -102,6 +103,28 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     []
   )
 
+  const preRequestScriptExtensions = useMemo(
+    () => [
+      scriptAutocompleteExtension({
+        includeResponse: false,
+        getEnvironmentNames: () => activeEnvironmentNames,
+        getVariableNames: () => activeEnvironmentVariableNames,
+      }),
+    ],
+    [activeEnvironmentNames, activeEnvironmentVariableNames]
+  )
+
+  const postRequestScriptExtensions = useMemo(
+    () => [
+      scriptAutocompleteExtension({
+        includeResponse: true,
+        getEnvironmentNames: () => activeEnvironmentNames,
+        getVariableNames: () => activeEnvironmentVariableNames,
+      }),
+    ],
+    [activeEnvironmentNames, activeEnvironmentVariableNames]
+  )
+
   const referencedVariables = useMemo(
     () =>
       Array.from(
@@ -161,17 +184,36 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   }, [isSending])
 
   const sendRequest = async () => {
+    const state = folderExplorerEditorStore.getSnapshot().context
+    const selected = state.selected
+    if (!selected || selected.itemType !== 'request') {
+      setResponse(null)
+      setResponseError('Request selection is missing')
+      return
+    }
+
+    const entry = state.entries[`request:${selected.id}`]
+    const latestDraft = entry?.current
+    if (!latestDraft || latestDraft.itemType !== 'request') {
+      setResponse(null)
+      setResponseError('Request draft is missing')
+      return
+    }
+
     setIsSending(true)
     setResponseError(null)
 
     const result = await getWindowElectron().sendRequest({
-      method: draft.method,
-      url: draft.url,
-      headers: draft.headers,
-      body: draft.body,
-      bodyType: draft.bodyType,
-      rawType: draft.rawType,
-      activeEnvironmentIds,
+      requestId: selected.id,
+      method: latestDraft.method,
+      url: latestDraft.url,
+      preRequestScript: latestDraft.preRequestScript,
+      postRequestScript: latestDraft.postRequestScript,
+      headers: latestDraft.headers,
+      body: latestDraft.body,
+      bodyType: latestDraft.bodyType,
+      rawType: latestDraft.rawType,
+      activeEnvironmentIds: state.activeEnvironmentIds,
     })
 
     setIsSending(false)
@@ -242,7 +284,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         />
       </section>
 
-      <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+      <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
           <div className="flex h-full min-h-0 flex-col border-b border-base-content/10">
             <div className="flex items-center gap-3">
@@ -285,6 +327,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               <CodeEditor
                 value={draft.body}
                 language={getRawEditorLanguage(draft.rawType)}
+                size="small"
                 minHeightClassName="min-h-0 h-full"
                 className="border-x-0 border-b-0"
                 placeholder={'{\n  "hello": "world"\n}'}
@@ -324,6 +367,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             minHeightClassName="min-h-[100px]"
             sectionClassName="flex min-h-[100px] flex-1 basis-0 flex-col"
             editorLanguage="javascript"
+            editorSize="small"
+            extensions={preRequestScriptExtensions}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -334,6 +379,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             minHeightClassName="min-h-[100px]"
             sectionClassName="flex min-h-[100px] flex-1 basis-0 flex-col"
             editorLanguage="javascript"
+            editorSize="small"
+            extensions={postRequestScriptExtensions}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -352,10 +399,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         />
 
         <div className="h-[calc(100%-2px)] overflow-auto">
-          <div className="flex items-start justify-between gap-4 p-2 border-b border-base-content/10">
+          <div className="flex items-start justify-between gap-4 border-b border-base-content/10 p-2">
             <div className="text-sm font-semibold text-base-content">Response</div>
             <ResponseStatusSummary response={response} responseError={responseError} />
           </div>
+          <ResponseScriptErrors errors={response?.scriptErrors ?? []} />
           <div className="grid md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
             <ResponseBodyPanel
               value={formattedResponseBody}
@@ -366,6 +414,18 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           </div>
         </div>
       </section>
+    </div>
+  )
+}
+
+function ResponseScriptErrors({ errors }: { errors: SendRequestResponse['scriptErrors'] }) {
+  if (errors.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="whitespace-pre-wrap border-b border-base-content/10 bg-warning/8 px-3 py-2 text-sm text-warning-content/90">
+      {errors.map(error => `${error.sourceName}: ${error.message}`).join('\n')}
     </div>
   )
 }
