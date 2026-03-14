@@ -83,7 +83,10 @@ export function ExplorerRow({
             return
           }
 
-          FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id })
+          void FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id }, { mode: 'preview' })
+        }}
+        onDoubleClick={() => {
+          void FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id }, { mode: 'pin' })
         }}
         onDragStart={event => onDragStart(node, event)}
         onDragEnd={onDragEnd}

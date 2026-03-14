@@ -7,6 +7,7 @@ import { xlsxWorkerPool } from './utils/xlsx-worker-pool.js'
 import { TaskManager } from './TaskManager.js'
 import { initializeDatabase } from './db/index.js'
 import { listExplorerItems } from './db/explorer.js'
+import { listFolderExplorerTabs, saveFolderExplorerTabs } from './db/folder-explorer-tabs.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
 import { createEnvironment, deleteEnvironment, duplicateEnvironment, listEnvironments, moveEnvironment, updateEnvironment } from './db/environments.js'
 import { deleteRequestHistoryEntry, listRequestHistory, trimRequestHistory } from './db/request-history.js'
@@ -236,6 +237,14 @@ app.on('ready', () => {
 
   ipcHandle('listExplorerItems', async () => {
     return listExplorerItems()
+  })
+
+  ipcHandle('listFolderExplorerTabs', async () => {
+    return listFolderExplorerTabs()
+  })
+
+  ipcHandle('saveFolderExplorerTabs', async input => {
+    return saveFolderExplorerTabs(input)
   })
 
   ipcHandle('createFolder', async input => {

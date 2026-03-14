@@ -117,7 +117,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         minHeightClassName="min-h-28"
         placeholder="Describe what this folder is for"
         onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, description: value })}
-        onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
+        onBlur={() => undefined}
       />
 
       <AuthorizationEditor
@@ -144,7 +144,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           editorSize="small"
           extensions={preRequestScriptExtensions}
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
-          onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
+          onBlur={() => undefined}
         />
 
         <DetailsTextArea
@@ -156,7 +156,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           editorSize="small"
           extensions={postRequestScriptExtensions}
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
-          onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
+          onBlur={() => undefined}
         />
       </div>
     </div>

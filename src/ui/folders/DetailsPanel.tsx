@@ -23,7 +23,7 @@ export function DetailsPanel() {
   )
 
   useEffect(() => {
-    if (!selected || (selected.itemType !== 'request' && selected.itemType !== 'example')) {
+    if (!selected) {
       return
     }
 
@@ -84,11 +84,7 @@ export function DetailsPanel() {
                   onChange={event =>
                     FolderExplorerCoordinator.updateSelectedDraft({ ...draft, name: event.target.value })
                   }
-                  onBlur={() => {
-                    if (selected.itemType !== 'example') {
-                      void FolderExplorerCoordinator.saveSelectedItem()
-                    }
-                  }}
+                  onBlur={() => undefined}
                 />
 
                 {draft.itemType !== 'folder' ? <SaveIndicator isDirty={isDirty} isSaving={isSaving} /> : null}

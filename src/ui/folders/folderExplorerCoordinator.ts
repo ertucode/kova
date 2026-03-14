@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import type { FolderExplorerTabRecord } from '@common/FolderExplorerTabs'
 import type { FolderRecord } from '@common/Folders'
 import { errorResponseToMessage } from '@common/GenericError'
 import type { RequestExampleRecord } from '@common/RequestExamples'
@@ -13,6 +14,7 @@ import type { DetailsDraft, Selection } from './folderExplorerTypes'
 import {
   createEmptyEntry,
   folderExplorerEditorStore,
+  getSelectionFromTabs,
   isEntryDirty,
   persistedDraftsSchema,
   saveFolderExplorerUiState,
@@ -26,6 +28,9 @@ const saveTokens: Record<string, number> = {}
 const MOVE_UNDO_TOAST_ID = 'folder-explorer-move-undo'
 const MOVE_UNDO_TIMEOUT_MS = 5000
 const MAX_MOVE_UNDO_STACK_SIZE = 20
+const MAX_FOLDER_EXPLORER_TABS = 20
+
+type OpenTabMode = 'preview' | 'pin'
 
 type MoveUndoEntry = {
   itemType: 'folder' | 'request'
@@ -39,6 +44,11 @@ let isUndoingMove = false
 const moveUndoStack: MoveUndoEntry[] = []
 
 export namespace FolderExplorerCoordinator {
+  export async function initialize() {
+    await loadItems()
+    await loadTabs()
+  }
+
   export async function loadItems() {
     folderExplorerTreeStore.trigger.loadingStarted()
 
@@ -46,17 +56,8 @@ export namespace FolderExplorerCoordinator {
       const items = await getWindowElectron().listExplorerItems()
       folderExplorerTreeStore.trigger.itemsLoaded({ items })
       folderExplorerEditorStore.trigger.expandedIdsReconciled({ items })
+      await reconcileTabsWithItems(items)
       persistUiState()
-
-      const selected = folderExplorerEditorStore.getSnapshot().context.selected
-      const nextSelection =
-        selected && items.some(item => item.id === selected.id && item.itemType === selected.itemType)
-          ? selected
-          : items[0]
-            ? { itemType: items[0].itemType, id: items[0].id }
-            : null
-
-      selectItem(nextSelection)
     } catch (error) {
       folderExplorerTreeStore.trigger.loadingFinished()
       toast.show({
@@ -67,27 +68,106 @@ export namespace FolderExplorerCoordinator {
     }
   }
 
-  export function selectItem(selection: Selection | null) {
-    const state = folderExplorerEditorStore.getSnapshot().context
-    const current = state.selected
+  export async function loadTabs() {
+    const tabs = await getWindowElectron().listFolderExplorerTabs()
+    await replaceTabsState(tabs, getActiveTabIdFromTabs(tabs), { persist: false, loadActiveSelection: true, reconcile: true })
+  }
 
-    if (isSameSelection(current, selection)) {
-      if (selection) {
-        const key = toSelectionKey(selection)
-        const entry = state.entries[key]
-        if (!entry?.base) {
-          void loadItem(selection)
-        }
-      }
+  export async function selectItem(selection: Selection | null, options?: { mode?: OpenTabMode }) {
+    if (!selection) {
+      await replaceTabsState([], null)
       return
     }
 
-    folderExplorerEditorStore.trigger.selectionChanged({ selection })
-    persistUiState()
+    const mode = options?.mode ?? 'pin'
+    const state = folderExplorerEditorStore.getSnapshot().context
 
-    if (selection) {
-      void loadItem(selection)
+    const existingTab = state.tabs.find(tab => tab.itemType === selection.itemType && tab.itemId === selection.id)
+    if (existingTab) {
+      const nextTabs = state.tabs.map(tab =>
+        tab.id === existingTab.id && mode === 'pin' && !tab.isPinned
+          ? { ...tab, isPinned: true, updatedAt: Date.now() }
+          : tab
+      )
+      await replaceTabsState(nextTabs, existingTab.id)
+      return
     }
+
+    const now = Date.now()
+    const previewTab = mode === 'preview' ? state.tabs.find(tab => !tab.isPinned) : null
+    const nextTabsBase = previewTab
+      ? state.tabs.map(tab =>
+          tab.id === previewTab.id
+            ? {
+                ...tab,
+                itemType: selection.itemType,
+                itemId: selection.id,
+                isPinned: false,
+                updatedAt: now,
+              }
+            : tab
+        )
+      : [
+          ...state.tabs,
+          {
+            id: crypto.randomUUID(),
+            itemType: selection.itemType,
+            itemId: selection.id,
+            position: state.tabs.length,
+            isPinned: mode === 'pin',
+            isActive: false,
+            createdAt: now,
+            updatedAt: now,
+          } satisfies FolderExplorerTabRecord,
+        ]
+    const nextActiveTabId = previewTab ? previewTab.id : nextTabsBase[nextTabsBase.length - 1]?.id ?? null
+    const nextTabs = enforceTabLimit(nextTabsBase, nextActiveTabId)
+    await replaceTabsState(nextTabs, getValidActiveTabId(nextTabs, nextActiveTabId))
+  }
+
+  export async function closeTab(tabId: string) {
+    const { tabs, activeTabId } = folderExplorerEditorStore.getSnapshot().context
+    const tabIndex = tabs.findIndex(tab => tab.id === tabId)
+    if (tabIndex < 0) {
+      return
+    }
+
+    const nextTabs = tabs.filter(tab => tab.id !== tabId)
+    const nextActiveTabId =
+      activeTabId === tabId ? nextTabs[Math.max(0, tabIndex - 1)]?.id ?? nextTabs[tabIndex]?.id ?? null : activeTabId
+
+    await replaceTabsState(nextTabs, getValidActiveTabId(nextTabs, nextActiveTabId))
+  }
+
+  export async function activateTab(tabId: string) {
+    const { tabs } = folderExplorerEditorStore.getSnapshot().context
+    if (!tabs.some(tab => tab.id === tabId)) {
+      return
+    }
+
+    await replaceTabsState(tabs, tabId)
+  }
+
+  export async function pinTab(tabId: string) {
+    const { tabs, activeTabId } = folderExplorerEditorStore.getSnapshot().context
+    const nextTabs = tabs.map(tab => (tab.id === tabId && !tab.isPinned ? { ...tab, isPinned: true, updatedAt: Date.now() } : tab))
+    await replaceTabsState(nextTabs, activeTabId ?? tabId)
+  }
+
+  export async function moveTab(tabId: string, targetPosition: number) {
+    const { tabs, activeTabId } = folderExplorerEditorStore.getSnapshot().context
+    const currentIndex = tabs.findIndex(tab => tab.id === tabId)
+    if (currentIndex < 0) {
+      return
+    }
+
+    const [tab] = tabs.slice(currentIndex, currentIndex + 1)
+    const remainingTabs = tabs.filter(currentTab => currentTab.id !== tabId)
+    const adjustedTargetPosition = targetPosition > currentIndex ? targetPosition - 1 : targetPosition
+    const nextPosition = Math.max(0, Math.min(adjustedTargetPosition, remainingTabs.length))
+    const nextTabs = remainingTabs.slice()
+    nextTabs.splice(nextPosition, 0, tab)
+    await replaceTabsState(nextTabs, activeTabId)
   }
 
   export function updateSelectedDraft(draft: DetailsDraft | null) {
@@ -115,19 +195,8 @@ export namespace FolderExplorerCoordinator {
     }
 
     await loadItems()
-    selectItem({ itemType: 'request', id: result.data.id })
+    await selectItem({ itemType: 'request', id: result.data.id })
     toast.show({ severity: 'success', title: 'Request duplicated', message: `Created ${result.data.name}.` })
-  }
-
-  export async function flushSelectedFolder() {
-    const state = folderExplorerEditorStore.getSnapshot().context
-    const selection = state.selected
-    if (!selection || selection.itemType !== 'folder') return
-
-    const entry = state.entries[toSelectionKey(selection)]
-    if (!entry || !isEntryDirty(entry)) return
-
-    await saveItem(selection)
   }
 
   export function startCreate(itemType: Extract<ExplorerItem['itemType'], 'folder' | 'request'>, parentFolderId: string | null) {
@@ -135,7 +204,7 @@ export namespace FolderExplorerCoordinator {
     if (parentFolderId) {
       folderExplorerEditorStore.trigger.expandedEnsured({ id: parentFolderId })
       persistUiState()
-      selectItem({ itemType: 'folder', id: parentFolderId })
+      void selectItem({ itemType: 'folder', id: parentFolderId })
     }
   }
 
@@ -174,7 +243,7 @@ export namespace FolderExplorerCoordinator {
     }
 
     await loadItems()
-    selectItem({ itemType: createDraft.itemType, id: result.data.id })
+    await selectItem({ itemType: createDraft.itemType, id: result.data.id })
   }
 
   export function requestDelete(item: ExplorerItem) {
@@ -372,6 +441,113 @@ async function undoLastMove() {
   showMoveUndoToast()
 }
 
+async function reconcileTabsWithItems(items: ExplorerItem[]) {
+  const { tabs, activeTabId } = folderExplorerEditorStore.getSnapshot().context
+  if (tabs.length === 0) {
+    if (folderExplorerEditorStore.getSnapshot().context.selected !== null) {
+      folderExplorerEditorStore.trigger.tabsStateReplaced({ tabs: [], activeTabId: null })
+    }
+    return
+  }
+
+  const validTabs = tabs.filter(tab => items.some(item => item.itemType === tab.itemType && item.id === tab.itemId))
+  const nextActiveTabId = getValidActiveTabId(validTabs, activeTabId)
+  const hasChanged =
+    validTabs.length !== tabs.length ||
+    validTabs.some((tab, index) => tab.id !== tabs[index]?.id) ||
+    nextActiveTabId !== activeTabId
+
+  if (!hasChanged) {
+    return
+  }
+
+  await replaceTabsState(validTabs, nextActiveTabId, { loadActiveSelection: false })
+}
+
+function getActiveTabIdFromTabs(tabs: FolderExplorerTabRecord[]) {
+  return tabs.find(tab => tab.isActive)?.id ?? tabs[0]?.id ?? null
+}
+
+function getValidActiveTabId(tabs: FolderExplorerTabRecord[], activeTabId: string | null) {
+  if (activeTabId && tabs.some(tab => tab.id === activeTabId)) {
+    return activeTabId
+  }
+
+  return tabs[0]?.id ?? null
+}
+
+function enforceTabLimit(tabs: FolderExplorerTabRecord[], activeTabId: string | null) {
+  if (tabs.length <= MAX_FOLDER_EXPLORER_TABS) {
+    return tabs
+  }
+
+  const removableTabs = tabs.filter(tab => tab.id !== activeTabId)
+  const firstPreviewTab = removableTabs.find(tab => !tab.isPinned)
+  const tabIdToRemove = firstPreviewTab?.id ?? removableTabs[0]?.id
+
+  if (!tabIdToRemove) {
+    return tabs.slice(-MAX_FOLDER_EXPLORER_TABS)
+  }
+
+  return enforceTabLimit(
+    tabs.filter(tab => tab.id !== tabIdToRemove),
+    activeTabId
+  )
+}
+
+async function replaceTabsState(
+  tabs: FolderExplorerTabRecord[],
+  activeTabId: string | null,
+  options?: { persist?: boolean; loadActiveSelection?: boolean; reconcile?: boolean }
+) {
+  const persist = options?.persist ?? true
+  const loadActiveSelection = options?.loadActiveSelection ?? true
+  const nextTabs = normalizeTabs(options?.reconcile ? filterToExistingTabs(tabs) : tabs, activeTabId)
+  const nextActiveTabId = getValidActiveTabId(nextTabs, activeTabId)
+
+  folderExplorerEditorStore.trigger.tabsStateReplaced({ tabs: nextTabs, activeTabId: nextActiveTabId })
+  persistUiState()
+
+  if (persist) {
+    await persistTabsState(nextTabs, nextActiveTabId)
+  }
+
+  const nextSelection = getSelectionFromTabs(nextTabs, nextActiveTabId)
+  if (loadActiveSelection && nextSelection) {
+    await ensureItemLoaded(nextSelection)
+  }
+}
+
+function filterToExistingTabs(tabs: FolderExplorerTabRecord[]) {
+  const items = folderExplorerTreeStore.getSnapshot().context.items
+  return tabs.filter(tab => items.some(item => item.itemType === tab.itemType && item.id === tab.itemId))
+}
+
+function normalizeTabs(tabs: FolderExplorerTabRecord[], activeTabId: string | null) {
+  const nextActiveTabId = getValidActiveTabId(tabs, activeTabId)
+  return tabs.map((tab, index) => ({
+    ...tab,
+    position: index,
+    isActive: tab.id === nextActiveTabId,
+  }))
+}
+
+async function persistTabsState(tabs: FolderExplorerTabRecord[], activeTabId: string | null) {
+  const normalizedTabs = normalizeTabs(tabs, activeTabId)
+  const result = await getWindowElectron().saveFolderExplorerTabs({ tabs: normalizedTabs })
+  if (!result.success) {
+    toast.show(result)
+  }
+}
+
+async function ensureItemLoaded(selection: Selection) {
+  const { entries } = folderExplorerEditorStore.getSnapshot().context
+  const entry = entries[toSelectionKey(selection)]
+  if (!entry?.base) {
+    await loadItem(selection)
+  }
+}
+
 async function loadItem(selection: Selection) {
   const key = toSelectionKey(selection)
   const token = (loadTokens[key] ?? 0) + 1
@@ -488,11 +664,6 @@ function persistUnsavedDrafts() {
 function persistUiState() {
   const { selected, expandedIds } = folderExplorerEditorStore.getSnapshot().context
   saveFolderExplorerUiState(selected, expandedIds)
-}
-
-function isSameSelection(left: Selection | null, right: Selection | null) {
-  if (!left || !right) return left === right
-  return left.id === right.id && left.itemType === right.itemType
 }
 
 function toServerDraft(selection: Selection, value: FolderRecord | HttpRequestRecord | RequestExampleRecord) {

@@ -31,6 +31,8 @@ electron.contextBridge.exposeInMainWorld('electron', {
   restoreWindowSize: () => ipcInvoke('restoreWindowSize', undefined),
   getIsCompactWindowSize: () => ipcInvoke('getIsCompactWindowSize', undefined),
   listExplorerItems: () => ipcInvoke('listExplorerItems', undefined),
+  listFolderExplorerTabs: () => ipcInvoke('listFolderExplorerTabs', undefined),
+  saveFolderExplorerTabs: input => ipcInvoke('saveFolderExplorerTabs', input),
   createFolder: input => ipcInvoke('createFolder', input),
   getFolder: input => ipcInvoke('getFolder', input),
   renameFolder: input => ipcInvoke('renameFolder', input),

@@ -3,6 +3,7 @@ import { useSelector } from '@xstate/store/react'
 import { ChevronDownIcon, Clock3Icon, FileCode2Icon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
+import { FolderExplorerTabs } from './FolderExplorerTabs'
 import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
@@ -26,7 +27,7 @@ export function FolderExplorer() {
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
 
   useEffect(() => {
-    void FolderExplorerCoordinator.loadItems()
+    void FolderExplorerCoordinator.initialize()
     void EnvironmentCoordinator.loadEnvironments()
   }, [])
 
@@ -222,6 +223,7 @@ export function FolderExplorer() {
       ) : null}
 
       <main className="flex min-h-0 flex-1 flex-col bg-base-100">
+        {sidebarTab === 'requests' ? <FolderExplorerTabs /> : null}
         {sidebarTab === 'requests' ? <DetailsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
         {sidebarTab === 'history' ? <HistoryPanel /> : null}

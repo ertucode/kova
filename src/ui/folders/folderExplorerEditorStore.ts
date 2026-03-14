@@ -2,6 +2,7 @@ import { createStore } from '@xstate/store'
 import { z } from 'zod'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import { AUTH_LOCATIONS } from '@common/Auth'
+import type { FolderExplorerTabRecord } from '@common/FolderExplorerTabs'
 import type { ExplorerItem } from '@common/Explorer'
 import type { DetailsDraft, Selection } from './folderExplorerTypes'
 import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
@@ -93,6 +94,8 @@ export type EditorEntry = {
 
 type FolderExplorerEditorContext = {
   selected: Selection | null
+  tabs: FolderExplorerTabRecord[]
+  activeTabId: string | null
   expandedIds: string[]
   activeEnvironmentIds: string[]
   sidebarTab: SidebarTab
@@ -121,6 +124,8 @@ const initialEntries = Object.fromEntries(
 export const folderExplorerEditorStore = createStore({
   context: {
     selected: persistedUiState.selected,
+    tabs: [],
+    activeTabId: null,
     expandedIds: persistedUiState.expandedIds,
     activeEnvironmentIds: persistedUiState.activeEnvironmentIds,
     sidebarTab: persistedUiState.sidebarTab,
@@ -131,6 +136,12 @@ export const folderExplorerEditorStore = createStore({
     selectionChanged: (context, event: { selection: Selection | null }) => ({
       ...context,
       selected: event.selection,
+    }),
+    tabsStateReplaced: (context, event: { tabs: FolderExplorerTabRecord[]; activeTabId: string | null }) => ({
+      ...context,
+      tabs: event.tabs,
+      activeTabId: event.activeTabId,
+      selected: getSelectionFromTabs(event.tabs, event.activeTabId),
     }),
     expandedToggled: (context, event: { id: string }) => ({
       ...context,
@@ -292,6 +303,22 @@ export function getSelectedEntry() {
   const state = folderExplorerEditorStore.getSnapshot().context
   if (!state.selected) return null
   return state.entries[toSelectionKey(state.selected)] ?? createEmptyEntry()
+}
+
+export function getSelectionFromTabs(tabs: FolderExplorerTabRecord[], activeTabId: string | null): Selection | null {
+  if (!activeTabId) {
+    return null
+  }
+
+  const activeTab = tabs.find(tab => tab.id === activeTabId)
+  if (!activeTab) {
+    return null
+  }
+
+  return {
+    itemType: activeTab.itemType,
+    id: activeTab.itemId,
+  }
 }
 
 export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {

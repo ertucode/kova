@@ -1,4 +1,5 @@
 import { type GenericResult } from './GenericError.js'
+import { type FolderExplorerTabRecord, type SaveFolderExplorerTabsInput } from './FolderExplorerTabs.js'
 import {
   type CreateFolderInput,
   type DeleteFolderInput,
@@ -71,6 +72,8 @@ export type EventResponseMapping = {
   getIsCompactWindowSize: Promise<boolean>
   setAsyncStorageValue: void
   listExplorerItems: Promise<ExplorerItem[]>
+  listFolderExplorerTabs: Promise<FolderExplorerTabRecord[]>
+  saveFolderExplorerTabs: Promise<GenericResult<void>>
   createFolder: Promise<GenericResult<FolderRecord>>
   getFolder: Promise<GenericResult<FolderRecord>>
   renameFolder: Promise<GenericResult<void>>
@@ -116,6 +119,8 @@ export type EventRequestMapping = {
   getIsCompactWindowSize: void
   setAsyncStorageValue: { key: AsyncStorageKey; value: $Maybe<string> }
   listExplorerItems: void
+  listFolderExplorerTabs: void
+  saveFolderExplorerTabs: SaveFolderExplorerTabsInput
   createFolder: CreateFolderInput
   getFolder: GetFolderInput
   renameFolder: RenameFolderInput
@@ -171,6 +176,8 @@ export type WindowElectron = {
   restoreWindowSize: () => Promise<void>
   getIsCompactWindowSize: () => Promise<boolean>
   listExplorerItems: () => Promise<ExplorerItem[]>
+  listFolderExplorerTabs: () => Promise<FolderExplorerTabRecord[]>
+  saveFolderExplorerTabs: (input: SaveFolderExplorerTabsInput) => Promise<GenericResult<void>>
   createFolder: (input: CreateFolderInput) => Promise<GenericResult<FolderRecord>>
   getFolder: (input: GetFolderInput) => Promise<GenericResult<FolderRecord>>
   renameFolder: (input: RenameFolderInput) => Promise<GenericResult<void>>

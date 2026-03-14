@@ -98,6 +98,26 @@ export const treeItems = sqliteTable(
   ]
 )
 
+export const folderExplorerTabs = sqliteTable(
+  'folder_explorer_tabs',
+  {
+    id: text('id').primaryKey(),
+    itemType: text('item_type').notNull(),
+    itemId: text('item_id').notNull(),
+    position: integer('position').notNull().default(0),
+    isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  table => [
+    index('folder_explorer_tabs_position_idx').on(table.position),
+    index('folder_explorer_tabs_item_ref_idx').on(table.itemType, table.itemId),
+    index('folder_explorer_tabs_active_idx').on(table.isActive),
+    check('folder_explorer_tabs_item_type_check', sql`${table.itemType} in ('folder', 'request', 'example')`),
+  ]
+)
+
 export const requestHistory = sqliteTable(
   'request_history',
   {
