@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { FlaskConicalIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { dialogActions } from '@/global/dialogStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { environmentEditorStore, isEnvironmentEntryDirty } from './environmentEditorStore'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { KeyValueEditor } from './KeyValueEditor'
+import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 
 export function EnvironmentsPanel() {
   const items = useSelector(environmentEditorStore, state => state.context.items)
@@ -51,18 +53,27 @@ export function EnvironmentsPanel() {
     <div className="flex min-h-0 flex-1 bg-base-100">
       <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-100">
         <div className="border-b border-base-content/10 px-4 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold text-base-content">Environments</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-base-content">Environments</div>
 
-            <button
-              type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 text-base-content transition hover:border-base-content/20 hover:bg-base-200"
-              onClick={() => void EnvironmentCoordinator.createEnvironment()}
-              aria-label="Add environment"
-              title="Add environment"
-            >
-              <PlusIcon className="size-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex h-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-200"
+                onClick={() => dialogActions.open({ component: PostmanEnvironmentImportDialog, props: {} })}
+              >
+                Import
+              </button>
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 text-base-content transition hover:border-base-content/20 hover:bg-base-200"
+                onClick={() => void EnvironmentCoordinator.createEnvironment()}
+                aria-label="Add environment"
+                title="Add environment"
+              >
+                <PlusIcon className="size-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -163,14 +174,14 @@ export function EnvironmentsPanel() {
               </div>
             </div>
 
-            <KeyValueEditor
-              label={null}
-              value={draft.variables}
-              onChange={value => EnvironmentCoordinator.updateDraft(selectedId, { ...draft, variables: value })}
-              keyPlaceholder="variable_name"
-              valuePlaceholder="value"
-              descriptionPlaceholder="Optional note"
-            />
+             <KeyValueEditor
+               label={null}
+               value={draft.variables}
+               onChange={value => EnvironmentCoordinator.updateDraft(selectedId, { ...draft, variables: value })}
+               keyPlaceholder="variable_name"
+               valuePlaceholder="value"
+               descriptionPlaceholder="Optional note"
+             />
           </div>
         ) : (
           <div className="flex h-full items-center justify-center px-8 text-sm text-base-content/45">Select an environment</div>

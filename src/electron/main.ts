@@ -15,6 +15,7 @@ import { createRequestExample, deleteRequestExample, getRequestExample, moveRequ
 import { moveExplorerItem } from './db/tree-items.js'
 import { sendRequest } from './send-request.js'
 import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
+import { analyzePostmanEnvironment, importPostmanEnvironment } from './postman-environment-import.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
 import { getServerConfig } from './server-config.js'
@@ -354,6 +355,29 @@ app.on('ready', () => {
 
   ipcHandle('importPostmanCollection', async input => {
     return importPostmanCollection(input)
+  })
+
+  ipcHandle('pickPostmanEnvironmentFile', async (_input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [{ name: 'Postman Environments', extensions: ['json'] }],
+    }
+    const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    return Result.Success({ filePath: result.filePaths[0] })
+  })
+
+  ipcHandle('analyzePostmanEnvironment', async input => {
+    return analyzePostmanEnvironment(input)
+  })
+
+  ipcHandle('importPostmanEnvironment', async input => {
+    return importPostmanEnvironment(input)
   })
 
   TaskManager.addListener(e => {

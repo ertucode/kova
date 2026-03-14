@@ -47,6 +47,12 @@ electron.contextBridge.exposeInMainWorld('electron', {
   deleteRequestExample: input => ipcInvoke('deleteRequestExample', input),
   moveRequestExample: input => ipcInvoke('moveRequestExample', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
+  pickPostmanCollectionFile: () => ipcInvoke('pickPostmanCollectionFile', undefined),
+  analyzePostmanCollection: input => ipcInvoke('analyzePostmanCollection', input),
+  importPostmanCollection: input => ipcInvoke('importPostmanCollection', input),
+  pickPostmanEnvironmentFile: () => ipcInvoke('pickPostmanEnvironmentFile', undefined),
+  analyzePostmanEnvironment: input => ipcInvoke('analyzePostmanEnvironment', input),
+  importPostmanEnvironment: input => ipcInvoke('importPostmanEnvironment', input),
 } satisfies Partial<WindowElectron>)
 
 function getArgv(key: string) {

@@ -58,6 +58,9 @@ electron.contextBridge.exposeInMainWorld('electron', {
   pickPostmanCollectionFile: () => ipcInvoke('pickPostmanCollectionFile', undefined),
   analyzePostmanCollection: input => ipcInvoke('analyzePostmanCollection', input),
   importPostmanCollection: input => ipcInvoke('importPostmanCollection', input),
+  pickPostmanEnvironmentFile: () => ipcInvoke('pickPostmanEnvironmentFile', undefined),
+  analyzePostmanEnvironment: input => ipcInvoke('analyzePostmanEnvironment', input),
+  importPostmanEnvironment: input => ipcInvoke('importPostmanEnvironment', input),
 } satisfies WindowElectron)
 
 function ipcInvoke<Key extends keyof EventResponseMapping>(

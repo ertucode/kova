@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Trash2Icon } from 'lucide-react'
+import { AlertTriangleIcon, Trash2Icon } from 'lucide-react'
 import type { Extension } from '@codemirror/state'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
@@ -14,6 +14,7 @@ type KeyValueEditorProps = {
   descriptionPlaceholder?: string
   valueEditorExtensions?: Extension[]
   valueEditorAsCode?: boolean
+  warnOnDuplicate?: boolean
 }
 
 export function KeyValueEditor({
@@ -25,8 +26,10 @@ export function KeyValueEditor({
   descriptionPlaceholder = 'Optional note',
   valueEditorExtensions,
   valueEditorAsCode = false,
+  warnOnDuplicate = true,
 }: KeyValueEditorProps) {
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
+  const duplicateRowIds = getDuplicateRowIds(rows)
 
   useEffect(() => {
     setRows(currentRows => buildRows(value, currentRows))
@@ -86,12 +89,25 @@ export function KeyValueEditor({
                     ) : null}
                   </td>
                   <td className="p-0 px-2 align-middle">
-                    <input
-                      className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
-                      value={row.key}
-                      placeholder={keyPlaceholder}
-                      onChange={event => updateRow(row.id, { key: event.target.value })}
-                    />
+                    <div className="flex items-center gap-1">
+                      <input
+                        className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
+                        value={row.key}
+                        placeholder={keyPlaceholder}
+                        onChange={event => updateRow(row.id, { key: event.target.value })}
+                      />
+                      {warnOnDuplicate && !isCreateRow && duplicateRowIds.has(row.id) ? (
+                        <div
+                          className="flex size-4 shrink-0 items-center justify-center text-warning"
+                          title="This key is overridden later by another enabled row."
+                          aria-label="Duplicate key overridden later"
+                        >
+                          <AlertTriangleIcon className="size-3.5" />
+                        </div>
+                      ) : (
+                        <div className="size-4 shrink-0" />
+                      )}
+                    </div>
                   </td>
                   <td className="p-0 px-2 align-middle">
                     {valueEditorAsCode ? (
@@ -168,4 +184,32 @@ function ensureTrailingEmptyRow(rows: KeyValueRow[]) {
 
 function hasKeyValueContent(row: KeyValueRow) {
   return row.key.trim() !== '' || row.value.trim() !== '' || row.description.trim() !== ''
+}
+
+function getDuplicateRowIds(rows: KeyValueRow[]) {
+  const lastEnabledIndexByKey = new Map<string, number>()
+
+  rows.forEach((row, index) => {
+    const key = row.key.trim()
+    if (!row.enabled || !key || !hasKeyValueContent(row)) {
+      return
+    }
+
+    lastEnabledIndexByKey.set(key, index)
+  })
+
+  const duplicateIds = new Set<string>()
+
+  rows.forEach((row, index) => {
+    const key = row.key.trim()
+    if (!row.enabled || !key || !hasKeyValueContent(row)) {
+      return
+    }
+
+    if (lastEnabledIndexByKey.get(key) !== index) {
+      duplicateIds.add(row.id)
+    }
+  })
+
+  return duplicateIds
 }

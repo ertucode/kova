@@ -1,5 +1,4 @@
-import { parseKeyValueRows } from './KeyValueRows.js'
-import type { EnvironmentRecord } from './Environments.js'
+export { buildEnvironmentVariableMap } from './EnvironmentVariables.js'
 
 const VARIABLE_TOKEN_REGEX = /\\?\{\{\s*([a-zA-Z0-9._-]+)\s*\}\}/g
 
@@ -33,23 +32,4 @@ export function resolveTemplateVariables(value: string, variables: Record<string
 
 export function findMissingTemplateVariables(value: string, variables: Record<string, string>) {
   return extractTemplateVariables(value).filter(variableName => !(variableName in variables))
-}
-
-export function buildEnvironmentVariableMap(environments: EnvironmentRecord[]) {
-  const variables: Record<string, string> = {}
-
-  for (const environment of environments
-    .slice()
-    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)) {
-    for (const row of parseKeyValueRows(environment.variables)) {
-      const key = row.key.trim()
-      if (!row.enabled || !key || key in variables) {
-        continue
-      }
-
-      variables[key] = row.value
-    }
-  }
-
-  return variables
 }

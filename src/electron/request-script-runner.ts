@@ -1,7 +1,7 @@
 import vm from 'node:vm'
 import type { HttpAuth } from '../common/Auth.js'
+import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolvedEnvironmentValue } from '../common/EnvironmentVariables.js'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
-import { buildEnvironmentVariableMap } from '../common/RequestVariables.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type {
   RequestBodyType,
@@ -168,7 +168,7 @@ export function createRequestScriptRuntime(input: {
           return null
         }
 
-        return getEnvironmentVariableValue(environment, name)
+        return getResolvedEnvironmentValue(environment, name)
       },
       hasValueForEnvironment: (name, environmentName) => {
         const environment = findEnvironmentByName(environments, environmentName)
@@ -176,7 +176,7 @@ export function createRequestScriptRuntime(input: {
           return false
         }
 
-        return getEnvironmentVariableValue(environment, name) !== null
+        return getResolvedEnvironmentValue(environment, name) !== null
       },
       setValue: (name, value, environmentName) => {
         const next = setEnvironmentValue({
@@ -490,33 +490,6 @@ function findEnvironmentByName(environments: EnvironmentRecord[], environmentNam
   )
 }
 
-function getEnvironmentVariableValue(environment: EnvironmentRecord, variableName: string) {
-  const targetName = variableName.trim()
-  for (const row of parseKeyValueRows(environment.variables)) {
-    if (row.enabled && row.key.trim() === targetName) {
-      return row.value
-    }
-  }
-
-  return null
-}
-
-function buildEffectiveEnvironmentOwners(environments: EnvironmentRecord[]): EnvironmentOwnerMap {
-  const owners = new Map<string, string>()
-
-  for (const environment of environments.slice().sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)) {
-    for (const row of parseKeyValueRows(environment.variables)) {
-      const key = row.key.trim()
-      if (!row.enabled || !key || owners.has(key)) {
-        continue
-      }
-
-      owners.set(key, environment.id)
-    }
-  }
-
-  return owners
-}
 
 async function persistEnvironmentUpdates(environments: EnvironmentRecord[], pendingEnvironmentIds: Set<string>) {
   const updatedById = new Map<string, EnvironmentRecord>()

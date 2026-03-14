@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { useSelector } from '@xstate/store/react'
+import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap } from '@common/RequestVariables'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import type { FolderDetailsDraft } from './folderExplorerTypes'
@@ -44,15 +45,13 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
       environments.map(environment => {
         const nextDraft = environmentEntries[environment.id]?.current
         const variables = nextDraft?.variables ?? environment.variables
-        const rows = parseKeyValueRows(variables)
-
         return {
           id: environment.id,
           name: nextDraft?.name ?? environment.name,
           isActive: activeEnvironmentIds.includes(environment.id),
           priority: nextDraft?.priority ?? environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(rows.map(row => [row.key.trim(), row.value])),
+          valueByVariableName: new Map(Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])),
         }
       }),
     [activeEnvironmentIds, environmentEntries, environments]

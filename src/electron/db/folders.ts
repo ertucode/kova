@@ -11,7 +11,7 @@ import type {
 } from '../../common/Folders.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
-import { folders, requests, treeItems } from './schema.js'
+import { folders, requestExamples, requests, treeItems } from './schema.js'
 import { ensureParentFolderExists, insertTreeItem } from './tree-items.js'
 
 type FolderRow = typeof folders.$inferSelect
@@ -148,18 +148,18 @@ export async function deleteFolder(input: DeleteFolderInput): Promise<GenericRes
     const now = Date.now()
     const folderResult = db.run(sql`
       WITH RECURSIVE subtree(id) AS (
-        SELECT ${folders.id}
-        FROM ${folders}
-        WHERE ${folders.id} = ${input.id} AND ${folders.deletedAt} IS NULL
+        SELECT id
+        FROM folders
+        WHERE id = ${input.id} AND deleted_at IS NULL
         UNION ALL
         SELECT child.id
         FROM folders AS child
         INNER JOIN subtree ON child.parent_id = subtree.id
         WHERE child.deleted_at IS NULL
       )
-      UPDATE ${folders}
-      SET ${folders.deletedAt} = ${now}
-      WHERE ${folders.id} IN (SELECT id FROM subtree)
+      UPDATE folders
+      SET deleted_at = ${now}
+      WHERE id IN (SELECT id FROM subtree)
     `)
 
     if (folderResult.changes === 0) {
@@ -168,35 +168,50 @@ export async function deleteFolder(input: DeleteFolderInput): Promise<GenericRes
 
     db.run(sql`
       WITH RECURSIVE subtree(id) AS (
-        SELECT ${folders.id}
-        FROM ${folders}
-        WHERE ${folders.id} = ${input.id}
+        SELECT id
+        FROM folders
+        WHERE id = ${input.id}
         UNION ALL
         SELECT child.id
-        FROM ${folders} AS child
+        FROM folders AS child
         INNER JOIN subtree ON child.parent_id = subtree.id
         WHERE child.deleted_at IS NULL
       )
-      UPDATE ${treeItems}
-      SET ${treeItems.deletedAt} = ${now}
-      WHERE ${treeItems.deletedAt} IS NULL
+      UPDATE tree_items
+      SET deleted_at = ${now}
+      WHERE deleted_at IS NULL
         AND (
-          (${treeItems.itemType} = 'folder' AND ${treeItems.itemId} IN (SELECT id FROM subtree))
-          OR (${treeItems.itemType} = 'request' AND ${treeItems.parentFolderId} IN (SELECT id FROM subtree))
+          (item_type = 'folder' AND item_id IN (SELECT id FROM subtree))
+          OR (item_type = 'request' AND parent_folder_id IN (SELECT id FROM subtree))
         )
     `)
 
     db.run(sql`
-      UPDATE ${requests}
-      SET ${requests.deletedAt} = ${now}
-      WHERE ${requests.deletedAt} IS NULL
-        AND ${requests.id} IN (
-          SELECT ${treeItems.itemId}
-          FROM ${treeItems}
-          WHERE ${treeItems.itemType} = 'request'
-            AND ${treeItems.deletedAt} = ${now}
+      UPDATE requests
+      SET deleted_at = ${now}
+      WHERE deleted_at IS NULL
+        AND id IN (
+          SELECT item_id
+          FROM tree_items
+          WHERE item_type = 'request'
+            AND deleted_at = ${now}
         )
     `)
+
+    db.update(requestExamples)
+      .set({ deletedAt: now })
+      .where(
+        and(
+          isNull(requestExamples.deletedAt),
+          sql`${requestExamples.requestId} IN (
+            SELECT item_id
+            FROM tree_items
+            WHERE item_type = 'request'
+              AND deleted_at = ${now}
+          )`
+        )
+      )
+      .run()
 
     return Result.Success(undefined)
   } catch (error) {

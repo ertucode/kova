@@ -12,6 +12,7 @@ import { buildTree, filterTree, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { dialogActions } from '@/global/dialogStore'
+import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
 
 type DropPlacement = ExplorerDropTarget['placement']
@@ -294,6 +295,12 @@ function CreateMenuButton() {
             <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanImportDialog, props: {} }))}>
               <FileCode2Icon className="size-4" />
               Import Postman
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanEnvironmentImportDialog, props: {} }))}>
+              <FileCode2Icon className="size-4" />
+              Import Environment
             </button>
           </li>
         </ul>

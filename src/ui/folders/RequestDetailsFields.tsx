@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { useSelector } from '@xstate/store/react'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
 import { getAuthVariableSources } from '@common/Auth'
+import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
 import { syncPathParamsWithUrl, syncSearchParamsWithUrl, syncUrlWithPathParams, syncUrlWithSearchParams } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
@@ -73,15 +74,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       environments.map(environment => {
         const draft = environmentEntries[environment.id]?.current
         const variables = draft?.variables ?? environment.variables
-        const rows = parseKeyValueRows(variables)
-
         return {
           id: environment.id,
           name: draft?.name ?? environment.name,
           isActive: activeEnvironmentIds.includes(environment.id),
           priority: draft?.priority ?? environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(rows.map(row => [row.key.trim(), row.value])),
+          valueByVariableName: new Map(Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])),
         }
       }),
     [activeEnvironmentIds, environmentEntries, environments]

@@ -46,6 +46,13 @@ import {
   type ImportPostmanCollectionResponse,
   type PickPostmanCollectionFileResponse,
 } from './PostmanImport.js'
+import {
+  type AnalyzePostmanEnvironmentInput,
+  type AnalyzePostmanEnvironmentResponse,
+  type ImportPostmanEnvironmentInput,
+  type ImportPostmanEnvironmentResponse,
+  type PickPostmanEnvironmentFileResponse,
+} from './PostmanEnvironmentImport.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -89,6 +96,9 @@ export type EventResponseMapping = {
   pickPostmanCollectionFile: Promise<GenericResult<PickPostmanCollectionFileResponse>>
   analyzePostmanCollection: Promise<GenericResult<AnalyzePostmanCollectionResponse>>
   importPostmanCollection: Promise<GenericResult<ImportPostmanCollectionResponse>>
+  pickPostmanEnvironmentFile: Promise<GenericResult<PickPostmanEnvironmentFileResponse>>
+  analyzePostmanEnvironment: Promise<GenericResult<AnalyzePostmanEnvironmentResponse>>
+  importPostmanEnvironment: Promise<GenericResult<ImportPostmanEnvironmentResponse>>
 }
 
 export type EventRequestMapping = {
@@ -129,6 +139,9 @@ export type EventRequestMapping = {
   pickPostmanCollectionFile: void
   analyzePostmanCollection: AnalyzePostmanCollectionInput
   importPostmanCollection: ImportPostmanCollectionInput
+  pickPostmanEnvironmentFile: void
+  analyzePostmanEnvironment: AnalyzePostmanEnvironmentInput
+  importPostmanEnvironment: ImportPostmanEnvironmentInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -179,4 +192,7 @@ export type WindowElectron = {
   pickPostmanCollectionFile: () => Promise<GenericResult<PickPostmanCollectionFileResponse>>
   analyzePostmanCollection: (input: AnalyzePostmanCollectionInput) => Promise<GenericResult<AnalyzePostmanCollectionResponse>>
   importPostmanCollection: (input: ImportPostmanCollectionInput) => Promise<GenericResult<ImportPostmanCollectionResponse>>
+  pickPostmanEnvironmentFile: () => Promise<GenericResult<PickPostmanEnvironmentFileResponse>>
+  analyzePostmanEnvironment: (input: AnalyzePostmanEnvironmentInput) => Promise<GenericResult<AnalyzePostmanEnvironmentResponse>>
+  importPostmanEnvironment: (input: ImportPostmanEnvironmentInput) => Promise<GenericResult<ImportPostmanEnvironmentResponse>>
 }
