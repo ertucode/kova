@@ -4,6 +4,7 @@ import { Result } from '../common/Result.js'
 import type {
   ExecutedRequestSnapshot,
   ReceivedResponseSnapshot,
+  RequestExecutionRecord,
   RequestMethod,
   ScriptResponseBody,
   SendRequestInput,
@@ -12,6 +13,7 @@ import type {
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getFolderAncestorChain } from './db/folders.js'
+import { persistRequestHistory } from './db/request-history.js'
 import { getRequest } from './db/requests.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { emitGenericEvent } from './generic-events.js'
@@ -130,6 +132,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       statusText: response.statusText,
       headers: responseHeaders,
       body: bodyText,
+      bodyOmitted: false,
       durationMs,
       receivedAt: sentAt + durationMs,
     }
@@ -141,6 +144,24 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       })
     }
 
+    const execution: RequestExecutionRecord = {
+      id: crypto.randomUUID(),
+      requestId: input.requestId,
+      requestName: requestResult.data.name,
+      request: executedRequest,
+      response: responseSnapshot,
+      responseError: null,
+      scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
+      consoleEntries: runtime.getConsoleEntries(),
+    }
+
+    let persistedExecution = execution
+    try {
+      persistedExecution = await persistRequestHistory({ execution, keepLast: input.historyKeepLast })
+    } catch (historyError) {
+      console.error('persistRequestHistory failed', historyError)
+    }
+
     return Result.Success({
       status: response.status,
       statusText: response.statusText,
@@ -150,16 +171,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
       updatedEnvironments,
       consoleEntries: runtime.getConsoleEntries(),
-      execution: {
-        id: crypto.randomUUID(),
-        requestId: input.requestId,
-        requestName: requestResult.data.name,
-        request: executedRequest,
-        response: responseSnapshot,
-        responseError: null,
-        scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
-        consoleEntries: runtime.getConsoleEntries(),
-      },
+      execution: persistedExecution,
     })
   } catch (error) {
     console.error('sendRequest failed', error)

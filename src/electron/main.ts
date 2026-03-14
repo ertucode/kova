@@ -9,6 +9,7 @@ import { initializeDatabase } from './db/index.js'
 import { listExplorerItems } from './db/explorer.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
 import { createEnvironment, deleteEnvironment, listEnvironments, updateEnvironment } from './db/environments.js'
+import { deleteRequestHistoryEntry, listRequestHistory, trimRequestHistory } from './db/request-history.js'
 import { createRequest, deleteRequest, getRequest, updateRequest } from './db/requests.js'
 import { moveExplorerItem } from './db/tree-items.js'
 import { sendRequest } from './send-request.js'
@@ -290,6 +291,18 @@ app.on('ready', () => {
 
   ipcHandle('sendRequest', async input => {
     return sendRequest(input)
+  })
+
+  ipcHandle('listRequestHistory', async input => {
+    return listRequestHistory(input)
+  })
+
+  ipcHandle('deleteRequestHistoryEntry', async input => {
+    return deleteRequestHistoryEntry(input)
+  })
+
+  ipcHandle('trimRequestHistory', async input => {
+    return trimRequestHistory(input)
   })
 
   TaskManager.addListener(e => {

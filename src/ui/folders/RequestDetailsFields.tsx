@@ -14,7 +14,7 @@ import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
-import { requestExecutionStore } from './requestExecutionStore'
+import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
@@ -219,6 +219,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       bodyType: latestDraft.bodyType,
       rawType: latestDraft.rawType,
       activeEnvironmentIds: state.activeEnvironmentIds,
+      historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
     })
 
     setIsSending(false)
@@ -237,6 +238,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       requestDraft: latestDraft,
       response: result.data,
     })
+    void RequestExecutionCoordinator.refreshHistory()
   }
 
   const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {

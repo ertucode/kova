@@ -87,3 +87,36 @@ export const treeItems = sqliteTable(
     check('tree_items_item_type_check', sql`${table.itemType} in ('folder', 'request')`),
   ]
 )
+
+export const requestHistory = sqliteTable(
+  'request_history',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('request_id').notNull(),
+    requestName: text('request_name').notNull(),
+    method: text('method').notNull(),
+    url: text('url').notNull(),
+    requestHeaders: text('request_headers').notNull().default(''),
+    requestBody: text('request_body').notNull().default(''),
+    requestVariablesJson: text('request_variables_json').notNull().default('{}'),
+    requestBodyType: text('request_body_type').notNull().default('none'),
+    requestRawType: text('request_raw_type').notNull().default('json'),
+    responseStatus: integer('response_status'),
+    responseStatusText: text('response_status_text'),
+    responseHeaders: text('response_headers').notNull().default(''),
+    responseBody: text('response_body').notNull().default(''),
+    responseBodyOmitted: integer('response_body_omitted', { mode: 'boolean' }).notNull().default(false),
+    responseError: text('response_error'),
+    responseDurationMs: integer('response_duration_ms'),
+    responseReceivedAt: integer('response_received_at'),
+    scriptErrorsJson: text('script_errors_json').notNull().default('[]'),
+    consoleEntriesJson: text('console_entries_json').notNull().default('[]'),
+    sentAt: integer('sent_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  table => [
+    index('request_history_created_at_idx').on(table.createdAt),
+    index('request_history_request_id_idx').on(table.requestId),
+    index('request_history_sent_at_idx').on(table.sentAt),
+  ]
+)

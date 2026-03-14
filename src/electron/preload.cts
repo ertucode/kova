@@ -46,6 +46,9 @@ electron.contextBridge.exposeInMainWorld('electron', {
   deleteEnvironment: input => ipcInvoke('deleteEnvironment', input),
   moveExplorerItem: input => ipcInvoke('moveExplorerItem', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
+  listRequestHistory: input => ipcInvoke('listRequestHistory', input),
+  deleteRequestHistoryEntry: input => ipcInvoke('deleteRequestHistoryEntry', input),
+  trimRequestHistory: input => ipcInvoke('trimRequestHistory', input),
 } satisfies WindowElectron)
 
 function ipcInvoke<Key extends keyof EventResponseMapping>(

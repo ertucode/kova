@@ -13,7 +13,7 @@ import {
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 
-export type SidebarTab = 'requests' | 'environments' | 'history' | 'console'
+export type SidebarTab = 'requests' | 'environments' | 'history'
 
 const selectionSchema = z.object({
   itemType: z.union([z.literal('folder'), z.literal('request')]),
@@ -281,9 +281,14 @@ function loadFolderExplorerUiState(): {
     const value = localStorage.getItem(PERSISTED_UI_STATE_KEY)
     if (!value) return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
     const parsed = persistedUiStateSchema.safeParse(JSON.parse(value))
-    return parsed.success
-      ? parsed.data
-      : { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
+    if (!parsed.success) {
+      return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
+    }
+
+    return {
+      ...parsed.data,
+      sidebarTab: parsed.data.sidebarTab === 'console' ? 'history' : parsed.data.sidebarTab,
+    }
   } catch {
     return { selected: null, expandedIds: [], activeEnvironmentIds: [], sidebarTab: 'requests' }
   }

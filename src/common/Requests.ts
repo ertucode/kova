@@ -58,6 +58,7 @@ export type SendRequestInput = {
   bodyType: RequestBodyType
   rawType: RequestRawType
   activeEnvironmentIds: string[]
+  historyKeepLast: number
 }
 
 export type ScriptResponseBody =
@@ -104,6 +105,7 @@ export type ReceivedResponseSnapshot = {
   statusText: string
   headers: string
   body: string
+  bodyOmitted: boolean
   durationMs: number
   receivedAt: number
 }
@@ -129,4 +131,23 @@ export type SendRequestResponse = {
   updatedEnvironments: EnvironmentRecord[]
   consoleEntries: RequestConsoleEntry[]
   execution: RequestExecutionRecord
+}
+
+export type ListRequestHistoryInput = {
+  searchQuery: string
+  offset: number
+  limit: number
+}
+
+export type ListRequestHistoryResponse = {
+  items: RequestExecutionRecord[]
+  nextOffset: number | null
+}
+
+export type DeleteRequestHistoryEntryInput = {
+  id: string
+}
+
+export type TrimRequestHistoryInput = {
+  keepLast: number
 }

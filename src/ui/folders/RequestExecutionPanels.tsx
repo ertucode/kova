@@ -1,42 +1,123 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { ChevronDownIcon, ChevronRightIcon, TerminalSquareIcon } from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
 import type { RequestConsoleEntry, RequestExecutionRecord } from '@common/Requests'
-import { requestExecutionStore } from './requestExecutionStore'
+import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 
 export function HistoryPanel() {
   const history = useSelector(requestExecutionStore, state => state.context.history)
+  const historyLoaded = useSelector(requestExecutionStore, state => state.context.historyLoaded)
+  const historyLoading = useSelector(requestExecutionStore, state => state.context.historyLoading)
+  const historyLoadingMore = useSelector(requestExecutionStore, state => state.context.historyLoadingMore)
+  const historyNextOffset = useSelector(requestExecutionStore, state => state.context.historyNextOffset)
+  const historySearchQuery = useSelector(requestExecutionStore, state => state.context.historySearchQuery)
+  const historyKeepLast = useSelector(requestExecutionStore, state => state.context.historyKeepLast)
   const visibleHistory = useMemo(() => history.filter(isRenderableExecution), [history])
+  const [searchValue, setSearchValue] = useState(historySearchQuery)
+
+  useEffect(() => {
+    void RequestExecutionCoordinator.ensureHistoryLoaded()
+  }, [])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (searchValue === requestExecutionStore.getSnapshot().context.historySearchQuery) {
+        return
+      }
+
+      RequestExecutionCoordinator.setSearchQuery(searchValue)
+      void RequestExecutionCoordinator.refreshHistory()
+    }, 250)
+
+    return () => window.clearTimeout(timeout)
+  }, [searchValue])
 
   return (
-    <ExecutionPanelShell title="History" description="Actual requests and responses are recorded here.">
-      {visibleHistory.length === 0 ? (
-        <EmptyExecutionState message="Send a request to start building history." />
-      ) : (
-        visibleHistory.map(execution => <ExecutionCard key={execution.id} execution={execution} mode="history" />)
-      )}
+    <ExecutionPanelShell title="History" description="Requests, responses, variables, and script logs are stored here.">
+      <HistoryToolbar
+        searchValue={searchValue}
+        keepLast={historyKeepLast}
+        onSearchChange={setSearchValue}
+        onKeepLastChange={value => RequestExecutionCoordinator.setKeepLast(value)}
+        onTrimNow={() => void RequestExecutionCoordinator.trimHistory()}
+      />
+
+      {!historyLoaded && historyLoading ? <EmptyExecutionState message="Loading history..." /> : null}
+      {historyLoaded && visibleHistory.length === 0 ? (
+        <EmptyExecutionState message={searchValue.trim() ? 'No history matches your search.' : 'Send a request to start building history.'} />
+      ) : null}
+      {visibleHistory.map(execution => (
+        <ExecutionCard key={execution.id} execution={execution} />
+      ))}
+      {historyNextOffset !== null ? (
+        <button
+          type="button"
+          className="rounded-2xl border border-base-content/10 bg-base-100/60 px-4 py-3 text-sm font-medium text-base-content/70 transition hover:border-base-content/20 hover:bg-base-100 hover:text-base-content"
+          onClick={() => void RequestExecutionCoordinator.loadNextHistory()}
+          disabled={historyLoadingMore}
+        >
+          {historyLoadingMore ? 'Loading...' : 'Load next'}
+        </button>
+      ) : null}
     </ExecutionPanelShell>
   )
 }
 
-export function ConsolePanel() {
-  const history = useSelector(requestExecutionStore, state => state.context.history)
-  const visibleHistory = useMemo(() => history.filter(isRenderableExecution), [history])
-
+function HistoryToolbar({
+  searchValue,
+  keepLast,
+  onSearchChange,
+  onKeepLastChange,
+  onTrimNow,
+}: {
+  searchValue: string
+  keepLast: number
+  onSearchChange: (value: string) => void
+  onKeepLastChange: (value: number) => void
+  onTrimNow: () => void
+}) {
   return (
-    <ExecutionPanelShell title="Console" description="Script logs and execution details appear here.">
-      {visibleHistory.length === 0 ? (
-        <EmptyExecutionState message="Run a request with scripts to see console output." />
-      ) : (
-        visibleHistory.map(execution => <ExecutionCard key={execution.id} execution={execution} mode="console" />)
-      )}
-    </ExecutionPanelShell>
+    <div className="grid gap-3 rounded-2xl border border-base-content/10 bg-base-100/50 p-4 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+      <label className="flex items-center gap-3 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5">
+        <SearchIcon className="size-4 shrink-0 text-base-content/40" />
+        <input
+          value={searchValue}
+          onChange={event => onSearchChange(event.target.value)}
+          placeholder="Search all history"
+          className="w-full border-0 bg-transparent text-sm text-base-content outline-none placeholder:text-base-content/35"
+        />
+      </label>
+
+      <label className="flex items-center gap-3 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5">
+        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/45">Keep last</span>
+        <input
+          type="number"
+          min={1}
+          max={1000}
+          value={keepLast}
+          onChange={event => onKeepLastChange(event.target.valueAsNumber)}
+          className="w-full border-0 bg-transparent text-sm text-base-content outline-none"
+        />
+      </label>
+
+      <button
+        type="button"
+        className="rounded-xl border border-base-content/10 bg-base-100 px-4 py-2.5 text-sm font-medium text-base-content/75 transition hover:border-base-content/20 hover:bg-base-200/70 hover:text-base-content"
+        onClick={() => {
+          void Promise.resolve(onTrimNow()).catch(error => {
+            console.error('trimHistory failed', error)
+          })
+        }}
+      >
+        Trim now
+      </button>
+    </div>
   )
 }
 
 function ExecutionPanelShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="flex h-full flex-col px-6 py-6">
+    <div className="flex h-full min-w-0 flex-col px-6 py-6">
       <div className="text-sm font-semibold text-base-content">{title}</div>
       <div className="mt-2 text-sm leading-6 text-base-content/45">{description}</div>
       <div className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-auto pr-1">{children}</div>
@@ -48,8 +129,8 @@ function EmptyExecutionState({ message }: { message: string }) {
   return <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">{message}</div>
 }
 
-function ExecutionCard({ execution, mode }: { execution: RequestExecutionRecord; mode: 'history' | 'console' }) {
-  const [expanded, setExpanded] = useState(mode === 'console')
+function ExecutionCard({ execution }: { execution: RequestExecutionRecord }) {
+  const [expanded, setExpanded] = useState(false)
   const [responseBodyExpanded, setResponseBodyExpanded] = useState(true)
   const tone = getExecutionTone(execution)
   const requestTime = useMemo(() => formatTimestamp(execution.request.sentAt), [execution.request.sentAt])
@@ -57,32 +138,48 @@ function ExecutionCard({ execution, mode }: { execution: RequestExecutionRecord;
   const scriptErrors = execution.scriptErrors ?? []
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
-      <button
-        type="button"
-        className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-base-100/60"
-        onClick={() => setExpanded(current => !current)}
-      >
-        <div className="mt-0.5 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className={`text-xs font-semibold tracking-[0.12em] ${tone}`}>{execution.request.method}</span>
-            <span className="truncate text-sm font-medium text-base-content">{execution.requestName}</span>
-            <span className="truncate text-sm text-base-content/50">{execution.request.url}</span>
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
+      <div className="flex items-start gap-2 px-4 py-3 transition hover:bg-base-100/60">
+        <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => setExpanded(current => !current)}>
+          <div className="mt-0.5 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className={`text-xs font-semibold tracking-[0.12em] ${tone}`}>{execution.request.method}</span>
+              <span className="truncate text-sm font-medium text-base-content">{execution.requestName}</span>
+              <span className="truncate text-sm text-base-content/50">{execution.request.url}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/45">
+              <span>{requestTime}</span>
+              {execution.response ? (
+                <span>
+                  {execution.response.status} {execution.response.statusText}
+                </span>
+              ) : null}
+              {execution.response ? <span>{execution.response.durationMs} ms</span> : null}
+              {execution.responseError ? <span className="text-error">{execution.responseError}</span> : null}
+              {consoleEntries.length > 0 ? <span>{consoleEntries.length} logs</span> : null}
+            </div>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/45">
-            <span>{requestTime}</span>
-            {execution.response ? <span>{execution.response.durationMs} ms</span> : null}
-            {execution.response ? <span>{execution.response.status} {execution.response.statusText}</span> : null}
-            {execution.responseError ? <span className="text-error">{execution.responseError}</span> : null}
-            {mode === 'console' ? <span>{consoleEntries.length} logs</span> : null}
-          </div>
-        </div>
-      </button>
+        </button>
+        <button
+          type="button"
+          className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
+          onClick={event => {
+            event.stopPropagation()
+            void RequestExecutionCoordinator.deleteHistoryEntry(execution.id).catch(error => {
+              console.error('deleteHistoryEntry failed', error)
+            })
+          }}
+          aria-label="Delete history entry"
+          title="Delete history entry"
+        >
+          <Trash2Icon className="size-4" />
+        </button>
+      </div>
 
       {expanded ? (
-        <div className="max-h-[500px] overflow-y-auto border-t border-base-content/10 px-4 py-4">
-          {mode === 'console' ? <ConsoleEntriesSection entries={consoleEntries} /> : null}
+        <div className="max-h-[500px] min-w-0 overflow-y-auto border-t border-base-content/10 px-4 py-4">
+          <ConsoleEntriesSection entries={consoleEntries} />
           <ExecutionSection title="Request" value={formatExecutionRequest(execution)} />
           <ExecutionVariablesSection variables={execution.request.variables ?? {}} />
           <ExecutionResponseSection
@@ -111,7 +208,7 @@ function ConsoleEntriesSection({ entries }: { entries: RequestConsoleEntry[] }) 
       {entries.length === 0 ? (
         <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">No script logs</div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-base-content/10 bg-base-100/60">
+        <div className="min-w-0 overflow-hidden rounded-xl border border-base-content/10 bg-base-100/60">
           {entries.map(entry => (
             <div key={entry.id} className="border-b border-base-content/10 px-3 py-2 last:border-b-0">
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-base-content/45">
@@ -119,7 +216,7 @@ function ConsoleEntriesSection({ entries }: { entries: RequestConsoleEntry[] }) 
                 <span>{entry.sourceName}</span>
                 <span>{formatTimestamp(entry.timestamp)}</span>
               </div>
-              <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[12px] leading-5 text-base-content">{entry.message}</pre>
+              <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">{entry.message}</pre>
             </div>
           ))}
         </div>
@@ -133,7 +230,7 @@ function ExecutionSection({ title, value }: { title: string; value: string }) {
     <div className="mb-4 last:mb-0">
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-base-content/50">{title}</div>
       <pre
-        className="overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-words font-mono text-[12px] leading-5 text-base-content"
+        className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"
         style={{ maxHeight: '500px' }}
       >
         {value || '(empty)'}
@@ -153,18 +250,18 @@ function ExecutionVariablesSection({ variables }: { variables: Record<string, st
           No variables used
         </div>
       ) : (
-        <div className="overflow-auto rounded-xl border border-base-content/10 bg-base-100/60" style={{ maxHeight: '500px' }}>
-          <div className="grid grid-cols-[minmax(0,180px)_minmax(0,1fr)] border-b border-base-content/10 bg-base-200/35 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">
+        <div className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60" style={{ maxHeight: '500px' }}>
+          <div className="grid min-w-0 grid-cols-[minmax(0,180px)_minmax(0,1fr)] border-b border-base-content/10 bg-base-200/35 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">
             <span>Name</span>
             <span>Value</span>
           </div>
           {entries.map(([key, value]) => (
             <div
               key={key}
-              className="grid grid-cols-[minmax(0,180px)_minmax(0,1fr)] gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0"
+              className="grid min-w-0 grid-cols-[minmax(0,180px)_minmax(0,1fr)] gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0"
             >
               <span className="truncate font-mono text-[12px] leading-5 text-base-content/70">{key}</span>
-              <span className="whitespace-pre-wrap break-words font-mono text-[12px] leading-5 text-base-content">{value}</span>
+              <span className="whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">{value}</span>
             </div>
           ))}
         </div>
@@ -195,7 +292,7 @@ function ExecutionResponseSection({
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-base-content/50">Response</div>
       <div className="space-y-3">
         <pre
-          className="overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-words font-mono text-[12px] leading-5 text-base-content"
+          className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"
           style={{ maxHeight: '500px' }}
         >
           {`${execution.response.status} ${execution.response.statusText} (${execution.response.durationMs} ms)`}
@@ -206,6 +303,7 @@ function ExecutionResponseSection({
           value={execution.response.body}
           expanded={bodyExpanded}
           onToggle={onToggleBody}
+          emptyValueMessage={execution.response.bodyOmitted ? 'Body omitted from history (over 500 KB)' : '(empty)'}
         />
       </div>
     </div>
@@ -217,7 +315,7 @@ function ExecutionSubsection({ title, value }: { title: string; value: string })
     <div>
       <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">{title}</div>
       <pre
-        className="overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-words font-mono text-[12px] leading-5 text-base-content"
+        className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"
         style={{ maxHeight: '500px' }}
       >
         {value || '(empty)'}
@@ -231,11 +329,13 @@ function ExecutionCollapsiblePreSection({
   value,
   expanded,
   onToggle,
+  emptyValueMessage,
 }: {
   title: string
   value: string
   expanded: boolean
   onToggle: () => void
+  emptyValueMessage?: string
 }) {
   return (
     <div>
@@ -249,10 +349,10 @@ function ExecutionCollapsiblePreSection({
       </button>
       {expanded ? (
         <pre
-          className="overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-words font-mono text-[12px] leading-5 text-base-content"
+          className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"
           style={{ maxHeight: '500px' }}
         >
-          {value || '(empty)'}
+          {value || emptyValueMessage || '(empty)'}
         </pre>
       ) : null}
     </div>

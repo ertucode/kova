@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { Clock3Icon, FileCode2Icon, FolderIcon, FlaskConicalIcon, SearchIcon, TerminalSquareIcon } from 'lucide-react'
+import { Clock3Icon, FileCode2Icon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
 import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { EnvironmentsPanel } from './EnvironmentsPanel'
-import { ConsolePanel, HistoryPanel } from './RequestExecutionPanels'
+import { HistoryPanel } from './RequestExecutionPanels'
 import { buildTree, filterTree, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -224,7 +224,6 @@ export function FolderExplorer() {
         {sidebarTab === 'requests' ? <DetailsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
         {sidebarTab === 'history' ? <HistoryPanel /> : null}
-        {sidebarTab === 'console' ? <ConsolePanel /> : null}
       </main>
     </div>
   )
@@ -235,7 +234,6 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
     { id: 'requests', label: 'Requests', icon: FileCode2Icon, disabled: false },
     { id: 'environments', label: 'Envs', icon: FlaskConicalIcon, disabled: false },
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },
-    { id: 'console', label: 'Console', icon: TerminalSquareIcon, disabled: false },
   ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
 
   return (

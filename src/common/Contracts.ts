@@ -15,11 +15,15 @@ import {
 } from './Environments.js'
 import {
   type CreateRequestInput,
+  type DeleteRequestHistoryEntryInput,
   type DeleteRequestInput,
   type GetRequestInput,
   type HttpRequestRecord,
+  type ListRequestHistoryInput,
+  type ListRequestHistoryResponse,
   type SendRequestInput,
   type SendRequestResponse,
+  type TrimRequestHistoryInput,
   type UpdateRequestInput,
 } from './Requests.js'
 import { TaskEvents } from './Tasks.js'
@@ -57,6 +61,9 @@ export type EventResponseMapping = {
   deleteEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
+  listRequestHistory: Promise<ListRequestHistoryResponse>
+  deleteRequestHistoryEntry: Promise<GenericResult<void>>
+  trimRequestHistory: Promise<GenericResult<void>>
 }
 
 export type EventRequestMapping = {
@@ -85,6 +92,9 @@ export type EventRequestMapping = {
   deleteEnvironment: DeleteEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
+  listRequestHistory: ListRequestHistoryInput
+  deleteRequestHistoryEntry: DeleteRequestHistoryEntryInput
+  trimRequestHistory: TrimRequestHistoryInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -123,4 +133,7 @@ export type WindowElectron = {
   deleteEnvironment: (input: DeleteEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
+  listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>
+  deleteRequestHistoryEntry: (input: DeleteRequestHistoryEntryInput) => Promise<GenericResult<void>>
+  trimRequestHistory: (input: TrimRequestHistoryInput) => Promise<GenericResult<void>>
 }

@@ -2,6 +2,7 @@ export const AsyncStorageKeys = {
   favorites: 'favorites',
   recents: 'recents',
   settings: 'settings',
+  requestHistorySettings: 'requestHistorySettings',
   tags: 'tags',
   folderExplorerDrafts: 'folderExplorerDrafts',
   oneTimeLayoutModel: 'oneTimeLayoutModel',
