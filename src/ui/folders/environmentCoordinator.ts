@@ -30,6 +30,11 @@ export namespace EnvironmentCoordinator {
     environmentEditorStore.trigger.selectedChanged({ id })
   }
 
+  export function openEnvironmentDetails(id: string) {
+    setSidebarTab('environments')
+    selectEnvironment(id)
+  }
+
   export async function createEnvironment() {
     const result = await getWindowElectron().createEnvironment({ name: 'New Environment' })
     if (!result.success) {

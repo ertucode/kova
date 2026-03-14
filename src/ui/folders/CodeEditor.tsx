@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import type { Extension } from '@codemirror/state'
+import { useEffect, useMemo, useRef } from 'react'
+import { EditorState, StateEffect, type Extension } from '@codemirror/state'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { json } from '@codemirror/lang-json'
@@ -8,6 +8,8 @@ import CodeMirror from '@uiw/react-codemirror'
 import { tags } from '@lezer/highlight'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'javascript'
+
+const refreshEffect = StateEffect.define<void>()
 
 const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
@@ -69,6 +71,9 @@ const editorTheme = EditorView.theme({
     border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
     backgroundColor: 'var(--color-base-200)',
     color: 'var(--color-base-content)',
+    pointerEvents: 'auto',
+    padding: '0',
+    overflow: 'hidden',
   },
   '.cm-activeLine, .cm-activeLineGutter': {
     backgroundColor: 'color-mix(in oklab, var(--color-base-content) 5%, transparent)',
@@ -87,6 +92,9 @@ export function CodeEditor({
   placeholder,
   minHeightClassName,
   className,
+  extensions,
+  singleLine,
+  refreshKey,
   onChange,
   onBlur,
 }: {
@@ -95,11 +103,20 @@ export function CodeEditor({
   placeholder?: string
   minHeightClassName?: string
   className?: string
+  extensions?: Extension[]
+  singleLine?: boolean
+  refreshKey?: string
   onChange: (value: string) => void
   onBlur?: () => void
 }) {
-  const extensions = useMemo(() => {
-    const nextExtensions: Extension[] = [EditorView.lineWrapping, editorTheme, syntaxHighlighting(editorHighlightStyle)]
+  const editorViewRef = useRef<EditorView | null>(null)
+
+  const resolvedExtensions = useMemo(() => {
+    const nextExtensions: Extension[] = [editorTheme, syntaxHighlighting(editorHighlightStyle)]
+
+    if (!singleLine) {
+      nextExtensions.push(EditorView.lineWrapping)
+    }
 
     if (placeholder) {
       nextExtensions.push(placeholderExtension(placeholder))
@@ -113,8 +130,37 @@ export function CodeEditor({
       nextExtensions.push(javascript())
     }
 
+    if (singleLine) {
+      nextExtensions.push(
+        EditorState.transactionFilter.of(transaction => {
+          if (!transaction.docChanged) {
+            return transaction
+          }
+
+          const nextText = transaction.newDoc.toString()
+          if (!nextText.includes('\n')) {
+            return transaction
+          }
+
+          return [transaction, { changes: { from: 0, to: transaction.newDoc.length, insert: nextText.replace(/\s*\n\s*/g, ' ') } }]
+        })
+      )
+    }
+
+    if (extensions) {
+      nextExtensions.push(...extensions)
+    }
+
     return nextExtensions
-  }, [language, placeholder])
+  }, [extensions, language, placeholder, singleLine])
+
+  useEffect(() => {
+    if (!editorViewRef.current) {
+      return
+    }
+
+    editorViewRef.current.dispatch({ effects: refreshEffect.of() })
+  }, [refreshKey])
 
   return (
     <div
@@ -140,7 +186,10 @@ export function CodeEditor({
           highlightActiveLineGutter: false,
           searchKeymap: false,
         }}
-        extensions={extensions}
+        extensions={resolvedExtensions}
+        onCreateEditor={view => {
+          editorViewRef.current = view
+        }}
         onChange={onChange}
         onBlur={onBlur}
       />

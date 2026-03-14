@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
-import { extractTemplateVariables } from '@common/RequestVariables'
+import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
+import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import { HeadersEditor } from './HeadersEditor'
@@ -9,9 +10,11 @@ import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { KeyValueEditor } from './KeyValueEditor'
 import { environmentEditorStore } from './environmentEditorStore'
+import { EnvironmentCoordinator } from './environmentCoordinator'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
+import { variableHighlightExtension } from './codeEditorVariableHighlight'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [response, setResponse] = useState<SendRequestResponse | null>(null)
@@ -21,10 +24,78 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
+  const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
 
   const activeEnvironmentNames = useMemo(
     () => environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
     [activeEnvironmentIds, environments]
+  )
+
+  const activeEnvironmentVariableNames = useMemo(() => {
+    const activeEnvironments = environments
+      .filter(environment => activeEnvironmentIds.includes(environment.id))
+      .map(environment => {
+        const draft = environmentEntries[environment.id]?.current
+
+        return {
+          ...environment,
+          name: draft?.name ?? environment.name,
+          variables: draft?.variables ?? environment.variables,
+          priority: draft?.priority ?? environment.priority,
+        }
+      })
+
+    return Object.keys(buildEnvironmentVariableMap(activeEnvironments))
+  }, [activeEnvironmentIds, environmentEntries, environments])
+
+  const variableTooltipRows = useMemo(
+    () =>
+      environments.map(environment => {
+        const draft = environmentEntries[environment.id]?.current
+        const variables = draft?.variables ?? environment.variables
+        const rows = parseKeyValueRows(variables)
+
+        return {
+          id: environment.id,
+          name: draft?.name ?? environment.name,
+          isActive: activeEnvironmentIds.includes(environment.id),
+          valueByVariableName: new Map(rows.map(row => [row.key.trim(), row.value])),
+        }
+      }),
+    [activeEnvironmentIds, environmentEntries, environments]
+  )
+
+  const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
+  const variableTooltipRowsRef = useRef(variableTooltipRows)
+
+  activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
+  variableTooltipRowsRef.current = variableTooltipRows
+
+  const variableHighlightExtensions = useMemo(
+    () => [
+      variableHighlightExtension({
+        getDefinedVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getEnvironments: () => variableTooltipRowsRef.current,
+        onToggleEnvironment: environmentId => EnvironmentCoordinator.toggleActiveEnvironment(environmentId),
+        onOpenEnvironment: environmentId => EnvironmentCoordinator.openEnvironmentDetails(environmentId),
+        onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
+        onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
+      }),
+    ],
+    []
+  )
+
+  const variableHighlightRefreshKey = useMemo(
+    () =>
+      JSON.stringify({
+        activeEnvironmentVariableNames,
+        rows: variableTooltipRows.map(row => ({
+          id: row.id,
+          isActive: row.isActive,
+          values: Array.from(row.valueByVariableName.entries()),
+        })),
+      }),
+    [activeEnvironmentVariableNames, variableTooltipRows]
   )
 
   const referencedVariables = useMemo(
@@ -124,11 +195,15 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             ))}
           </select>
 
-          <input
-            className="min-w-0 flex-1 border-0 bg-transparent px-4 py-4 text-sm outline-none"
+          <CodeEditor
             value={draft.url}
+            language="plain"
+            singleLine
+            className="min-w-0 flex-1 border-0"
             placeholder="https://api.example.com/resource"
-            onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, url: event.target.value })}
+            extensions={variableHighlightExtensions}
+            refreshKey={variableHighlightRefreshKey}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, url: value })}
           />
 
           <button
@@ -191,6 +266,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                 minHeightClassName="min-h-0 h-full"
                 className="border-x-0 border-b-0"
                 placeholder={'{\n  "hello": "world"\n}'}
+                extensions={variableHighlightExtensions}
+                refreshKey={variableHighlightRefreshKey}
                 onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
               />
             ) : null}
@@ -373,6 +450,39 @@ function isParamBodyType(bodyType: RequestBodyType) {
 
 function getRawEditorLanguage(rawType: RequestRawType): CodeEditorLanguage {
   return rawType === 'json' ? 'json' : 'plain'
+}
+
+function updateEnvironmentVariableDraft(environmentId: string, variableName: string, value: string) {
+  const state = environmentEditorStore.getSnapshot().context
+  const environment = state.items.find(item => item.id === environmentId)
+  const draft = state.entries[environmentId]?.current
+  if (!environment) {
+    return
+  }
+
+  const currentDraft = draft ?? {
+    name: environment.name,
+    variables: environment.variables,
+    priority: environment.priority,
+  }
+
+  const nextVariables = upsertVariableValue(currentDraft.variables, variableName, value)
+  EnvironmentCoordinator.updateDraft(environmentId, { ...currentDraft, variables: nextVariables })
+}
+
+function upsertVariableValue(variables: string, variableName: string, value: string) {
+  const rows = parseKeyValueRows(variables)
+  const existingRow = rows.find(row => row.key.trim() === variableName)
+
+  if (existingRow) {
+    return stringifyKeyValueRows(rows.map(row => (row.key.trim() === variableName ? { ...row, value } : row)))
+  }
+
+  const nextRow = createEmptyKeyValueRow()
+  nextRow.key = variableName
+  nextRow.value = value
+
+  return stringifyKeyValueRows([...rows, nextRow])
 }
 
 function formatResponseBody(body: string, headers: string) {
