@@ -22,6 +22,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const [response, setResponse] = useState<SendRequestResponse | null>(null)
   const [responseError, setResponseError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
   const [responsePaneHeight, setResponsePaneHeight] = useState(320)
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
@@ -143,6 +144,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
     const handlePointerUp = () => {
       resizeStateRef.current = null
+      setIsResizingResponsePane(false)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -188,6 +190,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       startY: event.clientY,
       startHeight: responsePaneHeight,
     }
+    setIsResizingResponsePane(true)
     document.body.style.cursor = 'ns-resize'
     document.body.style.userSelect = 'none'
   }
@@ -239,7 +242,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         />
       </section>
 
-      <section className="grid min-h-0 flex-1 w-full border-b border-base-content/10 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+      <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
         <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
           <div className="flex h-full min-h-0 flex-col border-b border-base-content/10">
             <div className="flex items-center gap-3">
@@ -337,16 +340,18 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </div>
       </section>
 
-      <section className="shrink-0 bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
+      <section className="shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
         <button
           type="button"
-          className="block h-px w-full cursor-ns-resize bg-base-content/10"
+          className={`block h-[3px] w-full cursor-ns-resize border-0 transition-colors ${
+            isResizingResponsePane ? 'bg-base-content/35' : 'bg-base-content/10 hover:bg-base-content/25'
+          } `}
           onPointerDown={startResize}
           aria-label="Resize response panel"
           title="Resize response panel"
         />
 
-        <div className="h-[calc(100%-1px)] overflow-auto">
+        <div className="h-[calc(100%-2px)] overflow-auto">
           <div className="flex items-start justify-between gap-4 p-2 border-b border-base-content/10">
             <div className="text-sm font-semibold text-base-content">Response</div>
             <ResponseStatusSummary response={response} responseError={responseError} />
@@ -489,11 +494,11 @@ function ResponseStatusSummary({
   }
 
   return (
-    <div className="text-right">
+    <div className="flex gap-2 items-center">
+      <div className="text-xs text-base-content/45">{response.durationMs} ms</div>
       <div className={`text-sm font-semibold ${statusTone.className}`}>
         {response.status} {response.statusText}
       </div>
-      <div className="mt-1 text-xs text-base-content/45">{response.durationMs} ms</div>
     </div>
   )
 }
