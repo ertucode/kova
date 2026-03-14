@@ -54,7 +54,7 @@ const editorTheme = EditorView.theme({
   },
   '.cm-content': {
     padding: '0.75rem 1rem',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
+    fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
     lineHeight: '1.5rem',
     caretColor: 'currentColor',
   },
@@ -189,6 +189,14 @@ export function CodeEditor({
 
     if (singleLine) {
       nextExtensions.push(
+        EditorView.theme({
+          '& .cm-content': {
+            minHeight: 'auto',
+            width: '100%',
+            paddingTop: '0.75rem !important',
+            paddingBottom: '0.75rem !important',
+          },
+        }),
         EditorState.transactionFilter.of(transaction => {
           if (!transaction.docChanged) {
             return transaction

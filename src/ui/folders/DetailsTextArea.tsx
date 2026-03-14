@@ -21,7 +21,7 @@ export function DetailsTextArea({
 }) {
   return (
     <section className={['w-full border-b border-base-content/10', sectionClassName].filter(Boolean).join(' ')}>
-      {label ? <div className="p-2 text-sm text-base-content/55">{label}</div> : null}
+      {label ? <div className="p-2 text-sm font-semibold text-base-content">{label}</div> : null}
       {editorLanguage ? (
         <CodeEditor
           value={value}

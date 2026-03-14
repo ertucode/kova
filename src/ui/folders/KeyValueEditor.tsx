@@ -56,7 +56,7 @@ export function KeyValueEditor({
 
   return (
     <section className="w-full border-b border-base-content/10">
-      {label ? <div className="pl-2 py-2 text-sm text-base-content/55">{label}</div> : null}
+      {label ? <div className="pl-2 py-2 text-sm font-semibold text-base-content">{label}</div> : null}
 
       <div className="overflow-hidden border border-base-content/10 bg-base-100/35">
         <table className="table w-full table-fixed border-collapse text-sm">

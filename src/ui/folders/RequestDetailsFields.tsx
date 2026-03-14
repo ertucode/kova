@@ -5,6 +5,7 @@ import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/R
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
+import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { HeadersEditor } from './HeadersEditor'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
@@ -187,39 +188,40 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <section className="w-full border-b border-base-content/10">
-        <div className="flex w-full overflow-hidden border border-base-content/10 bg-base-100/70">
-          <select
-            className="w-[118px] shrink-0 border-0 border-r border-base-content/10 bg-transparent px-3 py-4 text-sm font-semibold outline-none"
+        <div className="flex w-full overflow-visible border border-base-content/10 bg-base-100/70">
+          <DropdownSelect
             value={draft.method}
-            onChange={event =>
-              FolderExplorerCoordinator.updateSelectedDraft({ ...draft, method: event.target.value as RequestMethod })
-            }
-          >
-            {REQUEST_METHODS.map(option => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-
-          <CodeEditor
-            value={draft.url}
-            language="plain"
-            singleLine
-            className="min-w-0 flex-1 border-0"
-            placeholder="https://api.example.com/resource"
-            extensions={variableEditorExtensions}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, url: value })}
+            className="z-20 w-[126px] shrink-0 border-r border-base-content/10 bg-base-200/55"
+            triggerClassName="tracking-[0.08em]"
+            menuClassName="w-[220px]"
+            options={REQUEST_METHODS.map(option => ({
+              value: option,
+              label: <MethodBadge method={option} />,
+            }))}
+            renderValue={option => option.label}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, method: value as RequestMethod })}
           />
 
-          <button
-            type="button"
-            className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-6 py-4 text-sm font-medium text-base-content transition hover:bg-base-300"
-            onClick={() => void sendRequest()}
-            disabled={isSending}
-          >
-            {isSending ? 'Sending...' : 'Send'}
-          </button>
+          <div className="flex min-w-0 flex-1 overflow-hidden">
+            <CodeEditor
+              value={draft.url}
+              language="plain"
+              singleLine
+              className="min-w-0 flex-1 border-0"
+              placeholder="https://api.example.com/resource"
+              extensions={variableEditorExtensions}
+              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, url: value })}
+            />
+
+            <button
+              type="button"
+              className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-6 py-4 text-sm font-medium text-base-content transition hover:bg-base-300"
+              onClick={() => void sendRequest()}
+              disabled={isSending}
+            >
+              {isSending ? 'Sending...' : 'Send'}
+            </button>
+          </div>
         </div>
 
         <VariableUsageBanner activeEnvironmentNames={activeEnvironmentNames} referencedVariables={referencedVariables} />
@@ -229,40 +231,39 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
           <div className="flex h-full min-h-0 flex-col border-b border-base-content/10">
             <div className="flex items-center gap-3">
-              <div className="text-sm text-base-content/55 pl-2">Body</div>
-              <select
-                className="select select-sm w-auto rounded-none border-base-content/10 bg-base-100/70"
+              <div className="pl-2 text-sm font-semibold text-base-content">Body</div>
+              <DropdownSelect
                 value={draft.bodyType}
-                onChange={event =>
+                className="w-[182px]"
+                triggerClassName="h-8 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-xs font-medium capitalize"
+                menuClassName="w-[220px]"
+                options={REQUEST_BODY_TYPES.map(option => ({
+                  value: option,
+                  label: <span className="capitalize">{option}</span>,
+                }))}
+                onChange={value =>
                   FolderExplorerCoordinator.updateSelectedDraft({
                     ...draft,
-                    bodyType: event.target.value as RequestBodyType,
+                    bodyType: value as RequestBodyType,
                   })
                 }
-              >
-                {REQUEST_BODY_TYPES.map(option => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select select-sm w-auto rounded-none border-base-content/10 bg-base-100/70"
+              />
+              <DropdownSelect
                 value={draft.rawType}
-                onChange={event =>
+                className={`w-[120px] ${draft.bodyType !== 'raw' ? 'pointer-events-none opacity-45' : ''}`}
+                triggerClassName="h-8 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase"
+                menuClassName="w-[180px]"
+                options={REQUEST_RAW_TYPES.map(option => ({
+                  value: option,
+                  label: <span className="uppercase">{option}</span>,
+                }))}
+                onChange={value =>
                   FolderExplorerCoordinator.updateSelectedDraft({
                     ...draft,
-                    rawType: event.target.value as RequestRawType,
+                    rawType: value as RequestRawType,
                   })
                 }
-                disabled={draft.bodyType !== 'raw'}
-              >
-                {REQUEST_RAW_TYPES.map(option => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             {draft.bodyType === 'raw' ? (
@@ -335,7 +336,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
         <div className="h-[calc(100%-1px)] overflow-auto px-8 py-6">
           <div className="mb-4 flex items-start justify-between gap-4">
-            <div className="text-sm text-base-content/55">Response</div>
+            <div className="text-sm font-semibold text-base-content">Response</div>
             <ResponseStatusSummary response={response} responseError={responseError} />
           </div>
           <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
@@ -365,6 +366,37 @@ function VariableUsageBanner({
       {referencedVariables.length > 0 ? <span>Variables: {referencedVariables.join(', ')}</span> : null}
     </div>
   )
+}
+
+function MethodBadge({ method }: { method: RequestMethod }) {
+  const tone = getMethodTone(method)
+
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.12em] ${tone}`}>
+      {method}
+    </span>
+  )
+}
+
+function getMethodTone(method: RequestMethod) {
+  switch (method) {
+    case 'GET':
+      return 'bg-info/15 text-info'
+    case 'POST':
+      return 'bg-success/15 text-success'
+    case 'PUT':
+      return 'bg-accent/18 text-accent'
+    case 'PATCH':
+      return 'bg-warning/18 text-warning-content'
+    case 'DELETE':
+      return 'bg-error/15 text-error'
+    case 'HEAD':
+      return 'bg-secondary/18 text-secondary'
+    case 'OPTIONS':
+      return 'bg-base-content/10 text-base-content/75'
+    default:
+      return 'bg-base-content/10 text-base-content'
+  }
 }
 
 function ResponseBodyPanel({
