@@ -59,6 +59,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           id: environment.id,
           name: draft?.name ?? environment.name,
           isActive: activeEnvironmentIds.includes(environment.id),
+          priority: draft?.priority ?? environment.priority,
+          createdAt: environment.createdAt,
           valueByVariableName: new Map(rows.map(row => [row.key.trim(), row.value])),
         }
       }),

@@ -6,6 +6,7 @@ export type VariableTooltipEnvironmentRow = {
   name: string
   isActive: boolean
   value: string
+  isEffective: boolean
 }
 
 export function VariableHoverTooltip({
@@ -31,7 +32,7 @@ export function VariableHoverTooltip({
   }, [rows])
 
   return (
-    <div className="w-[420px] overflow-hidden rounded-2xl border border-base-content/10 bg-base-200/95 shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-sm">
+    <div className="w-[560px] overflow-hidden rounded-2xl border border-base-content/10 bg-base-200/95 shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-sm">
       <div className="border-b border-base-content/10 px-4 py-3">
         <div className="text-sm font-semibold text-base-content">Variable: {`{{${variableName}}}`}</div>
         <div className="mt-1 text-xs text-base-content/50">
@@ -41,11 +42,11 @@ export function VariableHoverTooltip({
 
       <div className="max-h-[320px] overflow-auto">
         {draftRows.map(row => (
-          <div key={row.id} className="grid grid-cols-[auto_minmax(0,140px)_minmax(0,1fr)_auto] items-center gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0">
+          <div key={row.id} className="grid grid-cols-[auto_minmax(0,120px)_minmax(0,2fr)_auto] items-center gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0">
             <label className="flex items-center justify-center px-1">
               <input
                 type="checkbox"
-                className="checkbox checkbox-sm rounded-none border-none"
+                className="checkbox checkbox-sm rounded-none border border-base-content/30 bg-base-100"
                 checked={row.isActive}
                 onChange={() => {
                   setDraftRows(current =>
@@ -65,8 +66,16 @@ export function VariableHoverTooltip({
               onClick={() => onOpenEnvironment(row.id)}
               title={`Open ${row.name}`}
             >
-              <div className="truncate text-sm font-medium text-base-content">{row.name}</div>
-              <div className="mt-0.5 text-[11px] text-base-content/45">{row.isActive ? 'Active' : 'Inactive'}</div>
+              <div className="flex items-center gap-2">
+                <div className="truncate text-sm font-medium text-base-content">{row.name}</div>
+                {row.isEffective ? (
+                  <span
+                    className="size-2 shrink-0 rounded-full bg-info shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-info)_16%,transparent)]"
+                    aria-label="Effective environment"
+                    title="Effective environment"
+                  />
+                ) : null}
+              </div>
             </button>
 
             <input

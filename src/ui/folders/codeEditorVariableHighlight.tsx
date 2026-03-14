@@ -9,6 +9,8 @@ type VariableTooltipEnvironment = {
   id: string
   name: string
   isActive: boolean
+  priority: number
+  createdAt: number
   valueByVariableName: Map<string, string>
 }
 
@@ -78,6 +80,7 @@ export function variableHighlightExtension({
           name: environment.name,
           isActive: environment.isActive,
           value: environment.valueByVariableName.get(match.variableName) ?? '',
+          isEffective: isEffectiveVariableSource(getEnvironments(), environment.id, match.variableName),
         }))
 
         return {
@@ -174,4 +177,12 @@ function getVariableAtPosition(view: EditorView, pos: number, side: number) {
   }
 
   return null
+}
+
+function isEffectiveVariableSource(environments: VariableTooltipEnvironment[], environmentId: string, variableName: string) {
+  const activeCandidates = environments
+    .filter(environment => environment.isActive && environment.valueByVariableName.has(variableName))
+    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)
+
+  return activeCandidates[0]?.id === environmentId
 }
