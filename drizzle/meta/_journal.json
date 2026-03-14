@@ -43,6 +43,20 @@
       "when": 1773495541591,
       "tag": "0005_previous_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1773500000000,
+      "tag": "0006_fancy_path_params",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1773501000000,
+      "tag": "0007_search_params",
+      "breakpoints": true
     }
   ]
 }

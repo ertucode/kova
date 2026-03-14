@@ -74,6 +74,8 @@ export function toRequestDetailsDraft(request: HttpRequestRecord): RequestDetail
     name: request.name,
     method: request.method,
     url: request.url,
+    pathParams: request.pathParams,
+    searchParams: request.searchParams,
     preRequestScript: request.preRequestScript,
     postRequestScript: request.postRequestScript,
     headers: request.headers,

@@ -257,6 +257,8 @@ async function saveItem(selection: Selection) {
           name: draft.name,
           method: draft.method,
           url: draft.url,
+          pathParams: draft.pathParams,
+          searchParams: draft.searchParams,
           preRequestScript: draft.preRequestScript,
           postRequestScript: draft.postRequestScript,
           headers: draft.headers,

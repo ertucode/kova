@@ -18,6 +18,8 @@ export function initializeDatabase(options: { dbPath: string; migrationsPath: st
     migrate(drizzleDb, { migrationsFolder: migrationsPath });
   }
 
+  ensureRequestParamColumns(sqlite)
+
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS environments (
       id text PRIMARY KEY NOT NULL,
@@ -33,6 +35,17 @@ export function initializeDatabase(options: { dbPath: string; migrationsPath: st
 
   db = drizzleDb;
   return db;
+}
+
+function ensureRequestParamColumns(sqlite: Database.Database) {
+  const columns = sqlite.prepare("PRAGMA table_info(requests)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'path_params')) {
+    sqlite.exec("ALTER TABLE requests ADD COLUMN path_params text NOT NULL DEFAULT '';")
+  }
+
+  if (!columns.some((column) => column.name === 'search_params')) {
+    sqlite.exec("ALTER TABLE requests ADD COLUMN search_params text NOT NULL DEFAULT '';")
+  }
 }
 
 export function getDb() {

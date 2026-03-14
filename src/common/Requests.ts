@@ -11,6 +11,8 @@ export type HttpRequestRecord = {
   name: string
   method: RequestMethod
   url: string
+  pathParams: string
+  searchParams: string
   preRequestScript: string
   postRequestScript: string
   headers: string
@@ -35,6 +37,8 @@ export type UpdateRequestInput = {
   name: string
   method: RequestMethod
   url: string
+  pathParams: string
+  searchParams: string
   preRequestScript: string
   postRequestScript: string
   headers: string
@@ -51,6 +55,8 @@ export type SendRequestInput = {
   requestId: string
   method: RequestMethod
   url: string
+  pathParams: string
+  searchParams: string
   preRequestScript: string
   postRequestScript: string
   headers: string

@@ -1,4 +1,5 @@
 import { GenericError, type GenericResult } from '../common/GenericError.js'
+import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
 import { extractTemplateVariables, findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type {
@@ -38,6 +39,8 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       request: {
         method: input.method,
         url: input.url,
+        pathParams: input.pathParams,
+        searchParams: input.searchParams,
         headers: input.headers,
         body: input.body,
         bodyType: input.bodyType,
@@ -59,7 +62,17 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       )
     }
 
-    const url = resolveTemplateVariables(runtime.request.url, variables).trim()
+    const urlWithTemplatesResolved = resolveTemplateVariables(runtime.request.url, variables).trim()
+    const resolvedPathParams = resolveTemplateVariables(runtime.request.pathParams, variables)
+    const { url: urlWithPathParams, missingNames: missingPathParamNames } = applyPathParamsToUrl(urlWithTemplatesResolved, resolvedPathParams)
+    if (missingPathParamNames.length > 0) {
+      return GenericError.Message(
+        `Path variable values are required: ${missingPathParamNames.join(', ')}. Fill them in before sending the request.`
+      )
+    }
+
+    const url = applySearchParamsToUrl(urlWithPathParams, runtime.request.searchParams, variables)
+
     if (!url) {
       return GenericError.Message('Request URL is required')
     }
@@ -180,13 +193,37 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
 }
 
 function collectMissingVariables(
-  input: Pick<SendRequestInput, 'url' | 'headers' | 'body' | 'bodyType'>,
+  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType'>,
   variables: Record<string, string>
 ) {
   const missingVariables = new Set<string>()
 
   for (const variableName of findMissingTemplateVariables(input.url, variables)) {
     missingVariables.add(variableName)
+  }
+
+  for (const row of parseKeyValueRows(input.pathParams)) {
+    if (!row.enabled) {
+      continue
+    }
+
+    for (const variableName of findMissingTemplateVariables(row.value, variables)) {
+      missingVariables.add(variableName)
+    }
+  }
+
+  for (const row of parseKeyValueRows(input.searchParams)) {
+    if (!row.enabled) {
+      continue
+    }
+
+    for (const variableName of findMissingTemplateVariables(row.key, variables)) {
+      missingVariables.add(variableName)
+    }
+
+    for (const variableName of findMissingTemplateVariables(row.value, variables)) {
+      missingVariables.add(variableName)
+    }
   }
 
   for (const row of parseKeyValueRows(input.headers)) {
@@ -279,7 +316,7 @@ function buildRequestBody(
 function buildExecutedRequestSnapshot(input: {
   requestId: string
   requestName: string
-  request: Pick<SendRequestInput, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  request: Pick<SendRequestInput, 'method' | 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   url: string
   headers: Headers
   body: string
@@ -303,13 +340,37 @@ function buildExecutedRequestSnapshot(input: {
 }
 
 function collectUsedVariables(
-  input: Pick<SendRequestInput, 'url' | 'headers' | 'body' | 'bodyType'>,
+  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType'>,
   variables: Record<string, string>
 ) {
   const variableNames = new Set<string>()
 
   for (const variableName of extractTemplateVariables(input.url)) {
     variableNames.add(variableName)
+  }
+
+  for (const row of parseKeyValueRows(input.pathParams)) {
+    if (!row.enabled) {
+      continue
+    }
+
+    for (const variableName of extractTemplateVariables(row.value)) {
+      variableNames.add(variableName)
+    }
+  }
+
+  for (const row of parseKeyValueRows(input.searchParams)) {
+    if (!row.enabled) {
+      continue
+    }
+
+    for (const variableName of extractTemplateVariables(row.key)) {
+      variableNames.add(variableName)
+    }
+
+    for (const variableName of extractTemplateVariables(row.value)) {
+      variableNames.add(variableName)
+    }
   }
 
   for (const row of parseKeyValueRows(input.headers)) {

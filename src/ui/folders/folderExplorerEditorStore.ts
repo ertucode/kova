@@ -40,6 +40,8 @@ const requestDetailsDraftSchema = z.object({
   name: z.string(),
   method: z.enum(REQUEST_METHODS),
   url: z.string(),
+  pathParams: z.string().default(''),
+  searchParams: z.string().default(''),
   preRequestScript: z.string(),
   postRequestScript: z.string(),
   headers: z.string(),

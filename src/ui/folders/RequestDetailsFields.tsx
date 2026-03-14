@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { useSelector } from '@xstate/store/react'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
 import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
+import { syncPathParamsWithUrl, syncSearchParamsWithUrl, syncUrlWithPathParams, syncUrlWithSearchParams } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
@@ -19,6 +20,7 @@ import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDet
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
+import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -90,10 +92,14 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
+  const definedPathParamNamesRef = useRef<string[]>([])
+  const pathParamRowsRef = useRef(parseKeyValueRows(draft.pathParams))
 
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
+  pathParamRowsRef.current = parseKeyValueRows(draft.pathParams)
+  definedPathParamNamesRef.current = pathParamRowsRef.current.map(row => row.key.trim()).filter(Boolean)
 
   const variableEditorExtensions = useMemo(
     () => [
@@ -109,6 +115,25 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current),
     ],
     []
+  )
+
+  const urlEditorExtensions = useMemo(
+    () => [
+      pathParamHighlightExtension({
+        getDefinedPathParamNames: () => definedPathParamNamesRef.current,
+        getPathParamValue: name => pathParamRowsRef.current.find(row => row.key.trim() === name)?.value ?? '',
+        getPathParamDescription: name => pathParamRowsRef.current.find(row => row.key.trim() === name)?.description ?? '',
+        onChangeValue: (name, value) => {
+          const nextRows = pathParamRowsRef.current.map(row =>
+            row.key.trim() === name ? { ...row, value } : row
+          )
+
+          updatePathParams(stringifyKeyValueRows(nextRows))
+        },
+      }),
+      ...variableEditorExtensions,
+    ],
+    [variableEditorExtensions]
   )
 
   const preRequestScriptExtensions = useMemo(
@@ -138,11 +163,15 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       Array.from(
         new Set([
           ...extractTemplateVariables(draft.url),
+          ...parseKeyValueRows(draft.pathParams).flatMap(row => (row.enabled ? extractTemplateVariables(row.value) : [])),
+          ...parseKeyValueRows(draft.searchParams).flatMap(row =>
+            row.enabled ? [...extractTemplateVariables(row.key), ...extractTemplateVariables(row.value)] : []
+          ),
           ...extractTemplateVariables(draft.headers),
           ...extractTemplateVariables(draft.body),
         ])
       ),
-    [draft.body, draft.headers, draft.url]
+    [draft.body, draft.headers, draft.pathParams, draft.searchParams, draft.url]
   )
 
   const formattedResponseBody = useMemo(() => {
@@ -212,6 +241,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       requestId: selected.id,
       method: latestDraft.method,
       url: latestDraft.url,
+      pathParams: latestDraft.pathParams,
+      searchParams: latestDraft.searchParams,
       preRequestScript: latestDraft.preRequestScript,
       postRequestScript: latestDraft.postRequestScript,
       headers: latestDraft.headers,
@@ -251,6 +282,31 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     document.body.style.userSelect = 'none'
   }
 
+  const updateUrl = (nextUrl: string) => {
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...draft,
+      url: nextUrl,
+      pathParams: syncPathParamsWithUrl(nextUrl, draft.pathParams),
+      searchParams: syncSearchParamsWithUrl(nextUrl, draft.searchParams),
+    })
+  }
+
+  const updatePathParams = (nextPathParams: string) => {
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...draft,
+      pathParams: nextPathParams,
+      url: syncUrlWithSearchParams(syncUrlWithPathParams(draft.url, nextPathParams), draft.searchParams),
+    })
+  }
+
+  const updateSearchParams = (nextSearchParams: string) => {
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...draft,
+      searchParams: nextSearchParams,
+      url: syncUrlWithSearchParams(draft.url, nextSearchParams),
+    })
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <section className="w-full border-b border-base-content/10">
@@ -276,9 +332,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               language="plain"
               singleLine
               className="min-w-0 flex-1 border-0"
-              placeholder="https://api.example.com/resource"
-              extensions={variableEditorExtensions}
-              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, url: value })}
+              placeholder="https://api.example.com/users/:userId"
+              extensions={urlEditorExtensions}
+              onChange={updateUrl}
             />
 
             <button
@@ -373,6 +429,24 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             value={draft.headers}
             valueEditorExtensions={variableEditorExtensions}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
+          />
+
+          <KeyValueEditor
+            label="Path Params"
+            value={draft.pathParams}
+            onChange={updatePathParams}
+            keyPlaceholder="userId"
+            valuePlaceholder="123"
+            valueEditorAsCode
+            valueEditorExtensions={variableEditorExtensions}
+          />
+
+          <KeyValueEditor
+            label="Search Params"
+            value={draft.searchParams}
+            onChange={updateSearchParams}
+            keyPlaceholder="page"
+            valuePlaceholder="1"
           />
 
           <DetailsTextArea

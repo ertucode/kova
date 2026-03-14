@@ -22,6 +22,8 @@ type ScriptSource = {
 type RuntimeRequestState = {
   method: RequestMethod
   url: string
+  pathParams: string
+  searchParams: string
   headers: string
   body: string
   bodyType: RequestBodyType

@@ -34,6 +34,8 @@ export const requests = sqliteTable(
     name: text('name').notNull(),
     method: text('method').notNull().default('GET'),
     url: text('url').notNull().default(''),
+    pathParams: text('path_params').notNull().default(''),
+    searchParams: text('search_params').notNull().default(''),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
     headers: text('headers').notNull().default(''),

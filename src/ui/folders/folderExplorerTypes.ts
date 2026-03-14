@@ -38,6 +38,8 @@ export type RequestDetailsDraft = {
   name: string
   method: RequestMethod
   url: string
+  pathParams: string
+  searchParams: string
   preRequestScript: string
   postRequestScript: string
   headers: string
