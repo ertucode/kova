@@ -10,7 +10,9 @@ import {
 import {
   type CreateEnvironmentInput,
   type DeleteEnvironmentInput,
+  type DuplicateEnvironmentInput,
   type EnvironmentRecord,
+  type MoveEnvironmentInput,
   type UpdateEnvironmentInput,
 } from './Environments.js'
 import {
@@ -86,8 +88,10 @@ export type EventResponseMapping = {
   moveRequestExample: Promise<GenericResult<void>>
   listEnvironments: Promise<EnvironmentRecord[]>
   createEnvironment: Promise<GenericResult<EnvironmentRecord>>
+  duplicateEnvironment: Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: Promise<GenericResult<EnvironmentRecord>>
   deleteEnvironment: Promise<GenericResult<void>>
+  moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
   listRequestHistory: Promise<ListRequestHistoryResponse>
@@ -129,8 +133,10 @@ export type EventRequestMapping = {
   moveRequestExample: MoveRequestExampleInput
   listEnvironments: void
   createEnvironment: CreateEnvironmentInput
+  duplicateEnvironment: DuplicateEnvironmentInput
   updateEnvironment: UpdateEnvironmentInput
   deleteEnvironment: DeleteEnvironmentInput
+  moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
   listRequestHistory: ListRequestHistoryInput
@@ -182,8 +188,10 @@ export type WindowElectron = {
   moveRequestExample: (input: MoveRequestExampleInput) => Promise<GenericResult<void>>
   listEnvironments: () => Promise<EnvironmentRecord[]>
   createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
+  duplicateEnvironment: (input: DuplicateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: (input: UpdateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   deleteEnvironment: (input: DeleteEnvironmentInput) => Promise<GenericResult<void>>
+  moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
   listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>

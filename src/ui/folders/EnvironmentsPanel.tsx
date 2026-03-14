@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { FlaskConicalIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { dialogActions } from '@/global/dialogStore'
@@ -22,6 +22,8 @@ export function EnvironmentsPanel() {
   const isDirty = isEnvironmentEntryDirty(entry)
   const isSaving = Boolean(entry?.saving)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const [draggedEnvironmentId, setDraggedEnvironmentId] = useState<string | null>(null)
+  const [dropIndicatorId, setDropIndicatorId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!selectedId) {
@@ -32,6 +34,12 @@ export function EnvironmentsPanel() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         void EnvironmentCoordinator.saveEnvironment(selectedId)
+        return
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
+        event.preventDefault()
+        void EnvironmentCoordinator.duplicateSelectedEnvironment()
       }
     }
 
@@ -88,37 +96,81 @@ export function EnvironmentsPanel() {
             {items.map(item => {
               const isActive = activeEnvironmentIds.includes(item.id)
               const isSelected = item.id === selectedId
+              const showDropBefore = dropIndicatorId === `${item.id}:before`
+              const showDropAfter = dropIndicatorId === `${item.id}:after`
 
               return (
-                <div
-                  key={item.id}
-                  className={[
-                    'flex items-center gap-3 rounded-2xl border px-3 py-3 transition',
-                    isSelected
-                      ? 'border-primary/35 bg-primary/10 text-base-content'
-                      : 'border-base-content/10 bg-base-100 text-base-content/80 hover:border-base-content/20 hover:bg-base-200/70',
-                  ].join(' ')}
-                >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    onClick={() => EnvironmentCoordinator.selectEnvironment(item.id)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{item.name}</div>
-                      <div className="mt-1 text-xs text-base-content/45">Priority {item.priority}</div>
-                    </div>
-                  </button>
+                <div key={item.id} className="relative">
+                  {showDropBefore ? <div className="pointer-events-none absolute inset-x-3 top-0 z-10 h-0.5 bg-primary" /> : null}
+                  <div
+                    draggable
+                    onDragStart={() => setDraggedEnvironmentId(item.id)}
+                    onDragEnd={() => {
+                      setDraggedEnvironmentId(null)
+                      setDropIndicatorId(null)
+                    }}
+                    onDragOver={event => {
+                      if (!draggedEnvironmentId || draggedEnvironmentId === item.id) {
+                        return
+                      }
 
-                  <button
-                    type="button"
-                    className={isActive ? 'rounded-full bg-success/15 px-2 py-1 text-[11px] font-medium text-success' : 'rounded-full bg-base-content/8 px-2 py-1 text-[11px] font-medium text-base-content/45'}
-                    onClick={() => EnvironmentCoordinator.toggleActiveEnvironment(item.id)}
-                    aria-pressed={isActive}
-                    title={isActive ? 'Deactivate environment' : 'Activate environment'}
+                      event.preventDefault()
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      const ratio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5
+                      setDropIndicatorId(`${item.id}:${ratio < 0.5 ? 'before' : 'after'}`)
+                    }}
+                    onDrop={event => {
+                      if (!draggedEnvironmentId || draggedEnvironmentId === item.id) {
+                        return
+                      }
+
+                      event.preventDefault()
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      const ratio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5
+                      const sourceIndex = items.findIndex(environment => environment.id === draggedEnvironmentId)
+                      const targetIndex = items.findIndex(environment => environment.id === item.id)
+                      if (sourceIndex < 0 || targetIndex < 0) {
+                        setDraggedEnvironmentId(null)
+                        setDropIndicatorId(null)
+                        return
+                      }
+
+                      const nextTargetPosition = ratio < 0.5 ? targetIndex : targetIndex + 1
+                      const adjustedTargetPosition = sourceIndex < nextTargetPosition ? nextTargetPosition - 1 : nextTargetPosition
+                      setDraggedEnvironmentId(null)
+                      setDropIndicatorId(null)
+                      void EnvironmentCoordinator.moveEnvironment(draggedEnvironmentId, adjustedTargetPosition)
+                    }}
+                    className={[
+                      'flex cursor-grab items-center gap-3 rounded-2xl border px-3 py-3 transition active:cursor-grabbing',
+                      isSelected
+                        ? 'border-primary/35 bg-primary/10 text-base-content'
+                        : 'border-base-content/10 bg-base-100 text-base-content/80 hover:border-base-content/20 hover:bg-base-200/70',
+                      draggedEnvironmentId === item.id ? 'opacity-50' : '',
+                    ].join(' ')}
                   >
-                    {isActive ? 'Active' : 'Inactive'}
-                  </button>
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      onClick={() => EnvironmentCoordinator.selectEnvironment(item.id)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{item.name}</div>
+                        <div className="mt-1 text-xs text-base-content/45">Priority {item.priority}</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={isActive ? 'rounded-full bg-success/15 px-2 py-1 text-[11px] font-medium text-success' : 'rounded-full bg-base-content/8 px-2 py-1 text-[11px] font-medium text-base-content/45'}
+                      onClick={() => EnvironmentCoordinator.toggleActiveEnvironment(item.id)}
+                      aria-pressed={isActive}
+                      title={isActive ? 'Deactivate environment' : 'Activate environment'}
+                    >
+                      {isActive ? 'Active' : 'Inactive'}
+                    </button>
+                  </div>
+                  {showDropAfter ? <div className="pointer-events-none absolute inset-x-3 bottom-0 z-10 h-0.5 bg-primary" /> : null}
                 </div>
               )
             })}

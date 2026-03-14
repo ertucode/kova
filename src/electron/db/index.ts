@@ -25,13 +25,17 @@ export function initializeDatabase(options: { dbPath: string; migrationsPath: st
       id text PRIMARY KEY NOT NULL,
       name text NOT NULL,
       variables text NOT NULL DEFAULT '',
+      position integer NOT NULL DEFAULT 0,
       priority integer NOT NULL DEFAULT 0,
       created_at integer NOT NULL,
       deleted_at integer
     );
     CREATE INDEX IF NOT EXISTS environments_deleted_at_idx ON environments (deleted_at);
     CREATE INDEX IF NOT EXISTS environments_priority_idx ON environments (priority);
+    CREATE INDEX IF NOT EXISTS environments_position_idx ON environments (position);
   `)
+
+  ensureEnvironmentColumns(sqlite)
 
   db = drizzleDb;
   return db;
@@ -59,6 +63,20 @@ function ensureFolderAndRequestColumns(sqlite: Database.Database) {
   if (!columns.some((column) => column.name === 'auth_json')) {
     sqlite.exec("ALTER TABLE requests ADD COLUMN auth_json text NOT NULL DEFAULT '{\"type\":\"inherit\"}';")
   }
+}
+
+function ensureEnvironmentColumns(sqlite: Database.Database) {
+  const columns = sqlite.prepare("PRAGMA table_info(environments)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'position')) {
+    sqlite.exec("ALTER TABLE environments ADD COLUMN position integer NOT NULL DEFAULT 0;")
+  }
+
+  sqlite.exec("CREATE INDEX IF NOT EXISTS environments_position_idx ON environments (position);")
+
+  const activeRows = sqlite.prepare("SELECT id FROM environments WHERE deleted_at IS NULL ORDER BY position, created_at").all() as Array<{ id: string }>
+  activeRows.forEach((row, index) => {
+    sqlite.prepare("UPDATE environments SET position = ? WHERE id = ?").run(index, row.id)
+  })
 }
 
 export function getDb() {

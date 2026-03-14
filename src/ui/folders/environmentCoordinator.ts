@@ -45,8 +45,37 @@ export namespace EnvironmentCoordinator {
     environmentEditorStore.trigger.itemAdded({ item: result.data })
   }
 
+  export async function duplicateSelectedEnvironment() {
+    const selectedId = environmentEditorStore.getSnapshot().context.selectedId
+    if (!selectedId) {
+      return
+    }
+
+    const result = await getWindowElectron().duplicateEnvironment({ id: selectedId })
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    await loadEnvironments()
+    selectEnvironment(result.data.id)
+    toast.show({ severity: 'success', title: 'Environment duplicated', message: `Created ${result.data.name}.` })
+  }
+
   export function updateDraft(id: string, draft: { name: string; variables: string; priority: number }) {
     environmentEditorStore.trigger.draftUpdated({ id, draft })
+  }
+
+  export async function moveEnvironment(id: string, targetPosition: number) {
+    const result = await getWindowElectron().moveEnvironment({ id, targetPosition })
+    if (!result.success) {
+      toast.show(result)
+      return false
+    }
+
+    await loadEnvironments()
+    selectEnvironment(id)
+    return true
   }
 
   export async function saveEnvironment(id: string) {

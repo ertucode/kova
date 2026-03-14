@@ -61,11 +61,16 @@ export const environments = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     variables: text('variables').notNull().default(''),
+    position: integer('position').notNull().default(0),
     priority: integer('priority').notNull().default(0),
     createdAt: integer('created_at').notNull(),
     deletedAt: integer('deleted_at'),
   },
-  table => [index('environments_deleted_at_idx').on(table.deletedAt), index('environments_priority_idx').on(table.priority)]
+  table => [
+    index('environments_deleted_at_idx').on(table.deletedAt),
+    index('environments_priority_idx').on(table.priority),
+    index('environments_position_idx').on(table.position),
+  ]
 )
 
 export const treeItems = sqliteTable(

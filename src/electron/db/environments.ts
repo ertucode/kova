@@ -3,7 +3,9 @@ import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
   CreateEnvironmentInput,
   DeleteEnvironmentInput,
+  DuplicateEnvironmentInput,
   EnvironmentRecord,
+  MoveEnvironmentInput,
   UpdateEnvironmentInput,
 } from '../../common/Environments.js'
 import { Result } from '../../common/Result.js'
@@ -19,7 +21,7 @@ export async function listEnvironments(): Promise<EnvironmentRecord[]> {
     .select()
     .from(environments)
     .where(isNull(environments.deletedAt))
-    .orderBy(desc(environments.priority), desc(environments.createdAt))
+    .orderBy(environments.position, desc(environments.createdAt))
     .all()
     .map(toEnvironmentRecord)
 }
@@ -48,13 +50,14 @@ export async function createEnvironment(input: CreateEnvironmentInput): Promise<
 
   try {
     const now = Date.now()
-    const environment: EnvironmentRow = {
-      id: crypto.randomUUID(),
-      name,
-      variables: '',
-      priority: 0,
-      createdAt: now,
-      deletedAt: null,
+      const environment: EnvironmentRow = {
+        id: crypto.randomUUID(),
+        name,
+        variables: '',
+        position: getNextEnvironmentPosition(db),
+        priority: 0,
+        createdAt: now,
+        deletedAt: null,
     }
 
     db.insert(environments).values(environment).run()
@@ -107,6 +110,37 @@ export async function updateEnvironment(input: UpdateEnvironmentInput): Promise<
   }
 }
 
+export async function duplicateEnvironment(input: DuplicateEnvironmentInput): Promise<GenericResult<EnvironmentRecord>> {
+  const db = getDb()
+
+  try {
+    const source = db
+      .select()
+      .from(environments)
+      .where(and(eq(environments.id, input.id), isNull(environments.deletedAt)))
+      .get()
+
+    if (!source) {
+      return GenericError.Message('Environment not found')
+    }
+
+    const now = Date.now()
+    const environment: EnvironmentRow = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: buildDuplicateEnvironmentName(db, source.name),
+      position: getNextEnvironmentPosition(db),
+      createdAt: now,
+      deletedAt: null,
+    }
+
+    db.insert(environments).values(environment).run()
+    return Result.Success(toEnvironmentRecord(environment))
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
 export async function deleteEnvironment(input: DeleteEnvironmentInput): Promise<GenericResult<void>> {
   const db = getDb()
 
@@ -122,6 +156,42 @@ export async function deleteEnvironment(input: DeleteEnvironmentInput): Promise<
     }
 
     return Result.Success(undefined)
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
+export async function moveEnvironment(input: MoveEnvironmentInput): Promise<GenericResult<void>> {
+  const db = getDb()
+
+  if (input.targetPosition < 0) {
+    return GenericError.Message('Invalid target position')
+  }
+
+  try {
+    const result = db.transaction(tx => {
+      const rows = tx
+        .select({ id: environments.id })
+        .from(environments)
+        .where(isNull(environments.deletedAt))
+        .orderBy(environments.position, desc(environments.createdAt))
+        .all()
+
+      const currentIndex = rows.findIndex(row => row.id === input.id)
+      if (currentIndex < 0) {
+        throw new Error('Environment not found')
+      }
+
+      const [current] = rows.splice(currentIndex, 1)
+      const targetIndex = Math.max(0, Math.min(input.targetPosition, rows.length))
+      rows.splice(targetIndex, 0, current)
+
+      rows.forEach((row, index) => {
+        tx.update(environments).set({ position: index }).where(eq(environments.id, row.id)).run()
+      })
+    })
+
+    return Result.Success(result)
   } catch (error) {
     return GenericError.Unknown(error)
   }
@@ -153,8 +223,40 @@ function toEnvironmentRecord(environment: EnvironmentRow): EnvironmentRecord {
     id: environment.id,
     name: environment.name,
     variables: environment.variables,
+    position: environment.position,
     priority: environment.priority,
     createdAt: environment.createdAt,
     deletedAt: environment.deletedAt,
   }
+}
+
+function getNextEnvironmentPosition(db: ReturnType<typeof getDb>) {
+  const activeEnvironments = db
+    .select({ position: environments.position })
+    .from(environments)
+    .where(isNull(environments.deletedAt))
+    .all()
+
+  if (activeEnvironments.length === 0) {
+    return 0
+  }
+
+  return Math.max(...activeEnvironments.map(environment => environment.position)) + 1
+}
+
+function buildDuplicateEnvironmentName(db: ReturnType<typeof getDb>, sourceName: string) {
+  const names = db
+    .select({ name: environments.name })
+    .from(environments)
+    .where(isNull(environments.deletedAt))
+    .all()
+    .map(row => row.name)
+
+  const baseName = sourceName.replace(/ \(\d+\)$/u, '')
+  let index = 2
+  while (names.includes(`${baseName} (${index})`)) {
+    index += 1
+  }
+
+  return `${baseName} (${index})`
 }

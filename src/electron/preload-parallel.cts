@@ -53,6 +53,8 @@ electron.contextBridge.exposeInMainWorld('electron', {
   pickPostmanEnvironmentFile: () => ipcInvoke('pickPostmanEnvironmentFile', undefined),
   analyzePostmanEnvironment: input => ipcInvoke('analyzePostmanEnvironment', input),
   importPostmanEnvironment: input => ipcInvoke('importPostmanEnvironment', input),
+  duplicateEnvironment: input => ipcInvoke('duplicateEnvironment', input),
+  moveEnvironment: input => ipcInvoke('moveEnvironment', input),
 } satisfies Partial<WindowElectron>)
 
 function getArgv(key: string) {

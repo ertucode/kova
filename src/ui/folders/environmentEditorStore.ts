@@ -61,7 +61,7 @@ export const environmentEditorStore = createStore({
 
       return {
         ...context,
-        items: event.items,
+        items: sortEnvironmentItems(event.items),
         entries: nextEntries,
         loading: false,
         selectedId: event.items.some(item => item.id === context.selectedId) ? context.selectedId : (event.items[0]?.id ?? null),
@@ -111,7 +111,7 @@ export const environmentEditorStore = createStore({
         ...context,
         items: context.items
           .map(item => (item.id === event.item.id ? event.item : item))
-          .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt),
+          .sort((left, right) => left.position - right.position || right.createdAt - left.createdAt),
         entries: {
           ...context.entries,
           [event.item.id]: {
@@ -137,7 +137,7 @@ export const environmentEditorStore = createStore({
     }),
     itemAdded: (context, event: { item: EnvironmentRecord }) => ({
       ...context,
-      items: [...context.items, event.item].sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt),
+      items: sortEnvironmentItems([...context.items, event.item]),
       selectedId: event.item.id,
       focusEnvironmentId: event.item.id,
       entries: {
@@ -183,6 +183,10 @@ export function toEnvironmentDetailsDraft(environment: EnvironmentRecord): Envir
     variables: environment.variables,
     priority: environment.priority,
   }
+}
+
+export function sortEnvironmentItems(items: EnvironmentRecord[]) {
+  return items.slice().sort((left, right) => left.position - right.position || right.createdAt - left.createdAt)
 }
 
 export function serializeEnvironmentDraft(draft: EnvironmentDetailsDraft | null) {
