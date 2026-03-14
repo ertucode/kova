@@ -1,0 +1,149 @@
+import { useMemo } from 'react'
+import type { Extension } from '@codemirror/state'
+import { javascript } from '@codemirror/lang-javascript'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { json } from '@codemirror/lang-json'
+import { EditorView, placeholder as placeholderExtension } from '@codemirror/view'
+import CodeMirror from '@uiw/react-codemirror'
+import { tags } from '@lezer/highlight'
+
+export type CodeEditorLanguage = 'plain' | 'json' | 'javascript'
+
+const editorHighlightStyle = HighlightStyle.define([
+  { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
+  { tag: [tags.string, tags.special(tags.string)], color: 'var(--color-accent)' },
+  { tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null], color: 'var(--color-info)' },
+  { tag: [tags.propertyName, tags.attributeName], color: 'color-mix(in oklab, var(--color-base-content) 92%, var(--color-accent) 8%)' },
+  { tag: [tags.variableName, tags.labelName], color: 'var(--color-base-content)' },
+  { tag: [tags.comment], color: 'color-mix(in oklab, var(--color-base-content) 45%, transparent)', fontStyle: 'italic' },
+  { tag: [tags.operator, tags.punctuation, tags.separator], color: 'color-mix(in oklab, var(--color-base-content) 68%, transparent)' },
+  { tag: [tags.brace, tags.squareBracket, tags.paren], color: 'color-mix(in oklab, var(--color-base-content) 76%, transparent)' },
+])
+
+const editorTheme = EditorView.theme({
+  '&': {
+    height: '100%',
+    fontSize: '0.875rem',
+    backgroundColor: 'transparent !important',
+    color: 'var(--color-base-content)',
+  },
+  '&.cm-editor': {
+    height: '100%',
+    backgroundColor: 'transparent !important',
+  },
+  '&.cm-focused': {
+    outline: '2px solid var(--color-base-content)',
+    outlineOffset: '-2px',
+  },
+  '.cm-scroller, .cm-gutters, .cm-layer': {
+    backgroundColor: 'transparent !important',
+  },
+  '.cm-scroller': {
+    height: '100%',
+    overflow: 'auto',
+    fontFamily: 'inherit',
+  },
+  '.cm-content, .cm-gutter': {
+    minHeight: '100%',
+  },
+  '.cm-content': {
+    padding: '0.75rem 1rem',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
+    lineHeight: '1.5rem',
+    caretColor: 'currentColor',
+  },
+  '.cm-focused': {
+    outline: 'none',
+  },
+  '.cm-cursor, .cm-dropCursor': {
+    borderLeftColor: 'var(--color-base-content)',
+  },
+  '.cm-placeholder': {
+    color: 'color-mix(in oklab, var(--color-base-content) 34%, transparent)',
+  },
+  '.cm-panels': {
+    backgroundColor: 'var(--color-base-200)',
+    color: 'var(--color-base-content)',
+  },
+  '.cm-tooltip': {
+    border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
+    backgroundColor: 'var(--color-base-200)',
+    color: 'var(--color-base-content)',
+  },
+  '.cm-activeLine, .cm-activeLineGutter': {
+    backgroundColor: 'color-mix(in oklab, var(--color-base-content) 5%, transparent)',
+  },
+  '.cm-selectionBackground, ::selection': {
+    backgroundColor: 'color-mix(in oklab, currentColor 18%, transparent)',
+  },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+    backgroundColor: 'color-mix(in oklab, var(--color-primary) 28%, transparent)',
+  },
+})
+
+export function CodeEditor({
+  value,
+  language,
+  placeholder,
+  minHeightClassName,
+  className,
+  onChange,
+  onBlur,
+}: {
+  value: string
+  language: CodeEditorLanguage
+  placeholder?: string
+  minHeightClassName?: string
+  className?: string
+  onChange: (value: string) => void
+  onBlur?: () => void
+}) {
+  const extensions = useMemo(() => {
+    const nextExtensions: Extension[] = [EditorView.lineWrapping, editorTheme, syntaxHighlighting(editorHighlightStyle)]
+
+    if (placeholder) {
+      nextExtensions.push(placeholderExtension(placeholder))
+    }
+
+    if (language === 'json') {
+      nextExtensions.push(json())
+    }
+
+    if (language === 'javascript') {
+      nextExtensions.push(javascript())
+    }
+
+    return nextExtensions
+  }, [language, placeholder])
+
+  return (
+    <div
+      className={[
+        'flex w-full min-h-0 flex-1 overflow-hidden rounded-none border border-base-content/10 bg-base-100/70 text-base-content',
+        minHeightClassName,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <CodeMirror
+        value={value}
+        height="100%"
+        className="h-full w-full"
+        theme="dark"
+        basicSetup={{
+          lineNumbers: false,
+          foldGutter: false,
+          dropCursor: false,
+          allowMultipleSelections: false,
+          highlightActiveLine: false,
+          highlightActiveLineGutter: false,
+          searchKeymap: false,
+        }}
+        extensions={extensions}
+        onChange={onChange}
+        onBlur={onBlur}
+      />
+    </div>
+  )
+}

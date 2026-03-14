@@ -18,6 +18,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         label="Pre-request Script"
         value={draft.preRequestScript}
         minHeightClassName="min-h-40"
+        editorLanguage="javascript"
         onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
         onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
       />
@@ -26,6 +27,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         label="Post-request Script"
         value={draft.postRequestScript}
         minHeightClassName="min-h-40"
+        editorLanguage="javascript"
         onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
         onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
       />

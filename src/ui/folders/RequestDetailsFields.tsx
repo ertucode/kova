@@ -5,6 +5,7 @@ import { extractTemplateVariables } from '@common/RequestVariables'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import { HeadersEditor } from './HeadersEditor'
+import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { KeyValueEditor } from './KeyValueEditor'
 import { environmentEditorStore } from './environmentEditorStore'
@@ -184,13 +185,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             </div>
 
             {draft.bodyType === 'raw' ? (
-              <textarea
-                className="textarea min-h-0 h-full w-full rounded-none border-base-content/10 bg-base-100/70 font-mono text-sm leading-6"
+              <CodeEditor
                 value={draft.body}
+                language={getRawEditorLanguage(draft.rawType)}
+                minHeightClassName="min-h-0 h-full"
+                className="border-x-0 border-b-0"
                 placeholder={'{\n  "hello": "world"\n}'}
-                onChange={event =>
-                  FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: event.target.value })
-                }
+                onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
               />
             ) : null}
 
@@ -212,7 +213,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           </div>
         </div>
 
-        <div className="min-h-0 overflow-auto md:border-l md:border-base-content/10">
+        <div className="flex min-h-0 flex-col md:border-l md:border-base-content/10">
           <HeadersEditor
             value={draft.headers}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
@@ -222,6 +223,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             label="Pre-request Script"
             value={draft.preRequestScript}
             minHeightClassName="min-h-[180px]"
+            sectionClassName="flex min-h-0 flex-1 flex-col"
+            editorLanguage="javascript"
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -230,6 +233,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             label="Post-request Script"
             value={draft.postRequestScript}
             minHeightClassName="min-h-[180px]"
+            sectionClassName="flex min-h-0 flex-1 flex-col"
+            editorLanguage="javascript"
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -364,6 +369,10 @@ function ResponseStatusSummary({
 
 function isParamBodyType(bodyType: RequestBodyType) {
   return bodyType === 'form-data' || bodyType === 'x-www-form-urlencoded'
+}
+
+function getRawEditorLanguage(rawType: RequestRawType): CodeEditorLanguage {
+  return rawType === 'json' ? 'json' : 'plain'
 }
 
 function formatResponseBody(body: string, headers: string) {
