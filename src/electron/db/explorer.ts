@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { ExplorerItem } from '../../common/Explorer.js'
 import { getDb } from './index.js'
+import { requestExamples } from './schema.js'
 import { folders, requests, treeItems } from './schema.js'
 
 export async function listExplorerItems(): Promise<ExplorerItem[]> {
@@ -19,6 +20,9 @@ export async function listExplorerItems(): Promise<ExplorerItem[]> {
     : []
   const requestRows = requestIds.length
     ? await db.select().from(requests).where(and(inArray(requests.id, requestIds), isNull(requests.deletedAt)))
+    : []
+  const exampleRows = requestIds.length
+    ? await db.select().from(requestExamples).where(and(inArray(requestExamples.requestId, requestIds), isNull(requestExamples.deletedAt)))
     : []
 
   const folderMap = new Map(folderRows.map(folder => [folder.id, folder]))
@@ -61,6 +65,19 @@ export async function listExplorerItems(): Promise<ExplorerItem[]> {
       position: row.position,
       createdAt: row.createdAt,
       deletedAt: request.deletedAt,
+    })
+  })
+
+  exampleRows.forEach(example => {
+    items.push({
+      itemType: 'example' as const,
+      id: example.id,
+      requestId: example.requestId,
+      name: example.name,
+      responseStatus: example.responseStatus,
+      position: example.position,
+      createdAt: example.createdAt,
+      deletedAt: example.deletedAt,
     })
   })
 

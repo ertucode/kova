@@ -3,6 +3,7 @@ import { useSelector } from '@xstate/store/react'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  CopyIcon,
   FileCode2Icon,
   FolderIcon,
   MoreHorizontalIcon,
@@ -43,16 +44,16 @@ export function ExplorerRow({
   const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
-  const isRequestDirty = useSelector(folderExplorerEditorStore, state => {
-    const entry = state.context.entries[`request:${node.id}`]
-    if (node.itemType !== 'request' || !entry?.current) {
+  const isItemDirty = useSelector(folderExplorerEditorStore, state => {
+    const entry = state.context.entries[`${node.itemType}:${node.id}`]
+    if (!entry?.current || node.itemType === 'folder') {
       return false
     }
 
     return isEntryDirty(entry)
   })
 
-  const hasChildren = node.itemType === 'folder' && node.children.length > 0
+  const hasChildren = (node.itemType === 'folder' || node.itemType === 'request') && node.children.length > 0
   const isExpanded = forceExpanded || expandedIds.includes(node.id)
   const isSelected = selected?.id === node.id && selected.itemType === node.itemType
   const isCreateOpen = createDraft?.parentFolderId === node.id
@@ -95,14 +96,14 @@ export function ExplorerRow({
           className="flex size-7 shrink-0 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content disabled:cursor-default disabled:hover:bg-transparent"
           onClick={event => {
             event.stopPropagation()
-            if (node.itemType === 'folder' && hasChildren) {
+            if ((node.itemType === 'folder' || node.itemType === 'request') && hasChildren) {
               FolderExplorerCoordinator.toggleExpanded(node.id)
             }
           }}
-          aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
-          disabled={node.itemType !== 'folder' || !hasChildren}
+          aria-label={isExpanded ? 'Collapse item' : 'Expand item'}
+          disabled={(node.itemType !== 'folder' && node.itemType !== 'request') || !hasChildren}
         >
-          {node.itemType === 'folder' && hasChildren ? (
+          {(node.itemType === 'folder' || node.itemType === 'request') && hasChildren ? (
             isExpanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />
           ) : (
             <span className="size-4" />
@@ -112,11 +113,13 @@ export function ExplorerRow({
         <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
           {node.itemType === 'folder' ? (
             <FolderIcon className="size-4 shrink-0 text-base-content/55" />
-          ) : (
+          ) : node.itemType === 'request' ? (
             <FileCode2Icon className="size-4 shrink-0 text-base-content/55" />
+          ) : (
+            <CopyIcon className="size-4 shrink-0 text-base-content/55" />
           )}
           <div className="min-w-0 flex-1 truncate px-1 text-sm text-base-content">{node.name}</div>
-          {isRequestDirty ? (
+          {isItemDirty ? (
             <div
               className="size-2 shrink-0 rounded-full bg-warning"
               aria-label="Request has unsaved changes"
@@ -144,7 +147,7 @@ export function ExplorerRow({
         />
       ) : null}
 
-      {node.itemType === 'folder' && hasChildren && isExpanded ? (
+      {(node.itemType === 'folder' || node.itemType === 'request') && hasChildren && isExpanded ? (
         <div>
           {node.children.map(child => (
             <ExplorerRow
@@ -187,7 +190,7 @@ export function DraftRow({
   return (
     <div className="py-1" style={{ paddingLeft: depth * 18 }}>
       <div className="flex items-center gap-2 border border-base-content/10 bg-base-100/90 px-2 pr-1">
-        {icon === 'folder' ? <FolderIcon className="size-4 text-base-content/55" /> : <FileCode2Icon className="size-4 text-base-content/55" />}
+        {icon === 'folder' ? <FolderIcon className="size-4 text-base-content/55" /> : icon === 'request' ? <FileCode2Icon className="size-4 text-base-content/55" /> : <CopyIcon className="size-4 text-base-content/55" />}
         <input
           autoFocus
           className="h-8 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-base-content/35"

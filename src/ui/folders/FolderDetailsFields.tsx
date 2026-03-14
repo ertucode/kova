@@ -1,12 +1,18 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { buildEnvironmentVariableMap } from '@common/RequestVariables'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import type { FolderDetailsDraft } from './folderExplorerTypes'
 import { DetailsTextArea } from './DetailsTextArea'
+import { HeadersEditor } from './HeadersEditor'
+import { AuthorizationEditor } from './AuthorizationEditor'
+import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
+import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { environmentEditorStore } from './environmentEditorStore'
+import { EnvironmentCoordinator } from './environmentCoordinator'
+import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
@@ -33,6 +39,54 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     return Object.keys(buildEnvironmentVariableMap(activeEnvironments))
   }, [activeEnvironmentIds, environmentEntries, environments])
 
+  const variableTooltipRows = useMemo(
+    () =>
+      environments.map(environment => {
+        const nextDraft = environmentEntries[environment.id]?.current
+        const variables = nextDraft?.variables ?? environment.variables
+        const rows = parseKeyValueRows(variables)
+
+        return {
+          id: environment.id,
+          name: nextDraft?.name ?? environment.name,
+          isActive: activeEnvironmentIds.includes(environment.id),
+          priority: nextDraft?.priority ?? environment.priority,
+          createdAt: environment.createdAt,
+          valueByVariableName: new Map(rows.map(row => [row.key.trim(), row.value])),
+        }
+      }),
+    [activeEnvironmentIds, environmentEntries, environments]
+  )
+
+  const variableAutocompleteItems = useMemo<VariableAutocompleteItem[]>(
+    () => buildVariableAutocompleteItems(variableTooltipRows),
+    [variableTooltipRows]
+  )
+
+  const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
+  const variableTooltipRowsRef = useRef(variableTooltipRows)
+  const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
+
+  activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
+  variableTooltipRowsRef.current = variableTooltipRows
+  variableAutocompleteItemsRef.current = variableAutocompleteItems
+
+  const variableEditorExtensions = useMemo(
+    () => [
+      variableHighlightExtension({
+        getDefinedVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getEnvironments: () => variableTooltipRowsRef.current,
+        onToggleEnvironment: environmentId => EnvironmentCoordinator.toggleActiveEnvironment(environmentId),
+        onOpenEnvironment: environmentId => EnvironmentCoordinator.openEnvironmentDetails(environmentId),
+        onChangeValue: (environmentId, variableName, value) =>
+          updateEnvironmentVariableDraft(environmentId, variableName, value),
+        onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current),
+    ],
+    []
+  )
+
   const preRequestScriptExtensions = useMemo(
     () => [
       scriptAutocompleteExtension({
@@ -56,7 +110,8 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   )
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 overflow-y-auto">
       <DetailsTextArea
         label={null}
         value={draft.description}
@@ -66,27 +121,126 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
       />
 
-      <DetailsTextArea
-        label="Pre-request Script"
-        value={draft.preRequestScript}
-        minHeightClassName="min-h-40"
-        editorLanguage="javascript"
-        editorSize="small"
-        extensions={preRequestScriptExtensions}
-        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
-        onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
+      <AuthorizationEditor
+        value={draft.auth}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
+        allowInherit
+        valueEditorExtensions={variableEditorExtensions}
       />
 
-      <DetailsTextArea
-        label="Post-request Script"
-        value={draft.postRequestScript}
-        minHeightClassName="min-h-40"
-        editorLanguage="javascript"
-        editorSize="small"
-        extensions={postRequestScriptExtensions}
-        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
-        onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
+      <HeadersEditor
+        value={draft.headers}
+        valueEditorExtensions={variableEditorExtensions}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
       />
-    </>
+      </div>
+
+      <div className="grid min-h-0 flex-1 md:grid-cols-2">
+        <DetailsTextArea
+          label="Pre-request Script"
+          value={draft.preRequestScript}
+          minHeightClassName="min-h-[220px]"
+          sectionClassName="flex min-h-0 flex-1 flex-col md:border-r md:border-base-content/10"
+          editorLanguage="javascript"
+          editorSize="small"
+          extensions={preRequestScriptExtensions}
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
+          onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
+        />
+
+        <DetailsTextArea
+          label="Post-request Script"
+          value={draft.postRequestScript}
+          minHeightClassName="min-h-[220px]"
+          sectionClassName="flex min-h-0 flex-1 flex-col"
+          editorLanguage="javascript"
+          editorSize="small"
+          extensions={postRequestScriptExtensions}
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
+          onBlur={() => void FolderExplorerCoordinator.flushSelectedFolder()}
+        />
+      </div>
+    </div>
   )
+}
+
+function updateEnvironmentVariableDraft(environmentId: string, variableName: string, value: string) {
+  const state = environmentEditorStore.getSnapshot().context
+  const entry = state.entries[environmentId]
+  if (!entry?.current) {
+    return
+  }
+
+  const rows = parseKeyValueRows(entry.current.variables)
+  const row = rows.find(currentRow => currentRow.key.trim() === variableName)
+
+  const nextVariables = row
+    ? stringifyKeyValueRows(rows.map(currentRow => (currentRow.key.trim() === variableName ? { ...currentRow, value } : currentRow)))
+    : entry.current.variables
+
+  environmentEditorStore.trigger.draftUpdated({
+    id: environmentId,
+    draft: {
+      ...entry.current,
+      variables: nextVariables,
+    },
+  })
+}
+
+function buildVariableAutocompleteItems(
+  rows: Array<{
+    name: string
+    isActive: boolean
+    priority: number
+    createdAt: number
+    valueByVariableName: Map<string, string>
+  }>
+): VariableAutocompleteItem[] {
+  const items = new Map<
+    string,
+    {
+      name: string
+      effectiveEnvironmentName: string | null
+      activeEnvironmentNames: string[]
+      inactiveEnvironmentNames: string[]
+    }
+  >()
+
+  const activeRowsByPriority = rows
+    .filter(row => row.isActive)
+    .slice()
+    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)
+
+  for (const row of rows) {
+    for (const variableName of row.valueByVariableName.keys()) {
+      if (variableName.trim() === '') {
+        continue
+      }
+
+      const current = items.get(variableName) ?? {
+        name: variableName,
+        effectiveEnvironmentName: null,
+        activeEnvironmentNames: [],
+        inactiveEnvironmentNames: [],
+      }
+
+      if (row.isActive) {
+        current.activeEnvironmentNames.push(row.name)
+      } else {
+        current.inactiveEnvironmentNames.push(row.name)
+      }
+
+      items.set(variableName, current)
+    }
+  }
+
+  for (const [variableName, item] of items) {
+    const effectiveRow = activeRowsByPriority.find(row => row.valueByVariableName.has(variableName))
+    item.effectiveEnvironmentName = effectiveRow?.name ?? null
+    item.activeEnvironmentNames.sort((left, right) => left.localeCompare(right))
+    item.inactiveEnvironmentNames.sort((left, right) => left.localeCompare(right))
+    items.set(variableName, item)
+  }
+
+  return Array.from(items.values())
 }

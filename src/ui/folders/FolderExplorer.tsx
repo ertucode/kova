@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { Clock3Icon, FileCode2Icon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
+import { ChevronDownIcon, Clock3Icon, FileCode2Icon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
 import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
@@ -11,6 +11,8 @@ import { HistoryPanel } from './RequestExecutionPanels'
 import { buildTree, filterTree, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+import { dialogActions } from '@/global/dialogStore'
+import { PostmanImportDialog } from './PostmanImportDialog'
 
 type DropPlacement = ExplorerDropTarget['placement']
 
@@ -88,10 +90,19 @@ export function FolderExplorer() {
     }
 
     await FolderExplorerCoordinator.moveItem({
-      itemType: itemToMove.itemType,
-      id: itemToMove.id,
-      targetParentFolderId: nextDropTarget.targetParentFolderId,
-      targetPosition: nextDropTarget.targetPosition,
+      ...(itemToMove.itemType === 'example'
+        ? {
+            itemType: 'example' as const,
+            id: itemToMove.id,
+            targetRequestId: nextDropTarget.targetRequestId ?? '',
+            targetPosition: nextDropTarget.targetPosition,
+          }
+        : {
+            itemType: itemToMove.itemType as 'folder' | 'request',
+            id: itemToMove.id,
+            targetParentFolderId: nextDropTarget.targetParentFolderId,
+            targetPosition: nextDropTarget.targetPosition,
+          }),
     })
   }
 
@@ -101,6 +112,10 @@ export function FolderExplorer() {
     }
 
     const nextDropTarget = getRootEndDropTarget(roots, draggedItem)
+    if (!nextDropTarget) {
+      setDropTarget(null)
+      return
+    }
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
     setDropTarget(current => (isSameDropTarget(current, nextDropTarget) ? current : nextDropTarget))
@@ -115,16 +130,19 @@ export function FolderExplorer() {
       return
     }
 
-    const nextDropTarget = getRootEndDropTarget(roots, draggedItem)
-    const itemToMove = draggedItem
+  const nextDropTarget = getRootEndDropTarget(roots, draggedItem)
+  if (!nextDropTarget) {
     clearDragState()
+    return
+  }
+  const itemToMove = draggedItem
+  clearDragState()
 
-    await FolderExplorerCoordinator.moveItem({
-      itemType: itemToMove.itemType,
-      id: itemToMove.id,
-      targetParentFolderId: nextDropTarget.targetParentFolderId,
-      targetPosition: nextDropTarget.targetPosition,
-    })
+    await FolderExplorerCoordinator.moveItem(
+      itemToMove.itemType === 'example'
+        ? { itemType: 'example', id: itemToMove.id, targetRequestId: nextDropTarget.targetRequestId ?? '', targetPosition: nextDropTarget.targetPosition }
+        : { itemType: itemToMove.itemType, id: itemToMove.id, targetParentFolderId: nextDropTarget.targetParentFolderId, targetPosition: nextDropTarget.targetPosition }
+    )
   }
 
   return (
@@ -135,25 +153,7 @@ export function FolderExplorer() {
         <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-100">
           <div className="border-b border-base-content/10 px-4 py-4">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
-                onClick={() => FolderExplorerCoordinator.startCreate('folder', null)}
-                aria-label="Add folder"
-                title="Add folder"
-              >
-                <FolderIcon className="size-4" />
-              </button>
-
-              <button
-                type="button"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-base-content/10 bg-base-100/70 text-base-content transition hover:border-base-content/20 hover:bg-base-100"
-                onClick={() => FolderExplorerCoordinator.startCreate('request', null)}
-                aria-label="Add request"
-                title="Add request"
-              >
-                <FileCode2Icon className="size-4" />
-              </button>
+              <CreateMenuButton />
 
               <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
                 <SearchIcon className="size-4 shrink-0" />
@@ -229,6 +229,79 @@ export function FolderExplorer() {
   )
 }
 
+function CreateMenuButton() {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
+  const runAction = (action: () => void) => {
+    setIsOpen(false)
+    action()
+  }
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        type="button"
+        className="flex h-10 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-100"
+        onClick={() => setIsOpen(current => !current)}
+      >
+        <FolderIcon className="size-4" />
+        <span>Add</span>
+        <ChevronDownIcon className="size-4" />
+      </button>
+
+      {isOpen ? (
+        <ul className="menu absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
+          <li>
+            <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('folder', null))}>
+              <FolderIcon className="size-4" />
+              Add Folder
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null))}>
+              <FileCode2Icon className="size-4" />
+              Add Request
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanImportDialog, props: {} }))}>
+              <FileCode2Icon className="size-4" />
+              Import Postman
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
 function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
   const tabs = [
     { id: 'requests', label: 'Requests', icon: FileCode2Icon, disabled: false },
@@ -289,6 +362,31 @@ function getRowDropTarget({
 
   const rect = event.currentTarget.getBoundingClientRect()
   const ratio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5
+
+  if (draggedItem.itemType === 'example') {
+    if (node.itemType === 'folder') {
+      return null
+    }
+
+    const requestId = node.itemType === 'request' ? node.id : node.requestId
+    const targetSiblings = getExampleSiblingNodes(itemMap, node).filter(sibling => !isSameSelection(sibling, draggedItem))
+    const anchorNode = node.itemType === 'request' ? null : node
+    const targetIndex = anchorNode ? targetSiblings.findIndex(sibling => isSameSelection(sibling, anchorNode)) : targetSiblings.length
+    const nextPosition = anchorNode ? (ratio < 0.5 ? targetIndex : targetIndex + 1) : targetSiblings.length
+
+    return {
+      targetParentFolderId: null,
+      targetRequestId: requestId,
+      targetPosition: Math.max(0, nextPosition),
+      placement: node.itemType === 'request' ? 'inside' : ratio < 0.5 ? 'before' : 'after',
+      indicatorId: `${toSelectionKey(node)}:${node.itemType === 'request' ? 'inside' : ratio < 0.5 ? 'before' : 'after'}`,
+    }
+  }
+
+  if (node.itemType === 'example') {
+    return null
+  }
+
   const placement: DropPlacement = node.itemType === 'folder' && ratio > 0.28 && ratio < 0.72 ? 'inside' : ratio < 0.5 ? 'before' : 'after'
 
   if (placement === 'inside') {
@@ -299,6 +397,7 @@ function getRowDropTarget({
     const children = node.children.filter(child => !isSameSelection(child, draggedItem))
     return {
       targetParentFolderId: node.id,
+      targetRequestId: null,
       targetPosition: children.length,
       placement,
       indicatorId: `${toSelectionKey(node)}:${placement}`,
@@ -313,15 +412,21 @@ function getRowDropTarget({
 
   return {
     targetParentFolderId: node.parentFolderId,
+    targetRequestId: null,
     targetPosition: placement === 'before' ? targetIndex : targetIndex + 1,
     placement,
     indicatorId: `${toSelectionKey(node)}:${placement}`,
   }
 }
 
-function getRootEndDropTarget(roots: TreeNode[], draggedItem: Selection): ExplorerDropTarget {
+function getRootEndDropTarget(roots: TreeNode[], draggedItem: Selection): ExplorerDropTarget | null {
+  if (draggedItem.itemType === 'example') {
+    return null
+  }
+
   return {
     targetParentFolderId: null,
+    targetRequestId: null,
     targetPosition: roots.filter(root => !isSameSelection(root, draggedItem)).length,
     placement: 'after',
     indicatorId: 'root:end',
@@ -329,11 +434,27 @@ function getRootEndDropTarget(roots: TreeNode[], draggedItem: Selection): Explor
 }
 
 function getSiblingNodes(roots: TreeNode[], itemMap: Map<string, TreeNode>, node: TreeNode) {
+  if (node.itemType === 'example') {
+    return getExampleSiblingNodes(itemMap, node)
+  }
+
+  if (node.itemType !== 'folder' && node.itemType !== 'request') {
+    return roots
+  }
+
   if (!node.parentFolderId) {
     return roots
   }
 
   return itemMap.get(`folder:${node.parentFolderId}`)?.children ?? roots
+}
+
+function getExampleSiblingNodes(itemMap: Map<string, TreeNode>, node: TreeNode) {
+  const requestId = node.itemType === 'request' ? node.id : node.itemType === 'example' ? node.requestId : null
+  if (!requestId) {
+    return []
+  }
+  return itemMap.get(`request:${requestId}`)?.children.filter(child => child.itemType === 'example') ?? []
 }
 
 function isFolderAncestor(itemMap: Map<string, TreeNode>, folderId: string, candidateChildId: string) {
@@ -344,7 +465,8 @@ function isFolderAncestor(itemMap: Map<string, TreeNode>, folderId: string, cand
       return true
     }
 
-    currentFolderId = itemMap.get(`folder:${currentFolderId}`)?.parentFolderId ?? null
+    const current = itemMap.get(`folder:${currentFolderId}`)
+    currentFolderId = current && current.itemType === 'folder' ? current.parentFolderId : null
   }
 
   return false
@@ -365,6 +487,7 @@ function isSameDropTarget(left: ExplorerDropTarget | null, right: ExplorerDropTa
 
   return (
     left.targetParentFolderId === right.targetParentFolderId &&
+    left.targetRequestId === right.targetRequestId &&
     left.targetPosition === right.targetPosition &&
     left.placement === right.placement &&
     left.indicatorId === right.indicatorId

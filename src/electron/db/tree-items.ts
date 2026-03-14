@@ -55,6 +55,47 @@ export function insertTreeItem(db: Db, input: { parentFolderId: string | null; i
     .run()
 }
 
+export function insertTreeItemAtPosition(
+  db: Db,
+  input: { parentFolderId: string | null; itemType: 'folder' | 'request'; itemId: string; position: number }
+) {
+  const now = Date.now()
+  const siblings = db
+    .select({ rowId: treeItems.id })
+    .from(treeItems)
+    .where(buildTreeParentFilter(input.parentFolderId))
+    .orderBy(treeItems.position, treeItems.createdAt)
+    .all()
+
+  const targetPosition = Math.max(0, Math.min(input.position, siblings.length))
+  const nextRowId = crypto.randomUUID()
+  const nextSiblings = siblings.slice()
+  nextSiblings.splice(targetPosition, 0, { rowId: nextRowId })
+
+  nextSiblings.forEach((sibling, index) => {
+    if (sibling.rowId === nextRowId) {
+      return
+    }
+
+    db.update(treeItems)
+      .set({ position: index })
+      .where(eq(treeItems.id, sibling.rowId))
+      .run()
+  })
+
+  db.insert(treeItems)
+    .values({
+      id: nextRowId,
+      parentFolderId: input.parentFolderId,
+      itemType: input.itemType,
+      itemId: input.itemId,
+      position: targetPosition,
+      createdAt: now,
+      deletedAt: null,
+    })
+    .run()
+}
+
 export function markTreeItemDeleted(db: Db, input: { itemType: 'folder' | 'request'; itemId: string; deletedAt: number }) {
   db.update(treeItems)
     .set({ deletedAt: input.deletedAt })
@@ -67,6 +108,10 @@ export function toGenericTreeError(error: unknown) {
 }
 
 export async function moveExplorerItem(input: MoveExplorerItemInput) {
+  if (input.itemType === 'example') {
+    return GenericError.Message('Examples are moved through request example ordering')
+  }
+
   const db = getDb()
 
   if (input.targetPosition < 0) {

@@ -8,6 +8,8 @@ export const folders = sqliteTable(
     parentId: text('parent_id'),
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
+    headers: text('headers').notNull().default(''),
+    authJson: text('auth_json').notNull().default('{"type":"inherit"}'),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
     position: integer('position').notNull().default(0),
@@ -36,6 +38,7 @@ export const requests = sqliteTable(
     url: text('url').notNull().default(''),
     pathParams: text('path_params').notNull().default(''),
     searchParams: text('search_params').notNull().default(''),
+    authJson: text('auth_json').notNull().default('{"type":"inherit"}'),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
     headers: text('headers').notNull().default(''),
@@ -120,5 +123,33 @@ export const requestHistory = sqliteTable(
     index('request_history_created_at_idx').on(table.createdAt),
     index('request_history_request_id_idx').on(table.requestId),
     index('request_history_sent_at_idx').on(table.sentAt),
+  ]
+)
+
+export const requestExamples = sqliteTable(
+  'request_examples',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('request_id').notNull(),
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+    requestHeaders: text('request_headers').notNull().default(''),
+    requestBody: text('request_body').notNull().default(''),
+    requestBodyType: text('request_body_type').notNull().default('none'),
+    requestRawType: text('request_raw_type').notNull().default('json'),
+    responseStatus: integer('response_status').notNull().default(200),
+    responseStatusText: text('response_status_text').notNull().default('OK'),
+    responseHeaders: text('response_headers').notNull().default(''),
+    responseBody: text('response_body').notNull().default(''),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    index('request_examples_request_id_idx').on(table.requestId),
+    index('request_examples_request_position_idx').on(table.requestId, table.position),
+    index('request_examples_deleted_at_idx').on(table.deletedAt),
+    check('request_examples_request_body_type_check', sql`${table.requestBodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`),
+    check('request_examples_request_raw_type_check', sql`${table.requestRawType} in ('json', 'text')`),
   ]
 )

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, screen, shell, clipboard } from 'electron'
+import { app, BrowserWindow, Menu, screen, shell, clipboard, dialog } from 'electron'
 import path from 'path'
 import os from 'os'
 import { ipcHandle, isDev } from './util.js'
@@ -10,12 +10,16 @@ import { listExplorerItems } from './db/explorer.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
 import { createEnvironment, deleteEnvironment, listEnvironments, updateEnvironment } from './db/environments.js'
 import { deleteRequestHistoryEntry, listRequestHistory, trimRequestHistory } from './db/request-history.js'
-import { createRequest, deleteRequest, getRequest, updateRequest } from './db/requests.js'
+import { createRequest, deleteRequest, duplicateRequest, getRequest, updateRequest } from './db/requests.js'
+import { createRequestExample, deleteRequestExample, getRequestExample, moveRequestExample, updateRequestExample } from './db/request-examples.js'
 import { moveExplorerItem } from './db/tree-items.js'
 import { sendRequest } from './send-request.js'
+import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
 import { getServerConfig } from './server-config.js'
+import { GenericError } from '../common/GenericError.js'
+import { Result } from '../common/Result.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -269,6 +273,30 @@ app.on('ready', () => {
     return deleteRequest(input)
   })
 
+  ipcHandle('duplicateRequest', async input => {
+    return duplicateRequest(input)
+  })
+
+  ipcHandle('createRequestExample', async input => {
+    return createRequestExample(input)
+  })
+
+  ipcHandle('getRequestExample', async input => {
+    return getRequestExample(input)
+  })
+
+  ipcHandle('updateRequestExample', async input => {
+    return updateRequestExample(input)
+  })
+
+  ipcHandle('deleteRequestExample', async input => {
+    return deleteRequestExample(input)
+  })
+
+  ipcHandle('moveRequestExample', async input => {
+    return moveRequestExample(input)
+  })
+
   ipcHandle('listEnvironments', async () => {
     return listEnvironments()
   })
@@ -303,6 +331,29 @@ app.on('ready', () => {
 
   ipcHandle('trimRequestHistory', async input => {
     return trimRequestHistory(input)
+  })
+
+  ipcHandle('pickPostmanCollectionFile', async (_input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [{ name: 'Postman Collections', extensions: ['json'] }],
+    }
+    const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    return Result.Success({ filePath: result.filePaths[0] })
+  })
+
+  ipcHandle('analyzePostmanCollection', async input => {
+    return analyzePostmanCollection(input)
+  })
+
+  ipcHandle('importPostmanCollection', async input => {
+    return importPostmanCollection(input)
   })
 
   TaskManager.addListener(e => {

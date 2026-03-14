@@ -1,4 +1,5 @@
 import vm from 'node:vm'
+import type { HttpAuth } from '../common/Auth.js'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
 import { buildEnvironmentVariableMap } from '../common/RequestVariables.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
@@ -24,6 +25,7 @@ type RuntimeRequestState = {
   url: string
   pathParams: string
   searchParams: string
+  auth: HttpAuth
   headers: string
   body: string
   bodyType: RequestBodyType

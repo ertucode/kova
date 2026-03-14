@@ -1,3 +1,4 @@
+import { getAuthHeaders, getAuthQueryParams, getAuthVariableSources, resolveAuth, resolveInheritedAuth, type HttpAuth } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
 import { extractTemplateVariables, findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
@@ -41,7 +42,8 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
         url: input.url,
         pathParams: input.pathParams,
         searchParams: input.searchParams,
-        headers: input.headers,
+        auth: input.auth,
+        headers: mergeHeaderRows(folders.map(folder => folder.headers), input.headers),
         body: input.body,
         bodyType: input.bodyType,
         rawType: input.rawType,
@@ -71,7 +73,19 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       )
     }
 
-    const url = applySearchParamsToUrl(urlWithPathParams, runtime.request.searchParams, variables)
+    const effectiveAuth = resolveInheritedAuth(
+      folders.map(folder => folder.auth),
+      runtime.request.auth
+    )
+    const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source => findMissingTemplateVariables(source, variables))
+    if (missingAuthVariables.length > 0) {
+      return GenericError.Message(
+        `Missing environment variables: ${Array.from(new Set(missingAuthVariables)).join(', ')}. Define them before sending the request.`
+      )
+    }
+
+    const resolvedAuth = resolveAuth(effectiveAuth, variables)
+    const url = applyAuthToUrl(applySearchParamsToUrl(urlWithPathParams, runtime.request.searchParams, variables), resolvedAuth)
 
     if (!url) {
       return GenericError.Message('Request URL is required')
@@ -89,14 +103,8 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
     }
 
     const headers = new Headers()
-    for (const row of parseKeyValueRows(runtime.request.headers)) {
-      const key = resolveTemplateVariables(row.key, variables).trim()
-      if (!row.enabled || !key) {
-        continue
-      }
-
-      headers.append(key, resolveTemplateVariables(row.value, variables))
-    }
+    applyAuthHeaders(headers, resolvedAuth)
+    applyResolvedHeaders(headers, parseKeyValueRows(runtime.request.headers), variables)
 
     const requestBody = buildRequestBody(runtime.request, headers, variables)
     const sentAt = Date.now()
@@ -193,7 +201,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
 }
 
 function collectMissingVariables(
-  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType'>,
+  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType'>,
   variables: Record<string, string>
 ) {
   const missingVariables = new Set<string>()
@@ -222,6 +230,12 @@ function collectMissingVariables(
     }
 
     for (const variableName of findMissingTemplateVariables(row.value, variables)) {
+      missingVariables.add(variableName)
+    }
+  }
+
+  for (const source of getAuthVariableSources(input.auth)) {
+    for (const variableName of findMissingTemplateVariables(source, variables)) {
       missingVariables.add(variableName)
     }
   }
@@ -316,7 +330,7 @@ function buildRequestBody(
 function buildExecutedRequestSnapshot(input: {
   requestId: string
   requestName: string
-  request: Pick<SendRequestInput, 'method' | 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  request: Pick<SendRequestInput, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   url: string
   headers: Headers
   body: string
@@ -340,7 +354,7 @@ function buildExecutedRequestSnapshot(input: {
 }
 
 function collectUsedVariables(
-  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType'>,
+  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType'>,
   variables: Record<string, string>
 ) {
   const variableNames = new Set<string>()
@@ -369,6 +383,12 @@ function collectUsedVariables(
     }
 
     for (const variableName of extractTemplateVariables(row.value)) {
+      variableNames.add(variableName)
+    }
+  }
+
+  for (const source of getAuthVariableSources(input.auth)) {
+    for (const variableName of extractTemplateVariables(source)) {
       variableNames.add(variableName)
     }
   }
@@ -475,4 +495,63 @@ function collectErrorMessages(error: Error, messages: Set<string>) {
   if (typeof cause === 'string' && cause.trim()) {
     messages.add(cause.trim())
   }
+}
+
+function applyResolvedHeaders(headers: Headers, rows: ReturnType<typeof parseKeyValueRows>, variables: Record<string, string>) {
+  for (const row of rows) {
+    const key = resolveTemplateVariables(row.key, variables).trim()
+    if (!row.enabled || !key) {
+      continue
+    }
+
+    headers.set(key, resolveTemplateVariables(row.value, variables))
+  }
+}
+
+function applyAuthHeaders(headers: Headers, auth: HttpAuth) {
+  for (const entry of getAuthHeaders(auth)) {
+    headers.set(entry.key, entry.value)
+  }
+}
+
+function applyAuthToUrl(url: string, auth: HttpAuth) {
+  const entries = getAuthQueryParams(auth)
+  if (entries.length === 0) {
+    return url
+  }
+
+  const nextUrl = new URL(url)
+  for (const entry of entries) {
+    nextUrl.searchParams.set(entry.key, entry.value)
+  }
+
+  return nextUrl.toString()
+}
+
+function mergeHeaderRows(folderHeaders: string[], requestHeaders: string) {
+  const mergedRows: Array<{ key: string; value: string; enabled: boolean }> = []
+  const pushRows = (value: string) => {
+    for (const row of parseKeyValueRows(value)) {
+      const key = row.key.trim()
+      if (!row.enabled || !key) {
+        continue
+      }
+
+      const existingIndex = mergedRows.findIndex(entry => entry.key.toLowerCase() === key.toLowerCase())
+      const nextEntry = { key: row.key, value: row.value, enabled: row.enabled }
+      if (existingIndex >= 0) {
+        mergedRows[existingIndex] = nextEntry
+      } else {
+        mergedRows.push(nextEntry)
+      }
+    }
+  }
+
+  for (const value of folderHeaders) {
+    pushRows(value)
+  }
+
+  pushRows(requestHeaders)
+
+  return mergedRows.map(row => `${row.key}:${row.value}`).join('\n')
 }

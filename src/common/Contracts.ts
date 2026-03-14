@@ -14,7 +14,16 @@ import {
   type UpdateEnvironmentInput,
 } from './Environments.js'
 import {
+  type CreateRequestExampleInput,
+  type DeleteRequestExampleInput,
+  type GetRequestExampleInput,
+  type MoveRequestExampleInput,
+  type RequestExampleRecord,
+  type UpdateRequestExampleInput,
+} from './RequestExamples.js'
+import {
   type CreateRequestInput,
+  type DuplicateRequestInput,
   type DeleteRequestHistoryEntryInput,
   type DeleteRequestInput,
   type GetRequestInput,
@@ -30,6 +39,13 @@ import { TaskEvents } from './Tasks.js'
 import { GenericEvent } from './GenericEvent.js'
 import { type AsyncStorageKey } from './AsyncStorageKeys.js'
 import { type ExplorerItem, type MoveExplorerItemInput } from './Explorer.js'
+import {
+  type AnalyzePostmanCollectionInput,
+  type AnalyzePostmanCollectionResponse,
+  type ImportPostmanCollectionInput,
+  type ImportPostmanCollectionResponse,
+  type PickPostmanCollectionFileResponse,
+} from './PostmanImport.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -55,6 +71,12 @@ export type EventResponseMapping = {
   getRequest: Promise<GenericResult<HttpRequestRecord>>
   updateRequest: Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: Promise<GenericResult<void>>
+  duplicateRequest: Promise<GenericResult<HttpRequestRecord>>
+  createRequestExample: Promise<GenericResult<RequestExampleRecord>>
+  getRequestExample: Promise<GenericResult<RequestExampleRecord>>
+  updateRequestExample: Promise<GenericResult<RequestExampleRecord>>
+  deleteRequestExample: Promise<GenericResult<void>>
+  moveRequestExample: Promise<GenericResult<void>>
   listEnvironments: Promise<EnvironmentRecord[]>
   createEnvironment: Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: Promise<GenericResult<EnvironmentRecord>>
@@ -64,6 +86,9 @@ export type EventResponseMapping = {
   listRequestHistory: Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: Promise<GenericResult<void>>
   trimRequestHistory: Promise<GenericResult<void>>
+  pickPostmanCollectionFile: Promise<GenericResult<PickPostmanCollectionFileResponse>>
+  analyzePostmanCollection: Promise<GenericResult<AnalyzePostmanCollectionResponse>>
+  importPostmanCollection: Promise<GenericResult<ImportPostmanCollectionResponse>>
 }
 
 export type EventRequestMapping = {
@@ -86,6 +111,12 @@ export type EventRequestMapping = {
   getRequest: GetRequestInput
   updateRequest: UpdateRequestInput
   deleteRequest: DeleteRequestInput
+  duplicateRequest: DuplicateRequestInput
+  createRequestExample: CreateRequestExampleInput
+  getRequestExample: GetRequestExampleInput
+  updateRequestExample: UpdateRequestExampleInput
+  deleteRequestExample: DeleteRequestExampleInput
+  moveRequestExample: MoveRequestExampleInput
   listEnvironments: void
   createEnvironment: CreateEnvironmentInput
   updateEnvironment: UpdateEnvironmentInput
@@ -95,6 +126,9 @@ export type EventRequestMapping = {
   listRequestHistory: ListRequestHistoryInput
   deleteRequestHistoryEntry: DeleteRequestHistoryEntryInput
   trimRequestHistory: TrimRequestHistoryInput
+  pickPostmanCollectionFile: void
+  analyzePostmanCollection: AnalyzePostmanCollectionInput
+  importPostmanCollection: ImportPostmanCollectionInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -127,6 +161,12 @@ export type WindowElectron = {
   getRequest: (input: GetRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   updateRequest: (input: UpdateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<void>>
+  duplicateRequest: (input: DuplicateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
+  createRequestExample: (input: CreateRequestExampleInput) => Promise<GenericResult<RequestExampleRecord>>
+  getRequestExample: (input: GetRequestExampleInput) => Promise<GenericResult<RequestExampleRecord>>
+  updateRequestExample: (input: UpdateRequestExampleInput) => Promise<GenericResult<RequestExampleRecord>>
+  deleteRequestExample: (input: DeleteRequestExampleInput) => Promise<GenericResult<void>>
+  moveRequestExample: (input: MoveRequestExampleInput) => Promise<GenericResult<void>>
   listEnvironments: () => Promise<EnvironmentRecord[]>
   createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: (input: UpdateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
@@ -136,4 +176,7 @@ export type WindowElectron = {
   listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: (input: DeleteRequestHistoryEntryInput) => Promise<GenericResult<void>>
   trimRequestHistory: (input: TrimRequestHistoryInput) => Promise<GenericResult<void>>
+  pickPostmanCollectionFile: () => Promise<GenericResult<PickPostmanCollectionFileResponse>>
+  analyzePostmanCollection: (input: AnalyzePostmanCollectionInput) => Promise<GenericResult<AnalyzePostmanCollectionResponse>>
+  importPostmanCollection: (input: ImportPostmanCollectionInput) => Promise<GenericResult<ImportPostmanCollectionResponse>>
 }

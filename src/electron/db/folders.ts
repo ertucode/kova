@@ -1,4 +1,5 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
+import { createDefaultHttpAuth, parseHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
   CreateFolderInput,
@@ -33,6 +34,8 @@ export async function createFolder(input: CreateFolderInput): Promise<GenericRes
         parentId: input.parentFolderId,
         name,
         description: '',
+        headers: '',
+        authJson: serializeHttpAuth(createDefaultHttpAuth()),
         preRequestScript: '',
         postRequestScript: '',
         position: 0,
@@ -110,6 +113,8 @@ export async function updateFolder(input: UpdateFolderInput): Promise<GenericRes
       .set({
         name,
         description: input.description,
+        headers: input.headers,
+        authJson: serializeHttpAuth(input.auth),
         preRequestScript: input.preRequestScript,
         postRequestScript: input.postRequestScript,
       })
@@ -233,6 +238,8 @@ function toFolderRecord(folder: FolderRow): FolderRecord {
     id: folder.id,
     name: folder.name,
     description: folder.description,
+    headers: folder.headers,
+    auth: parseHttpAuth(folder.authJson),
     preRequestScript: folder.preRequestScript,
     postRequestScript: folder.postRequestScript,
     createdAt: folder.createdAt,

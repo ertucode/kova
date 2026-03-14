@@ -63,6 +63,12 @@ export const folderExplorerTreeStore = createStore({
 
 export function getDeletedItemKeys(items: ExplorerItem[], item: ExplorerItem) {
   if (item.itemType === 'request') {
+    return items.filter(currentItem => (currentItem.itemType === 'example' ? currentItem.requestId === item.id : currentItem.id === item.id && currentItem.itemType === 'request')).map(toSelectionKey)
+      .concat(toSelectionKey(item))
+      .filter((value, index, array) => array.indexOf(value) === index)
+  }
+
+  if (item.itemType === 'example') {
     return [toSelectionKey(item)]
   }
 
@@ -88,7 +94,9 @@ export function getDeletedItemKeys(items: ExplorerItem[], item: ExplorerItem) {
     .filter(currentItem =>
       currentItem.itemType === 'folder'
         ? descendantFolderIds.has(currentItem.id)
-        : currentItem.parentFolderId !== null && descendantFolderIds.has(currentItem.parentFolderId)
+        : currentItem.itemType === 'request'
+          ? currentItem.parentFolderId !== null && descendantFolderIds.has(currentItem.parentFolderId)
+          : items.some(request => request.itemType === 'request' && request.id === currentItem.requestId && descendantFolderIds.has(request.parentFolderId ?? ''))
     )
     .map(currentItem => toSelectionKey(currentItem))
 }

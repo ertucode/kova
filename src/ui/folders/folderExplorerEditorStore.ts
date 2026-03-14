@@ -1,6 +1,7 @@
 import { createStore } from '@xstate/store'
 import { z } from 'zod'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
+import { AUTH_LOCATIONS } from '@common/Auth'
 import type { ExplorerItem } from '@common/Explorer'
 import type { DetailsDraft, Selection } from './folderExplorerTypes'
 import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
@@ -16,7 +17,7 @@ const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 export type SidebarTab = 'requests' | 'environments' | 'history'
 
 const selectionSchema = z.object({
-  itemType: z.union([z.literal('folder'), z.literal('request')]),
+  itemType: z.union([z.literal('folder'), z.literal('request'), z.literal('example')]),
   id: z.string(),
 })
 
@@ -27,10 +28,20 @@ const persistedUiStateSchema = z.object({
   sidebarTab: z.union([z.literal('requests'), z.literal('environments'), z.literal('history'), z.literal('console')]),
 })
 
+const authSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('inherit') }),
+  z.object({ type: z.literal('noauth') }),
+  z.object({ type: z.literal('bearer'), token: z.string() }),
+  z.object({ type: z.literal('apikey'), key: z.string(), value: z.string(), addTo: z.enum(AUTH_LOCATIONS) }),
+  z.object({ type: z.literal('basic'), username: z.string(), password: z.string() }),
+])
+
 const folderDetailsDraftSchema = z.object({
   itemType: z.literal('folder'),
   name: z.string(),
   description: z.string(),
+  headers: z.string().default(''),
+  auth: authSchema.default({ type: 'inherit' }),
   preRequestScript: z.string(),
   postRequestScript: z.string(),
 })
@@ -42,6 +53,7 @@ const requestDetailsDraftSchema = z.object({
   url: z.string(),
   pathParams: z.string().default(''),
   searchParams: z.string().default(''),
+  auth: authSchema.default({ type: 'inherit' }),
   preRequestScript: z.string(),
   postRequestScript: z.string(),
   headers: z.string(),
@@ -50,9 +62,22 @@ const requestDetailsDraftSchema = z.object({
   rawType: z.enum(REQUEST_RAW_TYPES),
 })
 
+const requestExampleDetailsDraftSchema = z.object({
+  itemType: z.literal('example'),
+  name: z.string(),
+  requestHeaders: z.string(),
+  requestBody: z.string(),
+  requestBodyType: z.enum(REQUEST_BODY_TYPES),
+  requestRawType: z.enum(REQUEST_RAW_TYPES),
+  responseStatus: z.number(),
+  responseStatusText: z.string(),
+  responseHeaders: z.string(),
+  responseBody: z.string(),
+})
+
 export const persistedDraftsSchema = z.record(
   z.string(),
-  z.discriminatedUnion('itemType', [folderDetailsDraftSchema, requestDetailsDraftSchema])
+  z.discriminatedUnion('itemType', [folderDetailsDraftSchema, requestDetailsDraftSchema, requestExampleDetailsDraftSchema])
 )
 
 export type EditorEntry = {
@@ -297,8 +322,12 @@ function loadFolderExplorerUiState(): {
 }
 
 function getNextExpandedIds(previousExpandedIds: string[], items: ExplorerItem[]) {
-  const validFolderIds = new Set(items.filter(item => item.itemType === 'folder').map(item => item.id))
-  const nextExpandedIds = previousExpandedIds.filter(id => validFolderIds.has(id))
+  const expandableItemIds = new Set(
+    items
+      .filter(item => item.itemType === 'folder' || item.itemType === 'request')
+      .map(item => item.id)
+  )
+  const nextExpandedIds = previousExpandedIds.filter(id => expandableItemIds.has(id))
 
   if (nextExpandedIds.length > 0) {
     return nextExpandedIds

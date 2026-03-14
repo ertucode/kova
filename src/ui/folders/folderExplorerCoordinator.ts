@@ -1,5 +1,6 @@
 import type { FolderRecord } from '@common/Folders'
 import { errorResponseToMessage } from '@common/GenericError'
+import type { RequestExampleRecord } from '@common/RequestExamples'
 import type { HttpRequestRecord } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
 import { confirmation } from '@/lib/components/confirmation'
@@ -16,7 +17,7 @@ import {
   saveFolderExplorerUiState,
 } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore, getDeletedItemKeys } from './folderExplorerTreeStore'
-import { serializeDetails, toFolderDetailsDraft, toRequestDetailsDraft, toSelectionKey } from './folderExplorerUtils'
+import { serializeDetails, toFolderDetailsDraft, toRequestDetailsDraft, toRequestExampleDetailsDraft, toSelectionKey } from './folderExplorerUtils'
 import type { MoveExplorerItemInput } from '@common/Explorer'
 
 const loadTokens: Record<string, number> = {}
@@ -86,6 +87,23 @@ export namespace FolderExplorerCoordinator {
     await saveItem(selection)
   }
 
+  export async function duplicateSelectedRequest() {
+    const selection = folderExplorerEditorStore.getSnapshot().context.selected
+    if (!selection || selection.itemType !== 'request') {
+      return
+    }
+
+    const result = await getWindowElectron().duplicateRequest({ id: selection.id })
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    await loadItems()
+    selectItem({ itemType: 'request', id: result.data.id })
+    toast.show({ severity: 'success', title: 'Request duplicated', message: `Created ${result.data.name}.` })
+  }
+
   export async function flushSelectedFolder() {
     const state = folderExplorerEditorStore.getSnapshot().context
     const selection = state.selected
@@ -97,7 +115,7 @@ export namespace FolderExplorerCoordinator {
     await saveItem(selection)
   }
 
-  export function startCreate(itemType: ExplorerItem['itemType'], parentFolderId: string | null) {
+  export function startCreate(itemType: Extract<ExplorerItem['itemType'], 'folder' | 'request'>, parentFolderId: string | null) {
     folderExplorerTreeStore.trigger.createStarted({ itemType, parentFolderId })
     if (parentFolderId) {
       folderExplorerEditorStore.trigger.expandedEnsured({ id: parentFolderId })
@@ -145,18 +163,20 @@ export namespace FolderExplorerCoordinator {
   }
 
   export function requestDelete(item: ExplorerItem) {
-    const title = item.itemType === 'folder' ? 'Delete folder?' : 'Delete request?'
-    const message = item.itemType === 'folder' ? `"${item.name}" and all nested items will be deleted.` : `"${item.name}" will be deleted.`
+      const title = item.itemType === 'folder' ? 'Delete folder?' : item.itemType === 'request' ? 'Delete request?' : 'Delete example?'
+      const message = item.itemType === 'folder' ? `"${item.name}" and all nested items will be deleted.` : `"${item.name}" will be deleted.`
 
     confirmation.trigger.confirm({
       title,
       message,
       confirmText: 'Delete',
       onConfirm: async () => {
-        const result =
-          item.itemType === 'folder'
-            ? await getWindowElectron().deleteFolder({ id: item.id })
-            : await getWindowElectron().deleteRequest({ id: item.id })
+          const result =
+            item.itemType === 'folder'
+              ? await getWindowElectron().deleteFolder({ id: item.id })
+              : item.itemType === 'request'
+                ? await getWindowElectron().deleteRequest({ id: item.id })
+                : await getWindowElectron().deleteRequestExample({ id: item.id })
 
         if (!result.success) {
           toast.show(result)
@@ -187,6 +207,16 @@ export namespace FolderExplorerCoordinator {
   }
 
   export async function moveItem(input: MoveExplorerItemInput) {
+    if (input.itemType === 'example') {
+      const result = await getWindowElectron().moveRequestExample({ id: input.id, requestId: input.targetRequestId, targetPosition: input.targetPosition })
+      if (!result.success) {
+        toast.show(result)
+        return false
+      }
+      await loadItems()
+      return true
+    }
+
     const result = await getWindowElectron().moveExplorerItem(input)
 
     if (!result.success) {
@@ -213,7 +243,9 @@ async function loadItem(selection: Selection) {
   const result =
     selection.itemType === 'folder'
       ? await getWindowElectron().getFolder({ id: selection.id })
-      : await getWindowElectron().getRequest({ id: selection.id })
+      : selection.itemType === 'request'
+        ? await getWindowElectron().getRequest({ id: selection.id })
+        : await getWindowElectron().getRequestExample({ id: selection.id })
 
   if (loadTokens[key] !== token) return
 
@@ -223,7 +255,7 @@ async function loadItem(selection: Selection) {
     return
   }
 
-  const serverDraft = toServerDraft(selection, result.data as FolderRecord | HttpRequestRecord)
+  const serverDraft = toServerDraft(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord)
   const currentEntry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
   const current = currentEntry.current && serializeDetails(currentEntry.current) !== serializeDetails(serverDraft) ? currentEntry.current : serverDraft
 
@@ -249,16 +281,20 @@ async function saveItem(selection: Selection) {
           id: selection.id,
           name: draft.name,
           description: draft.description,
+          headers: draft.headers,
+          auth: draft.auth,
           preRequestScript: draft.preRequestScript,
           postRequestScript: draft.postRequestScript,
         })
-      : await getWindowElectron().updateRequest({
+      : draft.itemType === 'request'
+        ? await getWindowElectron().updateRequest({
           id: selection.id,
           name: draft.name,
           method: draft.method,
           url: draft.url,
           pathParams: draft.pathParams,
           searchParams: draft.searchParams,
+          auth: draft.auth,
           preRequestScript: draft.preRequestScript,
           postRequestScript: draft.postRequestScript,
           headers: draft.headers,
@@ -266,6 +302,18 @@ async function saveItem(selection: Selection) {
           bodyType: draft.bodyType,
           rawType: draft.rawType,
         })
+        : await getWindowElectron().updateRequestExample({
+            id: selection.id,
+            name: draft.name,
+            requestHeaders: draft.requestHeaders,
+            requestBody: draft.requestBody,
+            requestBodyType: draft.requestBodyType,
+            requestRawType: draft.requestRawType,
+            responseStatus: draft.responseStatus,
+            responseStatusText: draft.responseStatusText,
+            responseHeaders: draft.responseHeaders,
+            responseBody: draft.responseBody,
+          })
 
   if (saveTokens[key] !== token) return
 
@@ -275,7 +323,7 @@ async function saveItem(selection: Selection) {
     return
   }
 
-  const serverDraft = toServerDraft(selection, result.data as FolderRecord | HttpRequestRecord)
+  const serverDraft = toServerDraft(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord)
   const latestEntry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
   const nextCurrent = latestEntry.current && serializeDetails(latestEntry.current) !== serializeDetails(serverDraft) ? latestEntry.current : serverDraft
 
@@ -309,6 +357,10 @@ function isSameSelection(left: Selection | null, right: Selection | null) {
   return left.id === right.id && left.itemType === right.itemType
 }
 
-function toServerDraft(selection: Selection, value: FolderRecord | HttpRequestRecord) {
-  return selection.itemType === 'folder' ? toFolderDetailsDraft(value as FolderRecord) : toRequestDetailsDraft(value as HttpRequestRecord)
+function toServerDraft(selection: Selection, value: FolderRecord | HttpRequestRecord | RequestExampleRecord) {
+  return selection.itemType === 'folder'
+    ? toFolderDetailsDraft(value as FolderRecord)
+    : selection.itemType === 'request'
+      ? toRequestDetailsDraft(value as HttpRequestRecord)
+      : toRequestExampleDetailsDraft(value as RequestExampleRecord)
 }

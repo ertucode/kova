@@ -1,6 +1,8 @@
+import type { HttpAuth } from '@common/Auth'
 import type { ExplorerItem } from '@common/Explorer'
 import type { FolderRecord } from '@common/Folders'
 import type { KeyValueRow } from '@common/KeyValueRows'
+import type { RequestExampleRecord } from '@common/RequestExamples'
 import type { HttpRequestRecord, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
 
 export type TreeNode = ExplorerItem & {
@@ -9,6 +11,7 @@ export type TreeNode = ExplorerItem & {
 
 export type ExplorerDropTarget = {
   targetParentFolderId: string | null
+  targetRequestId: string | null
   targetPosition: number
   placement: 'before' | 'after' | 'inside'
   indicatorId: string
@@ -29,6 +32,8 @@ export type FolderDetailsDraft = {
   itemType: 'folder'
   name: string
   description: string
+  headers: string
+  auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
 }
@@ -40,6 +45,7 @@ export type RequestDetailsDraft = {
   url: string
   pathParams: string
   searchParams: string
+  auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
   headers: string
@@ -48,7 +54,20 @@ export type RequestDetailsDraft = {
   rawType: RequestRawType
 }
 
-export type DetailsDraft = FolderDetailsDraft | RequestDetailsDraft
+export type RequestExampleDetailsDraft = {
+  itemType: 'example'
+  name: string
+  requestHeaders: string
+  requestBody: string
+  requestBodyType: RequestBodyType
+  requestRawType: RequestRawType
+  responseStatus: number
+  responseStatusText: string
+  responseHeaders: string
+  responseBody: string
+}
+
+export type DetailsDraft = FolderDetailsDraft | RequestDetailsDraft | RequestExampleDetailsDraft
 
 export type HeaderRow = KeyValueRow
 
@@ -58,4 +77,4 @@ export const REQUEST_BODY_TYPES: RequestBodyType[] = ['none', 'raw', 'form-data'
 
 export const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
 
-export type DetailEntity = FolderRecord | HttpRequestRecord
+export type DetailEntity = FolderRecord | HttpRequestRecord | RequestExampleRecord

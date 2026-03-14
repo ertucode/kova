@@ -1,8 +1,10 @@
+import { createDefaultHttpAuth, parseHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
 import { and, eq, isNull } from 'drizzle-orm'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
   CreateRequestInput,
   DeleteRequestInput,
+  DuplicateRequestInput,
   GetRequestInput,
   HttpRequestRecord,
   RequestBodyType,
@@ -12,8 +14,9 @@ import type {
 } from '../../common/Requests.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
-import { requests } from './schema.js'
-import { ensureParentFolderExists, insertTreeItem, markTreeItemDeleted } from './tree-items.js'
+import { markRequestExamplesDeleted } from './request-examples.js'
+import { requests, treeItems } from './schema.js'
+import { ensureParentFolderExists, insertTreeItem, insertTreeItemAtPosition, markTreeItemDeleted } from './tree-items.js'
 
 type RequestRow = typeof requests.$inferSelect
 
@@ -41,6 +44,7 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         url: '',
         pathParams: '',
         searchParams: '',
+        authJson: serializeHttpAuth(createDefaultHttpAuth()),
         preRequestScript: '',
         postRequestScript: '',
         headers: '',
@@ -111,6 +115,7 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
         url: input.url,
         pathParams: input.pathParams,
         searchParams: input.searchParams,
+        authJson: serializeHttpAuth(input.auth),
         preRequestScript: input.preRequestScript,
         postRequestScript: input.postRequestScript,
         headers: input.headers,
@@ -157,7 +162,74 @@ export async function deleteRequest(input: DeleteRequestInput): Promise<GenericR
     }
 
     markTreeItemDeleted(db, { itemType: 'request', itemId: input.id, deletedAt: now })
+    markRequestExamplesDeleted(input.id, now)
     return Result.Success(undefined)
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
+export async function duplicateRequest(input: DuplicateRequestInput): Promise<GenericResult<HttpRequestRecord>> {
+  const db = getDb()
+
+  try {
+    const duplicated = db.transaction(tx => {
+      const sourceRequest = tx
+        .select()
+        .from(requests)
+        .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
+        .get()
+
+      if (!sourceRequest) {
+        throw new Error('Request not found')
+      }
+
+      const sourceTreeItem = tx
+        .select({ rowId: treeItems.id, parentFolderId: treeItems.parentFolderId, position: treeItems.position })
+        .from(treeItems)
+        .where(and(eq(treeItems.itemType, 'request'), eq(treeItems.itemId, input.id), isNull(treeItems.deletedAt)))
+        .get()
+
+      if (!sourceTreeItem) {
+        throw new Error('Request tree item not found')
+      }
+
+      const siblingTreeItems = tx
+        .select({ rowId: treeItems.id })
+        .from(treeItems)
+        .where(
+          sourceTreeItem.parentFolderId
+            ? and(eq(treeItems.parentFolderId, sourceTreeItem.parentFolderId), isNull(treeItems.deletedAt))
+            : and(isNull(treeItems.parentFolderId), isNull(treeItems.deletedAt))
+        )
+        .orderBy(treeItems.position, treeItems.createdAt)
+        .all()
+      const sourceIndex = siblingTreeItems.findIndex(sibling => sibling.rowId === sourceTreeItem.rowId)
+
+      if (sourceIndex < 0) {
+        throw new Error('Request tree item order not found')
+      }
+
+      const now = Date.now()
+      const request: RequestRow = {
+        ...sourceRequest,
+        id: crypto.randomUUID(),
+        name: buildDuplicateRequestName(tx, sourceTreeItem.parentFolderId, sourceRequest.name),
+        createdAt: now,
+        deletedAt: null,
+      }
+
+      tx.insert(requests).values(request).run()
+      insertTreeItemAtPosition(tx, {
+        parentFolderId: sourceTreeItem.parentFolderId,
+        itemType: 'request',
+        itemId: request.id,
+        position: sourceIndex + 1,
+      })
+      return request
+    })
+
+    return Result.Success(toRequestRecord(duplicated))
   } catch (error) {
     return GenericError.Unknown(error)
   }
@@ -171,6 +243,7 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     url: request.url,
     pathParams: request.pathParams,
     searchParams: request.searchParams,
+    auth: parseHttpAuth(request.authJson),
     preRequestScript: request.preRequestScript,
     postRequestScript: request.postRequestScript,
     headers: request.headers,
@@ -180,4 +253,28 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     createdAt: request.createdAt,
     deletedAt: request.deletedAt,
   }
+}
+
+function buildDuplicateRequestName(db: ReturnType<typeof getDb>, parentFolderId: string | null, sourceName: string) {
+  const siblingRequestNames = db
+    .select({ name: requests.name })
+    .from(requests)
+    .innerJoin(treeItems, and(eq(treeItems.itemId, requests.id), eq(treeItems.itemType, 'request'), isNull(treeItems.deletedAt)))
+    .where(
+      and(
+        isNull(requests.deletedAt),
+        parentFolderId ? eq(treeItems.parentFolderId, parentFolderId) : isNull(treeItems.parentFolderId)
+      )
+    )
+    .all()
+    .map(row => row.name)
+
+  const baseName = sourceName.replace(/ \(\d+\)$/u, '')
+  let index = 2
+
+  while (siblingRequestNames.includes(`${baseName} (${index})`)) {
+    index += 1
+  }
+
+  return `${baseName} (${index})`
 }

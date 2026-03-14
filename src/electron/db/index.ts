@@ -18,7 +18,7 @@ export function initializeDatabase(options: { dbPath: string; migrationsPath: st
     migrate(drizzleDb, { migrationsFolder: migrationsPath });
   }
 
-  ensureRequestParamColumns(sqlite)
+  ensureFolderAndRequestColumns(sqlite)
 
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS environments (
@@ -37,7 +37,16 @@ export function initializeDatabase(options: { dbPath: string; migrationsPath: st
   return db;
 }
 
-function ensureRequestParamColumns(sqlite: Database.Database) {
+function ensureFolderAndRequestColumns(sqlite: Database.Database) {
+  const folderColumns = sqlite.prepare("PRAGMA table_info(folders)").all() as Array<{ name: string }>;
+  if (!folderColumns.some((column) => column.name === 'headers')) {
+    sqlite.exec("ALTER TABLE folders ADD COLUMN headers text NOT NULL DEFAULT '';")
+  }
+
+  if (!folderColumns.some((column) => column.name === 'auth_json')) {
+    sqlite.exec("ALTER TABLE folders ADD COLUMN auth_json text NOT NULL DEFAULT '{\"type\":\"inherit\"}';")
+  }
+
   const columns = sqlite.prepare("PRAGMA table_info(requests)").all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'path_params')) {
     sqlite.exec("ALTER TABLE requests ADD COLUMN path_params text NOT NULL DEFAULT '';")
@@ -45,6 +54,10 @@ function ensureRequestParamColumns(sqlite: Database.Database) {
 
   if (!columns.some((column) => column.name === 'search_params')) {
     sqlite.exec("ALTER TABLE requests ADD COLUMN search_params text NOT NULL DEFAULT '';")
+  }
+
+  if (!columns.some((column) => column.name === 'auth_json')) {
+    sqlite.exec("ALTER TABLE requests ADD COLUMN auth_json text NOT NULL DEFAULT '{\"type\":\"inherit\"}';")
   }
 }
 

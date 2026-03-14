@@ -1,7 +1,11 @@
+import type { HttpAuth } from './Auth.js'
+
 export type FolderRecord = {
   id: string
   name: string
   description: string
+  headers: string
+  auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
   createdAt: number
@@ -26,6 +30,8 @@ export type UpdateFolderInput = {
   id: string
   name: string
   description: string
+  headers: string
+  auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
 }

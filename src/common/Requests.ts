@@ -1,3 +1,4 @@
+import type { HttpAuth } from './Auth.js'
 import type { EnvironmentRecord } from './Environments.js'
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
@@ -13,6 +14,7 @@ export type HttpRequestRecord = {
   url: string
   pathParams: string
   searchParams: string
+  auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
   headers: string
@@ -39,6 +41,7 @@ export type UpdateRequestInput = {
   url: string
   pathParams: string
   searchParams: string
+  auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
   headers: string
@@ -51,12 +54,17 @@ export type DeleteRequestInput = {
   id: string
 }
 
+export type DuplicateRequestInput = {
+  id: string
+}
+
 export type SendRequestInput = {
   requestId: string
   method: RequestMethod
   url: string
   pathParams: string
   searchParams: string
+  auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
   headers: string

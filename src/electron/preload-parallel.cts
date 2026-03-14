@@ -40,6 +40,12 @@ electron.contextBridge.exposeInMainWorld('electron', {
   getRequest: input => ipcInvoke('getRequest', input),
   updateRequest: input => ipcInvoke('updateRequest', input),
   deleteRequest: input => ipcInvoke('deleteRequest', input),
+  duplicateRequest: input => ipcInvoke('duplicateRequest', input),
+  createRequestExample: input => ipcInvoke('createRequestExample', input),
+  getRequestExample: input => ipcInvoke('getRequestExample', input),
+  updateRequestExample: input => ipcInvoke('updateRequestExample', input),
+  deleteRequestExample: input => ipcInvoke('deleteRequestExample', input),
+  moveRequestExample: input => ipcInvoke('moveRequestExample', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
 } satisfies Partial<WindowElectron>)
 

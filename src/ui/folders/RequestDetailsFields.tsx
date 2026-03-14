@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
+import { getAuthVariableSources } from '@common/Auth'
 import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
 import { syncPathParamsWithUrl, syncSearchParamsWithUrl, syncUrlWithPathParams, syncUrlWithSearchParams } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
+import { toast } from '@/lib/components/toast'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { HeadersEditor } from './HeadersEditor'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
@@ -21,6 +23,7 @@ import { variableAutocompleteExtension, type VariableAutocompleteItem } from './
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
+import { AuthorizationEditor } from './AuthorizationEditor'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -167,11 +170,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           ...parseKeyValueRows(draft.searchParams).flatMap(row =>
             row.enabled ? [...extractTemplateVariables(row.key), ...extractTemplateVariables(row.value)] : []
           ),
+          ...getAuthVariableSources(draft.auth).flatMap(extractTemplateVariables),
           ...extractTemplateVariables(draft.headers),
           ...extractTemplateVariables(draft.body),
         ])
       ),
-    [draft.body, draft.headers, draft.pathParams, draft.searchParams, draft.url]
+    [draft.auth, draft.body, draft.headers, draft.pathParams, draft.searchParams, draft.url]
   )
 
   const formattedResponseBody = useMemo(() => {
@@ -243,6 +247,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       url: latestDraft.url,
       pathParams: latestDraft.pathParams,
       searchParams: latestDraft.searchParams,
+      auth: latestDraft.auth,
       preRequestScript: latestDraft.preRequestScript,
       postRequestScript: latestDraft.postRequestScript,
       headers: latestDraft.headers,
@@ -280,6 +285,34 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     setIsResizingResponsePane(true)
     document.body.style.cursor = 'ns-resize'
     document.body.style.userSelect = 'none'
+  }
+
+  const saveCurrentResponseAsExample = async () => {
+    if (!selectedRequestId || !response) {
+      return
+    }
+
+    const result = await getWindowElectron().createRequestExample({
+      requestId: selectedRequestId,
+      name: `${draft.name} ${response.status}`,
+      requestHeaders: draft.headers,
+      requestBody: draft.body,
+      requestBodyType: draft.bodyType,
+      requestRawType: draft.rawType,
+      responseStatus: response.status,
+      responseStatusText: response.statusText,
+      responseHeaders: response.headers,
+      responseBody: response.body,
+    })
+
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    await FolderExplorerCoordinator.loadItems()
+    FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
+    toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${draft.name}.` })
   }
 
   const updateUrl = (nextUrl: string) => {
@@ -425,6 +458,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </div>
 
         <div className="flex min-h-0 flex-col overflow-y-auto md:border-l md:border-base-content/10">
+          <AuthorizationEditor
+            value={draft.auth}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
+            allowInherit
+            valueEditorExtensions={variableEditorExtensions}
+          />
+
           <HeadersEditor
             value={draft.headers}
             valueEditorExtensions={variableEditorExtensions}
@@ -498,7 +538,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               description="Response body will appear here."
               contentType={responseContentType}
             />
-            <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
+            <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined} />
           </div>
         </div>
       </section>
@@ -595,12 +635,31 @@ function ResponseBodyPanel({
   )
 }
 
-function ResponseHeadersPanel({ value, description }: { value: string; description: string }) {
+function ResponseHeadersPanel({
+  value,
+  description,
+  onSaveAsExample,
+}: {
+  value: string
+  description: string
+  onSaveAsExample?: () => void
+}) {
   const rows = parseResponseHeaders(value)
 
   return (
     <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 p-2">
-      <div className="text-sm font-medium text-base-content">Headers</div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-medium text-base-content">Headers</div>
+        {onSaveAsExample ? (
+          <button
+            type="button"
+            className="rounded-lg border border-base-content/10 bg-base-100/70 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
+            onClick={onSaveAsExample}
+          >
+            Save as Example
+          </button>
+        ) : null}
+      </div>
 
       {rows.length > 0 ? (
         <div className="mt-3 overflow-auto">

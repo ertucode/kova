@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { ChevronDownIcon, ChevronRightIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, SaveIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
 import type { RequestConsoleEntry, RequestExecutionRecord } from '@common/Requests'
+import { getWindowElectron } from '@/getWindowElectron'
+import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
+import { toast } from '@/lib/components/toast'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 
 export function HistoryPanel() {
@@ -161,20 +164,34 @@ function ExecutionCard({ execution }: { execution: RequestExecutionRecord }) {
             </div>
           </div>
         </button>
-        <button
-          type="button"
-          className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
-          onClick={event => {
-            event.stopPropagation()
-            void RequestExecutionCoordinator.deleteHistoryEntry(execution.id).catch(error => {
-              console.error('deleteHistoryEntry failed', error)
-            })
-          }}
-          aria-label="Delete history entry"
-          title="Delete history entry"
-        >
-          <Trash2Icon className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
+            onClick={event => {
+              event.stopPropagation()
+              void saveExecutionAsExample(execution)
+            }}
+            aria-label="Save as example"
+            title="Save as Example"
+          >
+            <SaveIcon className="size-4" />
+          </button>
+          <button
+            type="button"
+            className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
+            onClick={event => {
+              event.stopPropagation()
+              void RequestExecutionCoordinator.deleteHistoryEntry(execution.id).catch(error => {
+                console.error('deleteHistoryEntry failed', error)
+              })
+            }}
+            aria-label="Delete history entry"
+            title="Delete history entry"
+          >
+            <Trash2Icon className="size-4" />
+          </button>
+        </div>
       </div>
 
       {expanded ? (
@@ -308,6 +325,34 @@ function ExecutionResponseSection({
       </div>
     </div>
   )
+}
+
+async function saveExecutionAsExample(execution: RequestExecutionRecord) {
+  if (!execution.response) {
+    return
+  }
+
+  const result = await getWindowElectron().createRequestExample({
+    requestId: execution.requestId,
+    name: `${execution.requestName} ${execution.response.status}`,
+    requestHeaders: execution.request.headers,
+    requestBody: execution.request.body,
+    requestBodyType: execution.request.bodyType,
+    requestRawType: execution.request.rawType,
+    responseStatus: execution.response.status,
+    responseStatusText: execution.response.statusText,
+    responseHeaders: execution.response.headers,
+    responseBody: execution.response.body,
+  })
+
+  if (!result.success) {
+    toast.show(result)
+    return
+  }
+
+  await FolderExplorerCoordinator.loadItems()
+  FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
+  toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${execution.requestName}.` })
 }
 
 function ExecutionSubsection({ title, value }: { title: string; value: string }) {
