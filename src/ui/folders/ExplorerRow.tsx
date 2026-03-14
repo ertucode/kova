@@ -111,13 +111,15 @@ export function ExplorerRow({
         </button>
 
         <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
-          {node.itemType === 'folder' ? (
-            <FolderIcon className="size-4 shrink-0 text-base-content/55" />
-          ) : node.itemType === 'request' ? (
-            <RequestMethodTag method={node.method} />
-          ) : (
-            <CopyIcon className="size-4 shrink-0 text-base-content/55" />
-          )}
+          <div className="w-8 shrink-0 flex items-center justify-center">
+            {node.itemType === 'folder' ? (
+              <FolderIcon className="size-4 shrink-0 text-base-content/55" />
+            ) : node.itemType === 'request' ? (
+              <RequestMethodTag method={node.method} />
+            ) : (
+              <CopyIcon className="size-4 shrink-0 text-base-content/55" />
+            )}
+          </div>
           <div className="min-w-0 flex-1 truncate px-1 text-sm text-base-content">{node.name}</div>
           {isItemDirty ? (
             <div
