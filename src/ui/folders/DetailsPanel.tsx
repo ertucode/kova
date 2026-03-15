@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { CopyIcon, FileCode2Icon, FolderIcon } from 'lucide-react'
+import { CopyIcon, FileCode2Icon, FolderIcon, RotateCcwIcon } from 'lucide-react'
 import { FolderDetailsFields } from './FolderDetailsFields'
 import { RequestExampleDetailsFields } from './RequestExampleDetailsFields'
 import { RequestDetailsFields } from './RequestDetailsFields'
@@ -113,17 +113,35 @@ export function DetailsPanel() {
 
 function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: boolean }) {
   return (
-    <div
-      className={[
-        'size-2.5 shrink-0 rounded-full transition mr-4',
-        isSaving ? 'bg-info shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-info)_18%,transparent)]' : '',
-        !isSaving && isDirty
-          ? 'bg-warning shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-warning)_18%,transparent)]'
-          : '',
-        !isSaving && !isDirty ? 'bg-base-content/12' : '',
-      ].join(' ')}
-      aria-label={isSaving ? 'Saving request' : isDirty ? 'Request has unsaved changes' : 'Request is saved'}
-      title={isSaving ? 'Saving request' : isDirty ? 'Request has unsaved changes' : 'Request is saved'}
-    />
+    <div className="group relative mr-4 flex shrink-0 items-center">
+      <div
+        className={[
+          'size-2.5 shrink-0 rounded-full transition',
+          isSaving ? 'bg-info shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-info)_18%,transparent)]' : '',
+          !isSaving && isDirty
+            ? 'bg-warning shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-warning)_18%,transparent)]'
+            : '',
+          !isSaving && !isDirty ? 'bg-base-content/12' : '',
+        ].join(' ')}
+        aria-label={isSaving ? 'Saving request' : isDirty ? 'Request has unsaved changes' : 'Request is saved'}
+        title={isSaving ? 'Saving request' : isDirty ? 'Request has unsaved changes' : 'Request is saved'}
+      />
+
+      {!isSaving && isDirty ? (
+        <>
+          <button
+            type="button"
+            className="pointer-events-none absolute right-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-warning/25 bg-base-100 px-2.5 py-1.5 text-[11px] font-semibold text-base-content/70 opacity-0 shadow-[0_14px_30px_rgba(0,0,0,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:border-warning/40 hover:bg-warning/6 hover:text-base-content focus:pointer-events-auto focus:opacity-100"
+            onClick={() => FolderExplorerCoordinator.discardSelectedChanges()}
+            title="Remove unsaved changes"
+          >
+            <span className="flex size-5 items-center justify-center rounded-full bg-warning/12 text-warning">
+              <RotateCcwIcon className="size-3" />
+            </span>
+            <span>Remove unsaved changes</span>
+          </button>
+        </>
+      ) : null}
+    </div>
   )
 }

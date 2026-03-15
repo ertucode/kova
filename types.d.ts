@@ -11,3 +11,14 @@ type $Branded<T, K extends string> = T & { __brand: K };
 type $DistributiveOmit<T, K extends PropertyKey> = T extends any
   ? Omit<T, K>
   : never;
+
+declare module 'parse-curl' {
+  type ParsedCurl = {
+    method?: string;
+    url?: string;
+    header?: Record<string, string>;
+    body?: string;
+  };
+
+  export default function parseCurl(value: string): ParsedCurl | undefined;
+}

@@ -128,6 +128,7 @@ export function CodeEditor({
   compact,
   size = 'normal',
   hideFocusOutline,
+  onPasteText,
   onChange,
   onBlur,
 }: {
@@ -141,6 +142,7 @@ export function CodeEditor({
   compact?: boolean
   size?: 'normal' | 'small'
   hideFocusOutline?: boolean
+  onPasteText?: (text: string) => boolean
   onChange: (value: string) => void
   onBlur?: () => void
 }) {
@@ -234,12 +236,33 @@ export function CodeEditor({
       )
     }
 
+    if (onPasteText) {
+      nextExtensions.push(
+        EditorView.domEventHandlers({
+          paste(event) {
+            const text = event.clipboardData?.getData('text/plain')
+            if (!text) {
+              return false
+            }
+
+            const handled = onPasteText(text)
+            if (handled) {
+              event.preventDefault()
+              return true
+            }
+
+            return false
+          },
+        })
+      )
+    }
+
     if (extensions) {
       nextExtensions.push(...extensions)
     }
 
     return nextExtensions
-  }, [compact, extensions, hideFocusOutline, language, placeholder, singleLine, size])
+  }, [compact, extensions, hideFocusOutline, language, onPasteText, placeholder, singleLine, size])
 
   return (
     <div

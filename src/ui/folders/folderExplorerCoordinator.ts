@@ -237,6 +237,16 @@ export namespace FolderExplorerCoordinator {
     persistUnsavedDrafts()
   }
 
+  export function discardSelectedChanges() {
+    const selection = folderExplorerEditorStore.getSnapshot().context.selected
+    if (!selection) {
+      return
+    }
+
+    folderExplorerEditorStore.trigger.entryResetToBase({ key: toSelectionKey(selection) })
+    persistUnsavedDrafts()
+  }
+
   export async function saveSelectedItem() {
     const selection = folderExplorerEditorStore.getSnapshot().context.selected
     if (!selection) return

@@ -70,6 +70,7 @@
     "lucide-react": "^0.554.0",
     "music-metadata": "^11.10.3",
     "os-utils": "^0.0.14",
+    "parse-curl": "^0.2.6",
     "picomatch": "^4.0.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

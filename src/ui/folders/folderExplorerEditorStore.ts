@@ -256,6 +256,26 @@ export const folderExplorerEditorStore = createStore({
         },
       }
     },
+    entryResetToBase: (context, event: { key: string }) => {
+      const entry = context.entries[event.key] ?? createEmptyEntry()
+      if (!entry.base) {
+        return context
+      }
+
+      return {
+        ...context,
+        entries: {
+          ...context.entries,
+          [event.key]: {
+            ...entry,
+            current: entry.base,
+            saving: false,
+            error: null,
+            version: entry.version + 1,
+          },
+        },
+      }
+    },
     entrySavingStarted: (context, event: { key: string }) => ({
       ...context,
       entries: {

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
+import { getAuthVariableSources } from '@common/Auth'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
+import { parseCurlRequest } from '@common/curl'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
-import { buildEnvironmentVariableMap } from '@common/RequestVariables'
+import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
 import { syncPathParamsWithUrl, syncSearchParamsWithUrl, syncUrlWithPathParams, syncUrlWithSearchParams } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -169,6 +171,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
   const hasPreRequestScript = draft.preRequestScript.trim().length > 0
   const hasPostRequestScript = draft.postRequestScript.trim().length > 0
+  const usedVariableNames = useMemo(() => getUsedRequestVariableNames(draft), [draft])
 
   useEffect(() => {
     const clampedHeight = clampResponsePaneHeight(responsePaneHeight)
@@ -330,6 +333,29 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     })
   }
 
+  const handleUrlPaste = (value: string) => {
+    const parsedCurl = parseCurlRequest(value)
+    if (!parsedCurl) {
+      return false
+    }
+
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...draft,
+      method: parsedCurl.method,
+      url: parsedCurl.url,
+      pathParams: parsedCurl.pathParams,
+      searchParams: parsedCurl.searchParams,
+      auth: parsedCurl.auth,
+      headers: parsedCurl.headers,
+      body: parsedCurl.body,
+      bodyType: parsedCurl.bodyType,
+      rawType: parsedCurl.rawType,
+    })
+
+    toast.show({ severity: 'success', title: 'Imported cURL', message: 'Updated request fields from pasted cURL command.' })
+    return true
+  }
+
   const updatePathParams = (nextPathParams: string) => {
     FolderExplorerCoordinator.updateSelectedDraft({
       ...draft,
@@ -389,6 +415,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               className="min-w-0 flex-1 border-0"
               placeholder="https://api.example.com/users/:userId"
               extensions={urlEditorExtensions}
+              onPasteText={handleUrlPaste}
               onChange={updateUrl}
             />
 
@@ -406,7 +433,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         <VariableUsageBanner
           metaTab={metaTab}
           onMetaTabChange={setMetaTab}
-          activeVariableNames={activeEnvironmentVariableNames}
+          usedVariableNames={usedVariableNames}
           hasPreRequestScript={hasPreRequestScript}
           hasPostRequestScript={hasPostRequestScript}
         />
@@ -607,13 +634,13 @@ function ResponseScriptErrors({ errors }: { errors: SendRequestResponse['scriptE
 function VariableUsageBanner({
   metaTab,
   onMetaTabChange,
-  activeVariableNames,
+  usedVariableNames,
   hasPreRequestScript,
   hasPostRequestScript,
 }: {
   metaTab: 'overview' | 'search-params' | 'scripts'
   onMetaTabChange: (tab: 'overview' | 'search-params' | 'scripts') => void
-  activeVariableNames: string[]
+  usedVariableNames: string[]
   hasPreRequestScript: boolean
   hasPostRequestScript: boolean
 }) {
@@ -663,11 +690,35 @@ function VariableUsageBanner({
         </button>
       </div>
 
-      <div className="ml-auto truncate px-3 text-right">
-        {activeVariableNames.length > 0 ? `Vars: ${activeVariableNames.join(', ')}` : 'No active vars'}
+      <div className="ml-auto max-w-[60%] overflow-auto px-3 text-right whitespace-nowrap [scrollbar-width:thin]">
+        {usedVariableNames.length > 0 ? `Vars: ${usedVariableNames.join(', ')}` : 'No vars used'}
       </div>
     </div>
   )
+}
+
+function getUsedRequestVariableNames(draft: RequestDetailsDraft) {
+  const variableNames = new Set<string>()
+
+  const collect = (value: string) => {
+    for (const variableName of extractTemplateVariables(value)) {
+      variableNames.add(variableName)
+    }
+  }
+
+  collect(draft.url)
+  collect(draft.pathParams)
+  collect(draft.searchParams)
+  collect(draft.headers)
+  collect(draft.body)
+  collect(draft.preRequestScript)
+  collect(draft.postRequestScript)
+
+  for (const source of getAuthVariableSources(draft.auth)) {
+    collect(source)
+  }
+
+  return Array.from(variableNames).sort((left, right) => left.localeCompare(right))
 }
 
 function MethodBadge({ method }: { method: RequestMethod }) {
