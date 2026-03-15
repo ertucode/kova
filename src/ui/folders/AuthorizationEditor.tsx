@@ -4,6 +4,7 @@ import type { HttpAuth } from '@common/Auth'
 import { AUTH_LOCATIONS, AUTH_TYPES, AUTH_TYPES_WITHOUT_INHERIT } from '@common/Auth'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { CodeEditor } from './CodeEditor'
+import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 export function AuthorizationEditor({
   value,
@@ -23,7 +24,7 @@ export function AuthorizationEditor({
 
   return (
     <section className="w-full border-b border-base-content/10">
-      <div className="pl-2 py-2 text-[0.78rem] font-semibold text-base-content">Authorization</div>
+      <DetailsSectionHeader title="Authorization" />
 
       <div className="border border-base-content/10 bg-base-100/35 p-3">
         <DropdownSelect

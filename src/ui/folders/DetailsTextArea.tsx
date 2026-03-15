@@ -1,5 +1,6 @@
 import type { Extension } from '@codemirror/state'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
+import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 export function DetailsTextArea({
   label,
@@ -26,7 +27,7 @@ export function DetailsTextArea({
 }) {
   return (
     <section className={['w-full border-b border-base-content/10', sectionClassName].filter(Boolean).join(' ')}>
-      {label ? <div className="p-2 text-sm font-semibold text-base-content">{label}</div> : null}
+      {label ? <DetailsSectionHeader title={label} /> : null}
       {editorLanguage ? (
         <CodeEditor
           value={value}

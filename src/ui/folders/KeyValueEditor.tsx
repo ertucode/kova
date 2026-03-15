@@ -4,6 +4,7 @@ import type { Extension } from '@codemirror/state'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { CodeEditor } from './CodeEditor'
+import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 type KeyValueEditorProps = {
   label: string | null
@@ -15,6 +16,7 @@ type KeyValueEditorProps = {
   valueEditorExtensions?: Extension[]
   valueEditorAsCode?: boolean
   warnOnDuplicate?: boolean
+  contentClassName?: string
 }
 
 export function KeyValueEditor({
@@ -27,6 +29,7 @@ export function KeyValueEditor({
   valueEditorExtensions,
   valueEditorAsCode = false,
   warnOnDuplicate = true,
+  contentClassName,
 }: KeyValueEditorProps) {
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
   const [isBulkEditMode, setIsBulkEditMode] = useState(false)
@@ -84,9 +87,9 @@ export function KeyValueEditor({
 
   return (
     <section className="w-full border-b border-base-content/10">
-      {label ? <div className="pl-2 py-2 text-[0.78rem] font-semibold text-base-content">{label}</div> : null}
+      {label ? <DetailsSectionHeader title={label} /> : null}
 
-      <div className="overflow-hidden border border-base-content/10 bg-base-100/35">
+      <div className={['overflow-hidden border border-base-content/10 bg-base-100/35', contentClassName].filter(Boolean).join(' ')}>
         {isBulkEditMode ? (
           <div className="flex flex-col">
             <div className="flex items-center justify-between gap-3 border-b border-base-content/10 bg-base-100/70 px-3 py-2">

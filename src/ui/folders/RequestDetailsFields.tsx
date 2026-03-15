@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
-import { getAuthVariableSources } from '@common/Auth'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
-import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
+import { buildEnvironmentVariableMap } from '@common/RequestVariables'
 import { syncPathParamsWithUrl, syncSearchParamsWithUrl, syncUrlWithPathParams, syncUrlWithSearchParams } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -25,10 +24,12 @@ import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { AuthorizationEditor } from './AuthorizationEditor'
+import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
+  const [metaTab, setMetaTab] = useState<'overview' | 'search-params' | 'scripts'>('overview')
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
@@ -160,29 +161,14 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [activeEnvironmentNames, activeEnvironmentVariableNames]
   )
 
-  const referencedVariables = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...extractTemplateVariables(draft.url),
-          ...parseKeyValueRows(draft.pathParams).flatMap(row => (row.enabled ? extractTemplateVariables(row.value) : [])),
-          ...parseKeyValueRows(draft.searchParams).flatMap(row =>
-            row.enabled ? [...extractTemplateVariables(row.key), ...extractTemplateVariables(row.value)] : []
-          ),
-          ...getAuthVariableSources(draft.auth).flatMap(extractTemplateVariables),
-          ...extractTemplateVariables(draft.headers),
-          ...extractTemplateVariables(draft.body),
-        ])
-      ),
-    [draft.auth, draft.body, draft.headers, draft.pathParams, draft.searchParams, draft.url]
-  )
-
   const formattedResponseBody = useMemo(() => {
     if (!response) return ''
     return formatResponseBody(response.body, response.headers)
   }, [response])
 
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
+  const hasPreRequestScript = draft.preRequestScript.trim().length > 0
+  const hasPostRequestScript = draft.postRequestScript.trim().length > 0
 
   useEffect(() => {
     const clampedHeight = clampResponsePaneHeight(responsePaneHeight)
@@ -190,6 +176,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       folderExplorerEditorStore.trigger.responsePaneHeightChanged({ height: clampedHeight })
     }
   }, [responsePaneHeight])
+
+  useEffect(() => {
+    setMetaTab('overview')
+  }, [selectedRequestId])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -414,127 +404,145 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </div>
 
         <VariableUsageBanner
-          activeEnvironmentNames={activeEnvironmentNames}
-          referencedVariables={referencedVariables}
+          metaTab={metaTab}
+          onMetaTabChange={setMetaTab}
+          activeVariableNames={activeEnvironmentVariableNames}
+          hasPreRequestScript={hasPreRequestScript}
+          hasPostRequestScript={hasPostRequestScript}
         />
       </section>
 
-      <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
-          <div className="flex h-full min-h-0 flex-col border-b border-base-content/10">
-            <div className="flex items-center gap-3">
-              <div className="pl-2 text-sm font-semibold text-base-content">Body</div>
-              <DropdownSelect
-                value={draft.bodyType}
-                className="w-[182px]"
-                triggerClassName="h-8 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-xs font-medium capitalize"
-                menuClassName="w-[220px]"
-                options={REQUEST_BODY_TYPES.map(option => ({
-                  value: option,
-                  label: <span className="capitalize">{option}</span>,
-                }))}
-                onChange={value =>
-                  FolderExplorerCoordinator.updateSelectedDraft({
-                    ...draft,
-                    bodyType: value as RequestBodyType,
-                  })
+      {metaTab === 'overview' ? (
+        <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
+            <div className="flex h-full min-h-0 flex-col">
+              <DetailsSectionHeader
+                title="Body"
+                actions={
+                  <>
+                <DropdownSelect
+                  value={draft.bodyType}
+                  className="w-[100px]"
+                  triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium capitalize"
+                  menuClassName="w-[220px]"
+                  options={REQUEST_BODY_TYPES.map(option => ({
+                    value: option,
+                    label: <span className="capitalize">{option}</span>,
+                  }))}
+                  onChange={value =>
+                    FolderExplorerCoordinator.updateSelectedDraft({
+                      ...draft,
+                      bodyType: value as RequestBodyType,
+                    })
+                  }
+                />
+                <DropdownSelect
+                  value={draft.rawType}
+                  className={`w-[120px] ${draft.bodyType !== 'raw' ? 'pointer-events-none opacity-45' : ''}`}
+                  triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase"
+                  menuClassName="w-[180px]"
+                  options={REQUEST_RAW_TYPES.map(option => ({
+                    value: option,
+                    label: <span className="uppercase">{option}</span>,
+                  }))}
+                  onChange={value =>
+                    FolderExplorerCoordinator.updateSelectedDraft({
+                      ...draft,
+                      rawType: value as RequestRawType,
+                    })
+                  }
+                />
+                {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
+                  <button
+                    type="button"
+                    className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
+                    onClick={formatJsonBody}
+                  >
+                    Format
+                  </button>
+                ) : null}
+                  </>
                 }
               />
-              <DropdownSelect
-                value={draft.rawType}
-                className={`w-[120px] ${draft.bodyType !== 'raw' ? 'pointer-events-none opacity-45' : ''}`}
-                triggerClassName="h-8 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase"
-                menuClassName="w-[180px]"
-                options={REQUEST_RAW_TYPES.map(option => ({
-                  value: option,
-                  label: <span className="uppercase">{option}</span>,
-                }))}
-                onChange={value =>
-                  FolderExplorerCoordinator.updateSelectedDraft({
-                    ...draft,
-                    rawType: value as RequestRawType,
-                  })
-                }
-              />
-              {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
-                <button
-                  type="button"
-                  className="h-8 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
-                  onClick={formatJsonBody}
-                >
-                  Format
-                </button>
+
+              {draft.bodyType === 'raw' ? (
+                <CodeEditor
+                  value={draft.body}
+                  language={getRawEditorLanguage(draft.rawType)}
+                  size="small"
+                  minHeightClassName="min-h-0 h-full"
+                  className="border-x-0 border-b-0"
+                  placeholder={'{\n  "hello": "world"\n}'}
+                  extensions={variableEditorExtensions}
+                  onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
+                />
+              ) : null}
+
+              {isParamBodyType(draft.bodyType) ? (
+                <KeyValueEditor
+                  label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
+                  value={draft.body}
+                  onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
+                  keyPlaceholder="key"
+                  valuePlaceholder="value"
+                />
+              ) : null}
+
+              {draft.bodyType === 'none' ? (
+                <div className="flex min-h-0 h-full items-center justify-center bg-base-100/35 text-sm text-base-content/45">
+                  No request body
+                </div>
               ) : null}
             </div>
-
-            {draft.bodyType === 'raw' ? (
-              <CodeEditor
-                value={draft.body}
-                language={getRawEditorLanguage(draft.rawType)}
-                size="small"
-                minHeightClassName="min-h-0 h-full"
-                className="border-x-0 border-b-0"
-                placeholder={'{\n  "hello": "world"\n}'}
-                extensions={variableEditorExtensions}
-                onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
-              />
-            ) : null}
-
-            {isParamBodyType(draft.bodyType) ? (
-              <KeyValueEditor
-                label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
-                value={draft.body}
-                onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
-                keyPlaceholder="key"
-                valuePlaceholder="value"
-              />
-            ) : null}
-
-            {draft.bodyType === 'none' ? (
-              <div className="flex min-h-0 h-full items-center justify-center border border-base-content/10 bg-base-100/35 text-sm text-base-content/45">
-                No request body
-              </div>
-            ) : null}
           </div>
-        </div>
 
-        <div className="flex min-h-0 flex-col overflow-y-auto md:border-l md:border-base-content/10">
-          <AuthorizationEditor
-            value={draft.auth}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
-            allowInherit
-            valueEditorExtensions={variableEditorExtensions}
-          />
+          <div className="flex min-h-0 flex-col overflow-y-auto">
+            <AuthorizationEditor
+              value={draft.auth}
+              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
+              allowInherit
+              valueEditorExtensions={variableEditorExtensions}
+            />
 
-          <HeadersEditor
-            value={draft.headers}
-            valueEditorExtensions={variableEditorExtensions}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
-          />
+            <HeadersEditor
+              value={draft.headers}
+              valueEditorExtensions={variableEditorExtensions}
+              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
+            />
 
+            <KeyValueEditor
+              label="Path Params"
+              value={draft.pathParams}
+              onChange={updatePathParams}
+              keyPlaceholder="userId"
+              valuePlaceholder="123"
+              valueEditorAsCode
+              valueEditorExtensions={variableEditorExtensions}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {metaTab === 'search-params' ? (
+        <section className="min-h-0 flex-1 overflow-auto">
           <KeyValueEditor
-            label="Path Params"
-            value={draft.pathParams}
-            onChange={updatePathParams}
-            keyPlaceholder="userId"
-            valuePlaceholder="123"
-            valueEditorAsCode
-            valueEditorExtensions={variableEditorExtensions}
-          />
-
-          <KeyValueEditor
-            label="Search Params"
+            label={null}
             value={draft.searchParams}
             onChange={updateSearchParams}
             keyPlaceholder="page"
             valuePlaceholder="1"
+            contentClassName="border-t-0"
           />
+        </section>
+      ) : null}
 
+      {metaTab === 'scripts' ? (
+        <section className="grid min-h-0 flex-1 md:grid-cols-2">
           <DetailsTextArea
             label="Pre-request Script"
             value={draft.preRequestScript}
-            minHeightClassName="min-h-[100px]"
-            sectionClassName="flex min-h-[100px] flex-1 basis-0 flex-col"
+            minHeightClassName="min-h-0 h-full"
+            sectionClassName="flex min-h-0 flex-1 flex-col md:border-r md:border-base-content/10"
             editorLanguage="javascript"
             editorSize="small"
             extensions={preRequestScriptExtensions}
@@ -545,16 +553,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           <DetailsTextArea
             label="Post-request Script"
             value={draft.postRequestScript}
-            minHeightClassName="min-h-[100px]"
-            sectionClassName="flex min-h-[100px] flex-1 basis-0 flex-col"
+            minHeightClassName="min-h-0 h-full"
+            sectionClassName="flex min-h-0 flex-1 flex-col"
             editorLanguage="javascript"
             editorSize="small"
             extensions={postRequestScriptExtensions}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
           />
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
         <button
@@ -568,10 +576,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         />
 
         <div className="h-[calc(100%-2px)] overflow-auto">
-          <div className="flex items-start justify-between gap-4 border-b border-base-content/10 p-2">
-            <div className="text-sm font-semibold text-base-content">Response</div>
-            <ResponseStatusSummary response={response} responseError={responseError} />
-          </div>
+          <DetailsSectionHeader title="Response" actions={<ResponseStatusSummary response={response} responseError={responseError} />} />
           <ResponseScriptErrors errors={response?.scriptErrors ?? []} />
           <div className="grid md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
             <ResponseBodyPanel
@@ -600,18 +605,67 @@ function ResponseScriptErrors({ errors }: { errors: SendRequestResponse['scriptE
 }
 
 function VariableUsageBanner({
-  activeEnvironmentNames,
-  referencedVariables,
+  metaTab,
+  onMetaTabChange,
+  activeVariableNames,
+  hasPreRequestScript,
+  hasPostRequestScript,
 }: {
-  activeEnvironmentNames: string[]
-  referencedVariables: string[]
+  metaTab: 'overview' | 'search-params' | 'scripts'
+  onMetaTabChange: (tab: 'overview' | 'search-params' | 'scripts') => void
+  activeVariableNames: string[]
+  hasPreRequestScript: boolean
+  hasPostRequestScript: boolean
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-x border-b border-base-content/10 bg-base-100/35 px-3 py-2 text-xs text-base-content/50">
-      <span>
-        {activeEnvironmentNames.length > 0 ? `Active: ${activeEnvironmentNames.join(', ')}` : 'No active environments'}
-      </span>
-      {referencedVariables.length > 0 ? <span>Variables: {referencedVariables.join(', ')}</span> : null}
+    <div className="flex min-h-10 items-center border-b border-base-content/10 text-xs text-base-content/50">
+      <div className="flex min-w-0 items-center">
+        <button
+          type="button"
+          className={[
+            'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
+            metaTab === 'overview'
+              ? 'border-b-2 border-b-base-content text-base-content'
+              : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+          ].join(' ')}
+          onClick={() => onMetaTabChange('overview')}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={[
+            'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
+            metaTab === 'search-params'
+              ? 'border-b-2 border-b-base-content text-base-content'
+              : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+          ].join(' ')}
+          onClick={() => onMetaTabChange('search-params')}
+        >
+          Search Params
+        </button>
+        <button
+          type="button"
+          className={[
+            'flex h-10 items-center gap-2 px-3 text-xs font-semibold transition',
+            metaTab === 'scripts'
+              ? 'border-b-2 border-b-base-content text-base-content'
+              : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+          ].join(' ')}
+          onClick={() => onMetaTabChange('scripts')}
+        >
+          <span>Scripts</span>
+          <span className={metaTab === 'scripts' ? 'text-base-content/55' : 'text-base-content/30'}>
+            <span className={hasPreRequestScript ? '' : 'opacity-45'}>Pre</span>
+            <span className="mx-1">/</span>
+            <span className={hasPostRequestScript ? '' : 'opacity-45'}>Post</span>
+          </span>
+        </button>
+      </div>
+
+      <div className="ml-auto truncate px-3 text-right">
+        {activeVariableNames.length > 0 ? `Vars: ${activeVariableNames.join(', ')}` : 'No active vars'}
+      </div>
     </div>
   )
 }
