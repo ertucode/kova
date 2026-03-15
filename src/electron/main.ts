@@ -9,11 +9,30 @@ import { initializeDatabase } from './db/index.js'
 import { listExplorerItems } from './db/explorer.js'
 import { listFolderExplorerTabs, saveFolderExplorerTabs } from './db/folder-explorer-tabs.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
-import { createEnvironment, deleteEnvironment, duplicateEnvironment, listEnvironments, moveEnvironment, updateEnvironment } from './db/environments.js'
+import {
+  createEnvironment,
+  deleteEnvironment,
+  duplicateEnvironment,
+  listEnvironments,
+  moveEnvironment,
+  updateEnvironment,
+} from './db/environments.js'
 import { deleteRequestHistoryEntry, listRequestHistory, trimRequestHistory } from './db/request-history.js'
 import { createRequest, deleteRequest, duplicateRequest, getRequest, updateRequest } from './db/requests.js'
-import { createRequestExample, deleteRequestExample, getRequestExample, moveRequestExample, updateRequestExample } from './db/request-examples.js'
-import { createWebSocketExample, deleteWebSocketExample, getWebSocketExample, moveWebSocketExample, updateWebSocketExample } from './db/websocket-examples.js'
+import {
+  createRequestExample,
+  deleteRequestExample,
+  getRequestExample,
+  moveRequestExample,
+  updateRequestExample,
+} from './db/request-examples.js'
+import {
+  createWebSocketExample,
+  deleteWebSocketExample,
+  getWebSocketExample,
+  moveWebSocketExample,
+  updateWebSocketExample,
+} from './db/websocket-examples.js'
 import {
   createWebSocketSavedMessage,
   deleteWebSocketSavedMessage,
@@ -152,7 +171,7 @@ app.on('ready', () => {
   Menu.setApplicationMenu(menu)
 
   app.on('web-contents-created', (_event, contents) => {
-    if (contents.getType() !== 'webview') return
+    // if (contents.getType() === 'webview') return
 
     contents.on('context-menu', (_contextEvent, params) => {
       const template = buildContextMenuTemplate(contents, params)
@@ -420,7 +439,9 @@ app.on('ready', () => {
       properties: ['openFile'],
       filters: [{ name: 'Postman Collections', extensions: ['json'] }],
     }
-    const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
+    const result = window
+      ? await dialog.showOpenDialog(window, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
 
     if (result.canceled || result.filePaths.length === 0) {
       return GenericError.Message('File selection was cancelled')
@@ -443,7 +464,9 @@ app.on('ready', () => {
       filters: [{ name: 'Postman Collections', extensions: ['json'] }],
       defaultPath: input.suggestedFileName,
     }
-    const result = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
+    const result = window
+      ? await dialog.showSaveDialog(window, dialogOptions)
+      : await dialog.showSaveDialog(dialogOptions)
 
     if (result.canceled || !result.filePath) {
       return GenericError.Message('File selection was cancelled')
@@ -466,7 +489,9 @@ app.on('ready', () => {
       properties: ['openFile'],
       filters: [{ name: 'Postman Environments', extensions: ['json'] }],
     }
-    const result = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
+    const result = window
+      ? await dialog.showOpenDialog(window, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
 
     if (result.canceled || result.filePaths.length === 0) {
       return GenericError.Message('File selection was cancelled')
@@ -489,7 +514,9 @@ app.on('ready', () => {
       filters: [{ name: 'Postman Environments', extensions: ['json'] }],
       defaultPath: input.suggestedFileName,
     }
-    const result = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
+    const result = window
+      ? await dialog.showSaveDialog(window, dialogOptions)
+      : await dialog.showSaveDialog(dialogOptions)
 
     if (result.canceled || !result.filePath) {
       return GenericError.Message('File selection was cancelled')

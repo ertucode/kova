@@ -4,5 +4,4 @@
 - startup yavaşladı. serverımız startupta çalışmasına gerek yok.
 - sandbox da mı startupta çalışıyor?
 - folderlar foldera geçerken flash oluyo. Olmaması için loading state göstermeyelim.
-- right click text copy ekle
 - global scope'a import
