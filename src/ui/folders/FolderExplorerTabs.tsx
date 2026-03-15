@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { CopyIcon, FileCode2Icon, FolderIcon, XIcon } from 'lucide-react'
-import { ContextMenu, ContextMenuList, type ForgivingContextMenuItem, useContextMenu } from '@/lib/components/context-menu'
+import {
+  ContextMenu,
+  ContextMenuList,
+  type ForgivingContextMenuItem,
+  useContextMenu,
+} from '@/lib/components/context-menu'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -52,7 +57,7 @@ export function FolderExplorerTabs() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (activeTabId && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'w') {
+      if (activeTabId && event.metaKey && event.key.toLowerCase() === 'w') {
         event.preventDefault()
         void FolderExplorerCoordinator.closeActiveTab()
       }
@@ -140,10 +145,7 @@ export function FolderExplorerTabs() {
 
                 {tab.isSaving || tab.isDirty ? (
                   <div
-                    className={[
-                      'size-2 shrink-0 rounded-full',
-                      tab.isSaving ? 'bg-info' : 'bg-warning',
-                    ].join(' ')}
+                    className={['size-2 shrink-0 rounded-full', tab.isSaving ? 'bg-info' : 'bg-warning'].join(' ')}
                     title={tab.isSaving ? 'Saving changes' : 'Unsaved changes'}
                     aria-label={tab.isSaving ? 'Saving changes' : 'Unsaved changes'}
                   />
@@ -177,7 +179,10 @@ export function FolderExplorerTabs() {
   )
 }
 
-function getTabMenuItems(tab: FolderExplorerTabViewModel, tabs: FolderExplorerTabViewModel[]): ForgivingContextMenuItem[] {
+function getTabMenuItems(
+  tab: FolderExplorerTabViewModel,
+  tabs: FolderExplorerTabViewModel[]
+): ForgivingContextMenuItem[] {
   const hasOtherTabs = tabs.some(currentTab => currentTab.id !== tab.id)
   const hasSavedTabs = tabs.some(currentTab => !currentTab.isDirty)
 
@@ -228,7 +233,7 @@ function getTabMenuItems(tab: FolderExplorerTabViewModel, tabs: FolderExplorerTa
       onClick: () => {
         void FolderExplorerCoordinator.saveAndCloseAllTabs()
       },
-    },
+    }
   )
 
   if (hasOtherTabs) {
@@ -240,14 +245,18 @@ function getTabMenuItems(tab: FolderExplorerTabViewModel, tabs: FolderExplorerTa
     })
   }
 
-  items.push(
-    { isSeparator: true },
-  )
+  items.push({ isSeparator: true })
 
   return items
 }
 
-function RequestMethodGlyph({ method, requestType }: { method: string | null; requestType: 'http' | 'websocket' | null }) {
+function RequestMethodGlyph({
+  method,
+  requestType,
+}: {
+  method: string | null
+  requestType: 'http' | 'websocket' | null
+}) {
   if (requestType === 'websocket') {
     return <span className="w-8 text-center text-[10px] font-semibold tracking-[0.12em] text-accent">WS</span>
   }
@@ -256,7 +265,11 @@ function RequestMethodGlyph({ method, requestType }: { method: string | null; re
     return <FileCode2Icon className="size-4" />
   }
 
-  return <span className="w-8 text-center text-[10px] font-semibold tracking-[0.12em] text-base-content/70">{method === 'DELETE' ? 'DEL' : method}</span>
+  return (
+    <span className="w-8 text-center text-[10px] font-semibold tracking-[0.12em] text-base-content/70">
+      {method === 'DELETE' ? 'DEL' : method}
+    </span>
+  )
 }
 
 function ExampleGlyph({ exampleType }: { exampleType: 'http' | 'websocket' | null }) {
