@@ -4,6 +4,8 @@ import { CopyIcon, FileCode2Icon, FolderIcon } from 'lucide-react'
 import { FolderDetailsFields } from './FolderDetailsFields'
 import { RequestExampleDetailsFields } from './RequestExampleDetailsFields'
 import { RequestDetailsFields } from './RequestDetailsFields'
+import { WebSocketRequestDetailsFields } from './WebSocketRequestDetailsFields'
+import { WebSocketExampleDetailsFields } from './WebSocketExampleDetailsFields'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
@@ -97,7 +99,13 @@ export function DetailsPanel() {
           </div>
         </div>
 
-        {draft.itemType === 'folder' ? <FolderDetailsFields draft={draft} /> : draft.itemType === 'request' ? <RequestDetailsFields draft={draft} /> : <RequestExampleDetailsFields draft={draft} />}
+        {draft.itemType === 'folder'
+          ? <FolderDetailsFields draft={draft} />
+          : draft.itemType === 'request'
+            ? (draft.requestType === 'websocket' ? <WebSocketRequestDetailsFields draft={draft} /> : <RequestDetailsFields draft={draft} />)
+            : draft.exampleType === 'websocket'
+              ? <WebSocketExampleDetailsFields draft={draft} />
+              : <RequestExampleDetailsFields draft={draft} />}
       </div>
     </div>
   )

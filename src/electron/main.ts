@@ -13,8 +13,16 @@ import { createEnvironment, deleteEnvironment, duplicateEnvironment, listEnviron
 import { deleteRequestHistoryEntry, listRequestHistory, trimRequestHistory } from './db/request-history.js'
 import { createRequest, deleteRequest, duplicateRequest, getRequest, updateRequest } from './db/requests.js'
 import { createRequestExample, deleteRequestExample, getRequestExample, moveRequestExample, updateRequestExample } from './db/request-examples.js'
+import { createWebSocketExample, deleteWebSocketExample, getWebSocketExample, moveWebSocketExample, updateWebSocketExample } from './db/websocket-examples.js'
+import {
+  createWebSocketSavedMessage,
+  deleteWebSocketSavedMessage,
+  listWebSocketSavedMessages,
+  updateWebSocketSavedMessage,
+} from './db/websocket-saved-messages.js'
 import { moveExplorerItem } from './db/tree-items.js'
 import { sendRequest } from './send-request.js'
+import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
 import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
 import { analyzePostmanEnvironment, importPostmanEnvironment } from './postman-environment-import.js'
 import { analyzePostmanCollectionExport, exportPostmanCollection } from './postman-export.js'
@@ -314,6 +322,26 @@ app.on('ready', () => {
     return moveRequestExample(input)
   })
 
+  ipcHandle('createWebSocketExample', async input => {
+    return createWebSocketExample(input)
+  })
+
+  ipcHandle('getWebSocketExample', async input => {
+    return getWebSocketExample(input)
+  })
+
+  ipcHandle('updateWebSocketExample', async input => {
+    return updateWebSocketExample(input)
+  })
+
+  ipcHandle('deleteWebSocketExample', async input => {
+    return deleteWebSocketExample(input)
+  })
+
+  ipcHandle('moveWebSocketExample', async input => {
+    return moveWebSocketExample(input)
+  })
+
   ipcHandle('listEnvironments', async () => {
     return listEnvironments()
   })
@@ -344,6 +372,34 @@ app.on('ready', () => {
 
   ipcHandle('sendRequest', async input => {
     return sendRequest(input)
+  })
+
+  ipcHandle('connectWebSocket', async input => {
+    return connectWebSocket(input)
+  })
+
+  ipcHandle('sendWebSocketMessage', async input => {
+    return sendWebSocketMessage(input)
+  })
+
+  ipcHandle('disconnectWebSocket', async input => {
+    return disconnectWebSocket(input)
+  })
+
+  ipcHandle('listWebSocketSavedMessages', async input => {
+    return listWebSocketSavedMessages(input)
+  })
+
+  ipcHandle('createWebSocketSavedMessage', async input => {
+    return createWebSocketSavedMessage(input)
+  })
+
+  ipcHandle('updateWebSocketSavedMessage', async input => {
+    return updateWebSocketSavedMessage(input)
+  })
+
+  ipcHandle('deleteWebSocketSavedMessage', async input => {
+    return deleteWebSocketSavedMessage(input)
   })
 
   ipcHandle('listRequestHistory', async input => {

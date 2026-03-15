@@ -3,6 +3,8 @@ import type { EnvironmentRecord } from './Environments.js'
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
+export type RequestType = 'http' | 'websocket'
+
 export type RequestBodyType = 'raw' | 'form-data' | 'x-www-form-urlencoded' | 'none'
 
 export type RequestRawType = 'json' | 'text'
@@ -10,6 +12,7 @@ export type RequestRawType = 'json' | 'text'
 export type HttpRequestRecord = {
   id: string
   name: string
+  requestType: RequestType
   method: RequestMethod
   url: string
   pathParams: string
@@ -21,6 +24,8 @@ export type HttpRequestRecord = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  websocketSubprotocols: string
+  saveToHistory: boolean
   createdAt: number
   deletedAt: number | null
 }
@@ -28,6 +33,7 @@ export type HttpRequestRecord = {
 export type CreateRequestInput = {
   parentFolderId: string | null
   name: string
+  requestType: RequestType
 }
 
 export type GetRequestInput = {
@@ -37,6 +43,7 @@ export type GetRequestInput = {
 export type UpdateRequestInput = {
   id: string
   name: string
+  requestType: RequestType
   method: RequestMethod
   url: string
   pathParams: string
@@ -48,6 +55,8 @@ export type UpdateRequestInput = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  websocketSubprotocols: string
+  saveToHistory: boolean
 }
 
 export type DeleteRequestInput = {
@@ -73,6 +82,57 @@ export type SendRequestInput = {
   rawType: RequestRawType
   activeEnvironmentIds: string[]
   historyKeepLast: number
+}
+
+export type WebSocketConnectInput = {
+  requestId: string
+  url: string
+  searchParams: string
+  auth: HttpAuth
+  preRequestScript: string
+  postRequestScript: string
+  headers: string
+  websocketSubprotocols: string
+  activeEnvironmentIds: string[]
+  saveToHistory: boolean
+  historyKeepLast: number
+}
+
+export type WebSocketSendMessageInput = {
+  requestId: string
+  body: string
+  activeEnvironmentIds: string[]
+}
+
+export type WebSocketDisconnectInput = {
+  requestId: string
+}
+
+export type WebSocketSavedMessageRecord = {
+  id: string
+  requestId: string
+  body: string
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}
+
+export type ListWebSocketSavedMessagesInput = {
+  requestId: string
+}
+
+export type CreateWebSocketSavedMessageInput = {
+  requestId: string
+  body: string
+}
+
+export type UpdateWebSocketSavedMessageInput = {
+  id: string
+  body: string
+}
+
+export type DeleteWebSocketSavedMessageInput = {
+  id: string
 }
 
 export type ScriptResponseBody =
@@ -125,6 +185,7 @@ export type ReceivedResponseSnapshot = {
 }
 
 export type RequestExecutionRecord = {
+  itemType: 'http'
   id: string
   requestId: string
   requestName: string
@@ -134,6 +195,39 @@ export type RequestExecutionRecord = {
   scriptErrors: RequestScriptError[]
   consoleEntries: RequestConsoleEntry[]
 }
+
+export type WebSocketMessageDirection = 'sent' | 'received'
+
+export type WebSocketMessageRecord = {
+  id: string
+  direction: WebSocketMessageDirection
+  body: string
+  mimeType: string | null
+  sizeBytes: number
+  timestamp: number
+}
+
+export type WebSocketConnectionState = 'connecting' | 'open' | 'closed'
+
+export type WebSocketSessionRecord = {
+  itemType: 'websocket'
+  id: string
+  requestId: string
+  requestName: string
+  url: string
+  requestHeaders: string
+  requestVariables: Record<string, string>
+  connectionState: WebSocketConnectionState
+  connectedAt: number
+  disconnectedAt: number | null
+  closeCode: number | null
+  closeReason: string | null
+  responseError: string | null
+  historySizeBytes: number
+  messages: WebSocketMessageRecord[]
+}
+
+export type RequestHistoryListItem = RequestExecutionRecord | WebSocketSessionRecord
 
 export type SendRequestResponse = {
   status: number
@@ -147,6 +241,12 @@ export type SendRequestResponse = {
   execution: RequestExecutionRecord
 }
 
+export type WebSocketConnectResponse = {
+  session: WebSocketSessionRecord
+  updatedEnvironments: EnvironmentRecord[]
+  consoleEntries: RequestConsoleEntry[]
+}
+
 export type ListRequestHistoryInput = {
   searchQuery: string
   offset: number
@@ -154,7 +254,7 @@ export type ListRequestHistoryInput = {
 }
 
 export type ListRequestHistoryResponse = {
-  items: RequestExecutionRecord[]
+  items: RequestHistoryListItem[]
   nextOffset: number | null
 }
 

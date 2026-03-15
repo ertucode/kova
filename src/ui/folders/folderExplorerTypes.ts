@@ -3,7 +3,8 @@ import type { ExplorerItem } from '@common/Explorer'
 import type { FolderRecord } from '@common/Folders'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import type { RequestExampleRecord } from '@common/RequestExamples'
-import type { HttpRequestRecord, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
+import type { HttpRequestRecord, RequestBodyType, RequestMethod, RequestRawType, RequestType } from '@common/Requests'
+import type { WebSocketExampleRecord } from '@common/WebSocketExamples'
 
 export type TreeNode = ExplorerItem & {
   children: TreeNode[]
@@ -26,6 +27,7 @@ export type CreateDraft = {
   itemType: ExplorerItem['itemType']
   parentFolderId: string | null
   name: string
+  requestType?: RequestType
 }
 
 export type FolderDetailsDraft = {
@@ -41,6 +43,7 @@ export type FolderDetailsDraft = {
 export type RequestDetailsDraft = {
   itemType: 'request'
   name: string
+  requestType: RequestType
   method: RequestMethod
   url: string
   pathParams: string
@@ -52,10 +55,13 @@ export type RequestDetailsDraft = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  websocketSubprotocols: string
+  saveToHistory: boolean
 }
 
 export type RequestExampleDetailsDraft = {
   itemType: 'example'
+  exampleType: 'http'
   name: string
   requestHeaders: string
   requestBody: string
@@ -67,7 +73,16 @@ export type RequestExampleDetailsDraft = {
   responseBody: string
 }
 
-export type DetailsDraft = FolderDetailsDraft | RequestDetailsDraft | RequestExampleDetailsDraft
+export type WebSocketExampleDetailsDraft = {
+  itemType: 'example'
+  exampleType: 'websocket'
+  name: string
+  requestHeaders: string
+  requestBody: string
+  messages: WebSocketExampleRecord['messages']
+}
+
+export type DetailsDraft = FolderDetailsDraft | RequestDetailsDraft | RequestExampleDetailsDraft | WebSocketExampleDetailsDraft
 
 export type HeaderRow = KeyValueRow
 
@@ -77,4 +92,4 @@ export const REQUEST_BODY_TYPES: RequestBodyType[] = ['none', 'raw', 'form-data'
 
 export const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
 
-export type DetailEntity = FolderRecord | HttpRequestRecord | RequestExampleRecord
+export type DetailEntity = FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord

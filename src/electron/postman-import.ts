@@ -296,6 +296,7 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
     .values({
       id: requestId,
       name,
+      requestType: 'http',
       method: requestModel.method,
       url: requestModel.url,
       pathParams: requestModel.pathParams,
@@ -307,6 +308,8 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
       body: requestModel.body,
       bodyType: requestModel.bodyType,
       rawType: requestModel.rawType,
+      websocketSubprotocols: '',
+      saveToHistory: true,
       createdAt: now,
       deletedAt: null,
     })

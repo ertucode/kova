@@ -1,7 +1,7 @@
 import { createStore } from '@xstate/store'
 import { z } from 'zod'
 import { errorResponseToMessage } from '@common/GenericError'
-import type { RequestExecutionRecord, SendRequestResponse } from '@common/Requests'
+import type { RequestExecutionRecord, RequestHistoryListItem, SendRequestResponse, WebSocketSessionRecord } from '@common/Requests'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import { getWindowElectron } from '@/getWindowElectron'
 import { createAsyncStoragePersistence } from '@/utils/asyncStorage'
@@ -20,7 +20,7 @@ const requestHistorySettingsPersistence = createAsyncStoragePersistence(
 )
 
 type RequestExecutionContext = {
-  history: RequestExecutionRecord[]
+  history: RequestHistoryListItem[]
   historySearchQuery: string
   historyLoading: boolean
   historyLoadingMore: boolean
@@ -29,6 +29,7 @@ type RequestExecutionContext = {
   historyKeepLast: number
   responseByRequestId: Record<string, SendRequestResponse | null>
   errorByRequestId: Record<string, string | null>
+  websocketSessionByRequestId: Record<string, WebSocketSessionRecord | null>
 }
 
 const initialSettings = requestHistorySettingsPersistence.load({ keepLast: MAX_HISTORY_KEEP_LAST })
@@ -44,6 +45,7 @@ export const requestExecutionStore = createStore({
     historyKeepLast: normalizeKeepLast(initialSettings.keepLast),
     responseByRequestId: {},
     errorByRequestId: {},
+    websocketSessionByRequestId: {},
   } as RequestExecutionContext,
   on: {
     requestSucceeded: (
@@ -76,7 +78,7 @@ export const requestExecutionStore = createStore({
       historyLoading: event.append ? context.historyLoading : true,
       historyLoadingMore: event.append,
     }),
-    historyLoaded: (context, event: { items: RequestExecutionRecord[]; nextOffset: number | null; append: boolean }) => ({
+    historyLoaded: (context, event: { items: RequestHistoryListItem[]; nextOffset: number | null; append: boolean }) => ({
       ...context,
       history: event.append ? [...context.history, ...event.items] : event.items,
       historyLoading: false,
@@ -101,6 +103,24 @@ export const requestExecutionStore = createStore({
     historyEntryDeleted: (context, event: { id: string }) => ({
       ...context,
       history: context.history.filter(entry => entry.id !== event.id),
+    }),
+    websocketSessionUpdated: (context, event: { session: WebSocketSessionRecord }) => ({
+      ...context,
+      websocketSessionByRequestId: {
+        ...context.websocketSessionByRequestId,
+        [event.session.requestId]: event.session,
+      },
+      errorByRequestId: {
+        ...context.errorByRequestId,
+        [event.session.requestId]: event.session.responseError,
+      },
+    }),
+    websocketSessionCleared: (context, event: { requestId: string }) => ({
+      ...context,
+      websocketSessionByRequestId: {
+        ...context.websocketSessionByRequestId,
+        [event.requestId]: null,
+      },
     }),
   },
 })
@@ -172,7 +192,7 @@ async function loadHistoryPage({ append }: { append: boolean }) {
     })
 
     requestExecutionStore.trigger.historyLoaded({
-      items: result.items.filter(isRequestExecutionRecord),
+      items: result.items.filter(isRequestHistoryListItem),
       nextOffset: result.nextOffset,
       append,
     })
@@ -181,15 +201,18 @@ async function loadHistoryPage({ append }: { append: boolean }) {
   }
 }
 
-function isRequestExecutionRecord(value: RequestExecutionRecord | null | undefined): value is RequestExecutionRecord {
+function isRequestHistoryListItem(value: RequestHistoryListItem | null | undefined): value is RequestHistoryListItem {
   return Boolean(
     value &&
       typeof value.id === 'string' &&
-      value.request &&
-      typeof value.request.url === 'string' &&
-      Array.isArray(value.consoleEntries) &&
-      Array.isArray(value.scriptErrors)
+      (value.itemType === 'http'
+        ? value.request && typeof value.request.url === 'string' && Array.isArray(value.consoleEntries) && Array.isArray(value.scriptErrors)
+        : typeof value.url === 'string' && Array.isArray(value.messages))
   )
+}
+
+function isRequestExecutionRecord(value: RequestHistoryListItem | RequestExecutionRecord | null | undefined): value is RequestExecutionRecord {
+  return Boolean(value && value.itemType === 'http')
 }
 
 function normalizeExecutionRecord(event: {
@@ -204,6 +227,7 @@ function normalizeExecutionRecord(event: {
 
   return {
     id: crypto.randomUUID(),
+    itemType: 'http',
     requestId: event.requestId,
     requestName: event.requestName,
     request: {

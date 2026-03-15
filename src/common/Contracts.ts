@@ -25,7 +25,17 @@ import {
   type UpdateRequestExampleInput,
 } from './RequestExamples.js'
 import {
+  type CreateWebSocketExampleInput,
+  type DeleteWebSocketExampleInput,
+  type GetWebSocketExampleInput,
+  type MoveWebSocketExampleInput,
+  type UpdateWebSocketExampleInput,
+  type WebSocketExampleRecord,
+} from './WebSocketExamples.js'
+import {
   type CreateRequestInput,
+  type CreateWebSocketSavedMessageInput,
+  type DeleteWebSocketSavedMessageInput,
   type DuplicateRequestInput,
   type DeleteRequestHistoryEntryInput,
   type DeleteRequestInput,
@@ -33,10 +43,17 @@ import {
   type HttpRequestRecord,
   type ListRequestHistoryInput,
   type ListRequestHistoryResponse,
+  type ListWebSocketSavedMessagesInput,
   type SendRequestInput,
   type SendRequestResponse,
   type TrimRequestHistoryInput,
   type UpdateRequestInput,
+  type UpdateWebSocketSavedMessageInput,
+  type WebSocketConnectInput,
+  type WebSocketConnectResponse,
+  type WebSocketDisconnectInput,
+  type WebSocketSavedMessageRecord,
+  type WebSocketSendMessageInput,
 } from './Requests.js'
 import { TaskEvents } from './Tasks.js'
 import { GenericEvent } from './GenericEvent.js'
@@ -106,6 +123,11 @@ export type EventResponseMapping = {
   updateRequestExample: Promise<GenericResult<RequestExampleRecord>>
   deleteRequestExample: Promise<GenericResult<void>>
   moveRequestExample: Promise<GenericResult<void>>
+  createWebSocketExample: Promise<GenericResult<WebSocketExampleRecord>>
+  getWebSocketExample: Promise<GenericResult<WebSocketExampleRecord>>
+  updateWebSocketExample: Promise<GenericResult<WebSocketExampleRecord>>
+  deleteWebSocketExample: Promise<GenericResult<void>>
+  moveWebSocketExample: Promise<GenericResult<void>>
   listEnvironments: Promise<EnvironmentRecord[]>
   createEnvironment: Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: Promise<GenericResult<EnvironmentRecord>>
@@ -114,6 +136,13 @@ export type EventResponseMapping = {
   moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
+  connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
+  sendWebSocketMessage: Promise<GenericResult<void>>
+  disconnectWebSocket: Promise<GenericResult<void>>
+  listWebSocketSavedMessages: Promise<WebSocketSavedMessageRecord[]>
+  createWebSocketSavedMessage: Promise<GenericResult<WebSocketSavedMessageRecord>>
+  updateWebSocketSavedMessage: Promise<GenericResult<WebSocketSavedMessageRecord>>
+  deleteWebSocketSavedMessage: Promise<GenericResult<void>>
   listRequestHistory: Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: Promise<GenericResult<void>>
   trimRequestHistory: Promise<GenericResult<void>>
@@ -160,6 +189,11 @@ export type EventRequestMapping = {
   updateRequestExample: UpdateRequestExampleInput
   deleteRequestExample: DeleteRequestExampleInput
   moveRequestExample: MoveRequestExampleInput
+  createWebSocketExample: CreateWebSocketExampleInput
+  getWebSocketExample: GetWebSocketExampleInput
+  updateWebSocketExample: UpdateWebSocketExampleInput
+  deleteWebSocketExample: DeleteWebSocketExampleInput
+  moveWebSocketExample: MoveWebSocketExampleInput
   listEnvironments: void
   createEnvironment: CreateEnvironmentInput
   duplicateEnvironment: DuplicateEnvironmentInput
@@ -168,6 +202,13 @@ export type EventRequestMapping = {
   moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
+  connectWebSocket: WebSocketConnectInput
+  sendWebSocketMessage: WebSocketSendMessageInput
+  disconnectWebSocket: WebSocketDisconnectInput
+  listWebSocketSavedMessages: ListWebSocketSavedMessagesInput
+  createWebSocketSavedMessage: CreateWebSocketSavedMessageInput
+  updateWebSocketSavedMessage: UpdateWebSocketSavedMessageInput
+  deleteWebSocketSavedMessage: DeleteWebSocketSavedMessageInput
   listRequestHistory: ListRequestHistoryInput
   deleteRequestHistoryEntry: DeleteRequestHistoryEntryInput
   trimRequestHistory: TrimRequestHistoryInput
@@ -224,6 +265,11 @@ export type WindowElectron = {
   updateRequestExample: (input: UpdateRequestExampleInput) => Promise<GenericResult<RequestExampleRecord>>
   deleteRequestExample: (input: DeleteRequestExampleInput) => Promise<GenericResult<void>>
   moveRequestExample: (input: MoveRequestExampleInput) => Promise<GenericResult<void>>
+  createWebSocketExample: (input: CreateWebSocketExampleInput) => Promise<GenericResult<WebSocketExampleRecord>>
+  getWebSocketExample: (input: GetWebSocketExampleInput) => Promise<GenericResult<WebSocketExampleRecord>>
+  updateWebSocketExample: (input: UpdateWebSocketExampleInput) => Promise<GenericResult<WebSocketExampleRecord>>
+  deleteWebSocketExample: (input: DeleteWebSocketExampleInput) => Promise<GenericResult<void>>
+  moveWebSocketExample: (input: MoveWebSocketExampleInput) => Promise<GenericResult<void>>
   listEnvironments: () => Promise<EnvironmentRecord[]>
   createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: (input: DuplicateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
@@ -232,6 +278,13 @@ export type WindowElectron = {
   moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
+  connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
+  sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>
+  disconnectWebSocket: (input: WebSocketDisconnectInput) => Promise<GenericResult<void>>
+  listWebSocketSavedMessages: (input: ListWebSocketSavedMessagesInput) => Promise<WebSocketSavedMessageRecord[]>
+  createWebSocketSavedMessage: (input: CreateWebSocketSavedMessageInput) => Promise<GenericResult<WebSocketSavedMessageRecord>>
+  updateWebSocketSavedMessage: (input: UpdateWebSocketSavedMessageInput) => Promise<GenericResult<WebSocketSavedMessageRecord>>
+  deleteWebSocketSavedMessage: (input: DeleteWebSocketSavedMessageInput) => Promise<GenericResult<void>>
   listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: (input: DeleteRequestHistoryEntryInput) => Promise<GenericResult<void>>
   trimRequestHistory: (input: TrimRequestHistoryInput) => Promise<GenericResult<void>>

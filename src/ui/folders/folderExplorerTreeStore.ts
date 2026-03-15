@@ -1,5 +1,6 @@
 import { createStore } from '@xstate/store'
 import type { ExplorerItem } from '@common/Explorer'
+import type { RequestType } from '@common/Requests'
 import type { CreateDraft, Selection } from './folderExplorerTypes'
 import { toSelectionKey } from './folderExplorerUtils'
 
@@ -35,9 +36,9 @@ export const folderExplorerTreeStore = createStore({
       ...context,
       searchQuery: event.searchQuery,
     }),
-    createStarted: (context, event: { itemType: ExplorerItem['itemType']; parentFolderId: string | null }) => ({
+    createStarted: (context, event: { itemType: ExplorerItem['itemType']; parentFolderId: string | null; requestType?: RequestType }) => ({
       ...context,
-      createDraft: { itemType: event.itemType, parentFolderId: event.parentFolderId, name: '' },
+      createDraft: { itemType: event.itemType, parentFolderId: event.parentFolderId, name: '', requestType: event.requestType },
     }),
     createNameChanged: (context, event: { name: string }) => ({
       ...context,

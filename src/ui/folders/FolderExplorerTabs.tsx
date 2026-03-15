@@ -19,6 +19,8 @@ type FolderExplorerTabViewModel = {
   isSaving: boolean
   isDirty: boolean
   method: string | null
+  requestType: 'http' | 'websocket' | null
+  exampleType: 'http' | 'websocket' | null
 }
 
 export function FolderExplorerTabs() {
@@ -41,6 +43,8 @@ export function FolderExplorerTabs() {
           isSaving: Boolean(entry?.saving),
           isDirty: Boolean(entry && isEntryDirty(entry)),
           method: item?.itemType === 'request' ? item.method : null,
+          requestType: item?.itemType === 'request' ? item.requestType : null,
+          exampleType: item?.itemType === 'example' ? item.exampleType : null,
         }
       }),
     [entries, items, tabs]
@@ -126,9 +130,9 @@ export function FolderExplorerTabs() {
                   {tab.itemType === 'folder' ? (
                     <FolderIcon className="size-4" />
                   ) : tab.itemType === 'request' ? (
-                    <RequestMethodGlyph method={tab.method} />
+                    <RequestMethodGlyph method={tab.method} requestType={tab.requestType} />
                   ) : (
-                    <CopyIcon className="size-4" />
+                    <ExampleGlyph exampleType={tab.exampleType} />
                   )}
                 </div>
 
@@ -243,10 +247,30 @@ function getTabMenuItems(tab: FolderExplorerTabViewModel, tabs: FolderExplorerTa
   return items
 }
 
-function RequestMethodGlyph({ method }: { method: string | null }) {
+function RequestMethodGlyph({ method, requestType }: { method: string | null; requestType: 'http' | 'websocket' | null }) {
+  if (requestType === 'websocket') {
+    return <span className="w-8 text-center text-[10px] font-semibold tracking-[0.12em] text-accent">WS</span>
+  }
+
   if (!method) {
     return <FileCode2Icon className="size-4" />
   }
 
   return <span className="w-8 text-center text-[10px] font-semibold tracking-[0.12em] text-base-content/70">{method === 'DELETE' ? 'DEL' : method}</span>
+}
+
+function ExampleGlyph({ exampleType }: { exampleType: 'http' | 'websocket' | null }) {
+  return (
+    <div className="relative flex size-5 items-center justify-center text-base-content/55">
+      <CopyIcon className="size-4" />
+      <span
+        className={[
+          'absolute -right-1.5 -top-1 text-[7px] font-semibold leading-none tracking-[0.08em]',
+          exampleType === 'websocket' ? 'text-accent' : 'text-info',
+        ].join(' ')}
+      >
+        {exampleType === 'websocket' ? 'WS' : 'EX'}
+      </span>
+    </div>
+  )
 }

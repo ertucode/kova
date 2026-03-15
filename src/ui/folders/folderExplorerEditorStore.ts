@@ -12,6 +12,9 @@ import {
   REQUEST_METHODS,
   REQUEST_RAW_TYPES,
 } from './folderExplorerTypes'
+import type { RequestType } from '@common/Requests'
+
+const REQUEST_TYPES: RequestType[] = ['http', 'websocket']
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 const DEFAULT_RESPONSE_PANE_HEIGHT = 320
@@ -52,6 +55,7 @@ const folderDetailsDraftSchema = z.object({
 const requestDetailsDraftSchema = z.object({
   itemType: z.literal('request'),
   name: z.string(),
+  requestType: z.enum(REQUEST_TYPES),
   method: z.enum(REQUEST_METHODS),
   url: z.string(),
   pathParams: z.string().default(''),
@@ -63,10 +67,13 @@ const requestDetailsDraftSchema = z.object({
   body: z.string(),
   bodyType: z.enum(REQUEST_BODY_TYPES),
   rawType: z.enum(REQUEST_RAW_TYPES),
+  websocketSubprotocols: z.string().default(''),
+  saveToHistory: z.boolean().default(true),
 })
 
 const requestExampleDetailsDraftSchema = z.object({
   itemType: z.literal('example'),
+  exampleType: z.literal('http'),
   name: z.string(),
   requestHeaders: z.string(),
   requestBody: z.string(),
@@ -78,9 +85,27 @@ const requestExampleDetailsDraftSchema = z.object({
   responseBody: z.string(),
 })
 
+const websocketExampleDetailsDraftSchema = z.object({
+  itemType: z.literal('example'),
+  exampleType: z.literal('websocket'),
+  name: z.string(),
+  requestHeaders: z.string(),
+  requestBody: z.string(),
+  messages: z.array(z.object({
+    id: z.string(),
+    exampleId: z.string(),
+    direction: z.union([z.literal('sent'), z.literal('received')]),
+    body: z.string(),
+    mimeType: z.string().nullable(),
+    sizeBytes: z.number(),
+    timestamp: z.number(),
+    createdAt: z.number(),
+  })),
+})
+
 export const persistedDraftsSchema = z.record(
   z.string(),
-  z.discriminatedUnion('itemType', [folderDetailsDraftSchema, requestDetailsDraftSchema, requestExampleDetailsDraftSchema])
+  z.union([folderDetailsDraftSchema, requestDetailsDraftSchema, requestExampleDetailsDraftSchema, websocketExampleDetailsDraftSchema])
 )
 
 export type EditorEntry = {

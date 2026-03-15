@@ -3,6 +3,7 @@ import type { FolderRecord } from '@common/Folders'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import type { RequestExampleRecord } from '@common/RequestExamples'
 import type { HttpRequestRecord } from '@common/Requests'
+import type { WebSocketExampleRecord } from '@common/WebSocketExamples'
 import type {
   DetailsDraft,
   DetailEntity,
@@ -60,7 +61,9 @@ export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
   return nodes.flatMap(node => {
     const filteredChildren = filterTree(node.children, query)
     const requestMatch = node.itemType === 'request' ? `${node.method} ${node.url}`.toLowerCase().includes(query) : false
-    const exampleMatch = node.itemType === 'example' ? `${node.name} ${node.responseStatus}`.toLowerCase().includes(query) : false
+    const exampleMatch = node.itemType === 'example'
+      ? `${node.name} ${node.responseStatus ?? ''} ${node.messageCount ?? ''}`.toLowerCase().includes(query)
+      : false
     const isMatch = node.name.toLowerCase().includes(query) || requestMatch || exampleMatch
 
     if (!isMatch && filteredChildren.length === 0) {
@@ -87,6 +90,7 @@ export function toRequestDetailsDraft(request: HttpRequestRecord): RequestDetail
   return {
     itemType: 'request',
     name: request.name,
+    requestType: request.requestType,
     method: request.method,
     url: request.url,
     pathParams: request.pathParams,
@@ -98,12 +102,15 @@ export function toRequestDetailsDraft(request: HttpRequestRecord): RequestDetail
     body: request.body,
     bodyType: request.bodyType,
     rawType: request.rawType,
+    websocketSubprotocols: request.websocketSubprotocols,
+    saveToHistory: request.saveToHistory,
   }
 }
 
 export function toRequestExampleDetailsDraft(example: RequestExampleRecord) {
   return {
     itemType: 'example' as const,
+    exampleType: 'http' as const,
     name: example.name,
     requestHeaders: example.requestHeaders,
     requestBody: example.requestBody,
@@ -116,9 +123,24 @@ export function toRequestExampleDetailsDraft(example: RequestExampleRecord) {
   }
 }
 
+export function toWebSocketExampleDetailsDraft(example: WebSocketExampleRecord) {
+  return {
+    itemType: 'example' as const,
+    exampleType: 'websocket' as const,
+    name: example.name,
+    requestHeaders: example.requestHeaders,
+    requestBody: example.requestBody,
+    messages: example.messages,
+  }
+}
+
 export function toDetailsDraft(value: DetailEntity): DetailsDraft {
   if ('method' in value) {
     return toRequestDetailsDraft(value)
+  }
+
+  if ('messages' in value) {
+    return toWebSocketExampleDetailsDraft(value)
   }
 
   if ('requestId' in value) {

@@ -34,6 +34,7 @@ export const requests = sqliteTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
+    requestType: text('request_type').notNull().default('http'),
     method: text('method').notNull().default('GET'),
     url: text('url').notNull().default(''),
     pathParams: text('path_params').notNull().default(''),
@@ -45,11 +46,15 @@ export const requests = sqliteTable(
     body: text('body').notNull().default(''),
     bodyType: text('body_type').notNull().default('none'),
     rawType: text('raw_type').notNull().default('json'),
+    websocketSubprotocols: text('websocket_subprotocols').notNull().default(''),
+    saveToHistory: integer('save_to_history', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at').notNull(),
     deletedAt: integer('deleted_at'),
   },
   table => [
     index('requests_deleted_at_idx').on(table.deletedAt),
+    index('requests_request_type_idx').on(table.requestType),
+    check('requests_request_type_check', sql`${table.requestType} in ('http', 'websocket')`),
     check('requests_body_type_check', sql`${table.bodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`),
     check('requests_raw_type_check', sql`${table.rawType} in ('json', 'text')`),
   ]
@@ -176,5 +181,129 @@ export const requestExamples = sqliteTable(
     index('request_examples_deleted_at_idx').on(table.deletedAt),
     check('request_examples_request_body_type_check', sql`${table.requestBodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`),
     check('request_examples_request_raw_type_check', sql`${table.requestRawType} in ('json', 'text')`),
+  ]
+)
+
+export const websocketSavedMessages = sqliteTable(
+  'websocket_saved_messages',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('request_id').notNull(),
+    body: text('body').notNull().default(''),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    foreignKey({
+      columns: [table.requestId],
+      foreignColumns: [requests.id],
+      name: 'websocket_saved_messages_request_id_fkey',
+    }),
+    index('websocket_saved_messages_request_id_idx').on(table.requestId),
+    index('websocket_saved_messages_deleted_at_idx').on(table.deletedAt),
+  ]
+)
+
+export const websocketHistory = sqliteTable(
+  'websocket_history',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('request_id').notNull(),
+    requestName: text('request_name').notNull(),
+    url: text('url').notNull(),
+    requestHeaders: text('request_headers').notNull().default(''),
+    requestVariablesJson: text('request_variables_json').notNull().default('{}'),
+    historySizeBytes: integer('history_size_bytes').notNull().default(0),
+    connectedAt: integer('connected_at').notNull(),
+    disconnectedAt: integer('disconnected_at'),
+    closeCode: integer('close_code'),
+    closeReason: text('close_reason'),
+    responseError: text('response_error'),
+    createdAt: integer('created_at').notNull(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.requestId],
+      foreignColumns: [requests.id],
+      name: 'websocket_history_request_id_fkey',
+    }),
+    index('websocket_history_created_at_idx').on(table.createdAt),
+    index('websocket_history_request_id_idx').on(table.requestId),
+    index('websocket_history_connected_at_idx').on(table.connectedAt),
+  ]
+)
+
+export const websocketHistoryMessages = sqliteTable(
+  'websocket_history_messages',
+  {
+    id: text('id').primaryKey(),
+    historyId: text('history_id').notNull(),
+    direction: text('direction').notNull(),
+    body: text('body').notNull().default(''),
+    mimeType: text('mime_type'),
+    sizeBytes: integer('size_bytes').notNull().default(0),
+    timestamp: integer('timestamp').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.historyId],
+      foreignColumns: [websocketHistory.id],
+      name: 'websocket_history_messages_history_id_fkey',
+    }),
+    index('websocket_history_messages_history_id_idx').on(table.historyId),
+    index('websocket_history_messages_timestamp_idx').on(table.timestamp),
+    check('websocket_history_messages_direction_check', sql`${table.direction} in ('sent', 'received')`),
+  ]
+)
+
+export const websocketExamples = sqliteTable(
+  'websocket_examples',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('request_id').notNull(),
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+    requestHeaders: text('request_headers').notNull().default(''),
+    requestBody: text('request_body').notNull().default(''),
+    messageCount: integer('message_count').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    foreignKey({
+      columns: [table.requestId],
+      foreignColumns: [requests.id],
+      name: 'websocket_examples_request_id_fkey',
+    }),
+    index('websocket_examples_request_id_idx').on(table.requestId),
+    index('websocket_examples_request_position_idx').on(table.requestId, table.position),
+    index('websocket_examples_deleted_at_idx').on(table.deletedAt),
+  ]
+)
+
+export const websocketExampleMessages = sqliteTable(
+  'websocket_example_messages',
+  {
+    id: text('id').primaryKey(),
+    exampleId: text('example_id').notNull(),
+    direction: text('direction').notNull(),
+    body: text('body').notNull().default(''),
+    mimeType: text('mime_type'),
+    sizeBytes: integer('size_bytes').notNull().default(0),
+    timestamp: integer('timestamp').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.exampleId],
+      foreignColumns: [websocketExamples.id],
+      name: 'websocket_example_messages_example_id_fkey',
+    }),
+    index('websocket_example_messages_example_id_idx').on(table.exampleId),
+    index('websocket_example_messages_timestamp_idx').on(table.timestamp),
+    check('websocket_example_messages_direction_check', sql`${table.direction} in ('sent', 'received')`),
   ]
 )

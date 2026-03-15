@@ -121,9 +121,9 @@ export function ExplorerRow({
             {node.itemType === 'folder' ? (
               <FolderIcon className="size-4 shrink-0 text-base-content/55" />
             ) : node.itemType === 'request' ? (
-              <RequestMethodTag method={node.method} />
+              <RequestMethodTag method={node.method} requestType={node.requestType} />
             ) : (
-              <CopyIcon className="size-4 shrink-0 text-base-content/55" />
+              <ExampleGlyph exampleType={node.exampleType} />
             )}
           </div>
           <div className="min-w-0 flex-1 truncate px-1 text-sm text-base-content">{node.name}</div>
@@ -140,7 +140,8 @@ export function ExplorerRow({
           itemId={node.id}
           itemType={node.itemType}
           onAddFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined}
-          onAddRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id) : undefined}
+          onAddHttpRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'http') : undefined}
+          onAddWebSocketRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'websocket') : undefined}
           onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
         />
       </div>
@@ -181,7 +182,11 @@ export function ExplorerRow({
   )
 }
 
-function RequestMethodTag({ method }: { method: string }) {
+function RequestMethodTag({ method, requestType }: { method: string; requestType: 'http' | 'websocket' }) {
+  if (requestType === 'websocket') {
+    return <div className="w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em] text-accent">WS</div>
+  }
+
   const tone = getMethodTone(method)
   const label = method === 'DELETE' ? 'DEL' : method
 
@@ -193,6 +198,22 @@ function RequestMethodTag({ method }: { method: string }) {
       ].join(' ')}
     >
       {label}
+    </div>
+  )
+}
+
+function ExampleGlyph({ exampleType }: { exampleType: 'http' | 'websocket' }) {
+  return (
+    <div className="relative flex size-5 shrink-0 items-center justify-center text-base-content/55">
+      <CopyIcon className="size-4 shrink-0" />
+      <span
+        className={[
+          'absolute -right-1.5 -top-1 text-[7px] font-semibold leading-none tracking-[0.08em]',
+          exampleType === 'websocket' ? 'text-accent' : 'text-info',
+        ].join(' ')}
+      >
+        {exampleType === 'websocket' ? 'WS' : 'EX'}
+      </span>
     </div>
   )
 }
@@ -281,13 +302,15 @@ function ExplorerMenu({
   itemId,
   itemType,
   onAddFolder,
-  onAddRequest,
+  onAddHttpRequest,
+  onAddWebSocketRequest,
   onDelete,
 }: {
   itemId: string
   itemType: ExplorerItem['itemType']
   onAddFolder?: () => void
-  onAddRequest?: () => void
+  onAddHttpRequest?: () => void
+  onAddWebSocketRequest?: () => void
   onDelete: () => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -348,11 +371,19 @@ function ExplorerMenu({
               </button>
             </li>
           ) : null}
-          {itemType === 'folder' && onAddRequest ? (
+          {itemType === 'folder' && onAddHttpRequest ? (
             <li>
-              <button type="button" onClick={() => runAction(onAddRequest)}>
+              <button type="button" onClick={() => runAction(onAddHttpRequest)}>
                 <PlusIcon className="size-4" />
-                Add Request
+                Add HTTP Request
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'folder' && onAddWebSocketRequest ? (
+            <li>
+              <button type="button" onClick={() => runAction(onAddWebSocketRequest)}>
+                <PlusIcon className="size-4" />
+                Add WebSocket
               </button>
             </li>
           ) : null}

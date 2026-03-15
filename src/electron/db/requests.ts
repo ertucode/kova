@@ -10,11 +10,13 @@ import type {
   RequestBodyType,
   RequestMethod,
   RequestRawType,
+  RequestType,
   UpdateRequestInput,
 } from '../../common/Requests.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
 import { markRequestExamplesDeleted } from './request-examples.js'
+import { markWebSocketExamplesDeleted } from './websocket-examples.js'
 import { requests, treeItems } from './schema.js'
 import { ensureParentFolderExists, insertTreeItem, insertTreeItemAtPosition, markTreeItemDeleted } from './tree-items.js'
 
@@ -23,6 +25,7 @@ type RequestRow = typeof requests.$inferSelect
 const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www-form-urlencoded', 'none']
 const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
+const REQUEST_TYPES: RequestType[] = ['http', 'websocket']
 
 export async function createRequest(input: CreateRequestInput): Promise<GenericResult<HttpRequestRecord>> {
   const db = getDb()
@@ -32,14 +35,19 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
     return GenericError.Message('Request name is required')
   }
 
+  if (!REQUEST_TYPES.includes(input.requestType)) {
+    return GenericError.Message('Invalid request type')
+  }
+
   try {
     const request = db.transaction(tx => {
       ensureParentFolderExists(tx, input.parentFolderId)
 
       const now = Date.now()
-      const request: RequestRow = {
-        id: crypto.randomUUID(),
-        name,
+        const request: RequestRow = {
+          id: crypto.randomUUID(),
+          name,
+        requestType: input.requestType,
         method: 'GET',
         url: '',
         pathParams: '',
@@ -51,6 +59,8 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         body: '',
         bodyType: 'none',
         rawType: 'json',
+        websocketSubprotocols: '',
+        saveToHistory: true,
         createdAt: now,
         deletedAt: null,
       }
@@ -94,23 +104,38 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
     return GenericError.Message('Request name is required')
   }
 
-  if (!REQUEST_METHODS.includes(input.method)) {
-    return GenericError.Message('Invalid request method')
-  }
-
-  if (!REQUEST_BODY_TYPES.includes(input.bodyType)) {
-    return GenericError.Message('Invalid request body type')
-  }
-
-  if (!REQUEST_RAW_TYPES.includes(input.rawType)) {
-    return GenericError.Message('Invalid request raw type')
-  }
-
   try {
+    const existingRequest = db
+      .select()
+      .from(requests)
+      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
+      .get()
+
+    if (!existingRequest) {
+      return GenericError.Message('Request not found')
+    }
+
+    if (!REQUEST_METHODS.includes(input.method)) {
+      return GenericError.Message('Invalid request method')
+    }
+
+    if (!REQUEST_TYPES.includes(input.requestType) || input.requestType !== existingRequest.requestType) {
+      return GenericError.Message('Request type cannot be changed')
+    }
+
+    if (!REQUEST_BODY_TYPES.includes(input.bodyType)) {
+      return GenericError.Message('Invalid request body type')
+    }
+
+    if (!REQUEST_RAW_TYPES.includes(input.rawType)) {
+      return GenericError.Message('Invalid request raw type')
+    }
+
     const result = db
       .update(requests)
       .set({
         name,
+        requestType: input.requestType,
         method: input.method,
         url: input.url,
         pathParams: input.pathParams,
@@ -122,6 +147,8 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
         body: input.body,
         bodyType: input.bodyType,
         rawType: input.rawType,
+        websocketSubprotocols: input.websocketSubprotocols,
+        saveToHistory: input.saveToHistory,
       })
       .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
       .run()
@@ -163,6 +190,7 @@ export async function deleteRequest(input: DeleteRequestInput): Promise<GenericR
 
     markTreeItemDeleted(db, { itemType: 'request', itemId: input.id, deletedAt: now })
     markRequestExamplesDeleted(input.id, now)
+    markWebSocketExamplesDeleted(input.id, now)
     return Result.Success(undefined)
   } catch (error) {
     return GenericError.Unknown(error)
@@ -240,6 +268,7 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     id: request.id,
     name: request.name,
     method: request.method as RequestMethod,
+    requestType: request.requestType as RequestType,
     url: request.url,
     pathParams: request.pathParams,
     searchParams: request.searchParams,
@@ -250,6 +279,8 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     body: request.body,
     bodyType: request.bodyType as RequestBodyType,
     rawType: request.rawType as RequestRawType,
+    websocketSubprotocols: request.websocketSubprotocols,
+    saveToHistory: request.saveToHistory,
     createdAt: request.createdAt,
     deletedAt: request.deletedAt,
   }

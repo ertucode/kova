@@ -5,6 +5,7 @@ import type {
   DeleteRequestHistoryEntryInput,
   ListRequestHistoryInput,
   ListRequestHistoryResponse,
+  RequestHistoryListItem,
   RequestConsoleEntry,
   RequestExecutionRecord,
   RequestScriptError,
@@ -12,6 +13,7 @@ import type {
 } from '../../common/Requests.js'
 import { getDb } from './index.js'
 import { requestHistory } from './schema.js'
+import { deleteWebSocketHistoryEntry, listWebSocketHistory } from './websocket-history.js'
 
 type RequestHistoryRow = typeof requestHistory.$inferSelect
 
@@ -55,11 +57,15 @@ export async function listRequestHistory(input: ListRequestHistoryInput): Promis
         .limit(limit + 1)
         .offset(offset))
 
-  const items = rows.slice(0, limit).map(toRequestExecutionRecord)
+  const httpItems = rows.slice(0, limit).map(toRequestExecutionRecord)
+  const websocketResult = await listWebSocketHistory(input)
+  const items = [...httpItems, ...websocketResult.items]
+    .sort((left, right) => getHistoryCreatedAt(right) - getHistoryCreatedAt(left) || right.id.localeCompare(left.id))
+    .slice(0, limit)
 
   return {
     items,
-    nextOffset: rows.length > limit ? offset + limit : null,
+    nextOffset: rows.length > limit || websocketResult.nextOffset !== null ? offset + limit : null,
   }
 }
 
@@ -105,7 +111,7 @@ export async function deleteRequestHistoryEntry(input: DeleteRequestHistoryEntry
   try {
     const result = db.delete(requestHistory).where(eq(requestHistory.id, input.id)).run()
     if (result.changes === 0) {
-      return GenericError.Message('History entry not found')
+      return deleteWebSocketHistoryEntry(input)
     }
 
     return Result.Success(undefined)
@@ -162,6 +168,7 @@ function omitLargeResponseBody(execution: RequestExecutionRecord): RequestExecut
 
 function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecord {
   return {
+    itemType: 'http',
     id: row.id,
     requestId: row.requestId,
     requestName: row.requestName,
@@ -193,6 +200,10 @@ function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecor
     scriptErrors: parseJson<RequestScriptError[]>(row.scriptErrorsJson, []),
     consoleEntries: parseJson<RequestConsoleEntry[]>(row.consoleEntriesJson, []),
   }
+}
+
+function getHistoryCreatedAt(item: RequestHistoryListItem) {
+  return item.itemType === 'http' ? item.request.sentAt : item.connectedAt
 }
 
 function parseJson<T>(value: string, fallback: T): T {

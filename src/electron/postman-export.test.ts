@@ -42,6 +42,7 @@ describe('postman export', () => {
         {
           id: 'request-1',
           name: 'Create User',
+          requestType: 'http',
           method: 'POST',
           url: 'https://api.example.com/users/:userId',
           pathParams: 'userId:42 // User id',
@@ -53,6 +54,8 @@ describe('postman export', () => {
           body: '{"name":"Ada"}',
           bodyType: 'raw',
           rawType: 'json',
+          websocketSubprotocols: '',
+          saveToHistory: true,
           createdAt: 1,
           deletedAt: null,
           parentFolderId: null,
@@ -83,7 +86,7 @@ describe('postman export', () => {
           ],
         ],
       ]),
-      orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Create User', method: 'POST', url: 'https://api.example.com/users/:userId', position: 0, createdAt: 1, deletedAt: null }],
+      orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Create User', requestType: 'http', method: 'POST', url: 'https://api.example.com/users/:userId', position: 0, createdAt: 1, deletedAt: null }],
     }, 'Workspace')
 
     expect(document.item[0]?.response?.[0]?.originalRequest?.header).toEqual(
@@ -155,6 +158,7 @@ describe('postman export', () => {
         {
           id: 'request-1',
           name: 'Create User',
+          requestType: 'http',
           method: 'POST',
           url: 'https://api.example.com/users',
           pathParams: '',
@@ -166,6 +170,8 @@ describe('postman export', () => {
           body: '',
           bodyType: 'none',
           rawType: 'json',
+          websocketSubprotocols: '',
+          saveToHistory: true,
           createdAt: 1,
           deletedAt: null,
           parentFolderId: null,
@@ -173,7 +179,7 @@ describe('postman export', () => {
         },
       ],
       examplesByRequestId: new Map(),
-      orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Create User', method: 'POST', url: 'https://api.example.com/users', position: 0, createdAt: 1, deletedAt: null }],
+      orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Create User', requestType: 'http', method: 'POST', url: 'https://api.example.com/users', position: 0, createdAt: 1, deletedAt: null }],
     }, 'Create User')
 
     expect(document.info.name).toBe('Create User')

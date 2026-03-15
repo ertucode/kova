@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowUpRightIcon } from 'lucide-react'
-
 export type VariableTooltipEnvironmentRow = {
   id: string
   name: string
@@ -77,8 +76,15 @@ export function VariableHoverTooltip({
             <button
               type="button"
               className="min-w-0 text-left"
-              onClick={() => onOpenEnvironment(row.id)}
-              title={`Open ${row.name}`}
+              onClick={() => {
+                setDraftRows(current =>
+                  current.map(currentRow =>
+                    currentRow.id === row.id ? { ...currentRow, isActive: !currentRow.isActive } : currentRow
+                  )
+                )
+                onToggleEnvironment(row.id)
+              }}
+              title={row.isActive ? `Deactivate ${row.name}` : `Activate ${row.name}`}
             >
               <div className="flex items-center gap-2">
                 <div className="truncate text-sm font-medium text-base-content">{row.name}</div>
@@ -122,6 +128,7 @@ export function VariableHoverTooltip({
             >
               <ArrowUpRightIcon className="size-4" />
             </button>
+
           </div>
           )
         })}

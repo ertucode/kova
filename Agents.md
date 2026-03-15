@@ -2,4 +2,4 @@
 - `npm run check:frontend` to check frontend build if frontend code is changed.
 - `npm run check:backend` to check backend build if backend code is changed.
 - Do not use the typescript 'any' unless completely necessary.
-- Do not generate migrations manually. There is `npm run db:migrate` for that.
+- Do not generate migrations manually. There is `npm run db:generate` for that. DO NOT RUN `npm run db:migrate`

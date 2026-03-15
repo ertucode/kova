@@ -35,6 +35,10 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       getRequestParentFolderId(input.requestId),
     ])
 
+    if (requestResult.data.requestType !== 'http') {
+      return GenericError.Message('Use the WebSocket connect flow for websocket requests')
+    }
+
     const folders = await getFolderAncestorChain(parentFolderId)
     const runtime = createRequestScriptRuntime({
       request: {
@@ -166,6 +170,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
     }
 
     const execution: RequestExecutionRecord = {
+      itemType: 'http',
       id: crypto.randomUUID(),
       requestId: input.requestId,
       requestName: requestResult.data.name,

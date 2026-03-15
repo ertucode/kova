@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { ChevronDownIcon, ChevronRightIcon, SaveIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
-import type { RequestConsoleEntry, RequestExecutionRecord } from '@common/Requests'
+import type { RequestConsoleEntry, RequestExecutionRecord, RequestHistoryListItem, WebSocketSessionRecord } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toast } from '@/lib/components/toast'
@@ -50,7 +50,9 @@ export function HistoryPanel() {
         <EmptyExecutionState message={searchValue.trim() ? 'No history matches your search.' : 'Send a request to start building history.'} />
       ) : null}
       {visibleHistory.map(execution => (
-        <ExecutionCard key={execution.id} execution={execution} />
+        execution.itemType === 'http'
+          ? <ExecutionCard key={execution.id} execution={execution} />
+          : <WebSocketHistoryCard key={execution.id} session={execution} />
       ))}
       {historyNextOffset !== null ? (
         <button
@@ -141,7 +143,7 @@ function ExecutionCard({ execution }: { execution: RequestExecutionRecord }) {
   const scriptErrors = execution.scriptErrors ?? []
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
+    <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
       <div className="flex items-start gap-2 px-4 py-3 transition hover:bg-base-100/60">
         <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => setExpanded(current => !current)}>
           <div className="mt-0.5 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
@@ -210,6 +212,82 @@ function ExecutionCard({ execution }: { execution: RequestExecutionRecord }) {
               value={scriptErrors.map(error => `${error.sourceName}: ${error.message}`).join('\n')}
             />
           ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) {
+  const [expanded, setExpanded] = useState(false)
+  const connectedTime = useMemo(() => formatTimestamp(session.connectedAt), [session.connectedAt])
+
+  return (
+    <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
+      <div className="flex items-start gap-2 px-4 py-3 transition hover:bg-base-100/60">
+        <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => setExpanded(current => !current)}>
+          <div className="mt-0.5 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-xs font-semibold tracking-[0.12em] text-accent">WS</span>
+              <span className="truncate text-sm font-medium text-base-content">{session.requestName}</span>
+              <span className="truncate text-sm text-base-content/50">{session.url}</span>
+            </div>
+            <div className="mt-1 flex min-w-0 items-center gap-3 overflow-hidden text-xs text-base-content/45">
+              <span>{connectedTime}</span>
+              <span>{session.messages.length} messages</span>
+              <span>{formatBytes(session.historySizeBytes)}</span>
+              {session.closeCode !== null ? <span>Code {session.closeCode}</span> : null}
+              {session.responseError ? <span className="truncate text-error">{session.responseError}</span> : null}
+            </div>
+          </div>
+        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
+            onClick={event => {
+              event.stopPropagation()
+              void saveWebSocketSessionAsExample(session)
+            }}
+            aria-label="Save as example"
+            title="Save as Example"
+          >
+            <SaveIcon className="size-4" />
+          </button>
+          <button
+            type="button"
+            className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
+            onClick={event => {
+              event.stopPropagation()
+              void RequestExecutionCoordinator.deleteHistoryEntry(session.id).catch(error => {
+                console.error('deleteHistoryEntry failed', error)
+              })
+            }}
+            aria-label="Delete history entry"
+            title="Delete history entry"
+          >
+            <Trash2Icon className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="max-h-[500px] min-w-0 overflow-y-auto border-t border-base-content/10 px-4 py-4">
+          <ExecutionSection title="Connection" value={formatWebSocketConnection(session)} />
+          <ExecutionVariablesSection variables={session.requestVariables ?? {}} />
+          <div className="mb-4 last:mb-0">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-base-content/50">Messages</div>
+            <div className="space-y-2">
+              {session.messages.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">No messages saved</div>
+              ) : (
+                session.messages.map(message => (
+                  <HistoryWebSocketMessageRow key={message.id} message={message} />
+                ))
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
@@ -355,6 +433,32 @@ async function saveExecutionAsExample(execution: RequestExecutionRecord) {
   toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${execution.requestName}.` })
 }
 
+async function saveWebSocketSessionAsExample(session: WebSocketSessionRecord) {
+  const lastSentMessage = [...session.messages].reverse().find(message => message.direction === 'sent')
+  const result = await getWindowElectron().createWebSocketExample({
+    requestId: session.requestId,
+    name: `${session.requestName} ${formatTimestamp(session.connectedAt)}`,
+    requestHeaders: session.requestHeaders,
+    requestBody: lastSentMessage?.body ?? '',
+    messages: session.messages.map(message => ({
+      direction: message.direction,
+      body: message.body,
+      mimeType: message.mimeType,
+      sizeBytes: message.sizeBytes,
+      timestamp: message.timestamp,
+    })),
+  })
+
+  if (!result.success) {
+    toast.show(result)
+    return
+  }
+
+  await FolderExplorerCoordinator.loadItems()
+  FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
+  toast.show({ severity: 'success', title: 'Example saved', message: `Saved transcript example for ${session.requestName}.` })
+}
+
 function ExecutionSubsection({ title, value }: { title: string; value: string }) {
   return (
     <div>
@@ -453,6 +557,62 @@ function getConsoleTone(level: RequestConsoleEntry['level']) {
   }
 }
 
-function isRenderableExecution(value: RequestExecutionRecord | null | undefined): value is RequestExecutionRecord {
-  return Boolean(value && typeof value.id === 'string' && value.request && typeof value.request.url === 'string')
+function isRenderableExecution(value: RequestHistoryListItem | null | undefined): value is RequestHistoryListItem {
+  return Boolean(
+    value && typeof value.id === 'string' && (value.itemType === 'http' ? value.request && typeof value.request.url === 'string' : typeof value.url === 'string')
+  )
+}
+
+function formatWebSocketConnection(session: WebSocketSessionRecord) {
+  return [
+    session.url,
+    `Connected ${formatTimestamp(session.connectedAt)}`,
+    session.disconnectedAt ? `Disconnected ${formatTimestamp(session.disconnectedAt)}` : '',
+    session.closeCode !== null ? `Close Code ${session.closeCode}` : '',
+    session.closeReason ? `Close Reason ${session.closeReason}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getCollapsedMessagePreview(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    return '(empty)'
+  }
+
+  return normalized.length > 40 ? `${normalized.slice(0, 40)}...` : normalized
+}
+
+function HistoryWebSocketMessageRow({ message }: { message: WebSocketSessionRecord['messages'][number] }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3">
+      <button type="button" className="flex min-w-0 w-full items-start gap-2 text-left" onClick={() => setExpanded(current => !current)}>
+        <div className="mt-0.5 shrink-0 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-base-content/45">
+            <span className={message.direction === 'sent' ? 'text-info' : 'text-success'}>{message.direction}</span>
+            <span>{formatTimestamp(message.timestamp)}</span>
+            <span>{formatBytes(message.sizeBytes)}</span>
+            {message.mimeType ? <span>{message.mimeType}</span> : null}
+          </div>
+          {expanded ? (
+            <pre className="mt-1 overflow-auto whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">{message.body || '(empty)'}</pre>
+          ) : (
+            <div className="mt-1 truncate font-mono text-[12px] text-base-content/75">{getCollapsedMessagePreview(message.body)}</div>
+          )}
+        </div>
+      </button>
+    </div>
+  )
 }

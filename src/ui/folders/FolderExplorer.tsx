@@ -288,12 +288,18 @@ function CreateMenuButton() {
               Add Folder
             </button>
           </li>
-          <li>
-            <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null))}>
-              <FileCode2Icon className="size-4" />
-              Add Request
-            </button>
-          </li>
+            <li>
+              <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'http'))}>
+                <FileCode2Icon className="size-4" />
+                Add HTTP Request
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'websocket'))}>
+                <FileCode2Icon className="size-4" />
+                Add WebSocket
+              </button>
+            </li>
           <li>
             <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'workspace' } }))}>
               <FileJsonIcon className="size-4" />

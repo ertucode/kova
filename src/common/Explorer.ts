@@ -16,14 +16,17 @@ export type ExplorerFolderItem = ExplorerItemBase & {
 export type ExplorerRequestItem = ExplorerItemBase & {
   itemType: 'request'
   parentFolderId: string | null
+  requestType: 'http' | 'websocket'
   method: string
   url: string
 }
 
 export type ExplorerExampleItem = ExplorerItemBase & {
   itemType: 'example'
+  exampleType: 'http' | 'websocket'
   requestId: string
-  responseStatus: number
+  responseStatus: number | null
+  messageCount: number | null
 }
 
 export type ExplorerItem = ExplorerFolderItem | ExplorerRequestItem | ExplorerExampleItem
