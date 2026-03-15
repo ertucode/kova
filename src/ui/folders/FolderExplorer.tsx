@@ -153,11 +153,11 @@ export function FolderExplorer() {
 
       {sidebarTab === 'requests' ? (
         <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-100">
-          <div className="border-b border-base-content/10 px-4 py-4">
-            <div className="flex items-center gap-2">
+          <div className="h-11 border-b border-base-content/10 px-2 py-1.5">
+            <div className="flex h-full items-center gap-2">
               <CreateMenuButton />
 
-              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
+              <label className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
                 <SearchIcon className="size-4 shrink-0" />
                 <input
                   type="text"
@@ -271,7 +271,7 @@ function CreateMenuButton() {
     <div ref={containerRef} className="relative shrink-0">
       <button
         type="button"
-        className="flex h-10 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-100"
+        className="flex h-full items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-100"
         onClick={() => setIsOpen(current => !current)}
       >
         <FolderIcon className="size-4" />

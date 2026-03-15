@@ -8,8 +8,10 @@ type ConfirmationOptions = {
   message: ReactNode;
   onConfirm: () => void | Promise<void>;
   onReject?: () => void;
+  onSecondaryAction?: () => void | Promise<void>;
   confirmText?: string;
   rejectText?: string;
+  secondaryActionText?: string;
 };
 
 export const confirmation = createStore({
@@ -45,6 +47,12 @@ export function ConfirmationRenderer() {
     confirmation.trigger.hide();
   };
 
+  const handleSecondaryAction = async () => {
+    if (!state?.onSecondaryAction) return;
+    await state.onSecondaryAction();
+    confirmation.trigger.hide();
+  };
+
   return (
     <>
       {state && (
@@ -52,6 +60,11 @@ export function ConfirmationRenderer() {
           <h3 className="font-bold text-lg mb-4">{state.title}</h3>
           <div className="mb-4">{state.message}</div>
           <div className="modal-action">
+            {state.secondaryActionText && state.onSecondaryAction && (
+              <button className="btn" onClick={handleSecondaryAction}>
+                {state.secondaryActionText}
+              </button>
+            )}
             <button
               className="btn btn-primary"
               autoFocus

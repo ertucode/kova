@@ -71,6 +71,7 @@ export namespace FolderExplorerCoordinator {
   export async function loadTabs() {
     const tabs = await getWindowElectron().listFolderExplorerTabs()
     await replaceTabsState(tabs, getActiveTabIdFromTabs(tabs), { persist: false, loadActiveSelection: true, reconcile: true })
+    pruneEntryStatesToTabs()
   }
 
   export async function selectItem(selection: Selection | null, options?: { mode?: OpenTabMode }) {
@@ -95,6 +96,13 @@ export namespace FolderExplorerCoordinator {
 
     const now = Date.now()
     const previewTab = mode === 'preview' ? state.tabs.find(tab => !tab.isPinned) : null
+    if (previewTab && (previewTab.itemType !== selection.itemType || previewTab.itemId !== selection.id)) {
+      const canClosePreviewTab = await confirmTabCanClose(previewTab.id)
+      if (!canClosePreviewTab) {
+        return
+      }
+    }
+
     const nextTabsBase = previewTab
       ? state.tabs.map(tab =>
           tab.id === previewTab.id
@@ -122,21 +130,69 @@ export namespace FolderExplorerCoordinator {
         ]
     const nextActiveTabId = previewTab ? previewTab.id : nextTabsBase[nextTabsBase.length - 1]?.id ?? null
     const nextTabs = enforceTabLimit(nextTabsBase, nextActiveTabId)
+    if (previewTab) {
+      clearClosedTabEntries(state.tabs, nextTabs)
+    }
     await replaceTabsState(nextTabs, getValidActiveTabId(nextTabs, nextActiveTabId))
   }
 
   export async function closeTab(tabId: string) {
-    const { tabs, activeTabId } = folderExplorerEditorStore.getSnapshot().context
-    const tabIndex = tabs.findIndex(tab => tab.id === tabId)
-    if (tabIndex < 0) {
+    const canClose = await confirmTabCanClose(tabId)
+    if (!canClose) {
       return
     }
 
-    const nextTabs = tabs.filter(tab => tab.id !== tabId)
-    const nextActiveTabId =
-      activeTabId === tabId ? nextTabs[Math.max(0, tabIndex - 1)]?.id ?? nextTabs[tabIndex]?.id ?? null : activeTabId
+    await closeTabInternal(tabId)
+  }
 
-    await replaceTabsState(nextTabs, getValidActiveTabId(nextTabs, nextActiveTabId))
+  export async function closeActiveTab() {
+    const { activeTabId } = folderExplorerEditorStore.getSnapshot().context
+    if (!activeTabId) {
+      return
+    }
+
+    await closeTab(activeTabId)
+  }
+
+  export async function closeAllTabs() {
+    await closeTabsWithConfirmation(folderExplorerEditorStore.getSnapshot().context.tabs.map(tab => tab.id))
+  }
+
+  export async function closeOtherTabs(tabId: string) {
+    const { tabs } = folderExplorerEditorStore.getSnapshot().context
+    await closeTabsWithConfirmation(tabs.filter(tab => tab.id !== tabId).map(tab => tab.id))
+  }
+
+  export async function closeAllSavedTabs() {
+    const { tabs } = folderExplorerEditorStore.getSnapshot().context
+    const savedTabIds = tabs.filter(tab => !isTabDirty(tab)).map(tab => tab.id)
+    await closeTabsImmediately(savedTabIds)
+  }
+
+  export async function saveAndCloseTab(tabId: string) {
+    const tab = getTabById(tabId)
+    if (!tab) {
+      return
+    }
+
+    if (isTabDirty(tab)) {
+      await saveItem({ itemType: tab.itemType, id: tab.itemId })
+      const latestTab = getTabById(tabId)
+      if (!latestTab || isTabDirty(latestTab)) {
+        return
+      }
+    }
+
+    await closeTabInternal(tabId)
+  }
+
+  export async function saveAndCloseAllTabs() {
+    await saveAndCloseTabs(folderExplorerEditorStore.getSnapshot().context.tabs.map(tab => tab.id))
+  }
+
+  export async function saveAndCloseOtherTabs(tabId: string) {
+    const { tabs } = folderExplorerEditorStore.getSnapshot().context
+    await saveAndCloseTabs(tabs.filter(tab => tab.id !== tabId).map(tab => tab.id))
   }
 
   export async function activateTab(tabId: string) {
@@ -173,6 +229,7 @@ export namespace FolderExplorerCoordinator {
   export function updateSelectedDraft(draft: DetailsDraft | null) {
     if (!draft) return
     folderExplorerEditorStore.trigger.selectedDraftUpdated({ draft })
+    void pinActivePreviewTabIfDirty()
     persistUnsavedDrafts()
   }
 
@@ -464,6 +521,166 @@ async function reconcileTabsWithItems(items: ExplorerItem[]) {
   await replaceTabsState(validTabs, nextActiveTabId, { loadActiveSelection: false })
 }
 
+async function closeTabsWithConfirmation(tabIds: string[]) {
+  for (const tabId of tabIds) {
+    const canClose = await confirmTabCanClose(tabId)
+    if (!canClose) {
+      continue
+    }
+
+    await closeTabInternal(tabId)
+  }
+}
+
+async function saveAndCloseTabs(tabIds: string[]) {
+  for (const tabId of tabIds) {
+    const tab = getTabById(tabId)
+    if (!tab) {
+      continue
+    }
+
+    if (isTabDirty(tab)) {
+      await saveItem({ itemType: tab.itemType, id: tab.itemId })
+      const latestTab = getTabById(tabId)
+      if (!latestTab || isTabDirty(latestTab)) {
+        continue
+      }
+    }
+
+    await closeTabInternal(tabId)
+  }
+}
+
+async function closeTabsImmediately(tabIds: string[]) {
+  for (const tabId of tabIds) {
+    await closeTabInternal(tabId)
+  }
+}
+
+async function closeTabInternal(tabId: string) {
+  const { tabs, activeTabId } = folderExplorerEditorStore.getSnapshot().context
+  const tabIndex = tabs.findIndex(tab => tab.id === tabId)
+  if (tabIndex < 0) {
+    return
+  }
+
+  const nextTabs = tabs.filter(tab => tab.id !== tabId)
+  const nextActiveTabId =
+    activeTabId === tabId ? nextTabs[Math.max(0, tabIndex - 1)]?.id ?? nextTabs[tabIndex]?.id ?? null : activeTabId
+
+  clearClosedTabEntries(tabs, nextTabs)
+  await replaceTabsState(nextTabs, getValidActiveTabId(nextTabs, nextActiveTabId))
+}
+
+async function confirmTabCanClose(tabId: string) {
+  const tab = getTabById(tabId)
+  if (!tab || !isTabDirty(tab)) {
+    return true
+  }
+
+  const name = getTabName(tab)
+  return await new Promise<boolean>(resolve => {
+    confirmation.trigger.confirm({
+      title: 'Unsaved changes',
+      message: `"${name}" has unsaved changes. Close without saving?`,
+      secondaryActionText: 'Save And Close',
+      confirmText: 'Close tab',
+      rejectText: 'Keep tab',
+      onConfirm: () => resolve(true),
+      onReject: () => resolve(false),
+      onSecondaryAction: async () => {
+        await saveItem({ itemType: tab.itemType, id: tab.itemId })
+        const latestTab = getTabById(tabId)
+        resolve(Boolean(latestTab && !isTabDirty(latestTab)))
+      },
+    })
+  })
+}
+
+async function pinActivePreviewTabIfDirty() {
+  const state = folderExplorerEditorStore.getSnapshot().context
+  if (!state.selected || !state.activeTabId) {
+    return
+  }
+
+  const activeTab = state.tabs.find(tab => tab.id === state.activeTabId)
+  if (!activeTab || activeTab.isPinned) {
+    return
+  }
+
+  if (activeTab.itemType !== state.selected.itemType || activeTab.itemId !== state.selected.id) {
+    return
+  }
+
+  const entry = state.entries[toSelectionKey(state.selected)]
+  if (!entry || !isEntryDirty(entry)) {
+    return
+  }
+
+  const nextTabs = state.tabs.map(tab =>
+    tab.id === activeTab.id
+      ? {
+          ...tab,
+          isPinned: true,
+          updatedAt: Date.now(),
+        }
+      : tab
+  )
+
+  await replaceTabsState(nextTabs, state.activeTabId, { loadActiveSelection: false })
+}
+
+function getTabById(tabId: string) {
+  return folderExplorerEditorStore.getSnapshot().context.tabs.find(tab => tab.id === tabId) ?? null
+}
+
+function isTabDirty(tab: FolderExplorerTabRecord) {
+  const entry = folderExplorerEditorStore.getSnapshot().context.entries[toSelectionKey({ itemType: tab.itemType, id: tab.itemId })]
+  return Boolean(entry && isEntryDirty(entry))
+}
+
+function getTabName(tab: FolderExplorerTabRecord) {
+  const key = toSelectionKey({ itemType: tab.itemType, id: tab.itemId })
+  const entry = folderExplorerEditorStore.getSnapshot().context.entries[key]
+  if (entry?.current?.name?.trim()) {
+    return entry.current.name.trim()
+  }
+
+  const item = folderExplorerTreeStore
+    .getSnapshot()
+    .context.items.find(currentItem => currentItem.itemType === tab.itemType && currentItem.id === tab.itemId)
+
+  return item?.name ?? 'Untitled'
+}
+
+function clearClosedTabEntries(previousTabs: FolderExplorerTabRecord[], nextTabs: FolderExplorerTabRecord[]) {
+  const openKeys = new Set(nextTabs.map(tab => toSelectionKey({ itemType: tab.itemType, id: tab.itemId })))
+  const keysToClear = previousTabs
+    .map(tab => toSelectionKey({ itemType: tab.itemType, id: tab.itemId }))
+    .filter(key => !openKeys.has(key))
+
+  if (keysToClear.length === 0) {
+    return
+  }
+
+  folderExplorerEditorStore.trigger.itemStatesCleared({ keys: keysToClear })
+  persistUnsavedDrafts()
+}
+
+function pruneEntryStatesToTabs() {
+  const state = folderExplorerEditorStore.getSnapshot().context
+  const openKeys = new Set(state.tabs.map(tab => toSelectionKey({ itemType: tab.itemType, id: tab.itemId })))
+  const keysToClear = Object.keys(state.entries).filter(key => !openKeys.has(key))
+
+  if (keysToClear.length === 0) {
+    persistUnsavedDrafts()
+    return
+  }
+
+  folderExplorerEditorStore.trigger.itemStatesCleared({ keys: keysToClear })
+  persistUnsavedDrafts()
+}
+
 function getActiveTabIdFromTabs(tabs: FolderExplorerTabRecord[]) {
   return tabs.find(tab => tab.isActive)?.id ?? tabs[0]?.id ?? null
 }
@@ -652,9 +869,14 @@ async function saveItem(selection: Selection) {
 
 function persistUnsavedDrafts() {
   const entries = folderExplorerEditorStore.getSnapshot().context.entries
+  const openKeys = new Set(
+    folderExplorerEditorStore
+      .getSnapshot()
+      .context.tabs.map(tab => toSelectionKey({ itemType: tab.itemType, id: tab.itemId }))
+  )
   const nextPersistedDrafts = Object.fromEntries(
     Object.entries(entries)
-      .filter(([, entry]) => entry.current && (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base)))
+      .filter(([key, entry]) => openKeys.has(key) && entry.current && (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base)))
       .map(([key, entry]) => [key, entry.current as DetailsDraft])
   )
 
