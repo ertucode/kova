@@ -1,12 +1,15 @@
 import { useMemo, useRef } from 'react'
+import { InfoIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap } from '@common/RequestVariables'
+import { dialogActions } from '@/global/dialogStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import type { FolderDetailsDraft } from './folderExplorerTypes'
 import { DetailsTextArea } from './DetailsTextArea'
 import { HeadersEditor } from './HeadersEditor'
 import { AuthorizationEditor } from './AuthorizationEditor'
+import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
@@ -143,6 +146,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           editorLanguage="javascript"
           editorSize="small"
           extensions={preRequestScriptExtensions}
+          headerActions={<ScriptDocumentationButton phase="pre-request" />}
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
           onBlur={() => undefined}
         />
@@ -155,11 +159,26 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           editorLanguage="javascript"
           editorSize="small"
           extensions={postRequestScriptExtensions}
+          headerActions={<ScriptDocumentationButton phase="post-request" />}
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
           onBlur={() => undefined}
         />
       </div>
     </div>
+  )
+}
+
+function ScriptDocumentationButton({ phase }: { phase: 'pre-request' | 'post-request' }) {
+  return (
+    <button
+      type="button"
+      className="grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content"
+      onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase } })}
+      aria-label={phase === 'pre-request' ? 'Open pre-request script documentation' : 'Open post-request script documentation'}
+      title="Script documentation"
+    >
+      <InfoIcon className="size-3.5" />
+    </button>
   )
 }
 

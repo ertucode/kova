@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { Extension } from '@codemirror/state'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
@@ -11,6 +12,7 @@ export function DetailsTextArea({
   editorSize,
   placeholder,
   extensions,
+  headerActions,
   onChange,
   onBlur,
 }: {
@@ -22,12 +24,13 @@ export function DetailsTextArea({
   editorSize?: 'normal' | 'small'
   placeholder?: string
   extensions?: Extension[]
+  headerActions?: ReactNode
   onChange: (value: string) => void
   onBlur: () => void
 }) {
   return (
     <section className={['w-full border-b border-base-content/10', sectionClassName].filter(Boolean).join(' ')}>
-      {label ? <DetailsSectionHeader title={label} /> : null}
+      {label ? <DetailsSectionHeader title={label} actions={headerActions} /> : null}
       {editorLanguage ? (
         <CodeEditor
           value={value}

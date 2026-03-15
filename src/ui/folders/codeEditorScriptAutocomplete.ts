@@ -8,89 +8,15 @@ import {
 } from '@codemirror/autocomplete'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
-
-type ScriptApiCompletionNode = {
-  label: string
-  type: Completion['type']
-  detail?: string
-  apply?: string
-  children?: ScriptApiCompletionNode[]
-}
-
-const sharedNodes: ScriptApiCompletionNode[] = [
-  {
-    label: 'env',
-    type: 'namespace',
-    detail: 'effective environment API',
-    children: [
-      { label: 'get', type: 'function', detail: 'env.get(name, environmentName?)', apply: 'get()' },
-      { label: 'set', type: 'function', detail: 'env.set(name, value, environmentName?)', apply: 'set()' },
-      { label: 'has', type: 'function', detail: 'env.has(name, environmentName?)', apply: 'has()' },
-    ],
-  },
-  {
-    label: 'scope',
-    type: 'namespace',
-    detail: 'request-scoped variables',
-    children: [
-      { label: 'get', type: 'function', detail: 'scope.get(name)', apply: 'get()' },
-      { label: 'set', type: 'function', detail: 'scope.set(name, value)', apply: 'set()' },
-      { label: 'has', type: 'function', detail: 'scope.has(name)', apply: 'has()' },
-    ],
-  },
-  {
-    label: 'request',
-    type: 'namespace',
-    detail: 'mutable request object',
-    children: [
-      { label: 'method', type: 'property', detail: 'request.method' },
-      { label: 'url', type: 'property', detail: 'request.url' },
-      { label: 'body', type: 'property', detail: 'request.body' },
-      { label: 'bodyType', type: 'property', detail: 'request.bodyType' },
-      { label: 'rawType', type: 'property', detail: 'request.rawType' },
-      {
-        label: 'headers',
-        type: 'property',
-        detail: 'request.headers helper',
-        children: [
-          { label: 'get', type: 'function', detail: 'request.headers.get(name)', apply: 'get()' },
-          { label: 'set', type: 'function', detail: 'request.headers.set(name, value)', apply: 'set()' },
-          { label: 'delete', type: 'function', detail: 'request.headers.delete(name)', apply: 'delete()' },
-          { label: 'has', type: 'function', detail: 'request.headers.has(name)', apply: 'has()' },
-          { label: 'entries', type: 'function', detail: 'request.headers.entries()', apply: 'entries()' },
-          { label: 'toObject', type: 'function', detail: 'request.headers.toObject()', apply: 'toObject()' },
-        ],
-      },
-    ],
-  },
-]
-
-const responseNode: ScriptApiCompletionNode = {
-  label: 'response',
-  type: 'namespace',
-  detail: 'parsed response object',
-  children: [
-    { label: 'status', type: 'property', detail: 'response.status' },
-    { label: 'statusText', type: 'property', detail: 'response.statusText' },
-    { label: 'headers', type: 'property', detail: 'response.headers' },
-    {
-      label: 'body',
-      type: 'property',
-      detail: "response.body: { type: 'json' | 'text', data }",
-      children: [
-        { label: 'type', type: 'property', detail: 'response.body.type' },
-        { label: 'data', type: 'property', detail: 'response.body.data' },
-      ],
-    },
-  ],
-}
+import { requestScriptAutocomplete } from './scriptAutocompleteClient'
+import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
 
 export function scriptAutocompleteExtension(options: {
   includeResponse: boolean
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
 }): Extension {
-  const roots = options.includeResponse ? [...sharedNodes, responseNode] : sharedNodes
+  const phase: ScriptAutocompletePhase = options.includeResponse ? 'post-request' : 'pre-request'
 
   return [
     autocompletion({
@@ -98,7 +24,7 @@ export function scriptAutocompleteExtension(options: {
       override: [
         context => completeVariableName(context, options.getVariableNames),
         context => completeEnvironmentName(context, options.getEnvironmentNames),
-        context => completeScriptApi(context, roots),
+        context => completeScriptApi(context, phase),
       ],
     }),
     EditorView.updateListener.of(update => {
@@ -111,16 +37,8 @@ export function scriptAutocompleteExtension(options: {
         return
       }
 
-      const textBeforeCursor = update.state.doc.sliceString(Math.max(0, selection.from - 120), selection.from)
-      if (
-        !/(?:^|[^\w$])(?:env|scope|request|response)(?:\.[A-Za-z_$][\w$]*)*\.?$/.test(textBeforeCursor) &&
-        !/env\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) &&
-        !/scope\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) &&
-        !/request\.headers\.(?:get|has|set|delete)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) &&
-        !/env\.(?:get|has)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) &&
-        !/env\.set\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) &&
-        !/env\.(?:get|has)\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor)
-      ) {
+      const textBeforeCursor = update.state.doc.sliceString(Math.max(0, selection.from - 240), selection.from)
+      if (!shouldStartCompletion(textBeforeCursor)) {
         return
       }
 
@@ -156,14 +74,11 @@ function completeVariableName(
 
     const quote = match[1] ?? '"'
     const query = match[2] ?? ''
-    const names = Array.from(new Set(getVariableNames().filter(name => name.trim() !== ''))).sort((a, b) => a.localeCompare(b))
-    const options = names
-      .filter(name => name.toLowerCase().includes(query.toLowerCase()))
-      .map(name => ({
-        label: name,
-        type: 'variable' as const,
-        detail: 'variable',
-        apply: `${name}${quote}`,
+    const options = buildVariableStringCompletions(getVariableNames)
+      .filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
+      .map(option => ({
+        ...option,
+        apply: `${option.label}${quote}`,
       }))
 
     if (options.length === 0) {
@@ -202,16 +117,13 @@ function completeEnvironmentName(
       continue
     }
 
-    const query = match[match.length - 1] ?? ''
     const quote = match[match.length - 2] ?? '"'
-    const names = Array.from(new Set(getEnvironmentNames().filter(name => name.trim() !== ''))).sort((a, b) => a.localeCompare(b))
-    const options = names
-      .filter(name => name.toLowerCase().includes(query.toLowerCase()))
-      .map(name => ({
-        label: name,
-        type: 'constant' as const,
-        detail: 'environment',
-        apply: `${name}${quote}`,
+    const query = match[match.length - 1] ?? ''
+    const options = buildEnvironmentStringCompletions(getEnvironmentNames)
+      .filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
+      .map(option => ({
+        ...option,
+        apply: `${option.label}${quote}`,
       }))
 
     if (options.length === 0) {
@@ -230,90 +142,86 @@ function completeEnvironmentName(
   return null
 }
 
-function completeScriptApi(context: CompletionContext, roots: ScriptApiCompletionNode[]): CompletionResult | null {
-  if (context.explicit) {
-    const word = context.matchBefore(/[A-Za-z_$][\w$]*/)
-    const query = word?.text ?? ''
-    const options = roots
-      .filter(node => query === '' || node.label.toLowerCase().includes(query.toLowerCase()))
-      .sort((left, right) => left.label.localeCompare(right.label))
-      .map(node => toCompletion(node))
-
-    if (options.length > 0) {
-      return {
-        from: word?.from ?? context.pos,
-        to: context.pos,
-        options,
-        filter: false,
-        validFor: /^[A-Za-z_$\d]*$/,
-      }
-    }
-  }
-
-  const match = context.matchBefore(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.?[A-Za-z_$\d]*$/)
-  if (!match) {
+async function completeScriptApi(
+  context: CompletionContext,
+  phase: ScriptAutocompletePhase
+): Promise<CompletionResult | null> {
+  const identifierMatch = context.matchBefore(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.?[A-Za-z_$\d]*$/)
+  if (!identifierMatch && !context.explicit) {
     return null
   }
 
-  if (match.from === match.to && !context.explicit) {
-    return null
-  }
+  try {
+    const abortController = new AbortController()
+    context.addEventListener('abort', () => abortController.abort(), { onDocChange: true })
 
-  const text = match.text
-  const hasTrailingDot = text.endsWith('.')
-  const segments = text.split('.')
-  const query = hasTrailingDot ? '' : (segments.pop() ?? '')
-  const path = hasTrailingDot ? segments.filter(Boolean) : segments.filter(Boolean)
-  const parentNodes = findNodesForPath(roots, path)
-  if (!parentNodes) {
-    return null
-  }
+    const result = await requestScriptAutocomplete({
+      phase,
+      code: context.state.doc.toString(),
+      position: context.pos,
+      signal: abortController.signal,
+    })
 
-  const options = parentNodes
-    .filter(node => query === '' || node.label.toLowerCase().includes(query.toLowerCase()))
-    .sort((left, right) => left.label.localeCompare(right.label))
-    .map(node => toCompletion(node))
-
-  if (options.length === 0) {
-    return null
-  }
-
-  return {
-    from: match.to - query.length,
-    options,
-    filter: false,
-    validFor: /^[A-Za-z_$\d]*$/,
-  }
-}
-
-function findNodesForPath(roots: ScriptApiCompletionNode[], path: string[]) {
-  if (path.length === 0) {
-    return roots
-  }
-
-  let currentNodes = roots
-  for (const segment of path) {
-    const nextNode = currentNodes.find(node => node.label === segment)
-    if (!nextNode?.children) {
+    if (context.aborted || !result || result.options.length === 0) {
       return null
     }
-    currentNodes = nextNode.children
-  }
 
-  return currentNodes
+    return {
+      from: result.from,
+      to: result.to,
+      options: result.options.map(option => ({
+        label: option.label,
+        type: option.type,
+        detail: option.detail,
+        info: option.info,
+        boost: option.boost,
+        apply: option.applyText,
+      })),
+      validFor: /^[A-Za-z_$\d]*$/,
+    }
+  } catch {
+    return null
+  }
 }
 
-function toCompletion(node: ScriptApiCompletionNode): Completion {
-  return {
-    label: node.label,
-    type: node.type,
-    detail: node.detail,
-    apply(view, completion, from, to) {
-      const replacement = node.apply ?? completion.label
-      view.dispatch({
-        changes: { from, to, insert: replacement },
-        selection: { anchor: from + replacement.length },
-      })
-    },
+function shouldStartCompletion(textBeforeCursor: string) {
+  if (
+    /env\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
+    /scope\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
+    /request\.headers\.(?:get|has|set|delete)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
+    /env\.(?:get|has)\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
+    /env\.set\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor)
+  ) {
+    return true
   }
+
+  return /(?:^|[^\w$])[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.?[A-Za-z_$\d]*$/.test(textBeforeCursor)
+}
+
+function buildVariableStringCompletions(getVariableNames: (() => string[]) | undefined): Completion[] {
+  if (!getVariableNames) {
+    return []
+  }
+
+  return Array.from(new Set(getVariableNames().filter(name => name.trim() !== '')))
+    .sort((left, right) => left.localeCompare(right))
+    .map(name => ({
+      label: name,
+      type: 'variable',
+      detail: 'variable',
+    }))
+}
+
+function buildEnvironmentStringCompletions(getEnvironmentNames: (() => string[]) | undefined): Completion[] {
+  if (!getEnvironmentNames) {
+    return []
+  }
+
+  return Array.from(new Set(getEnvironmentNames().filter(name => name.trim() !== '')))
+    .sort((left, right) => left.localeCompare(right))
+    .map(name => ({
+      label: name,
+      type: 'constant',
+      detail: 'environment',
+    }))
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { InfoIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { getAuthVariableSources } from '@common/Auth'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
@@ -11,6 +12,7 @@ import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import { toast } from '@/lib/components/toast'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
+import { dialogActions } from '@/global/dialogStore'
 import { HeadersEditor } from './HeadersEditor'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
@@ -27,6 +29,7 @@ import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
+import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -573,6 +576,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             editorLanguage="javascript"
             editorSize="small"
             extensions={preRequestScriptExtensions}
+            headerActions={<ScriptDocumentationButton phase="pre-request" />}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -585,6 +589,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             editorLanguage="javascript"
             editorSize="small"
             extensions={postRequestScriptExtensions}
+            headerActions={<ScriptDocumentationButton phase="post-request" />}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -616,6 +621,20 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </div>
       </section>
     </div>
+  )
+}
+
+function ScriptDocumentationButton({ phase }: { phase: 'pre-request' | 'post-request' }) {
+  return (
+    <button
+      type="button"
+      className="grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content"
+      onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase } })}
+      aria-label={phase === 'pre-request' ? 'Open pre-request script documentation' : 'Open post-request script documentation'}
+      title="Script documentation"
+    >
+      <InfoIcon className="size-3.5" />
+    </button>
   )
 }
 

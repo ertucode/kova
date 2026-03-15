@@ -1,4 +1,5 @@
 import vm from 'node:vm'
+import { randomUUID } from 'node:crypto'
 import type { HttpAuth } from '../common/Auth.js'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolvedEnvironmentValue } from '../common/EnvironmentVariables.js'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
@@ -229,6 +230,7 @@ async function runScriptPhase(input: {
       response: input.response ? createResponseApi(input.response) : undefined,
       env: createEnvironmentApi(input.environmentContext),
       scope: createScopeApi(input.requestScope),
+      crypto: createCryptoApi(),
     }
 
     try {
@@ -240,6 +242,12 @@ async function runScriptPhase(input: {
         message: error instanceof Error ? error.message : String(error),
       }
     }
+  }
+}
+
+function createCryptoApi() {
+  return {
+    randomUUID,
   }
 }
 
