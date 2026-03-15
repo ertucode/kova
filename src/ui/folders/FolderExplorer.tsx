@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { ChevronDownIcon, Clock3Icon, FileCode2Icon, FileJsonIcon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
+import { Clock3Icon, FileCode2Icon, FileJsonIcon, FlaskConicalIcon, FolderIcon, MoreHorizontalIcon, SearchIcon } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
 import { FolderExplorerTabs } from './FolderExplorerTabs'
@@ -272,12 +272,10 @@ function CreateMenuButton() {
     <div ref={containerRef} className="relative shrink-0">
       <button
         type="button"
-        className="flex h-full items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-100"
+        className="flex h-8 items-center rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-100"
         onClick={() => setIsOpen(current => !current)}
       >
-        <FolderIcon className="size-4" />
-        <span>Add</span>
-        <ChevronDownIcon className="size-4" />
+        <MoreHorizontalIcon className="size-4" />
       </button>
 
       {isOpen ? (

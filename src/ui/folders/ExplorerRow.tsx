@@ -314,7 +314,12 @@ function ExplorerMenu({
   onDelete: () => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [menuPlacement, setMenuPlacement] = useState<{ vertical: 'down' | 'up'; horizontal: 'right' | 'left' }>({
+    vertical: 'down',
+    horizontal: 'right',
+  })
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLUListElement | null>(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -340,6 +345,44 @@ function ExplorerMenu({
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (!isOpen || !containerRef.current || !menuRef.current) {
+      return
+    }
+
+    const updateMenuPlacement = () => {
+      const triggerRect = containerRef.current?.getBoundingClientRect()
+      const menuRect = menuRef.current?.getBoundingClientRect()
+      if (!triggerRect || !menuRect) {
+        return
+      }
+
+      const nextVertical =
+        triggerRect.bottom + menuRect.height > window.innerHeight && triggerRect.top >= menuRect.height
+          ? 'up'
+          : 'down'
+      const nextHorizontal =
+        triggerRect.right - menuRect.width < 0 && triggerRect.left + menuRect.width <= window.innerWidth
+          ? 'left'
+          : 'right'
+
+      setMenuPlacement(current =>
+        current.vertical === nextVertical && current.horizontal === nextHorizontal
+          ? current
+          : { vertical: nextVertical, horizontal: nextHorizontal }
+      )
+    }
+
+    updateMenuPlacement()
+    window.addEventListener('resize', updateMenuPlacement)
+    window.addEventListener('scroll', updateMenuPlacement, true)
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPlacement)
+      window.removeEventListener('scroll', updateMenuPlacement, true)
+    }
+  }, [isOpen])
+
   const runAction = (action: () => void) => {
     setIsOpen(false)
     action()
@@ -362,7 +405,14 @@ function ExplorerMenu({
       </button>
 
       {isOpen ? (
-        <ul className="menu absolute right-0 top-full z-20 mt-1 w-44 border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
+        <ul
+          ref={menuRef}
+          className={[
+            'menu absolute z-20 w-44 border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]',
+            menuPlacement.vertical === 'down' ? 'top-full mt-1' : 'bottom-full mb-1',
+            menuPlacement.horizontal === 'right' ? 'right-0' : 'left-0',
+          ].join(' ')}
+        >
           {itemType === 'folder' && onAddFolder ? (
             <li>
               <button type="button" onClick={() => runAction(onAddFolder)}>
