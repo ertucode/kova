@@ -82,14 +82,20 @@ export function DetailsPanel() {
                 <input
                   className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
                   value={draft.name}
-                   placeholder={selected.itemType === 'folder' ? 'Folder name' : selected.itemType === 'request' ? 'Request name' : 'Example name'}
+                  placeholder={
+                    selected.itemType === 'folder'
+                      ? 'Folder name'
+                      : selected.itemType === 'request'
+                        ? 'Request name'
+                        : 'Example name'
+                  }
                   onChange={event =>
                     FolderExplorerCoordinator.updateSelectedDraft({ ...draft, name: event.target.value })
                   }
                   onBlur={() => undefined}
                 />
 
-                {draft.itemType !== 'folder' ? <SaveIndicator isDirty={isDirty} isSaving={isSaving} /> : null}
+                <SaveIndicator isDirty={isDirty} isSaving={isSaving} />
               </div>
 
               <div className="mt-2 h-5 text-sm text-base-content/45">
@@ -99,13 +105,19 @@ export function DetailsPanel() {
           </div>
         </div>
 
-        {draft.itemType === 'folder'
-          ? <FolderDetailsFields draft={draft} />
-          : draft.itemType === 'request'
-            ? (draft.requestType === 'websocket' ? <WebSocketRequestDetailsFields draft={draft} /> : <RequestDetailsFields draft={draft} />)
-            : draft.exampleType === 'websocket'
-              ? <WebSocketExampleDetailsFields draft={draft} />
-              : <RequestExampleDetailsFields draft={draft} />}
+        {draft.itemType === 'folder' ? (
+          <FolderDetailsFields draft={draft} />
+        ) : draft.itemType === 'request' ? (
+          draft.requestType === 'websocket' ? (
+            <WebSocketRequestDetailsFields draft={draft} />
+          ) : (
+            <RequestDetailsFields draft={draft} />
+          )
+        ) : draft.exampleType === 'websocket' ? (
+          <WebSocketExampleDetailsFields draft={draft} />
+        ) : (
+          <RequestExampleDetailsFields draft={draft} />
+        )}
       </div>
     </div>
   )
