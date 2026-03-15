@@ -1,5 +1,4 @@
 - variable autocomplete env.get("variable"")
-- url autocomplete broken. yazarken updatelenmiyor
 - tab autocomplete, not enter
 - startup yavaşladı. serverımız startupta çalışmasına gerek yok.
 - sandbox da mı startupta çalışıyor?

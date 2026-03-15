@@ -1,4 +1,11 @@
-import { autocompletion, completionStatus, startCompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete'
+import {
+  autocompletion,
+  completionStatus,
+  startCompletion,
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+} from '@codemirror/autocomplete'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 
@@ -67,8 +74,10 @@ function completeVariables(
   return {
     from: match.from,
     options,
+    // Burda filter true verince completionımız {{}} bracketlı olduğu için her değeri filtreliyor.
+    // validFor'u da verince bu sefer yazarken update olmuyor liste. O yüzden validFor vermiyoruz.
     filter: false,
-    validFor: /^\{\{[a-zA-Z0-9._-]*$/,
+    // validFor: /^\{\{[a-zA-Z0-9._-]*$/,
   }
 }
 
