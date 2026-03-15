@@ -6,6 +6,7 @@ import { EnvironmentCoordinator } from './environmentCoordinator'
 import { environmentEditorStore, isEnvironmentEntryDirty } from './environmentEditorStore'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { KeyValueEditor } from './KeyValueEditor'
+import { PostmanEnvironmentExportDialog } from './PostmanEnvironmentExportDialog'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 
 export function EnvironmentsPanel() {
@@ -71,6 +72,14 @@ export function EnvironmentsPanel() {
                 onClick={() => dialogActions.open({ component: PostmanEnvironmentImportDialog, props: {} })}
               >
                 Import
+              </button>
+              <button
+                type="button"
+                className="flex h-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-200 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => selectedId ? dialogActions.open({ component: PostmanEnvironmentExportDialog, props: { environmentId: selectedId } }) : undefined}
+                disabled={!selectedId}
+              >
+                Export
               </button>
               <button
                 type="button"

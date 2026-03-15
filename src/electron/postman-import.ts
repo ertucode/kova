@@ -29,12 +29,16 @@ type PostmanCollection = {
 
 type PostmanItem = {
   name?: string
+  description?: unknown
   item?: PostmanItem[]
   request?: PostmanRequest
   event?: PostmanEvent[]
   auth?: PostmanAuth
   protocolProfileBehavior?: unknown
   response?: PostmanResponse[]
+  _kova?: {
+    folderHeaders?: unknown
+  }
 }
 
 type PostmanResponse = {
@@ -43,6 +47,7 @@ type PostmanResponse = {
   status?: string
   header?: PostmanHeader[]
   body?: string
+  originalRequest?: PostmanRequest
 }
 
 type PostmanRequest = {
@@ -263,8 +268,8 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
         id: folderId,
         parentId: parentFolderId,
         name,
-        description: '',
-        headers: '',
+        description: readFolderDescription(item.description),
+        headers: readFolderHeaders(item._kova),
         authJson: JSON.stringify(mapAuth(item.auth, true)),
         preRequestScript: mapScripts(item.event, 'prerequest'),
         postRequestScript: mapScripts(item.event, 'test'),
@@ -309,16 +314,17 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
   insertTreeItem(db, { parentFolderId, itemType: 'request', itemId: requestId })
 
   ;(item.response ?? []).forEach((response, index) => {
+    const exampleRequestModel = mapExampleRequest(response.originalRequest, requestModel)
     db.insert(requestExamples)
       .values({
         id: crypto.randomUUID(),
         requestId,
         name: sanitizeName(response.name, `Example ${index + 1}`),
         position: index,
-        requestHeaders: requestModel.headers,
-        requestBody: requestModel.body,
-        requestBodyType: requestModel.bodyType,
-        requestRawType: requestModel.rawType,
+        requestHeaders: exampleRequestModel.headers,
+        requestBody: exampleRequestModel.body,
+        requestBodyType: exampleRequestModel.bodyType,
+        requestRawType: exampleRequestModel.rawType,
         responseStatus: response.code ?? 200,
         responseStatusText: response.status ?? 'OK',
         responseHeaders: stringifyKeyValueRows(
@@ -622,10 +628,28 @@ function sanitizeName(value: string | undefined, fallback: string) {
   return name ? name : fallback
 }
 
+function readFolderDescription(value: unknown) {
+  return typeof value === 'string' ? value : ''
+}
+
+function readFolderHeaders(metadata: PostmanItem['_kova']) {
+  return typeof metadata?.folderHeaders === 'string' ? metadata.folderHeaders : ''
+}
+
+function mapExampleRequest(
+  originalRequest: PostmanRequest | undefined,
+  fallbackRequest: ReturnType<typeof mapRequest>
+) {
+  if (!originalRequest) {
+    return fallbackRequest
+  }
+
+  return mapRequest(originalRequest)
+}
+
 const warningMessageByCode: Record<PostmanImportWarningCode, string> = {
   'scripts-commented': 'Postman scripts are imported as commented reference blocks so you can rewrite them safely.',
   'unsupported-script-api': 'Some scripts use Postman-specific APIs that do not exist in Kova.',
-  'responses-ignored': 'Saved Postman response examples are ignored.',
   'collection-variables-ignored': 'Collection variables are ignored during import.',
   'protocol-profile-ignored': 'protocolProfileBehavior settings are ignored.',
   'unsupported-auth': 'Some auth types are not supported and will not be imported as working auth configs.',

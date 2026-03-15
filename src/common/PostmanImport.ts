@@ -3,7 +3,6 @@ export type PostmanImportWarningSeverity = 'info' | 'warning'
 export type PostmanImportWarningCode =
   | 'scripts-commented'
   | 'unsupported-script-api'
-  | 'responses-ignored'
   | 'collection-variables-ignored'
   | 'protocol-profile-ignored'
   | 'unsupported-auth'

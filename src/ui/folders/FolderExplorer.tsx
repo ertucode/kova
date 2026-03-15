@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { ChevronDownIcon, Clock3Icon, FileCode2Icon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
+import { ChevronDownIcon, Clock3Icon, FileCode2Icon, FileJsonIcon, FolderIcon, FlaskConicalIcon, SearchIcon } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
 import { FolderExplorerTabs } from './FolderExplorerTabs'
@@ -15,6 +15,7 @@ import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { dialogActions } from '@/global/dialogStore'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
+import { PostmanExportDialog } from './PostmanExportDialog'
 
 type DropPlacement = ExplorerDropTarget['placement']
 
@@ -291,6 +292,12 @@ function CreateMenuButton() {
             <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null))}>
               <FileCode2Icon className="size-4" />
               Add Request
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'workspace' } }))}>
+              <FileJsonIcon className="size-4" />
+              Export Postman
             </button>
           </li>
           <li>

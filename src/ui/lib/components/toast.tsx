@@ -20,6 +20,8 @@ export interface ToastOptions {
   location?: ToastLocation;
   customIcon?: React.ComponentType<{ className?: string }>;
   closeOnOutsideClick?: boolean;
+  actionLabel?: ReactNode;
+  onAction?: () => void;
 }
 
 interface Toast extends ToastOptions {
@@ -129,6 +131,11 @@ const ToastItem: React.FC<{ toast: Toast; onClose: (id: string) => void }> = ({
         <div className="text-xs">
           {toast.message && <div className="text-xs">{toast.message}</div>}
         </div>
+        {toast.actionLabel && toast.onAction ? (
+          <button className="btn btn-xs btn-ghost mt-2 -ml-2" onClick={toast.onAction}>
+            {toast.actionLabel}
+          </button>
+        ) : null}
       </div>
       <button
         className="btn btn-sm btn-circle btn-ghost"

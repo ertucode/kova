@@ -56,6 +56,22 @@ import {
   type ImportPostmanEnvironmentResponse,
   type PickPostmanEnvironmentFileResponse,
 } from './PostmanEnvironmentImport.js'
+import {
+  type AnalyzePostmanCollectionExportInput,
+  type AnalyzePostmanCollectionExportResponse,
+  type ExportPostmanCollectionInput,
+  type ExportPostmanCollectionResponse,
+  type PickPostmanCollectionExportFileInput,
+  type PickPostmanCollectionExportFileResponse,
+} from './PostmanExport.js'
+import {
+  type AnalyzePostmanEnvironmentExportInput,
+  type AnalyzePostmanEnvironmentExportResponse,
+  type ExportPostmanEnvironmentInput,
+  type ExportPostmanEnvironmentResponse,
+  type PickPostmanEnvironmentExportFileInput,
+  type PickPostmanEnvironmentExportFileResponse,
+} from './PostmanEnvironmentExport.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -63,6 +79,7 @@ export type EventResponseMapping = {
   'window:focus': void
   abortTask: Promise<void>
   openShell: Promise<void>
+  openFileLocation: Promise<GenericResult<void>>
   runCommand: Promise<GenericResult<void>>
   getParallelPreloadPath: string
   setAlwaysOnTop: Promise<void>
@@ -103,14 +120,21 @@ export type EventResponseMapping = {
   pickPostmanCollectionFile: Promise<GenericResult<PickPostmanCollectionFileResponse>>
   analyzePostmanCollection: Promise<GenericResult<AnalyzePostmanCollectionResponse>>
   importPostmanCollection: Promise<GenericResult<ImportPostmanCollectionResponse>>
+  pickPostmanCollectionExportFile: Promise<GenericResult<PickPostmanCollectionExportFileResponse>>
+  analyzePostmanCollectionExport: Promise<GenericResult<AnalyzePostmanCollectionExportResponse>>
+  exportPostmanCollection: Promise<GenericResult<ExportPostmanCollectionResponse>>
   pickPostmanEnvironmentFile: Promise<GenericResult<PickPostmanEnvironmentFileResponse>>
   analyzePostmanEnvironment: Promise<GenericResult<AnalyzePostmanEnvironmentResponse>>
   importPostmanEnvironment: Promise<GenericResult<ImportPostmanEnvironmentResponse>>
+  pickPostmanEnvironmentExportFile: Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
+  analyzePostmanEnvironmentExport: Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
+  exportPostmanEnvironment: Promise<GenericResult<ExportPostmanEnvironmentResponse>>
 }
 
 export type EventRequestMapping = {
   abortTask: string
   openShell: string
+  openFileLocation: string
   runCommand: { name: string; filePath: string; parameters: any }
   setAlwaysOnTop: boolean
   getAlwaysOnTop: void
@@ -150,9 +174,15 @@ export type EventRequestMapping = {
   pickPostmanCollectionFile: void
   analyzePostmanCollection: AnalyzePostmanCollectionInput
   importPostmanCollection: ImportPostmanCollectionInput
+  pickPostmanCollectionExportFile: PickPostmanCollectionExportFileInput
+  analyzePostmanCollectionExport: AnalyzePostmanCollectionExportInput
+  exportPostmanCollection: ExportPostmanCollectionInput
   pickPostmanEnvironmentFile: void
   analyzePostmanEnvironment: AnalyzePostmanEnvironmentInput
   importPostmanEnvironment: ImportPostmanEnvironmentInput
+  pickPostmanEnvironmentExportFile: PickPostmanEnvironmentExportFileInput
+  analyzePostmanEnvironmentExport: AnalyzePostmanEnvironmentExportInput
+  exportPostmanEnvironment: ExportPostmanEnvironmentInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -168,6 +198,7 @@ export type WindowElectron = {
   onWindowFocus: (cb: () => void) => UnsubscribeFunction
   abortTask: (taskId: string) => Promise<void>
   openShell: (url: string) => Promise<void>
+  openFileLocation: (filePath: string) => Promise<GenericResult<void>>
   getWindowArgs: () => string
   runCommand: (opts: { name: string; filePath: string; parameters: any }) => Promise<GenericResult<void>>
   setAlwaysOnTop: (alwaysOnTop: boolean) => Promise<void>
@@ -207,7 +238,13 @@ export type WindowElectron = {
   pickPostmanCollectionFile: () => Promise<GenericResult<PickPostmanCollectionFileResponse>>
   analyzePostmanCollection: (input: AnalyzePostmanCollectionInput) => Promise<GenericResult<AnalyzePostmanCollectionResponse>>
   importPostmanCollection: (input: ImportPostmanCollectionInput) => Promise<GenericResult<ImportPostmanCollectionResponse>>
+  pickPostmanCollectionExportFile: (input: PickPostmanCollectionExportFileInput) => Promise<GenericResult<PickPostmanCollectionExportFileResponse>>
+  analyzePostmanCollectionExport: (input: AnalyzePostmanCollectionExportInput) => Promise<GenericResult<AnalyzePostmanCollectionExportResponse>>
+  exportPostmanCollection: (input: ExportPostmanCollectionInput) => Promise<GenericResult<ExportPostmanCollectionResponse>>
   pickPostmanEnvironmentFile: () => Promise<GenericResult<PickPostmanEnvironmentFileResponse>>
   analyzePostmanEnvironment: (input: AnalyzePostmanEnvironmentInput) => Promise<GenericResult<AnalyzePostmanEnvironmentResponse>>
   importPostmanEnvironment: (input: ImportPostmanEnvironmentInput) => Promise<GenericResult<ImportPostmanEnvironmentResponse>>
+  pickPostmanEnvironmentExportFile: (input: PickPostmanEnvironmentExportFileInput) => Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
+  analyzePostmanEnvironmentExport: (input: AnalyzePostmanEnvironmentExportInput) => Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
+  exportPostmanEnvironment: (input: ExportPostmanEnvironmentInput) => Promise<GenericResult<ExportPostmanEnvironmentResponse>>
 }

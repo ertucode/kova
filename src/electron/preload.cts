@@ -24,6 +24,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   },
   abortTask: (taskId: string) => ipcInvoke('abortTask', taskId),
   openShell: (url: string) => ipcInvoke('openShell', url),
+  openFileLocation: (filePath: string) => ipcInvoke('openFileLocation', filePath),
   runCommand: (opts: { name: string; filePath: string; parameters: any }) => ipcInvoke('runCommand', opts),
   setAlwaysOnTop: (alwaysOnTop: boolean) => ipcInvoke('setAlwaysOnTop', alwaysOnTop),
   getAlwaysOnTop: () => ipcInvoke('getAlwaysOnTop', undefined),
@@ -62,9 +63,15 @@ electron.contextBridge.exposeInMainWorld('electron', {
   pickPostmanCollectionFile: () => ipcInvoke('pickPostmanCollectionFile', undefined),
   analyzePostmanCollection: input => ipcInvoke('analyzePostmanCollection', input),
   importPostmanCollection: input => ipcInvoke('importPostmanCollection', input),
+  pickPostmanCollectionExportFile: input => ipcInvoke('pickPostmanCollectionExportFile', input),
+  analyzePostmanCollectionExport: input => ipcInvoke('analyzePostmanCollectionExport', input),
+  exportPostmanCollection: input => ipcInvoke('exportPostmanCollection', input),
   pickPostmanEnvironmentFile: () => ipcInvoke('pickPostmanEnvironmentFile', undefined),
   analyzePostmanEnvironment: input => ipcInvoke('analyzePostmanEnvironment', input),
   importPostmanEnvironment: input => ipcInvoke('importPostmanEnvironment', input),
+  pickPostmanEnvironmentExportFile: input => ipcInvoke('pickPostmanEnvironmentExportFile', input),
+  analyzePostmanEnvironmentExport: input => ipcInvoke('analyzePostmanEnvironmentExport', input),
+  exportPostmanEnvironment: input => ipcInvoke('exportPostmanEnvironment', input),
 } satisfies WindowElectron)
 
 function ipcInvoke<Key extends keyof EventResponseMapping>(

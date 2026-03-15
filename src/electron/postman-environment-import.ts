@@ -18,7 +18,7 @@ import { createEnvironment, updateEnvironment } from './db/environments.js'
 
 type PostmanEnvironment = {
   name?: string
-  values?: Array<{ key?: string; value?: string; enabled?: boolean; type?: string }>
+  values?: Array<{ key?: string; value?: string; enabled?: boolean; type?: string; _kova?: { description?: unknown } }>
   color?: unknown
   id?: unknown
   _postman_variable_scope?: unknown
@@ -105,7 +105,7 @@ export function analyzeEnvironmentDocument(document: PostmanEnvironment): Analys
       enabled: value.enabled !== false,
       key,
       value: value.value ?? '',
-      description: '',
+      description: typeof value._kova?.description === 'string' ? value._kova.description : '',
     })
   }
 

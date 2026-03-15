@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   FileCode2Icon,
+  FileJsonIcon,
   FolderIcon,
   MoreHorizontalIcon,
   PlusIcon,
@@ -13,6 +14,8 @@ import {
 } from 'lucide-react'
 import type { ExplorerItem } from '@common/Explorer'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
+import { dialogActions } from '@/global/dialogStore'
+import { PostmanExportDialog } from './PostmanExportDialog'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorStore'
@@ -134,6 +137,7 @@ export function ExplorerRow({
         </div>
 
         <ExplorerMenu
+          itemId={node.id}
           itemType={node.itemType}
           onAddFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined}
           onAddRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id) : undefined}
@@ -274,11 +278,13 @@ export function EmptyState({ title, description }: { title: string; description:
 }
 
 function ExplorerMenu({
+  itemId,
   itemType,
   onAddFolder,
   onAddRequest,
   onDelete,
 }: {
+  itemId: string
   itemType: ExplorerItem['itemType']
   onAddFolder?: () => void
   onAddRequest?: () => void
@@ -347,6 +353,22 @@ function ExplorerMenu({
               <button type="button" onClick={() => runAction(onAddRequest)}>
                 <PlusIcon className="size-4" />
                 Add Request
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'folder' ? (
+            <li>
+              <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } }))}>
+                <FileJsonIcon className="size-4" />
+                Export Postman
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'request' ? (
+            <li>
+              <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'request', requestId: itemId } }))}>
+                <FileJsonIcon className="size-4" />
+                Export Postman
               </button>
             </li>
           ) : null}
