@@ -404,7 +404,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <section className="w-full border-b border-base-content/10">
-        <div className="flex w-full overflow-visible border border-base-content/10 bg-base-100/70">
+        <div className="flex w-full border border-base-content/10 bg-base-100/70">
           <DropdownSelect
             value={draft.method}
             className="z-20 w-[126px] shrink-0 border-r border-base-content/10 bg-base-200/55"
@@ -420,27 +420,27 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             }
           />
 
-          <div className="flex min-w-0 flex-1 overflow-hidden">
-            <CodeEditor
-              value={draft.url}
-              language="plain"
-              singleLine
-              className="min-w-0 flex-1 border-0"
-              placeholder="https://api.example.com/users/:userId"
-              extensions={urlEditorExtensions}
-              onPasteText={handleUrlPaste}
-              onChange={updateUrl}
-            />
+          <CodeEditor
+            value={draft.url}
+            language="plain"
+            singleLine
+            compact
+            linePaddingOverride="0 1rem !important"
+            className="border-0 w-[20px]"
+            placeholder="https://api.example.com/users/:userId"
+            extensions={urlEditorExtensions}
+            onPasteText={handleUrlPaste}
+            onChange={updateUrl}
+          />
 
-            <button
-              type="button"
-              className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-6 py-4 text-sm font-medium text-base-content transition hover:bg-base-300"
-              onClick={() => void sendRequest()}
-              disabled={isSending}
-            >
-              {isSending ? 'Sending...' : 'Send'}
-            </button>
-          </div>
+          <button
+            type="button"
+            className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-4 py-2 text-sm font-medium text-base-content transition hover:bg-base-300"
+            onClick={() => void sendRequest()}
+            disabled={isSending}
+          >
+            {isSending ? 'Sending...' : 'Send'}
+          </button>
         </div>
 
         <VariableUsageBanner
@@ -761,33 +761,27 @@ function getUsedRequestVariableNames(draft: RequestDetailsDraft) {
 function MethodBadge({ method }: { method: RequestMethod }) {
   const tone = getMethodTone(method)
 
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.12em] ${tone}`}
-    >
-      {method}
-    </span>
-  )
+  return <span className={`inline-flex items-center text-xs font-semibold tracking-[0.12em] ${tone}`}>{method}</span>
 }
 
 function getMethodTone(method: RequestMethod) {
   switch (method) {
     case 'GET':
-      return 'bg-info/15 text-info'
+      return 'text-success'
     case 'POST':
-      return 'bg-success/15 text-success'
+      return 'text-info'
     case 'PUT':
-      return 'bg-accent/18 text-accent'
+      return 'text-warning'
     case 'PATCH':
-      return 'bg-warning/18 text-warning-content'
+      return 'text-secondary'
     case 'DELETE':
-      return 'bg-error/15 text-error'
+      return 'text-error'
     case 'HEAD':
-      return 'bg-secondary/18 text-secondary'
+      return 'text-accent'
     case 'OPTIONS':
-      return 'bg-base-content/10 text-base-content/75'
+      return 'text-base-content/70'
     default:
-      return 'bg-base-content/10 text-base-content'
+      return 'text-base-content/70'
   }
 }
 

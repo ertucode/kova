@@ -9,6 +9,7 @@ import { xml } from '@codemirror/lang-xml'
 import { EditorView, placeholder as placeholderExtension } from '@codemirror/view'
 import CodeMirror from '@uiw/react-codemirror'
 import { tags } from '@lezer/highlight'
+import { twMerge } from 'tailwind-merge'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'javascript' | 'html' | 'css' | 'xml'
 
@@ -16,11 +17,24 @@ const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
   { tag: [tags.string, tags.special(tags.string)], color: 'var(--color-accent)' },
   { tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null], color: 'var(--color-info)' },
-  { tag: [tags.propertyName, tags.attributeName], color: 'color-mix(in oklab, var(--color-base-content) 92%, var(--color-accent) 8%)' },
+  {
+    tag: [tags.propertyName, tags.attributeName],
+    color: 'color-mix(in oklab, var(--color-base-content) 92%, var(--color-accent) 8%)',
+  },
   { tag: [tags.variableName, tags.labelName], color: 'var(--color-base-content)' },
-  { tag: [tags.comment], color: 'color-mix(in oklab, var(--color-base-content) 45%, transparent)', fontStyle: 'italic' },
-  { tag: [tags.operator, tags.punctuation, tags.separator], color: 'color-mix(in oklab, var(--color-base-content) 68%, transparent)' },
-  { tag: [tags.brace, tags.squareBracket, tags.paren], color: 'color-mix(in oklab, var(--color-base-content) 76%, transparent)' },
+  {
+    tag: [tags.comment],
+    color: 'color-mix(in oklab, var(--color-base-content) 45%, transparent)',
+    fontStyle: 'italic',
+  },
+  {
+    tag: [tags.operator, tags.punctuation, tags.separator],
+    color: 'color-mix(in oklab, var(--color-base-content) 68%, transparent)',
+  },
+  {
+    tag: [tags.brace, tags.squareBracket, tags.paren],
+    color: 'color-mix(in oklab, var(--color-base-content) 76%, transparent)',
+  },
 ])
 
 const editorTheme = EditorView.theme({
@@ -57,7 +71,8 @@ const editorTheme = EditorView.theme({
   },
   '.cm-content': {
     padding: '0.75rem 1rem',
-    fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
+    fontFamily:
+      'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
     lineHeight: '1.5rem',
     caretColor: 'currentColor',
   },
@@ -135,6 +150,7 @@ export function CodeEditor({
   onPasteText,
   onChange,
   onBlur,
+  linePaddingOverride,
 }: {
   value: string
   language: CodeEditorLanguage
@@ -150,6 +166,7 @@ export function CodeEditor({
   onPasteText?: (text: string) => boolean
   onChange: (value: string) => void
   onBlur?: () => void
+  linePaddingOverride?: string
 }) {
   const editorViewRef = useRef<EditorView | null>(null)
 
@@ -184,7 +201,7 @@ export function CodeEditor({
             lineHeight: '1.25rem',
           },
           '& .cm-line': {
-            padding: '0 !important',
+            padding: linePaddingOverride ?? '0 !important',
           },
         })
       )
@@ -252,7 +269,10 @@ export function CodeEditor({
             return transaction
           }
 
-          return [transaction, { changes: { from: 0, to: transaction.newDoc.length, insert: nextText.replace(/\s*\n\s*/g, ' ') } }]
+          return [
+            transaction,
+            { changes: { from: 0, to: transaction.newDoc.length, insert: nextText.replace(/\s*\n\s*/g, ' ') } },
+          ]
         })
       )
     }
@@ -287,14 +307,12 @@ export function CodeEditor({
 
   return (
     <div
-        className={[
+      className={twMerge(
         'flex w-full min-h-0 flex-1 overflow-visible rounded-none border border-base-content/10 bg-base-100/70 text-base-content',
         readOnly ? 'overflow-auto' : '',
         minHeightClassName,
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
+        className
+      )}
     >
       <CodeMirror
         value={value}
