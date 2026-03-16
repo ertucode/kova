@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { CopyIcon, FileCode2Icon, FolderIcon, RotateCcwIcon } from 'lucide-react'
 import { FolderDetailsFields } from './FolderDetailsFields'
@@ -18,6 +18,13 @@ export function DetailsPanel() {
   })
 
   const draft = entry?.current ?? null
+  const lastDraftRef = useRef<typeof draft>(null)
+
+  if (draft && !entry?.loading) {
+    lastDraftRef.current = draft
+  }
+
+  const displayDraft = lastDraftRef.current ?? draft
   const isLoading = Boolean(selected && (!entry || entry.loading))
   const isSaving = Boolean(entry?.saving)
   const isDirty = Boolean(
@@ -46,7 +53,7 @@ export function DetailsPanel() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selected])
 
-  if (!selected) {
+  if (!selected && !displayDraft) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-sm text-base-content/45">
         Select a folder or request
@@ -54,7 +61,9 @@ export function DetailsPanel() {
     )
   }
 
-  if (isLoading || !draft) {
+  const renderDraft = isLoading && displayDraft ? displayDraft : draft
+
+  if (!renderDraft) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-sm text-base-content/45">
         {/* Loading item details... */}
@@ -62,15 +71,17 @@ export function DetailsPanel() {
     )
   }
 
+  const renderSelected = selected ?? displayDraft!
+
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
       <div className="flex h-full w-full flex-col items-stretch">
         <div className="w-full px-2 py-2">
           <div className="flex items-center gap-4">
             <div className="shrink-0 rounded-2xl border border-base-content/10 bg-base-100/60 p-3 text-base-content/60">
-              {selected.itemType === 'folder' ? (
+              {renderSelected.itemType === 'folder' ? (
                 <FolderIcon className="size-5" />
-              ) : selected.itemType === 'request' ? (
+              ) : renderSelected.itemType === 'request' ? (
                 <FileCode2Icon className="size-5" />
               ) : (
                 <CopyIcon className="size-5" />
@@ -81,16 +92,16 @@ export function DetailsPanel() {
               <div className="flex items-center w-full gap-3">
                 <input
                   className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
-                  value={draft.name}
+                  value={renderDraft.name}
                   placeholder={
-                    selected.itemType === 'folder'
+                    renderSelected.itemType === 'folder'
                       ? 'Folder name'
-                      : selected.itemType === 'request'
+                      : renderSelected.itemType === 'request'
                         ? 'Request name'
                         : 'Example name'
                   }
                   onChange={event =>
-                    FolderExplorerCoordinator.updateSelectedDraft({ ...draft, name: event.target.value })
+                    FolderExplorerCoordinator.updateSelectedDraft({ ...renderDraft, name: event.target.value })
                   }
                   onBlur={() => undefined}
                 />
@@ -99,24 +110,24 @@ export function DetailsPanel() {
               </div>
 
               <div className="mt-2 h-5 text-sm text-base-content/45">
-                {isSaving && draft.itemType === 'folder' ? 'Saving...' : ' '}
+                {isSaving && renderDraft.itemType === 'folder' ? 'Saving...' : ' '}
               </div>
             </div>
           </div>
         </div>
 
-        {draft.itemType === 'folder' ? (
-          <FolderDetailsFields draft={draft} />
-        ) : draft.itemType === 'request' ? (
-          draft.requestType === 'websocket' ? (
-            <WebSocketRequestDetailsFields draft={draft} />
+        {renderDraft.itemType === 'folder' ? (
+          <FolderDetailsFields draft={renderDraft} />
+        ) : renderDraft.itemType === 'request' ? (
+          renderDraft.requestType === 'websocket' ? (
+            <WebSocketRequestDetailsFields draft={renderDraft} />
           ) : (
-            <RequestDetailsFields draft={draft} />
+            <RequestDetailsFields draft={renderDraft} />
           )
-        ) : draft.exampleType === 'websocket' ? (
-          <WebSocketExampleDetailsFields draft={draft} />
+        ) : renderDraft.exampleType === 'websocket' ? (
+          <WebSocketExampleDetailsFields draft={renderDraft} />
         ) : (
-          <RequestExampleDetailsFields draft={draft} />
+          <RequestExampleDetailsFields draft={renderDraft} />
         )}
       </div>
     </div>
