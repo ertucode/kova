@@ -3,11 +3,14 @@ import { EditorState, type Extension } from '@codemirror/state'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { json } from '@codemirror/lang-json'
+import { html } from '@codemirror/lang-html'
+import { css } from '@codemirror/lang-css'
+import { xml } from '@codemirror/lang-xml'
 import { EditorView, placeholder as placeholderExtension } from '@codemirror/view'
 import CodeMirror from '@uiw/react-codemirror'
 import { tags } from '@lezer/highlight'
 
-export type CodeEditorLanguage = 'plain' | 'json' | 'javascript'
+export type CodeEditorLanguage = 'plain' | 'json' | 'javascript' | 'html' | 'css' | 'xml'
 
 const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
@@ -128,6 +131,7 @@ export function CodeEditor({
   compact,
   size = 'normal',
   hideFocusOutline,
+  readOnly,
   onPasteText,
   onChange,
   onBlur,
@@ -142,6 +146,7 @@ export function CodeEditor({
   compact?: boolean
   size?: 'normal' | 'small'
   hideFocusOutline?: boolean
+  readOnly?: boolean
   onPasteText?: (text: string) => boolean
   onChange: (value: string) => void
   onBlur?: () => void
@@ -211,6 +216,22 @@ export function CodeEditor({
       nextExtensions.push(javascript())
     }
 
+    if (language === 'html') {
+      nextExtensions.push(html())
+    }
+
+    if (language === 'css') {
+      nextExtensions.push(css())
+    }
+
+    if (language === 'xml') {
+      nextExtensions.push(xml())
+    }
+
+    if (readOnly) {
+      nextExtensions.push(EditorState.readOnly.of(true))
+    }
+
     if (singleLine) {
       nextExtensions.push(
         EditorView.theme({
@@ -268,6 +289,7 @@ export function CodeEditor({
     <div
         className={[
         'flex w-full min-h-0 flex-1 overflow-visible rounded-none border border-base-content/10 bg-base-100/70 text-base-content',
+        readOnly ? 'overflow-auto' : '',
         minHeightClassName,
         className,
       ]

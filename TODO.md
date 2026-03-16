@@ -1,5 +1,4 @@
 - variable autocomplete env.get("variable"")
-- startup yavaşladı. serverımız startupta çalışmasına gerek yok.
-- sandbox da mı startupta çalışıyor?
-- folderlar foldera geçerken flash oluyo. Olmaması için loading state göstermeyelim.
 - global scope'a import
+- @src/common/PostmanImport.ts @src/electron/postman-import.ts postman import şu anda sadece bi klasör oluşturarak yapılabiliyo. Bunu yerine global scope'a da eklenebilmeli yeni şey. Ayrıca import edilen dosyada sadece bir request varsa kullanıcıya klasörsüz import edip etmeme sorulmalı ve sadece request oluşturulmalı. Ayrıca kullanıcıya yeni klasör oluşturmak yerine zaten olan klasörlerden birini seçtirebilmeliyiz. Seçilen klasör içine top level yeni folder oluşturmadan import edebilmeli. Ayrıca postman importtan bağımsız klasörlerde context menuye Flatten Folder gibi bir seçenek ekleyip bu seçilince o klasördeki itemleri bir üst levele taşıyıp klasörü silmeliyiz.
+- url çok geniş olursa, send kısmı kayıyo

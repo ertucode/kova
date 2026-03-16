@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { InfoIcon } from 'lucide-react'
+import { InfoIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { getAuthVariableSources } from '@common/Auth'
 import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
 import { parseCurlRequest } from '@common/curl'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
-import { syncPathParamsWithUrl, syncSearchParamsWithUrl, syncUrlWithPathParams, syncUrlWithSearchParams } from '@common/PathParams'
+import {
+  syncPathParamsWithUrl,
+  syncSearchParamsWithUrl,
+  syncUrlWithPathParams,
+  syncUrlWithSearchParams,
+} from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
@@ -86,7 +91,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           isActive: activeEnvironmentIds.includes(environment.id),
           priority: draft?.priority ?? environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])),
+          valueByVariableName: new Map(
+            Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])
+          ),
         }
       }),
     [activeEnvironmentIds, environmentEntries, environments]
@@ -130,11 +137,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       pathParamHighlightExtension({
         getDefinedPathParamNames: () => definedPathParamNamesRef.current,
         getPathParamValue: name => pathParamRowsRef.current.find(row => row.key.trim() === name)?.value ?? '',
-        getPathParamDescription: name => pathParamRowsRef.current.find(row => row.key.trim() === name)?.description ?? '',
+        getPathParamDescription: name =>
+          pathParamRowsRef.current.find(row => row.key.trim() === name)?.description ?? '',
         onChangeValue: (name, value) => {
-          const nextRows = pathParamRowsRef.current.map(row =>
-            row.key.trim() === name ? { ...row, value } : row
-          )
+          const nextRows = pathParamRowsRef.current.map(row => (row.key.trim() === name ? { ...row, value } : row))
 
           updatePathParams(stringifyKeyValueRows(nextRows))
         },
@@ -355,7 +361,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       rawType: parsedCurl.rawType,
     })
 
-    toast.show({ severity: 'success', title: 'Imported cURL', message: 'Updated request fields from pasted cURL command.' })
+    toast.show({
+      severity: 'success',
+      title: 'Imported cURL',
+      message: 'Updated request fields from pasted cURL command.',
+    })
     return true
   }
 
@@ -450,47 +460,47 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                 title="Body"
                 actions={
                   <>
-                <DropdownSelect
-                  value={draft.bodyType}
-                  className="w-[100px]"
-                  triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium capitalize"
-                  menuClassName="w-[220px]"
-                  options={REQUEST_BODY_TYPES.map(option => ({
-                    value: option,
-                    label: <span className="capitalize">{option}</span>,
-                  }))}
-                  onChange={value =>
-                    FolderExplorerCoordinator.updateSelectedDraft({
-                      ...draft,
-                      bodyType: value as RequestBodyType,
-                    })
-                  }
-                />
-                <DropdownSelect
-                  value={draft.rawType}
-                  className={`w-[120px] ${draft.bodyType !== 'raw' ? 'pointer-events-none opacity-45' : ''}`}
-                  triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase"
-                  menuClassName="w-[180px]"
-                  options={REQUEST_RAW_TYPES.map(option => ({
-                    value: option,
-                    label: <span className="uppercase">{option}</span>,
-                  }))}
-                  onChange={value =>
-                    FolderExplorerCoordinator.updateSelectedDraft({
-                      ...draft,
-                      rawType: value as RequestRawType,
-                    })
-                  }
-                />
-                {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
-                  <button
-                    type="button"
-                    className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
-                    onClick={formatJsonBody}
-                  >
-                    Format
-                  </button>
-                ) : null}
+                    <DropdownSelect
+                      value={draft.bodyType}
+                      className="w-[100px]"
+                      triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium capitalize"
+                      menuClassName="w-[220px]"
+                      options={REQUEST_BODY_TYPES.map(option => ({
+                        value: option,
+                        label: <span className="capitalize">{option}</span>,
+                      }))}
+                      onChange={value =>
+                        FolderExplorerCoordinator.updateSelectedDraft({
+                          ...draft,
+                          bodyType: value as RequestBodyType,
+                        })
+                      }
+                    />
+                    <DropdownSelect
+                      value={draft.rawType}
+                      className={`w-[120px] ${draft.bodyType !== 'raw' ? 'pointer-events-none opacity-45' : ''}`}
+                      triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase"
+                      menuClassName="w-[180px]"
+                      options={REQUEST_RAW_TYPES.map(option => ({
+                        value: option,
+                        label: <span className="uppercase">{option}</span>,
+                      }))}
+                      onChange={value =>
+                        FolderExplorerCoordinator.updateSelectedDraft({
+                          ...draft,
+                          rawType: value as RequestRawType,
+                        })
+                      }
+                    />
+                    {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
+                      <button
+                        type="button"
+                        className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
+                        onClick={formatJsonBody}
+                      >
+                        Format
+                      </button>
+                    ) : null}
                   </>
                 }
               />
@@ -607,16 +617,22 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           title="Resize response panel"
         />
 
-        <div className="h-[calc(100%-2px)] overflow-auto">
-          <DetailsSectionHeader title="Response" actions={<ResponseStatusSummary response={response} responseError={responseError} />} />
+        <div className="flex min-h-0 flex-col overflow-hidden h-[calc(100%-2px)]">
+          {/* <DetailsSectionHeader */}
+          {/*   title="Response" */}
+          {/*   actions={<ResponseStatusSummary response={response} responseError={responseError} />} */}
+          {/* /> */}
           <ResponseScriptErrors errors={response?.scriptErrors ?? []} />
-          <div className="grid md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
             <ResponseBodyPanel
               value={formattedResponseBody}
               description="Response body will appear here."
               contentType={responseContentType}
+              response={response}
+              responseError={responseError}
+              onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
             />
-            <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined} />
+            <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
           </div>
         </div>
       </section>
@@ -630,7 +646,9 @@ function ScriptDocumentationButton({ phase }: { phase: 'pre-request' | 'post-req
       type="button"
       className="grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content"
       onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase } })}
-      aria-label={phase === 'pre-request' ? 'Open pre-request script documentation' : 'Open post-request script documentation'}
+      aria-label={
+        phase === 'pre-request' ? 'Open pre-request script documentation' : 'Open post-request script documentation'
+      }
       title="Script documentation"
     >
       <InfoIcon className="size-3.5" />
@@ -777,22 +795,51 @@ function ResponseBodyPanel({
   value,
   description,
   contentType,
+  response,
+  responseError,
+  onSaveAsExample,
 }: {
   value: string
   description: string
   contentType: string | null
+  response: SendRequestResponse | null
+  responseError: string | null
+  onSaveAsExample?: () => void
 }) {
+  const language = detectResponseLanguage(contentType, value)
+
   return (
-    <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 p-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-sm font-medium text-base-content">Body</div>
-        {contentType ? <div className="text-xs text-base-content/45">{contentType}</div> : null}
+    <div className="flex min-h-0 flex-[2] flex-col bg-base-100/35 p-2 overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <div className="text-sm font-medium text-base-content">Response Body</div>
+        <div className="flex gap-2 items-center">
+          {onSaveAsExample ? (
+            <button
+              type="button"
+              className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
+              onClick={onSaveAsExample}
+            >
+              <SaveIcon className="w-4 h-4" />
+            </button>
+          ) : null}
+          {contentType ? <div className="text-xs text-base-content/45">{contentType}</div> : null}
+          <ResponseStatusSummary response={response} responseError={responseError} />
+        </div>
       </div>
 
       {value ? (
-        <pre className="mt-2 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-base-content">
-          {value}
-        </pre>
+        <div className="min-h-0 flex-1 overflow-hidden h-full">
+          <CodeEditor
+            value={value}
+            language={language}
+            readOnly
+            size="small"
+            className="border-0 h-full"
+            hideFocusOutline
+            onChange={() => undefined}
+            compact
+          />
+        </div>
       ) : (
         <div className="mt-2 text-sm text-base-content/50">{description}</div>
       )}
@@ -800,34 +847,17 @@ function ResponseBodyPanel({
   )
 }
 
-function ResponseHeadersPanel({
-  value,
-  description,
-  onSaveAsExample,
-}: {
-  value: string
-  description: string
-  onSaveAsExample?: () => void
-}) {
+function ResponseHeadersPanel({ value, description }: { value: string; description: string }) {
   const rows = parseResponseHeaders(value)
 
   return (
-    <div className="min-h-32 border border-dashed border-base-content/12 bg-base-100/35 p-2">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-medium text-base-content">Headers</div>
-        {onSaveAsExample ? (
-          <button
-            type="button"
-            className="rounded-lg border border-base-content/10 bg-base-100/70 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
-            onClick={onSaveAsExample}
-          >
-            Save as Example
-          </button>
-        ) : null}
+    <div className="flex min-h-0 flex-1 flex-col border-l border-base-content/12 bg-base-100/35 p-2 overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <div className="text-sm font-medium text-base-content">Response Headers</div>
       </div>
 
       {rows.length > 0 ? (
-        <div className="mt-3 overflow-auto">
+        <div className="mt-3 min-h-0 flex-1 overflow-auto">
           <table className="w-full table-fixed border-collapse text-sm">
             <tbody>
               {rows.map(row => (
@@ -980,15 +1010,51 @@ function formatResponseBody(body: string, headers: string) {
   const contentType = getResponseContentType(headers)?.toLowerCase()
 
   const looksJson = contentType?.includes('json') || /^[\[{]/.test(body.trim())
-  if (!looksJson) {
-    return body
+  if (looksJson) {
+    try {
+      return JSON.stringify(JSON.parse(body), null, 2)
+    } catch {
+      return body
+    }
   }
 
-  try {
-    return JSON.stringify(JSON.parse(body), null, 2)
-  } catch {
-    return body
+  const looksXml = contentType?.includes('xml') || /^\s*<\?xml|^\s*<[a-zA-Z]/.test(body.trim())
+  if (looksXml) {
+    try {
+      return formatXml(body)
+    } catch {
+      return body
+    }
   }
+
+  return body
+}
+
+function formatXml(xml: string): string {
+  let formatted = ''
+  let indent = 0
+  const lines = xml.replace(/>\s*</g, '>\n<').split('\n')
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    const isClosing = trimmed.startsWith('</')
+    const isSelfClosing = trimmed.endsWith('/>') || trimmed.startsWith('<?')
+    const isOpening = trimmed.startsWith('<') && !isClosing && !isSelfClosing
+
+    if (isClosing) {
+      indent = Math.max(0, indent - 1)
+    }
+
+    formatted += '  '.repeat(indent) + trimmed + '\n'
+
+    if (isOpening) {
+      indent++
+    }
+  }
+
+  return formatted.trim()
 }
 
 function getResponseContentType(headers: string) {
@@ -1001,6 +1067,45 @@ function getResponseContentType(headers: string) {
       .join(':')
       .trim() ?? null
   )
+}
+
+function detectResponseLanguage(contentType: string | null, body: string): CodeEditorLanguage {
+  const normalizedContentType = contentType?.toLowerCase() ?? ''
+
+  if (normalizedContentType.includes('json')) {
+    return 'json'
+  }
+
+  if (normalizedContentType.includes('html')) {
+    return 'html'
+  }
+
+  if (normalizedContentType.includes('xml')) {
+    return 'xml'
+  }
+
+  if (normalizedContentType.includes('javascript') || normalizedContentType.includes('ecmascript')) {
+    return 'javascript'
+  }
+
+  if (normalizedContentType.includes('css')) {
+    return 'css'
+  }
+
+  const trimmedBody = body.trim()
+  if (trimmedBody.startsWith('<!DOCTYPE') || trimmedBody.startsWith('<html')) {
+    return 'html'
+  }
+
+  if (trimmedBody.startsWith('<?xml') || trimmedBody.startsWith('<')) {
+    return 'xml'
+  }
+
+  if (/^[\[{]/.test(trimmedBody)) {
+    return 'json'
+  }
+
+  return 'plain'
 }
 
 function parseResponseHeaders(value: string) {
