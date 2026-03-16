@@ -2,12 +2,13 @@ import {
   autocompletion,
   completionStatus,
   startCompletion,
+  acceptCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete'
-import type { Extension } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { Prec, type Extension } from '@codemirror/state'
+import { EditorView, keymap } from '@codemirror/view'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
 
@@ -19,6 +20,16 @@ export function scriptAutocompleteExtension(options: {
   const phase: ScriptAutocompletePhase = options.includeResponse ? 'post-request' : 'pre-request'
 
   return [
+    Prec.highest(
+      keymap.of([
+        {
+          key: 'Tab',
+          run: (view: EditorView) => {
+            return acceptCompletion(view) || false
+          },
+        },
+      ])
+    ),
     autocompletion({
       activateOnTyping: true,
       override: [

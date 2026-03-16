@@ -2,12 +2,15 @@ import {
   autocompletion,
   completionStatus,
   startCompletion,
+  acceptCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete'
+import { Prec } from '@codemirror/state'
+
 import type { Extension } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { EditorView, keymap } from '@codemirror/view'
 
 export type VariableAutocompleteItem = {
   name: string
@@ -18,6 +21,16 @@ export type VariableAutocompleteItem = {
 
 export function variableAutocompleteExtension(getVariables: () => VariableAutocompleteItem[]): Extension {
   return [
+    Prec.highest(
+      keymap.of([
+        {
+          key: 'Tab',
+          run: (view: EditorView) => {
+            return acceptCompletion(view)
+          },
+        },
+      ])
+    ),
     autocompletion({
       activateOnTyping: true,
       override: [context => completeVariables(context, getVariables)],

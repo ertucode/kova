@@ -1,5 +1,4 @@
 - variable autocomplete env.get("variable"")
-- tab autocomplete, not enter
 - startup yavaşladı. serverımız startupta çalışmasına gerek yok.
 - sandbox da mı startupta çalışıyor?
 - folderlar foldera geçerken flash oluyo. Olmaması için loading state göstermeyelim.
