@@ -76,22 +76,22 @@ export function DetailsPanel() {
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
       <div className="flex h-full w-full flex-col items-stretch">
-        <div className="w-full px-2 py-2">
-          <div className="flex items-center gap-4">
-            <div className="shrink-0 rounded-2xl border border-base-content/10 bg-base-100/60 p-3 text-base-content/60">
+        <div className="w-full">
+          <div className="flex items-center gap-2">
+            <div className="shrink-0 border-r border-base-content/10 bg-base-100/60 p-2 text-base-content/60">
               {renderSelected.itemType === 'folder' ? (
-                <FolderIcon className="size-5" />
+                <FolderIcon className="size-4" />
               ) : renderSelected.itemType === 'request' ? (
-                <FileCode2Icon className="size-5" />
+                <FileCode2Icon className="size-4" />
               ) : (
-                <CopyIcon className="size-5" />
+                <CopyIcon className="size-4" />
               )}
             </div>
 
             <div className="min-w-0 flex-1 flex items-center">
               <div className="flex items-center w-full gap-3">
                 <input
-                  className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
+                  className="w-full border-0 bg-transparent px-0 py-0.5 text-sm font-semibold tracking-tight text-base-content outline-none"
                   value={renderDraft.name}
                   placeholder={
                     renderSelected.itemType === 'folder'
@@ -154,7 +154,7 @@ function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: bool
         <>
           <button
             type="button"
-            className="pointer-events-none absolute right-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-warning/25 bg-base-100 px-2.5 py-1.5 text-[11px] font-semibold text-base-content/70 opacity-0 shadow-[0_14px_30px_rgba(0,0,0,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:border-warning/40 hover:bg-warning/6 hover:text-base-content focus:pointer-events-auto focus:opacity-100"
+            className="pointer-events-none absolute right-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-warning/25 bg-base-100 px-1.5 py-0.5 text-[11px] font-semibold text-base-content/70 opacity-0 shadow-[0_14px_30px_rgba(0,0,0,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:border-warning/40 hover:bg-warning/6 hover:text-base-content focus:pointer-events-auto focus:opacity-100"
             onClick={() => FolderExplorerCoordinator.discardSelectedChanges()}
             title="Remove unsaved changes"
           >
