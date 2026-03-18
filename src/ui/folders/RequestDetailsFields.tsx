@@ -1146,3 +1146,40 @@ function clampResponsePaneHeight(height: number) {
   const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight
   return Math.max(180, Math.min(height, Math.floor(viewportHeight * 0.8)))
 }
+
+export function getActiveSearchParam(url: string, caretPos: number) {
+  const queryStart = url.indexOf('?')
+  if (queryStart === -1 || caretPos <= queryStart) return null
+
+  // End of query (before hash if exists)
+  const hashIndex = url.indexOf('#', queryStart)
+  const queryEnd = hashIndex === -1 ? url.length : hashIndex
+
+  const query = url.slice(queryStart + 1, queryEnd)
+
+  let cursor = queryStart + 1
+
+  const pairs = query.split('&')
+
+  for (const pair of pairs) {
+    const start = cursor
+    const end = cursor + pair.length
+
+    if (caretPos >= start && caretPos <= end) {
+      const eqIndex = pair.indexOf('=')
+
+      if (eqIndex === -1) {
+        return { key: pair, value: '' }
+      }
+
+      const key = pair.slice(0, eqIndex)
+      const value = pair.slice(eqIndex + 1)
+
+      return { key, value }
+    }
+
+    cursor = end + 1 // skip '&'
+  }
+
+  return null
+}

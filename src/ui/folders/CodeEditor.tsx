@@ -164,7 +164,7 @@ export function CodeEditor({
   hideFocusOutline?: boolean
   readOnly?: boolean
   onPasteText?: (text: string) => boolean
-  onChange: (value: string) => void
+  onChange: (value: string, params: { caretPos: number; previousValue: string; previousCaretPos: number }) => void
   onBlur?: () => void
   linePaddingOverride?: string
 }) {
@@ -332,7 +332,14 @@ export function CodeEditor({
         onCreateEditor={view => {
           editorViewRef.current = view
         }}
-        onChange={onChange}
+        onChange={(value, viewUpdate) => {
+          const caretPos = viewUpdate.state.selection.main.head
+          onChange(value, {
+            caretPos,
+            previousValue: viewUpdate.startState.doc.toString(),
+            previousCaretPos: viewUpdate.startState.selection.main.head,
+          })
+        }}
         onBlur={onBlur}
       />
     </div>
