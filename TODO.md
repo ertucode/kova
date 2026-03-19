@@ -1,2 +1,1 @@
-- Klasörlerde context menuye Flatten Folder gibi bir seçenek ekleyip bu seçilince o klasördeki itemleri bir üst levele taşıyıp klasörü silmeliyiz.
 - implement undo
