@@ -25,6 +25,10 @@ type PostmanCollection = {
   auth?: PostmanAuth
   variable?: Array<{ key?: string }>
   protocolProfileBehavior?: unknown
+  _kova?: {
+    exportedByKova?: unknown
+    folderHeaders?: unknown
+  }
 }
 
 type PostmanItem = {
@@ -113,7 +117,25 @@ type ImportAnalysis = {
   suggestedRootFolderName: string
   folderCount: number
   requestCount: number
+  exportedByKova: boolean
+  hasCollectionAuth: boolean
+  hasCollectionScripts: boolean
+  hasCollectionHeaders: boolean
+  hasCollectionVariables: boolean
+  hasCollectionProtocolProfileBehavior: boolean
   warnings: PostmanImportWarning[]
+}
+
+type ImportedItemSelection = {
+  itemType: 'folder' | 'request'
+  id: string
+}
+
+type ImportResult = {
+  createdRootFolderId?: string
+  createdRootFolderName?: string
+  targetFolderId: string | null
+  primaryImportedItem?: ImportedItemSelection
 }
 
 const SUPPORTED_REQUEST_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
@@ -135,6 +157,12 @@ export async function analyzePostmanCollection(input: AnalyzePostmanCollectionIn
       folderCount: analysis.folderCount,
       requestCount: analysis.requestCount,
       warningCount: analysis.warnings.reduce((sum, warning) => sum + warning.count, 0),
+      exportedByKova: analysis.exportedByKova,
+      hasCollectionAuth: analysis.hasCollectionAuth,
+      hasCollectionScripts: analysis.hasCollectionScripts,
+      hasCollectionHeaders: analysis.hasCollectionHeaders,
+      hasCollectionVariables: analysis.hasCollectionVariables,
+      hasCollectionProtocolProfileBehavior: analysis.hasCollectionProtocolProfileBehavior,
       warnings: analysis.warnings,
     })
   } catch (error) {
@@ -143,20 +171,33 @@ export async function analyzePostmanCollection(input: AnalyzePostmanCollectionIn
 }
 
 export async function importPostmanCollection(input: ImportPostmanCollectionInput): Promise<GenericResult<ImportPostmanCollectionResponse>> {
-  const rootFolderName = input.rootFolderName.trim()
-  if (!rootFolderName) {
+  const shouldCreateRootFolder = input.target === 'new-folder' && input.skipRootFolder !== true
+  const rootFolderName = input.rootFolderName?.trim() ?? ''
+
+  if (input.target === 'new-folder' && shouldCreateRootFolder && !rootFolderName) {
     return GenericError.Message('Root folder name is required')
+  }
+
+  if (input.target === 'existing-folder' && !input.targetFolderId) {
+    return GenericError.Message('Target folder is required')
   }
 
   try {
     const collection = readPostmanCollection(input.filePath)
     const analysis = analyzeCollectionDocument(collection)
-    const rootFolderId = importCollectionDocument(collection, rootFolderName)
+    const importResult = importCollectionDocument(collection, {
+      target: input.target,
+      targetFolderId: input.target === 'existing-folder' ? input.targetFolderId ?? null : null,
+      rootFolderName,
+      shouldCreateRootFolder,
+    })
 
     return Result.Success({
-      rootFolderId,
-      rootFolderName,
-      folderCount: analysis.folderCount + 1,
+      createdRootFolderId: importResult.createdRootFolderId,
+      createdRootFolderName: importResult.createdRootFolderName,
+      targetFolderId: importResult.targetFolderId,
+      primaryImportedItem: importResult.primaryImportedItem,
+      folderCount: analysis.folderCount + (importResult.createdRootFolderId ? 1 : 0),
       requestCount: analysis.requestCount,
       warningCount: analysis.warnings.reduce((sum, warning) => sum + warning.count, 0),
       warnings: analysis.warnings,
@@ -171,16 +212,22 @@ export function analyzeCollectionDocument(collection: PostmanCollection): Import
   const collectionName = sanitizeName(collection.info?.name, 'Imported Collection')
   let folderCount = 0
   let requestCount = 0
+  const exportedByKova = isKovaExportedCollection(collection)
+  const hasCollectionVariables = (collection.variable?.length ?? 0) > 0
+  const hasCollectionProtocolProfileBehavior = Boolean(collection.protocolProfileBehavior)
+  const hasCollectionScripts = hasScripts(collection.event)
+  const hasCollectionAuth = hasSupportedOrUnsupportedAuth(collection.auth)
+  const hasCollectionHeaders = readCollectionHeaders(collection).trim() !== ''
 
-  if ((collection.variable?.length ?? 0) > 0) {
+  if (hasCollectionVariables) {
     addWarning(warnings, 'collection-variables-ignored', collection.variable?.length ?? 0, [collectionName])
   }
 
-  if (collection.protocolProfileBehavior) {
+  if (hasCollectionProtocolProfileBehavior) {
     addWarning(warnings, 'protocol-profile-ignored', 1, [collectionName])
   }
 
-  inspectEvents(warnings, `${collectionName} (collection)`, collection.event)
+  inspectEvents(warnings, `${collectionName} (collection)`, collection.event, exportedByKova)
   inspectAuth(warnings, `${collectionName} (collection)`, collection.auth)
 
   const visit = (items: PostmanItem[], parentPath: string[]) => {
@@ -190,7 +237,7 @@ export function analyzeCollectionDocument(collection: PostmanCollection): Import
 
       if (item.item?.length) {
         folderCount += 1
-        inspectEvents(warnings, nextPath.join(' / '), item.event)
+        inspectEvents(warnings, nextPath.join(' / '), item.event, exportedByKova)
         inspectAuth(warnings, nextPath.join(' / '), item.auth)
         if (item.protocolProfileBehavior) {
           addWarning(warnings, 'protocol-profile-ignored', 1, [nextPath.join(' / ')])
@@ -204,7 +251,7 @@ export function analyzeCollectionDocument(collection: PostmanCollection): Import
       }
 
       requestCount += 1
-      inspectEvents(warnings, nextPath.join(' / '), item.event)
+      inspectEvents(warnings, nextPath.join(' / '), item.event, exportedByKova)
       inspectAuth(warnings, nextPath.join(' / '), item.request.auth ?? item.auth)
       inspectRequestBody(warnings, nextPath.join(' / '), item.request.body)
 
@@ -221,42 +268,79 @@ export function analyzeCollectionDocument(collection: PostmanCollection): Import
     suggestedRootFolderName: collectionName,
     folderCount,
     requestCount,
+    exportedByKova,
+    hasCollectionAuth,
+    hasCollectionScripts,
+    hasCollectionHeaders,
+    hasCollectionVariables,
+    hasCollectionProtocolProfileBehavior,
     warnings: buildWarnings(warnings),
   }
 }
 
-export function importCollectionDocument(collection: PostmanCollection, rootFolderName: string) {
+export function importCollectionDocument(
+  collection: PostmanCollection,
+  input: {
+    target: ImportPostmanCollectionInput['target']
+    targetFolderId: string | null
+    rootFolderName: string
+    shouldCreateRootFolder: boolean
+  }
+): ImportResult {
   const db = getDb()
 
   return db.transaction(tx => {
     const now = Date.now()
-    const rootFolderId = crypto.randomUUID()
-    tx.insert(folders)
-      .values({
-        id: rootFolderId,
-        parentId: null,
-        name: rootFolderName,
-        description: '',
-        headers: '',
-        authJson: JSON.stringify(mapAuth(collection.auth, false)),
-        preRequestScript: mapScripts(collection.event, 'prerequest'),
-        postRequestScript: mapScripts(collection.event, 'test'),
-        position: 0,
-        createdAt: now,
-        deletedAt: null,
-      })
-      .run()
-    insertTreeItem(tx, { parentFolderId: null, itemType: 'folder', itemId: rootFolderId })
+    let targetFolderId = input.target === 'existing-folder' ? input.targetFolderId : null
+    let createdRootFolderId: string | undefined
+    let createdRootFolderName: string | undefined
+    let primaryImportedItem: ImportedItemSelection | undefined
 
-    for (const item of collection.item ?? []) {
-      importItem(tx, item, rootFolderId)
+    if (input.shouldCreateRootFolder) {
+      const rootFolderId = crypto.randomUUID()
+      tx.insert(folders)
+        .values({
+          id: rootFolderId,
+          parentId: null,
+          name: input.rootFolderName,
+          description: '',
+          headers: readCollectionHeaders(collection),
+          authJson: JSON.stringify(mapAuth(collection.auth, false)),
+          preRequestScript: mapScripts(collection.event, 'prerequest', isKovaExportedCollection(collection)),
+          postRequestScript: mapScripts(collection.event, 'test', isKovaExportedCollection(collection)),
+          position: 0,
+          createdAt: now,
+          deletedAt: null,
+        })
+        .run()
+      insertTreeItem(tx, { parentFolderId: null, itemType: 'folder', itemId: rootFolderId })
+      createdRootFolderId = rootFolderId
+      createdRootFolderName = input.rootFolderName
+      targetFolderId = rootFolderId
     }
 
-    return rootFolderId
+    for (const item of collection.item ?? []) {
+      const imported = importItem(tx, item, targetFolderId, isKovaExportedCollection(collection))
+      if (!primaryImportedItem && imported) {
+        primaryImportedItem = imported
+      }
+    }
+
+    return {
+      createdRootFolderId,
+      createdRootFolderName,
+      targetFolderId,
+      primaryImportedItem,
+    }
   })
 }
 
-function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolderId: string) {
+function importItem(
+  db: ReturnType<typeof getDb>,
+  item: PostmanItem,
+  parentFolderId: string | null,
+  preserveScripts: boolean
+): ImportedItemSelection | undefined {
   ensureParentFolderExists(db, parentFolderId)
   const now = Date.now()
   const name = sanitizeName(item.name, item.request ? 'Imported Request' : 'Imported Folder')
@@ -271,8 +355,8 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
         description: readFolderDescription(item.description),
         headers: readFolderHeaders(item._kova),
         authJson: JSON.stringify(mapAuth(item.auth, true)),
-        preRequestScript: mapScripts(item.event, 'prerequest'),
-        postRequestScript: mapScripts(item.event, 'test'),
+        preRequestScript: mapScripts(item.event, 'prerequest', preserveScripts),
+        postRequestScript: mapScripts(item.event, 'test', preserveScripts),
         position: 0,
         createdAt: now,
         deletedAt: null,
@@ -281,13 +365,13 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
     insertTreeItem(db, { parentFolderId, itemType: 'folder', itemId: folderId })
 
     for (const child of item.item) {
-      importItem(db, child, folderId)
+      importItem(db, child, folderId, preserveScripts)
     }
-    return
+    return { itemType: 'folder', id: folderId }
   }
 
   if (!item.request) {
-    return
+    return undefined
   }
 
   const requestId = crypto.randomUUID()
@@ -302,8 +386,8 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
       pathParams: requestModel.pathParams,
       searchParams: requestModel.searchParams,
       authJson: JSON.stringify(mapAuth(item.request.auth ?? item.auth, true)),
-      preRequestScript: mapScripts(item.event, 'prerequest'),
-      postRequestScript: mapScripts(item.event, 'test'),
+      preRequestScript: mapScripts(item.event, 'prerequest', preserveScripts),
+      postRequestScript: mapScripts(item.event, 'test', preserveScripts),
       headers: requestModel.headers,
       body: requestModel.body,
       bodyType: requestModel.bodyType,
@@ -346,6 +430,8 @@ function importItem(db: ReturnType<typeof getDb>, item: PostmanItem, parentFolde
       })
       .run()
   })
+
+  return { itemType: 'request', id: requestId }
 }
 
 function readPostmanCollection(filePath: string) {
@@ -360,7 +446,7 @@ function readPostmanCollection(filePath: string) {
   return value as PostmanCollection
 }
 
-function inspectEvents(warnings: WarningAccumulator, pathLabel: string, events: PostmanEvent[] | undefined) {
+function inspectEvents(warnings: WarningAccumulator, pathLabel: string, events: PostmanEvent[] | undefined, exportedByKova: boolean) {
   const scripts = events
     ?.filter(event => event.listen === 'prerequest' || event.listen === 'test')
     .map(event => ({
@@ -369,7 +455,7 @@ function inspectEvents(warnings: WarningAccumulator, pathLabel: string, events: 
     }))
     .filter(event => event.source !== '') ?? []
 
-  if (scripts.length > 0) {
+  if (scripts.length > 0 && !exportedByKova) {
     addWarning(warnings, 'scripts-commented', scripts.length, [pathLabel])
   }
 
@@ -604,7 +690,7 @@ export function mapAuth(auth: PostmanAuth | undefined, allowInherit: boolean): H
   return { type: 'noauth' }
 }
 
-export function mapScripts(events: PostmanEvent[] | undefined, listen: 'prerequest' | 'test') {
+export function mapScripts(events: PostmanEvent[] | undefined, listen: 'prerequest' | 'test', preserveScripts = false) {
   const scripts = events
     ?.filter(event => event.listen === listen)
     .map(event => (event.script?.exec ?? []).join('\n').trim())
@@ -612,6 +698,10 @@ export function mapScripts(events: PostmanEvent[] | undefined, listen: 'prereque
 
   if (scripts.length === 0) {
     return ''
+  }
+
+  if (preserveScripts) {
+    return scripts.join('\n\n')
   }
 
   return [
@@ -637,6 +727,28 @@ function readFolderDescription(value: unknown) {
 
 function readFolderHeaders(metadata: PostmanItem['_kova']) {
   return typeof metadata?.folderHeaders === 'string' ? metadata.folderHeaders : ''
+}
+
+function readCollectionHeaders(collection: PostmanCollection) {
+  return typeof collection._kova?.folderHeaders === 'string' ? collection._kova.folderHeaders : ''
+}
+
+function hasScripts(events: PostmanEvent[] | undefined) {
+  return events?.some(event => {
+    if (event.listen !== 'prerequest' && event.listen !== 'test') {
+      return false
+    }
+
+    return (event.script?.exec ?? []).join('\n').trim() !== ''
+  }) ?? false
+}
+
+function hasSupportedOrUnsupportedAuth(auth: PostmanAuth | undefined) {
+  return Boolean(auth?.type?.trim())
+}
+
+function isKovaExportedCollection(collection: PostmanCollection) {
+  return collection._kova?.exportedByKova === true
 }
 
 function mapExampleRequest(

@@ -48,7 +48,14 @@ type PostmanCollectionDocument = {
     name: string
     schema: string
   }
+  description?: string
+  auth?: PostmanAuth
+  event?: PostmanEvent[]
   item: PostmanItem[]
+  _kova?: {
+    exportedByKova?: true
+    folderHeaders?: string
+  }
 }
 
 type PostmanItem = {
@@ -215,6 +222,9 @@ export function buildCollectionExportDocument(source: CollectionExportSource, co
   const folderById = new Map(source.folders.map(folder => [folder.id, folder]))
   const requestById = new Map(source.requests.map(request => [request.id, request]))
   const childrenByParentId = new Map<string | null, ExplorerItem[]>()
+  const rootFolder = source.scope === 'folder' && source.folderId ? folderById.get(source.folderId) ?? null : null
+  const collectionHeaders = rootFolder?.headers ?? ''
+  const rootParentFolderId = rootFolder?.id ?? null
 
   for (const item of source.orderedItems) {
     if (item.itemType === 'example') {
@@ -252,7 +262,16 @@ export function buildCollectionExportDocument(source: CollectionExportSource, co
       name: collectionName,
       schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
     },
-    item: buildItems(null),
+    description: rootFolder?.description.trim() ? rootFolder.description : undefined,
+    auth: rootFolder ? mapAuth(rootFolder.auth) : undefined,
+    event: rootFolder ? buildEvents(rootFolder.preRequestScript, rootFolder.postRequestScript) : undefined,
+    item: buildItems(rootParentFolderId),
+    _kova: {
+      exportedByKova: true,
+      folderHeaders: parseKeyValueRows(collectionHeaders).some(row => row.key.trim() || row.value.trim() || row.description.trim())
+        ? collectionHeaders
+        : undefined,
+    },
   }
 }
 

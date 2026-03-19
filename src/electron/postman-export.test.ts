@@ -110,11 +110,11 @@ describe('postman export', () => {
         {
           id: 'folder-1',
           name: 'Users',
-          description: '',
-          headers: '',
-          auth: { type: 'inherit' },
-          preRequestScript: '',
-          postRequestScript: '',
+          description: 'User management endpoints',
+          headers: 'x-team:api',
+          auth: { type: 'bearer', token: '{{token}}' },
+          preRequestScript: 'const token = kova.env.get("token")',
+          postRequestScript: 'kova.test("ok", () => true)',
           createdAt: 1,
           deletedAt: null,
           parentFolderId: null,
@@ -143,8 +143,14 @@ describe('postman export', () => {
     }, 'Users')
 
     expect(document.info.name).toBe('Users')
-    expect(document.item[0]?.name).toBe('Users')
-    expect(document.item[0]?.item?.[0]?.name).toBe('Admin')
+    expect(document.description).toBe('User management endpoints')
+    expect(document.auth).toEqual({ type: 'bearer', bearer: [{ key: 'token', value: '{{token}}' }] })
+    expect(document.event).toEqual([
+      { listen: 'prerequest', script: { exec: ['const token = kova.env.get("token")'], type: 'text/javascript' } },
+      { listen: 'test', script: { exec: ['kova.test("ok", () => true)'], type: 'text/javascript' } },
+    ])
+    expect(document._kova).toEqual({ exportedByKova: true, folderHeaders: 'x-team:api' })
+    expect(document.item[0]?.name).toBe('Admin')
   })
 
   it('exports a single request as a top-level collection item', () => {
@@ -184,6 +190,7 @@ describe('postman export', () => {
 
     expect(document.info.name).toBe('Create User')
     expect(document.item).toHaveLength(1)
+    expect(document._kova).toEqual({ exportedByKova: true, folderHeaders: undefined })
     expect(document.item[0]?.name).toBe('Create User')
     expect(document.item[0]?.request?.method).toBe('POST')
   })

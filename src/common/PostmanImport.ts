@@ -32,17 +32,31 @@ export type AnalyzePostmanCollectionResponse = {
   folderCount: number
   requestCount: number
   warningCount: number
+  exportedByKova: boolean
+  hasCollectionAuth: boolean
+  hasCollectionScripts: boolean
+  hasCollectionHeaders: boolean
+  hasCollectionVariables: boolean
+  hasCollectionProtocolProfileBehavior: boolean
   warnings: PostmanImportWarning[]
 }
 
 export type ImportPostmanCollectionInput = {
   filePath: string
-  rootFolderName: string
+  target: 'new-folder' | 'existing-folder' | 'global'
+  targetFolderId?: string
+  rootFolderName?: string
+  skipRootFolder?: boolean
 }
 
 export type ImportPostmanCollectionResponse = {
-  rootFolderId: string
-  rootFolderName: string
+  createdRootFolderId?: string
+  createdRootFolderName?: string
+  targetFolderId: string | null
+  primaryImportedItem?: {
+    itemType: 'folder' | 'request'
+    id: string
+  }
   folderCount: number
   requestCount: number
   warningCount: number

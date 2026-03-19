@@ -5,7 +5,11 @@ describe('postman import', () => {
   it('reports warnings for commented scripts and unsupported features', () => {
     const analysis = analyzeCollectionDocument({
       info: { name: 'Sample' },
+      _kova: { folderHeaders: 'x-team:api' },
+      auth: { type: 'bearer', bearer: [{ key: 'token', value: '{{token}}' }] },
+      event: [{ listen: 'test', script: { exec: ['pm.test("collection ok")'] } }],
       variable: [{ key: 'baseUrl' }],
+      protocolProfileBehavior: { disableBodyPruning: true },
       item: [
         {
           name: 'Folder',
@@ -28,6 +32,12 @@ describe('postman import', () => {
     expect(analysis.collectionName).toBe('Sample')
     expect(analysis.folderCount).toBe(1)
     expect(analysis.requestCount).toBe(1)
+    expect(analysis.exportedByKova).toBe(false)
+    expect(analysis.hasCollectionAuth).toBe(true)
+    expect(analysis.hasCollectionScripts).toBe(true)
+    expect(analysis.hasCollectionHeaders).toBe(true)
+    expect(analysis.hasCollectionVariables).toBe(true)
+    expect(analysis.hasCollectionProtocolProfileBehavior).toBe(true)
     expect(analysis.warnings.map(warning => warning.code)).toEqual(
       expect.arrayContaining([
         'scripts-commented',
@@ -35,6 +45,7 @@ describe('postman import', () => {
         'unsupported-auth',
         'unsupported-body-mode',
         'collection-variables-ignored',
+        'protocol-profile-ignored',
       ])
     )
   })
@@ -77,5 +88,24 @@ describe('postman import', () => {
     expect(mapScripts([{ listen: 'test', script: { exec: ['pm.test("ok")', 'console.log("x")'] } }], 'test')).toContain(
       '// pm.test("ok")'
     )
+    expect(mapScripts([{ listen: 'test', script: { exec: ['console.log("kept")'] } }], 'test', true)).toBe('console.log("kept")')
+  })
+
+  it('does not add commented-script warnings for Kova exports', () => {
+    const analysis = analyzeCollectionDocument({
+      info: { name: 'Round Trip' },
+      _kova: { exportedByKova: true },
+      event: [{ listen: 'prerequest', script: { exec: ['console.log("root")'] } }],
+      item: [
+        {
+          name: 'Request',
+          event: [{ listen: 'test', script: { exec: ['console.log("item")'] } }],
+          request: { method: 'GET', url: 'https://api.example.com' },
+        },
+      ],
+    })
+
+    expect(analysis.exportedByKova).toBe(true)
+    expect(analysis.warnings.map(warning => warning.code)).not.toContain('scripts-commented')
   })
 })
