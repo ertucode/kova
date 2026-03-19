@@ -148,6 +148,7 @@ export function ExplorerRow({
           onAddFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined}
           onAddHttpRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'http') : undefined}
           onAddWebSocketRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'websocket') : undefined}
+          onFlattenFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.flattenFolder(node) : undefined}
           onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
         />
       </div>
@@ -312,6 +313,7 @@ function ExplorerMenu({
   onAddFolder,
   onAddHttpRequest,
   onAddWebSocketRequest,
+  onFlattenFolder,
   onDelete,
 }: {
   itemId: string
@@ -321,6 +323,7 @@ function ExplorerMenu({
   onAddFolder?: () => void
   onAddHttpRequest?: () => void
   onAddWebSocketRequest?: () => void
+  onFlattenFolder?: () => void
   onDelete: () => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -482,6 +485,14 @@ function ExplorerMenu({
               <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } }))}>
                 <FileJsonIcon className="size-4" />
                 Export Postman
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'folder' && onFlattenFolder ? (
+            <li>
+              <button type="button" onClick={() => runAction(onFlattenFolder)}>
+                <ChevronDownIcon className="size-4" />
+                Flatten Folder
               </button>
             </li>
           ) : null}

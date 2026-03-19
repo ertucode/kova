@@ -1,5 +1,6 @@
 import { createElement } from 'react'
 import type { FolderExplorerTabRecord } from '@common/FolderExplorerTabs'
+import type { HttpAuth } from '@common/Auth'
 import type { FolderRecord } from '@common/Folders'
 import { errorResponseToMessage } from '@common/GenericError'
 import type { RequestExampleRecord } from '@common/RequestExamples'
@@ -355,6 +356,23 @@ export namespace FolderExplorerCoordinator {
     })
   }
 
+  export async function flattenFolder(item: Extract<ExplorerItem, { itemType: 'folder' }>) {
+    const warning = await getFlattenFolderWarning(item.id)
+    if (warning === null) {
+      return
+    }
+
+    confirmation.trigger.confirm({
+      title: warning ? 'Folder settings will be lost' : 'Flatten folder?',
+      message: [buildFlattenFolderMessage(item), warning].filter(Boolean).join(' '),
+      confirmText: warning ? 'Flatten Anyway' : 'Flatten Folder',
+      rejectText: 'Cancel',
+      onConfirm: async () => {
+        await executeFlattenFolder(item)
+      },
+    })
+  }
+
   export function updateTreeSearchQuery(searchQuery: string) {
     folderExplorerTreeStore.trigger.searchQueryChanged({ searchQuery })
   }
@@ -476,6 +494,120 @@ function showMoveUndoToast() {
         'Undo'
       )
     ),
+  })
+}
+
+function buildFlattenFolderMessage(item: Extract<ExplorerItem, { itemType: 'folder' }>) {
+  return item.parentFolderId
+    ? `Direct children in "${item.name}" will be moved into the containing folder, then the folder will be deleted.`
+    : `Direct children in "${item.name}" will be moved to the root, then the folder will be deleted.`
+}
+
+async function getFlattenFolderWarning(folderId: string) {
+  const key = toSelectionKey({ itemType: 'folder', id: folderId })
+  const entry = folderExplorerEditorStore.getSnapshot().context.entries[key]
+  const currentDraft = entry?.current
+
+  if (currentDraft?.itemType === 'folder') {
+    return buildFlattenFolderWarningMessage(currentDraft) ?? undefined
+  }
+
+  const result = await getWindowElectron().getFolder({ id: folderId })
+  if (!result.success) {
+    toast.show(result)
+    return null
+  }
+
+  return buildFlattenFolderWarningMessage(toFolderDetailsDraft(result.data)) ?? undefined
+}
+
+function buildFlattenFolderWarningMessage(folder: Pick<FolderRecord, 'headers' | 'auth' | 'preRequestScript' | 'postRequestScript'>) {
+  const warningItems: string[] = []
+
+  if (folder.headers.trim()) {
+    warningItems.push('headers')
+  }
+
+  if (hasCustomFolderAuth(folder.auth)) {
+    warningItems.push('auth')
+  }
+
+  if (folder.preRequestScript.trim()) {
+    warningItems.push('pre-request script')
+  }
+
+  if (folder.postRequestScript.trim()) {
+    warningItems.push('post-request script')
+  }
+
+  if (warningItems.length === 0) {
+    return null
+  }
+
+  const summary = warningItems.length === 1
+    ? warningItems[0]
+    : `${warningItems.slice(0, -1).join(', ')} and ${warningItems[warningItems.length - 1]}`
+
+  return `This folder has ${summary}. Flattening moves only direct children, so these folder-level settings will be discarded when the folder is deleted.`
+}
+
+function hasCustomFolderAuth(auth: HttpAuth) {
+  return auth.type !== 'inherit' && auth.type !== 'noauth'
+}
+
+async function executeFlattenFolder(item: Extract<ExplorerItem, { itemType: 'folder' }>) {
+  const treeState = folderExplorerTreeStore.getSnapshot().context
+  const children = treeState.items
+    .filter(
+      (currentItem): currentItem is Extract<ExplorerItem, { itemType: 'folder' | 'request' }> =>
+        currentItem.itemType !== 'example' && currentItem.parentFolderId === item.id
+    )
+    .slice()
+    .sort((left, right) => left.position - right.position || left.createdAt - right.createdAt)
+
+  const targetParentFolderId = item.parentFolderId
+  let targetPosition = treeState.items.filter(
+    (currentItem): currentItem is Extract<ExplorerItem, { itemType: 'folder' | 'request' }> =>
+      currentItem.itemType !== 'example' && currentItem.parentFolderId === targetParentFolderId && currentItem.id !== item.id
+  ).length
+
+  for (const child of children) {
+    const result = await getWindowElectron().moveExplorerItem({
+      itemType: child.itemType,
+      id: child.id,
+      targetParentFolderId,
+      targetPosition,
+    })
+
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    targetPosition += 1
+  }
+
+  const deleteResult = await getWindowElectron().deleteFolder({ id: item.id })
+  if (!deleteResult.success) {
+    toast.show(deleteResult)
+    return
+  }
+
+  if (treeState.createDraft?.parentFolderId === item.id) {
+    FolderExplorerCoordinator.cancelCreate()
+  }
+
+  folderExplorerEditorStore.trigger.itemStatesCleared({ keys: [toSelectionKey(item)] })
+  persistUiState()
+  persistUnsavedDrafts()
+  await FolderExplorerCoordinator.loadItems()
+
+  toast.show({
+    severity: 'success',
+    title: 'Folder flattened',
+    message: children.length === 0
+      ? `"${item.name}" was deleted.`
+      : `Moved ${children.length} item${children.length === 1 ? '' : 's'} out of "${item.name}" and deleted the folder.`,
   })
 }
 
