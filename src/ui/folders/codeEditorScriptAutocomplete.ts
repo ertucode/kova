@@ -87,10 +87,7 @@ function completeVariableName(
     const query = match[2] ?? ''
     const options = buildVariableStringCompletions(getVariableNames)
       .filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
-      .map(option => ({
-        ...option,
-        apply: `${option.label}${quote}`,
-      }))
+      .map(option => buildQuotedStringCompletion(option, quote))
 
     if (options.length === 0) {
       return null
@@ -132,10 +129,7 @@ function completeEnvironmentName(
     const query = match[match.length - 1] ?? ''
     const options = buildEnvironmentStringCompletions(getEnvironmentNames)
       .filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
-      .map(option => ({
-        ...option,
-        apply: `${option.label}${quote}`,
-      }))
+      .map(option => buildQuotedStringCompletion(option, quote))
 
     if (options.length === 0) {
       return null
@@ -235,4 +229,20 @@ function buildEnvironmentStringCompletions(getEnvironmentNames: (() => string[])
       type: 'constant',
       detail: 'environment',
     }))
+}
+
+function buildQuotedStringCompletion(option: Completion, quote: string): Completion {
+  return {
+    ...option,
+    apply(view, completion, from, to) {
+      const nextCharacter = view.state.doc.sliceString(to, to + 1)
+      const replacementTo = nextCharacter === quote ? to + 1 : to
+      const replacement = `${completion.label}${quote}`
+
+      view.dispatch({
+        changes: { from, to: replacementTo, insert: replacement },
+        selection: { anchor: from + replacement.length },
+      })
+    },
+  }
 }
