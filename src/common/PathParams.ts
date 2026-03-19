@@ -117,22 +117,38 @@ export function applyPathParamsToUrl(url: string, pathParams: string) {
 export function syncSearchParamsWithUrl(url: string, searchParams: string) {
   const urlRows = extractSearchParamRows(url)
   const existingRows = parseKeyValueRows(searchParams)
-  const disabledRows = existingRows.filter(row => !row.enabled && !urlRows.some(urlRow => urlRow.key === row.key.trim()))
-  const existingRowsByKey = new Map(existingRows.map(row => [row.key.trim(), row] satisfies [string, KeyValueRow]))
+  const remainingUrlRows = [...urlRows]
+  const nextRows = existingRows.map(existingRow => {
+    const existingKey = existingRow.key.trim()
+    const matchingIndex = remainingUrlRows.findIndex(urlRow => urlRow.key === existingKey)
 
-  const nextRows = urlRows.map((row, index) => {
-    const existingRow = existingRowsByKey.get(row.key) ?? existingRows[index]
+    if (matchingIndex < 0) {
+      return existingRow
+    }
+
+    const matchingRow = remainingUrlRows[matchingIndex]
+    remainingUrlRows.splice(matchingIndex, 1)
 
     return {
-      id: existingRow?.id ?? `search-param-${index}`,
+      ...existingRow,
       enabled: true,
-      key: row.key,
-      value: row.value,
-      description: existingRow?.description ?? '',
+      key: matchingRow.key,
+      value: matchingRow.value,
     } satisfies KeyValueRow
   })
 
-  return stringifyKeyValueRows([...nextRows, ...disabledRows])
+  const appendedRows = remainingUrlRows.map(
+    (row, index) =>
+      ({
+        id: `search-param-${existingRows.length + index}`,
+        enabled: true,
+        key: row.key,
+        value: row.value,
+        description: '',
+      }) satisfies KeyValueRow
+  )
+
+  return stringifyKeyValueRows([...nextRows, ...appendedRows])
 }
 
 export function syncUrlWithSearchParams(url: string, searchParams: string) {

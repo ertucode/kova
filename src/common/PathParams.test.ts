@@ -39,6 +39,18 @@ describe('PathParams', () => {
     )
   })
 
+  it('keeps existing search param row order stable while syncing URL values', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?sort=desc', 'page:1\nsort:asc\nfilter:active')).toBe(
+      'page:1\nsort:desc\nfilter:active'
+    )
+  })
+
+  it('appends newly introduced URL search params after existing rows', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?sort=desc&page=2', 'filter:active\nsort:asc')).toBe(
+      'filter:active\nsort:desc\npage:2'
+    )
+  })
+
   it('syncs the URL query string from search param rows', () => {
     expect(syncUrlWithSearchParams('https://api.example.com/users?old=1#hash', 'page:2\n//hidden:3\nsort:desc')).toBe(
       'https://api.example.com/users?page=2&sort=desc#hash'
