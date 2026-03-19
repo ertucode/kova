@@ -32,6 +32,7 @@ import { variableAutocompleteExtension, type VariableAutocompleteItem } from './
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
+import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
@@ -145,6 +146,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           updatePathParams(stringifyKeyValueRows(nextRows))
         },
       }),
+      searchParamHighlightExtension(),
       ...variableEditorExtensions,
     ],
     [variableEditorExtensions]

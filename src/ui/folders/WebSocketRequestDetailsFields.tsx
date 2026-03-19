@@ -21,6 +21,7 @@ import { EnvironmentCoordinator } from './environmentCoordinator'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
 import { requestExecutionStore } from './requestExecutionStore'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
+import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 
 type WebSocketMetaTab = 'overview' | 'search-params'
@@ -108,6 +109,8 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     ],
     []
   )
+
+  const urlEditorExtensions = useMemo(() => [searchParamHighlightExtension(), ...variableEditorExtensions], [variableEditorExtensions])
 
   useEffect(() => {
     setMetaTab('overview')
@@ -345,7 +348,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               singleLine
               className="min-w-0 flex-1 border-0"
               placeholder="wss://echo.websocket.events"
-              extensions={variableEditorExtensions}
+              extensions={urlEditorExtensions}
               onChange={value =>
                 FolderExplorerCoordinator.updateSelectedDraft({
                   ...draft,
