@@ -1,120 +1,32 @@
-import { getAuthHeaders, getAuthQueryParams, getAuthVariableSources, resolveAuth, resolveInheritedAuth, type HttpAuth } from '../common/Auth.js'
+import { getAuthVariableSources } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
-import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
-import { extractTemplateVariables, findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
+import { extractTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type {
   ExecutedRequestSnapshot,
   ReceivedResponseSnapshot,
   RequestExecutionRecord,
-  RequestMethod,
   ScriptResponseBody,
   SendRequestInput,
   SendRequestResponse,
 } from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
-import { getEnvironmentsByIds } from './db/environments.js'
-import { getFolderAncestorChain } from './db/folders.js'
 import { persistRequestHistory } from './db/request-history.js'
-import { getRequest } from './db/requests.js'
-import { getRequestParentFolderId } from './db/explorer.js'
 import { emitGenericEvent } from './generic-events.js'
-import { createRequestScriptRuntime } from './request-script-runner.js'
-
-const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+import { prepareHttpRequest } from './http-request-runtime.js'
 
 export async function sendRequest(input: SendRequestInput): Promise<GenericResult<SendRequestResponse>> {
   try {
-    const requestResult = await getRequest({ id: input.requestId })
-    if (!requestResult.success) {
-      return requestResult
+    const preparedRequest = await prepareHttpRequest(input)
+    if (!preparedRequest.success) {
+      return preparedRequest
     }
 
-    const [activeEnvironments, parentFolderId] = await Promise.all([
-      getEnvironmentsByIds(input.activeEnvironmentIds),
-      getRequestParentFolderId(input.requestId),
-    ])
-
-    if (requestResult.data.requestType !== 'http') {
-      return GenericError.Message('Use the WebSocket connect flow for websocket requests')
-    }
-
-    const folders = await getFolderAncestorChain(parentFolderId)
-    const runtime = createRequestScriptRuntime({
-      request: {
-        method: input.method,
-        url: input.url,
-        pathParams: input.pathParams,
-        searchParams: input.searchParams,
-        auth: input.auth,
-        headers: mergeHeaderRows(folders.map(folder => folder.headers), input.headers),
-        body: input.body,
-        bodyType: input.bodyType,
-        rawType: input.rawType,
-      },
-      environments: activeEnvironments,
-    })
-
-    await runtime.runPreRequestScripts([
-      ...folders.map(folder => ({ name: `Folder: ${folder.name}`, script: folder.preRequestScript })),
-      { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
-    ])
-
-    const variables = runtime.getResolvedVariables()
-    const missingVariables = collectMissingVariables(runtime.request, variables)
-    if (missingVariables.length > 0) {
-      return GenericError.Message(
-        `Missing environment variables: ${missingVariables.join(', ')}. Define them before sending the request.`
-      )
-    }
-
-    const urlWithTemplatesResolved = resolveTemplateVariables(runtime.request.url, variables).trim()
-    const resolvedPathParams = resolveTemplateVariables(runtime.request.pathParams, variables)
-    const { url: urlWithPathParams, missingNames: missingPathParamNames } = applyPathParamsToUrl(urlWithTemplatesResolved, resolvedPathParams)
-    if (missingPathParamNames.length > 0) {
-      return GenericError.Message(
-        `Path variable values are required: ${missingPathParamNames.join(', ')}. Fill them in before sending the request.`
-      )
-    }
-
-    const effectiveAuth = resolveInheritedAuth(
-      folders.map(folder => folder.auth),
-      runtime.request.auth
-    )
-    const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source => findMissingTemplateVariables(source, variables))
-    if (missingAuthVariables.length > 0) {
-      return GenericError.Message(
-        `Missing environment variables: ${Array.from(new Set(missingAuthVariables)).join(', ')}. Define them before sending the request.`
-      )
-    }
-
-    const resolvedAuth = resolveAuth(effectiveAuth, variables)
-    const url = applyAuthToUrl(applySearchParamsToUrl(urlWithPathParams, runtime.request.searchParams, variables), resolvedAuth)
-
-    if (!url) {
-      return GenericError.Message('Request URL is required')
-    }
-
-    let parsedUrl: URL
-    try {
-      parsedUrl = new URL(url)
-    } catch {
-      return GenericError.Message('Request URL is invalid')
-    }
-
-    if (!REQUEST_METHODS.includes(runtime.request.method)) {
-      return GenericError.Message('Invalid request method')
-    }
-
-    const headers = new Headers()
-    applyAuthHeaders(headers, resolvedAuth)
-    applyResolvedHeaders(headers, parseKeyValueRows(runtime.request.headers), variables)
-
-    const requestBody = buildRequestBody(runtime.request, headers, variables)
+    const { headers, postRequestScriptSources, requestBody, requestName, runtime, url, variables } = preparedRequest.data
     const sentAt = Date.now()
     const executedRequest = buildExecutedRequestSnapshot({
       requestId: input.requestId,
-      requestName: requestResult.data.name,
+      requestName,
       request: runtime.request,
       url,
       headers,
@@ -123,7 +35,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       sentAt,
     })
     const startedAt = Date.now()
-    const response = await fetch(parsedUrl, {
+    const response = await fetch(url, {
       method: runtime.request.method,
       headers,
       body: requestBody.body,
@@ -135,21 +47,12 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n')
 
-    const scriptErrors = await runtime.runPostRequestScripts(
-      [
-        { name: `Request: ${requestResult.data.name}`, script: input.postRequestScript },
-        ...folders
-          .slice()
-          .reverse()
-          .map(folder => ({ name: `Folder: ${folder.name}`, script: folder.postRequestScript })),
-      ],
-      {
-        status: response.status,
-        statusText: response.statusText,
-        headers: responseHeaders,
-        body: parseScriptResponseBody(bodyText, responseHeaders),
-      }
-    )
+    const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+      body: parseScriptResponseBody(bodyText, responseHeaders),
+    })
 
     const updatedEnvironments = runtime.getUpdatedEnvironments()
     const responseSnapshot: ReceivedResponseSnapshot = {
@@ -173,7 +76,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       itemType: 'http',
       id: crypto.randomUUID(),
       requestId: input.requestId,
-      requestName: requestResult.data.name,
+      requestName,
       request: executedRequest,
       response: responseSnapshot,
       responseError: null,
@@ -202,133 +105,6 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
   } catch (error) {
     console.error('sendRequest failed', error)
     return GenericError.Message(formatRequestError(error))
-  }
-}
-
-function collectMissingVariables(
-  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType'>,
-  variables: Record<string, string>
-) {
-  const missingVariables = new Set<string>()
-
-  for (const variableName of findMissingTemplateVariables(input.url, variables)) {
-    missingVariables.add(variableName)
-  }
-
-  for (const row of parseKeyValueRows(input.pathParams)) {
-    if (!row.enabled) {
-      continue
-    }
-
-    for (const variableName of findMissingTemplateVariables(row.value, variables)) {
-      missingVariables.add(variableName)
-    }
-  }
-
-  for (const row of parseKeyValueRows(input.searchParams)) {
-    if (!row.enabled) {
-      continue
-    }
-
-    for (const variableName of findMissingTemplateVariables(row.key, variables)) {
-      missingVariables.add(variableName)
-    }
-
-    for (const variableName of findMissingTemplateVariables(row.value, variables)) {
-      missingVariables.add(variableName)
-    }
-  }
-
-  for (const source of getAuthVariableSources(input.auth)) {
-    for (const variableName of findMissingTemplateVariables(source, variables)) {
-      missingVariables.add(variableName)
-    }
-  }
-
-  for (const row of parseKeyValueRows(input.headers)) {
-    if (!row.enabled) {
-      continue
-    }
-
-    for (const variableName of findMissingTemplateVariables(row.key, variables)) {
-      missingVariables.add(variableName)
-    }
-
-    for (const variableName of findMissingTemplateVariables(row.value, variables)) {
-      missingVariables.add(variableName)
-    }
-  }
-
-  if (input.bodyType === 'raw') {
-    for (const variableName of findMissingTemplateVariables(input.body, variables)) {
-      missingVariables.add(variableName)
-    }
-  }
-
-  if (input.bodyType === 'form-data' || input.bodyType === 'x-www-form-urlencoded') {
-    for (const row of parseKeyValueRows(input.body)) {
-      if (!row.enabled) {
-        continue
-      }
-
-      for (const variableName of findMissingTemplateVariables(row.key, variables)) {
-        missingVariables.add(variableName)
-      }
-
-      for (const variableName of findMissingTemplateVariables(row.value, variables)) {
-        missingVariables.add(variableName)
-      }
-    }
-  }
-
-  return Array.from(missingVariables).sort((left, right) => left.localeCompare(right))
-}
-
-function buildRequestBody(
-  input: Pick<SendRequestInput, 'bodyType' | 'body' | 'rawType'>,
-  headers: Headers,
-  variables: Record<string, string>
-) {
-  switch (input.bodyType) {
-    case 'none':
-      return { body: undefined, preview: '' }
-    case 'raw': {
-      const resolvedBody = resolveTemplateVariables(input.body, variables)
-      if (input.body && !headers.has('content-type')) {
-        headers.set('content-type', input.rawType === 'json' ? 'application/json' : 'text/plain')
-      }
-      return { body: resolvedBody, preview: resolvedBody }
-    }
-    case 'form-data': {
-      const formData = new FormData()
-      const previewRows: string[] = []
-      for (const row of parseKeyValueRows(input.body)) {
-        const key = resolveTemplateVariables(row.key, variables).trim()
-        if (!row.enabled || !key) {
-          continue
-        }
-
-        const value = resolveTemplateVariables(row.value, variables)
-        formData.append(key, value)
-        previewRows.push(`${key}: ${value}`)
-      }
-      return { body: formData, preview: previewRows.join('\n') }
-    }
-    case 'x-www-form-urlencoded': {
-      const searchParams = new URLSearchParams()
-      for (const row of parseKeyValueRows(input.body)) {
-        const key = resolveTemplateVariables(row.key, variables).trim()
-        if (!row.enabled || !key) {
-          continue
-        }
-
-        searchParams.append(key, resolveTemplateVariables(row.value, variables))
-      }
-      if (!headers.has('content-type')) {
-        headers.set('content-type', 'application/x-www-form-urlencoded')
-      }
-      return { body: searchParams, preview: searchParams.toString() }
-    }
   }
 }
 
@@ -500,63 +276,4 @@ function collectErrorMessages(error: Error, messages: Set<string>) {
   if (typeof cause === 'string' && cause.trim()) {
     messages.add(cause.trim())
   }
-}
-
-function applyResolvedHeaders(headers: Headers, rows: ReturnType<typeof parseKeyValueRows>, variables: Record<string, string>) {
-  for (const row of rows) {
-    const key = resolveTemplateVariables(row.key, variables).trim()
-    if (!row.enabled || !key) {
-      continue
-    }
-
-    headers.set(key, resolveTemplateVariables(row.value, variables))
-  }
-}
-
-function applyAuthHeaders(headers: Headers, auth: HttpAuth) {
-  for (const entry of getAuthHeaders(auth)) {
-    headers.set(entry.key, entry.value)
-  }
-}
-
-function applyAuthToUrl(url: string, auth: HttpAuth) {
-  const entries = getAuthQueryParams(auth)
-  if (entries.length === 0) {
-    return url
-  }
-
-  const nextUrl = new URL(url)
-  for (const entry of entries) {
-    nextUrl.searchParams.set(entry.key, entry.value)
-  }
-
-  return nextUrl.toString()
-}
-
-function mergeHeaderRows(folderHeaders: string[], requestHeaders: string) {
-  const mergedRows: Array<{ key: string; value: string; enabled: boolean }> = []
-  const pushRows = (value: string) => {
-    for (const row of parseKeyValueRows(value)) {
-      const key = row.key.trim()
-      if (!row.enabled || !key) {
-        continue
-      }
-
-      const existingIndex = mergedRows.findIndex(entry => entry.key.toLowerCase() === key.toLowerCase())
-      const nextEntry = { key: row.key, value: row.value, enabled: row.enabled }
-      if (existingIndex >= 0) {
-        mergedRows[existingIndex] = nextEntry
-      } else {
-        mergedRows.push(nextEntry)
-      }
-    }
-  }
-
-  for (const value of folderHeaders) {
-    pushRows(value)
-  }
-
-  pushRows(requestHeaders)
-
-  return mergedRows.map(row => `${row.key}:${row.value}`).join('\n')
 }

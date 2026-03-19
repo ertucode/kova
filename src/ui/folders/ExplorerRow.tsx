@@ -13,6 +13,7 @@ import {
   XIcon,
 } from 'lucide-react'
 import type { ExplorerItem } from '@common/Explorer'
+import type { RequestType } from '@common/Requests'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { dialogActions } from '@/global/dialogStore'
 import { PostmanExportDialog } from './PostmanExportDialog'
@@ -20,6 +21,8 @@ import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTy
 import { toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+import { getWindowElectron } from '@/getWindowElectron'
+import { toast } from '@/lib/components/toast'
 
 export function ExplorerRow({
   node,
@@ -47,6 +50,7 @@ export function ExplorerRow({
   const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const isItemDirty = useSelector(folderExplorerEditorStore, state => {
     const entry = state.context.entries[`${node.itemType}:${node.id}`]
     if (!entry?.current || node.itemType === 'folder') {
@@ -139,6 +143,8 @@ export function ExplorerRow({
         <ExplorerMenu
           itemId={node.id}
           itemType={node.itemType}
+          requestType={node.itemType === 'request' ? node.requestType : undefined}
+          activeEnvironmentIds={activeEnvironmentIds}
           onAddFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined}
           onAddHttpRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'http') : undefined}
           onAddWebSocketRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'websocket') : undefined}
@@ -301,6 +307,8 @@ export function EmptyState({ title, description }: { title: string; description:
 function ExplorerMenu({
   itemId,
   itemType,
+  requestType,
+  activeEnvironmentIds,
   onAddFolder,
   onAddHttpRequest,
   onAddWebSocketRequest,
@@ -308,6 +316,8 @@ function ExplorerMenu({
 }: {
   itemId: string
   itemType: ExplorerItem['itemType']
+  requestType?: RequestType
+  activeEnvironmentIds: string[]
   onAddFolder?: () => void
   onAddHttpRequest?: () => void
   onAddWebSocketRequest?: () => void
@@ -383,9 +393,39 @@ function ExplorerMenu({
     }
   }, [isOpen])
 
-  const runAction = (action: () => void) => {
+  const runAction = (action: () => void | Promise<void>) => {
     setIsOpen(false)
-    action()
+    void action()
+  }
+
+  const copyRequestCode = async (format: 'curl' | 'fetch') => {
+    if (itemType !== 'request' || requestType !== 'http') {
+      return
+    }
+
+    const result = await getWindowElectron().generateRequestCode({
+      requestId: itemId,
+      activeEnvironmentIds,
+    })
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(format === 'curl' ? result.data.curl : result.data.fetch)
+      toast.show({
+        severity: 'success',
+        title: format === 'curl' ? 'cURL copied' : 'Fetch copied',
+        message: format === 'curl' ? 'Resolved cURL command copied to clipboard.' : 'Resolved fetch snippet copied to clipboard.',
+      })
+    } catch {
+      toast.show({
+        severity: 'error',
+        title: 'Copy failed',
+        message: 'Could not write the generated request code to the clipboard.',
+      })
+    }
   }
 
   return (
@@ -450,6 +490,22 @@ function ExplorerMenu({
               <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'request', requestId: itemId } }))}>
                 <FileJsonIcon className="size-4" />
                 Export Postman
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'request' && requestType === 'http' ? (
+            <li>
+              <button type="button" onClick={() => runAction(() => copyRequestCode('curl'))}>
+                <CopyIcon className="size-4" />
+                Copy as cURL
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'request' && requestType === 'http' ? (
+            <li>
+              <button type="button" onClick={() => runAction(() => copyRequestCode('fetch'))}>
+                <FileCode2Icon className="size-4" />
+                Copy as fetch
               </button>
             </li>
           ) : null}

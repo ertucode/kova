@@ -89,6 +89,7 @@ import {
   type PickPostmanEnvironmentExportFileInput,
   type PickPostmanEnvironmentExportFileResponse,
 } from './PostmanEnvironmentExport.js'
+import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -136,6 +137,7 @@ export type EventResponseMapping = {
   moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
+  generateRequestCode: Promise<GenericResult<GenerateRequestCodeResponse>>
   connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: Promise<GenericResult<void>>
   disconnectWebSocket: Promise<GenericResult<void>>
@@ -202,6 +204,7 @@ export type EventRequestMapping = {
   moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
+  generateRequestCode: GenerateRequestCodeInput
   connectWebSocket: WebSocketConnectInput
   sendWebSocketMessage: WebSocketSendMessageInput
   disconnectWebSocket: WebSocketDisconnectInput
@@ -278,6 +281,7 @@ export type WindowElectron = {
   moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
+  generateRequestCode: (input: GenerateRequestCodeInput) => Promise<GenericResult<GenerateRequestCodeResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>
   disconnectWebSocket: (input: WebSocketDisconnectInput) => Promise<GenericResult<void>>

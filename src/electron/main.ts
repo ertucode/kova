@@ -41,6 +41,7 @@ import {
 } from './db/websocket-saved-messages.js'
 import { moveExplorerItem } from './db/tree-items.js'
 import { sendRequest } from './send-request.js'
+import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
 import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
 import { analyzePostmanEnvironment, importPostmanEnvironment } from './postman-environment-import.js'
@@ -391,6 +392,38 @@ app.on('ready', () => {
 
   ipcHandle('sendRequest', async input => {
     return sendRequest(input)
+  })
+
+  ipcHandle('generateRequestCode', async input => {
+    const requestResult = await getRequest({ id: input.requestId })
+    if (!requestResult.success) {
+      return requestResult
+    }
+
+    const preparedRequest = await prepareHttpRequest({
+      requestId: requestResult.data.id,
+      method: requestResult.data.method,
+      url: requestResult.data.url,
+      pathParams: requestResult.data.pathParams,
+      searchParams: requestResult.data.searchParams,
+      auth: requestResult.data.auth,
+      preRequestScript: requestResult.data.preRequestScript,
+      postRequestScript: requestResult.data.postRequestScript,
+      headers: requestResult.data.headers,
+      body: requestResult.data.body,
+      bodyType: requestResult.data.bodyType,
+      rawType: requestResult.data.rawType,
+      activeEnvironmentIds: input.activeEnvironmentIds,
+      historyKeepLast: 0,
+    })
+    if (!preparedRequest.success) {
+      return preparedRequest
+    }
+
+    return Result.Success({
+      curl: buildCurlCommand(preparedRequest.data),
+      fetch: buildFetchSnippet(preparedRequest.data),
+    })
   })
 
   ipcHandle('connectWebSocket', async input => {
