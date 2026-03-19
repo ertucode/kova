@@ -69,12 +69,25 @@ describe('postman import', () => {
     })
 
     expect(request.method).toBe('POST')
-    expect(request.url).toBe('https://api.example.com/users/:userId')
+    expect(request.url).toBe('https://api.example.com/users/:userId?page=2')
     expect(request.pathParams).toBe('userId:42 // User id')
     expect(request.searchParams).toBe('page:2 // Pagination')
     expect(request.headers).toBe('x-test:1')
     expect(request.bodyType).toBe('form-data')
     expect(request.body).toBe('name:Ada')
+  })
+
+  it('derives search params from raw url when query entries are missing', () => {
+    const request = mapRequest({
+      method: 'get',
+      url: {
+        raw: 'https://api.example.com/users/{{userId}}?page=2&filter=active#details',
+        variable: [{ key: 'userId', value: '42' }],
+      },
+    })
+
+    expect(request.url).toBe('https://api.example.com/users/:userId?page=2&filter=active')
+    expect(request.searchParams).toBe('page:2\nfilter:active')
   })
 
   it('maps supported auth types and comments scripts', () => {

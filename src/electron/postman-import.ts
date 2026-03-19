@@ -73,6 +73,8 @@ type PostmanUrl = {
   variable?: Array<{ key?: string; value?: string; disabled?: boolean; description?: string }>
 }
 
+type PostmanUrlQueryEntry = NonNullable<PostmanUrl['query']>[number]
+
 type PostmanHeader = {
   key?: string
   value?: string
@@ -560,7 +562,7 @@ function normalizeUrl(value: string | PostmanUrl | undefined) {
     value: entry.value ?? '',
     description: entry.description ?? '',
   }))
-  const searchParams = (postmanUrl?.query ?? []).map((entry, index) => ({
+  const searchParams = (postmanUrl?.query?.length ? postmanUrl.query : readQueryParamsFromRawUrl(rawUrl)).map((entry, index) => ({
     id: `search-param-${index}`,
     enabled: !entry.disabled,
     key: entry.key ?? '',
@@ -568,7 +570,7 @@ function normalizeUrl(value: string | PostmanUrl | undefined) {
     description: entry.description ?? '',
   }))
 
-  let normalizedUrl = parsed.baseUrl
+  let normalizedUrl = parsed.url
   for (const row of pathParams) {
     if (!row.key.trim()) {
       continue
@@ -602,10 +604,45 @@ function buildUrlFromParts(url: PostmanUrl | undefined) {
 function safelyParseUrl(rawUrl: string) {
   const hashIndex = rawUrl.indexOf('#')
   const withoutHash = hashIndex >= 0 ? rawUrl.slice(0, hashIndex) : rawUrl
-  const queryIndex = withoutHash.indexOf('?')
 
   return {
-    baseUrl: queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash,
+    url: withoutHash,
+  }
+}
+
+function readQueryParamsFromRawUrl(rawUrl: string) {
+  const queryIndex = rawUrl.indexOf('?')
+  if (queryIndex < 0) {
+    return [] as PostmanUrlQueryEntry[]
+  }
+
+  const hashIndex = rawUrl.indexOf('#', queryIndex)
+  const queryValue = rawUrl.slice(queryIndex + 1, hashIndex >= 0 ? hashIndex : undefined)
+  if (!queryValue) {
+    return [] as PostmanUrlQueryEntry[]
+  }
+
+  return queryValue.split('&').flatMap(part => {
+    if (!part.trim()) {
+      return []
+    }
+
+    const separatorIndex = part.indexOf('=')
+    const key = decodeQueryComponent(separatorIndex >= 0 ? part.slice(0, separatorIndex) : part)
+    const value = decodeQueryComponent(separatorIndex >= 0 ? part.slice(separatorIndex + 1) : '')
+    if (!key.trim()) {
+      return []
+    }
+
+    return [{ key, value, disabled: false, description: '' } satisfies PostmanUrlQueryEntry]
+  })
+}
+
+function decodeQueryComponent(value: string) {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, ' '))
+  } catch {
+    return value
   }
 }
 

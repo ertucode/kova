@@ -348,6 +348,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       return false
     }
 
+    const shouldShowSearchParams = parsedCurl.bodyType === 'none' && parsedCurl.searchParams.trim() !== ''
+
     FolderExplorerCoordinator.updateSelectedDraft({
       ...draft,
       method: parsedCurl.method,
@@ -360,6 +362,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       bodyType: parsedCurl.bodyType,
       rawType: parsedCurl.rawType,
     })
+
+    setMetaTab(shouldShowSearchParams ? 'search-params' : 'overview')
 
     toast.show({
       severity: 'success',

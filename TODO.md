@@ -1,6 +1,6 @@
-- Ayrıca postman importtan bağımsız klasörlerde context menuye Flatten Folder gibi bir seçenek ekleyip bu seçilince o klasördeki itemleri bir üst levele taşıyıp klasörü silmeliyiz.
+- Klasörlerde context menuye Flatten Folder gibi bir seçenek ekleyip bu seçilince o klasördeki itemleri bir üst levele taşıyıp klasörü silmeliyiz.
 - urlle oynayınca kullanılmayan search paramslar aşağıya kayıyo. Sırası değişmemeli.
-- curl import edince request body yoksa ve search params varsa o taba gitmeliyiz
 - postman import edince search params direkt url'i etkilemiyo
 - copy as curl bizde de olabilir
 - search param syntax highlighting (subtle)
+- implement undo
