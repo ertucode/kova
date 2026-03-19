@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { FlaskConicalIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { normalizeEnvironmentColor } from '@common/Environments'
 import { dialogActions } from '@/global/dialogStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { environmentEditorStore, isEnvironmentEntryDirty } from './environmentEditorStore'
@@ -25,6 +26,7 @@ export function EnvironmentsPanel() {
   const nameInputRef = useRef<HTMLInputElement>(null)
   const [draggedEnvironmentId, setDraggedEnvironmentId] = useState<string | null>(null)
   const [dropIndicatorId, setDropIndicatorId] = useState<string | null>(null)
+  const draftColorValue = draft?.color ?? '#64748b'
 
   useEffect(() => {
     if (!selectedId) {
@@ -62,8 +64,8 @@ export function EnvironmentsPanel() {
     <div className="flex min-h-0 flex-1 bg-base-100">
       <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-100">
         <div className="border-b border-base-content/10 px-4 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-base-content">Environments</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-base-content">Environments</div>
 
             <div className="flex items-center gap-2">
               <button
@@ -169,6 +171,14 @@ export function EnvironmentsPanel() {
                       </div>
                     </button>
 
+                    {item.color ? (
+                      <span
+                        className="size-2.5 shrink-0 rounded-full ring-1 ring-base-content/10"
+                        style={{ backgroundColor: item.color }}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+
                     <button
                       type="button"
                       className={isActive ? 'rounded-full bg-success/15 px-2 py-1 text-[11px] font-medium text-success' : 'rounded-full bg-base-content/8 px-2 py-1 text-[11px] font-medium text-base-content/45'}
@@ -217,7 +227,7 @@ export function EnvironmentsPanel() {
                 </div>
               </div>
 
-              <div className="mt-5 flex items-end gap-3">
+              <div className="mt-5 flex flex-wrap items-end gap-3">
                 <label className="block w-[180px] max-w-full">
                   <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Priority</div>
                   <input
@@ -232,17 +242,58 @@ export function EnvironmentsPanel() {
                     }
                   />
                 </label>
+
+                <div className="flex items-end gap-3">
+                  <div className="block w-[180px] max-w-full">
+                    <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Color</div>
+                    <div className="flex h-11 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100 px-3">
+                      <input
+                        type="color"
+                        className="h-7 w-14 cursor-pointer appearance-none border-0 bg-transparent p-0"
+                        value={draftColorValue}
+                        onChange={event => {
+                          EnvironmentCoordinator.updateDraft(selectedId, {
+                            ...draft,
+                            color: normalizeEnvironmentColor(event.target.value),
+                          })
+                          void EnvironmentCoordinator.saveEnvironment(selectedId)
+                        }}
+                        aria-label="Environment color"
+                      />
+                      <div className="min-w-0 flex-1 truncate text-sm text-base-content/70">{draft.color ?? 'No custom color'}</div>
+                      {draft.color ? (
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-lg p-1.5 text-base-content/55 transition hover:bg-base-200 hover:text-base-content"
+                          onClick={() =>
+                            {
+                              EnvironmentCoordinator.updateDraft(selectedId, {
+                                ...draft,
+                                color: null,
+                              })
+                              void EnvironmentCoordinator.saveEnvironment(selectedId)
+                            }
+                          }
+                          title="Clear custom color"
+                          aria-label="Clear custom color"
+                        >
+                          <Trash2Icon className="size-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-             <KeyValueEditor
-               label={null}
-               value={draft.variables}
-               onChange={value => EnvironmentCoordinator.updateDraft(selectedId, { ...draft, variables: value })}
-               keyPlaceholder="variable_name"
-               valuePlaceholder="value"
-               descriptionPlaceholder="Optional note"
-             />
+            <KeyValueEditor
+              label={null}
+              value={draft.variables}
+              onChange={value => EnvironmentCoordinator.updateDraft(selectedId, { ...draft, variables: value })}
+              keyPlaceholder="variable_name"
+              valuePlaceholder="value"
+              descriptionPlaceholder="Optional note"
+            />
           </div>
         ) : (
           <div className="flex h-full items-center justify-center px-8 text-sm text-base-content/45">Select an environment</div>

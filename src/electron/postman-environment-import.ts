@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { normalizeEnvironmentColor } from '../common/Environments.js'
 import { collectDuplicateEnvironmentKeys } from '../common/EnvironmentVariables.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { stringifyEnvironmentVariables } from '../common/EnvironmentVariables.js'
@@ -28,6 +29,7 @@ type PostmanEnvironment = {
 
 type Analysis = {
   environmentName: string
+  color: string | null
   variableCount: number
   warnings: PostmanEnvironmentImportWarning[]
   variables: string
@@ -70,6 +72,7 @@ export async function importPostmanEnvironment(input: ImportPostmanEnvironmentIn
       id: created.data.id,
       name: environmentName,
       variables: analysis.variables,
+      color: analysis.color,
       priority: created.data.priority,
     })
     if (!updated.success) {
@@ -90,6 +93,7 @@ export async function importPostmanEnvironment(input: ImportPostmanEnvironmentIn
 
 export function analyzeEnvironmentDocument(document: PostmanEnvironment): Analysis {
   const environmentName = sanitizeName(document.name, 'Imported Environment')
+  const color = typeof document.color === 'string' ? normalizeEnvironmentColor(document.color) : null
   const rows: KeyValueRow[] = []
   const warnings = new Map<PostmanEnvironmentImportWarningCode, { count: number; examples: string[] }>()
 
@@ -120,13 +124,14 @@ export function analyzeEnvironmentDocument(document: PostmanEnvironment): Analys
     addWarning(warnings, 'disabled-variables-commented', disabledRows.length, disabledRows.slice(0, 5).map(row => row.key))
   }
 
-  const metadataCount = Number(Boolean(document.color)) + Number(Boolean(document.id)) + Number(Boolean(document._postman_variable_scope)) + Number(Boolean(document._postman_exported_at)) + Number(Boolean(document._postman_exported_using))
+  const metadataCount = Number(Boolean(document.id)) + Number(Boolean(document._postman_variable_scope)) + Number(Boolean(document._postman_exported_at)) + Number(Boolean(document._postman_exported_using))
   if (metadataCount > 0) {
     addWarning(warnings, 'metadata-ignored', metadataCount, [environmentName])
   }
 
   return {
     environmentName,
+    color,
     variableCount: rows.length,
     warnings: buildWarnings(warnings),
     variables,

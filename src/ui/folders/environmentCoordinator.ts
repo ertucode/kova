@@ -62,7 +62,7 @@ export namespace EnvironmentCoordinator {
     toast.show({ severity: 'success', title: 'Environment duplicated', message: `Created ${result.data.name}.` })
   }
 
-  export function updateDraft(id: string, draft: { name: string; variables: string; priority: number }) {
+  export function updateDraft(id: string, draft: { name: string; variables: string; color: string | null; priority: number }) {
     environmentEditorStore.trigger.draftUpdated({ id, draft })
   }
 
@@ -94,6 +94,7 @@ export namespace EnvironmentCoordinator {
       id,
       name: entry.current.name,
       variables: entry.current.variables,
+      color: entry.current.color,
       priority: entry.current.priority,
     })
 

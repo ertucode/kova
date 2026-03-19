@@ -18,6 +18,7 @@ import { listEnvironments } from './db/environments.js'
 type PostmanEnvironmentDocument = {
   name: string
   values: PostmanEnvironmentValue[]
+  color?: string
   _postman_variable_scope: 'environment'
 }
 
@@ -111,6 +112,7 @@ export function analyzeEnvironmentExport(environment: EnvironmentRecord): Export
 export function buildEnvironmentExportDocument(environment: EnvironmentRecord, environmentName: string): PostmanEnvironmentDocument {
   return {
     name: environmentName,
+    color: environment.color ?? undefined,
     _postman_variable_scope: 'environment',
     values: parseKeyValueRows(environment.variables).map(row => ({
       key: row.key,

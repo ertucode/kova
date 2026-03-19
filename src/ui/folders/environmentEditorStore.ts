@@ -4,6 +4,7 @@ import type { EnvironmentRecord } from '@common/Environments'
 export type EnvironmentDetailsDraft = {
   name: string
   variables: string
+  color: string | null
   priority: number
 }
 
@@ -181,6 +182,7 @@ export function toEnvironmentDetailsDraft(environment: EnvironmentRecord): Envir
   return {
     name: environment.name,
     variables: environment.variables,
+    color: environment.color,
     priority: environment.priority,
   }
 }

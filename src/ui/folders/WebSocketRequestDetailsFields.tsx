@@ -738,6 +738,7 @@ function updateEnvironmentVariableDraft(environmentId: string, variableName: str
   const currentDraft = draft ?? {
     name: environment.name,
     variables: environment.variables,
+    color: environment.color,
     priority: environment.priority,
   }
 

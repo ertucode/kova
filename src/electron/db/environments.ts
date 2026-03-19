@@ -8,6 +8,7 @@ import type {
   MoveEnvironmentInput,
   UpdateEnvironmentInput,
 } from '../../common/Environments.js'
+import { normalizeEnvironmentColor } from '../../common/Environments.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
 import { environments } from './schema.js'
@@ -54,6 +55,7 @@ export async function createEnvironment(input: CreateEnvironmentInput): Promise<
         id: crypto.randomUUID(),
         name,
         variables: '',
+        color: null,
         position: getNextEnvironmentPosition(db),
         priority: 0,
         createdAt: now,
@@ -85,6 +87,7 @@ export async function updateEnvironment(input: UpdateEnvironmentInput): Promise<
       .set({
         name,
         variables: input.variables,
+        color: normalizeEnvironmentColor(input.color),
         priority: input.priority,
       })
       .where(and(eq(environments.id, input.id), isNull(environments.deletedAt)))
@@ -223,6 +226,7 @@ function toEnvironmentRecord(environment: EnvironmentRow): EnvironmentRecord {
     id: environment.id,
     name: environment.name,
     variables: environment.variables,
+    color: normalizeEnvironmentColor(environment.color),
     position: environment.position,
     priority: environment.priority,
     createdAt: environment.createdAt,

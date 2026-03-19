@@ -66,6 +66,7 @@ export const environments = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     variables: text('variables').notNull().default(''),
+    color: text('color'),
     position: integer('position').notNull().default(0),
     priority: integer('priority').notNull().default(0),
     createdAt: integer('created_at').notNull(),
