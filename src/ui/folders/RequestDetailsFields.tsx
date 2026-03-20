@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { InfoIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { getAuthVariableSources } from '@common/Auth'
-import type { RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse } from '@common/Requests'
+import { isSseContentType, parseSseEvents } from '@common/Sse'
+import type { HttpSseStreamState, RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse, SseEventRecord } from '@common/Requests'
 import { parseCurlRequest } from '@common/curl'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
@@ -36,6 +37,7 @@ import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
+import { SseTranscript } from './SseTranscript'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -54,6 +56,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
   const responseError = useSelector(requestExecutionStore, state =>
     selectedRequestId ? (state.context.errorByRequestId[selectedRequestId] ?? null) : null
+  )
+  const sseStream = useSelector(requestExecutionStore, state =>
+    selectedRequestId ? (state.context.httpSseByRequestId[selectedRequestId] ?? null) : null
   )
 
   const activeEnvironmentNames = useMemo(
@@ -180,6 +185,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   }, [response])
 
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
+  const sseStreamContentType = useMemo(() => getResponseContentType(sseStream?.headers ?? ''), [sseStream?.headers])
+  const responseSseEvents = useMemo(
+    () => (response && isSseContentType(responseContentType) ? parseSseEvents(response.body) : []),
+    [response, responseContentType]
+  )
+  const displayedSseEvents = sseStream?.events.length ? sseStream.events : responseSseEvents
+  const shouldShowSsePanel = isSseContentType(sseStreamContentType) || isSseContentType(responseContentType)
   const hasPreRequestScript = draft.preRequestScript.trim().length > 0
   const hasPostRequestScript = draft.postRequestScript.trim().length > 0
   const usedVariableNames = useMemo(() => getUsedRequestVariableNames(draft), [draft])
@@ -260,6 +272,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     }
 
     setIsSending(true)
+    requestExecutionStore.trigger.httpSseStreamCleared({ requestId: selected.id })
 
     const result = await getWindowElectron().sendRequest({
       requestId: selected.id,
@@ -275,6 +288,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       bodyType: latestDraft.bodyType,
       rawType: latestDraft.rawType,
       activeEnvironmentIds: state.activeEnvironmentIds,
+      saveToHistory: latestDraft.saveToHistory,
       historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
     })
 
@@ -308,21 +322,41 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   }
 
   const saveCurrentResponseAsExample = async () => {
-    if (!selectedRequestId || !response) {
+    if (!selectedRequestId) {
+      return
+    }
+
+    const responseSource = response
+      ? {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+          body: response.body,
+        }
+      : sseStream && sseStream.body.trim()
+        ? {
+            status: sseStream.status ?? 0,
+            statusText: sseStream.statusText || (sseStream.state === 'cancelled' ? 'Cancelled' : 'Streaming Response'),
+            headers: sseStream.headers,
+            body: sseStream.body,
+          }
+        : null
+
+    if (!responseSource) {
       return
     }
 
     const result = await getWindowElectron().createRequestExample({
       requestId: selectedRequestId,
-      name: `${draft.name} ${response.status}`,
+      name: `${draft.name} ${responseSource.status || responseSource.statusText}`,
       requestHeaders: draft.headers,
       requestBody: draft.body,
       requestBodyType: draft.bodyType,
       requestRawType: draft.rawType,
-      responseStatus: response.status,
-      responseStatusText: response.statusText,
-      responseHeaders: response.headers,
-      responseBody: response.body,
+      responseStatus: responseSource.status,
+      responseStatusText: responseSource.statusText,
+      responseHeaders: responseSource.headers,
+      responseBody: responseSource.body,
     })
 
     if (!result.success) {
@@ -442,10 +476,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           <button
             type="button"
             className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-4 py-2 text-sm font-medium text-base-content transition hover:bg-base-300"
-            onClick={() => void sendRequest()}
-            disabled={isSending}
+            onClick={() => {
+              if (isSending && selectedRequestId) {
+                void getWindowElectron().cancelHttpRequest({ requestId: selectedRequestId })
+                return
+              }
+
+              void sendRequest()
+            }}
           >
-            {isSending ? 'Sending...' : 'Send'}
+            {isSending ? 'Stop' : 'Send'}
           </button>
         </div>
 
@@ -630,15 +670,27 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           {/* /> */}
           <ResponseScriptErrors errors={response?.scriptErrors ?? []} />
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            <ResponseBodyPanel
-              value={formattedResponseBody}
-              description="Response body will appear here."
-              contentType={responseContentType}
-              response={response}
-              responseError={responseError}
-              onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
-            />
-            <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
+            {shouldShowSsePanel ? (
+              <SseResponsePanel
+                stream={sseStream}
+                response={response}
+                responseError={responseError}
+                events={displayedSseEvents}
+                onSaveAsExample={response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseAsExample() : undefined}
+              />
+            ) : (
+              <>
+                <ResponseBodyPanel
+                  value={formattedResponseBody}
+                  description="Response body will appear here."
+                  contentType={responseContentType}
+                  response={response}
+                  responseError={responseError}
+                  onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
+                />
+                <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -843,6 +895,99 @@ function ResponseBodyPanel({
       ) : (
         <div className="mt-2 text-sm text-base-content/50">{description}</div>
       )}
+    </div>
+  )
+}
+
+function SseResponsePanel({
+  stream,
+  response,
+  responseError,
+  events,
+  onSaveAsExample,
+}: {
+  stream: HttpSseStreamState | null
+  response: SendRequestResponse | null
+  responseError: string | null
+  events: SseEventRecord[]
+  onSaveAsExample?: () => void
+}) {
+  const headerContentType = getResponseContentType(stream?.headers ?? response?.headers ?? '')
+  const durationMs = stream?.durationMs ?? response?.durationMs ?? null
+  const status = stream?.status ?? response?.status ?? null
+  const statusText = stream?.statusText ?? response?.statusText ?? ''
+  const statusTone = getStatusTone(status ?? undefined)
+  const [viewMode, setViewMode] = useState<'rows' | 'raw'>('rows')
+  const rawBody = stream?.body ?? response?.body ?? ''
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-3">
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <div className="text-sm font-medium text-base-content">SSE Events</div>
+        <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-base-content/45">
+          {onSaveAsExample ? (
+            <button
+              type="button"
+              className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
+              onClick={onSaveAsExample}
+              title="Save as Example"
+            >
+              <SaveIcon className="h-4 w-4" />
+            </button>
+          ) : null}
+          {headerContentType ? <span>{headerContentType}</span> : null}
+          <span>{events.length} events</span>
+          {durationMs !== null ? <span>{durationMs} ms</span> : null}
+          {status !== null ? <span className={`font-semibold ${statusTone.className}`}>{status} {statusText}</span> : null}
+          {stream ? <span>{stream.state}</span> : null}
+          {responseError ? <span className="text-error">{responseError}</span> : null}
+          <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+            <button
+              type="button"
+              className={[
+                'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                viewMode === 'rows' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+              ].join(' ')}
+              onClick={() => setViewMode('rows')}
+            >
+              Rows
+            </button>
+            <button
+              type="button"
+              className={[
+                'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                viewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+              ].join(' ')}
+              onClick={() => setViewMode('raw')}
+            >
+              Raw
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 min-h-0 flex-1 overflow-auto pr-1">
+        {viewMode === 'rows' ? (
+          <SseTranscript
+            events={events}
+            emptyMessage={stream ? 'Waiting for SSE events.' : 'Response events will appear here.'}
+            showTimestamps={Boolean(stream)}
+          />
+        ) : rawBody ? (
+          <CodeEditor
+            value={rawBody}
+            language="plain"
+            readOnly
+            size="small"
+            className="h-full border-0"
+            hideFocusOutline
+            onChange={() => undefined}
+            compact
+          />
+        ) : (
+          <div className="mt-2 text-sm text-base-content/50">Raw SSE body will appear here.</div>
+        )}
+      </div>
     </div>
   )
 }

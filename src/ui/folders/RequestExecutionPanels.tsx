@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { ChevronDownIcon, ChevronRightIcon, SaveIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
+import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type { RequestConsoleEntry, RequestExecutionRecord, RequestHistoryListItem, WebSocketSessionRecord } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toast } from '@/lib/components/toast'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
+import { SseTranscript } from './SseTranscript'
 
 export function HistoryPanel() {
   const history = useSelector(requestExecutionStore, state => state.context.history)
@@ -374,12 +376,71 @@ function ExecutionResponseSection({
   bodyExpanded: boolean
   onToggleBody: () => void
 }) {
+  const [sseViewMode, setSseViewMode] = useState<'rows' | 'raw'>('rows')
+
   if (execution.responseError) {
     return <ExecutionSection title="Response" value={execution.responseError} />
   }
 
   if (!execution.response) {
     return <ExecutionSection title="Response" value="" />
+  }
+
+  if (isSseContentType(getResponseContentType(execution.response.headers))) {
+    return (
+      <div className="mb-4 last:mb-0">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-base-content/50">Response</div>
+        <div className="space-y-3">
+          <pre
+            className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"
+            style={{ maxHeight: '500px' }}
+          >
+            {`${execution.response.status} ${execution.response.statusText} (${execution.response.durationMs} ms)`}
+          </pre>
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">Events</div>
+              <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+                <button
+                  type="button"
+                  className={[
+                    'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                    sseViewMode === 'rows' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                  ].join(' ')}
+                  onClick={() => setSseViewMode('rows')}
+                >
+                  Rows
+                </button>
+                <button
+                  type="button"
+                  className={[
+                    'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                    sseViewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                  ].join(' ')}
+                  onClick={() => setSseViewMode('raw')}
+                >
+                  Raw
+                </button>
+              </div>
+            </div>
+            {sseViewMode === 'rows' ? (
+              <SseTranscript
+                events={parseSseEvents(execution.response.body)}
+                emptyMessage={execution.response.bodyOmitted ? 'Events omitted from history (over 500 KB)' : 'No SSE events recorded.'}
+              />
+            ) : (
+              <pre
+                className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"
+                style={{ maxHeight: '500px' }}
+              >
+                {execution.response.body || (execution.response.bodyOmitted ? 'Body omitted from history (over 500 KB)' : '(empty)')}
+              </pre>
+            )}
+          </div>
+          {execution.response.headers ? <ExecutionSubsection title="Headers" value={execution.response.headers} /> : null}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -520,6 +581,18 @@ function formatExecutionRequest(execution: RequestExecutionRecord) {
 
 function formatTimestamp(value: number) {
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function getResponseContentType(headers: string) {
+  return (
+    headers
+      .split('\n')
+      .find(line => line.toLowerCase().startsWith('content-type:'))
+      ?.split(':')
+      .slice(1)
+      .join(':')
+      .trim() ?? null
+  )
 }
 
 function getExecutionTone(execution: RequestExecutionRecord) {

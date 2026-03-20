@@ -62,6 +62,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   moveEnvironment: input => ipcInvoke('moveEnvironment', input),
   moveExplorerItem: input => ipcInvoke('moveExplorerItem', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
+  cancelHttpRequest: input => ipcInvoke('cancelHttpRequest', input),
   generateRequestCode: input => ipcInvoke('generateRequestCode', input),
   connectWebSocket: input => ipcInvoke('connectWebSocket', input),
   sendWebSocketMessage: input => ipcInvoke('sendWebSocketMessage', input),

@@ -1,7 +1,13 @@
 import { createStore } from '@xstate/store'
 import { z } from 'zod'
 import { errorResponseToMessage } from '@common/GenericError'
-import type { RequestExecutionRecord, RequestHistoryListItem, SendRequestResponse, WebSocketSessionRecord } from '@common/Requests'
+import type {
+  HttpSseStreamState,
+  RequestExecutionRecord,
+  RequestHistoryListItem,
+  SendRequestResponse,
+  WebSocketSessionRecord,
+} from '@common/Requests'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import { getWindowElectron } from '@/getWindowElectron'
 import { createAsyncStoragePersistence } from '@/utils/asyncStorage'
@@ -29,6 +35,7 @@ type RequestExecutionContext = {
   historyKeepLast: number
   responseByRequestId: Record<string, SendRequestResponse | null>
   errorByRequestId: Record<string, string | null>
+  httpSseByRequestId: Record<string, HttpSseStreamState | null>
   websocketSessionByRequestId: Record<string, WebSocketSessionRecord | null>
 }
 
@@ -45,6 +52,7 @@ export const requestExecutionStore = createStore({
     historyKeepLast: normalizeKeepLast(initialSettings.keepLast),
     responseByRequestId: {},
     errorByRequestId: {},
+    httpSseByRequestId: {},
     websocketSessionByRequestId: {},
   } as RequestExecutionContext,
   on: {
@@ -71,6 +79,24 @@ export const requestExecutionStore = createStore({
       errorByRequestId: {
         ...context.errorByRequestId,
         [event.requestId]: event.error,
+      },
+    }),
+    httpSseStreamUpdated: (context, event: { stream: HttpSseStreamState }) => ({
+      ...context,
+      httpSseByRequestId: {
+        ...context.httpSseByRequestId,
+        [event.stream.requestId]: event.stream,
+      },
+      errorByRequestId: {
+        ...context.errorByRequestId,
+        [event.stream.requestId]: event.stream.responseError,
+      },
+    }),
+    httpSseStreamCleared: (context, event: { requestId: string }) => ({
+      ...context,
+      httpSseByRequestId: {
+        ...context.httpSseByRequestId,
+        [event.requestId]: null,
       },
     }),
     historyLoadingStarted: (context, event: { append: boolean }) => ({

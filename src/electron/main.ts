@@ -40,7 +40,7 @@ import {
   updateWebSocketSavedMessage,
 } from './db/websocket-saved-messages.js'
 import { moveExplorerItem } from './db/tree-items.js'
-import { sendRequest } from './send-request.js'
+import { cancelHttpRequest, sendRequest } from './send-request.js'
 import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
 import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
@@ -394,6 +394,10 @@ app.on('ready', () => {
     return sendRequest(input)
   })
 
+  ipcHandle('cancelHttpRequest', async input => {
+    return cancelHttpRequest(input)
+  })
+
   ipcHandle('generateRequestCode', async input => {
     const requestResult = await getRequest({ id: input.requestId })
     if (!requestResult.success) {
@@ -414,6 +418,7 @@ app.on('ready', () => {
       bodyType: requestResult.data.bodyType,
       rawType: requestResult.data.rawType,
       activeEnvironmentIds: input.activeEnvironmentIds,
+      saveToHistory: false,
       historyKeepLast: 0,
     })
     if (!preparedRequest.success) {

@@ -1,4 +1,4 @@
-import type { WebSocketSessionRecord } from './Requests.js'
+import type { HttpSseStreamState, WebSocketSessionRecord } from './Requests.js'
 
 export type GenericEvent = {
   type: 'reload-path'
@@ -12,5 +12,11 @@ export type GenericEvent = {
   session: WebSocketSessionRecord
 } | {
   type: 'websocket-session-cleared'
+  requestId: string
+} | {
+  type: 'http-sse-stream-updated'
+  stream: HttpSseStreamState
+} | {
+  type: 'http-sse-stream-cleared'
   requestId: string
 }

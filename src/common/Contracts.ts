@@ -33,6 +33,7 @@ import {
   type WebSocketExampleRecord,
 } from './WebSocketExamples.js'
 import {
+  type CancelHttpRequestInput,
   type CreateRequestInput,
   type CreateWebSocketSavedMessageInput,
   type DeleteWebSocketSavedMessageInput,
@@ -137,6 +138,7 @@ export type EventResponseMapping = {
   moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
+  cancelHttpRequest: Promise<GenericResult<void>>
   generateRequestCode: Promise<GenericResult<GenerateRequestCodeResponse>>
   connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: Promise<GenericResult<void>>
@@ -204,6 +206,7 @@ export type EventRequestMapping = {
   moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
+  cancelHttpRequest: CancelHttpRequestInput
   generateRequestCode: GenerateRequestCodeInput
   connectWebSocket: WebSocketConnectInput
   sendWebSocketMessage: WebSocketSendMessageInput
@@ -281,6 +284,7 @@ export type WindowElectron = {
   moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
+  cancelHttpRequest: (input: CancelHttpRequestInput) => Promise<GenericResult<void>>
   generateRequestCode: (input: GenerateRequestCodeInput) => Promise<GenericResult<GenerateRequestCodeResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>

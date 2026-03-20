@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type { RequestExampleDetailsDraft } from './folderExplorerTypes'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { HeadersEditor } from './HeadersEditor'
@@ -7,12 +8,16 @@ import { DetailsTextArea } from './DetailsTextArea'
 import { CodeEditor } from './CodeEditor'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { REQUEST_BODY_TYPES, REQUEST_RAW_TYPES } from './folderExplorerTypes'
+import { SseTranscript } from './SseTranscript'
 
 export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDetailsDraft }) {
   const responseContentType = useMemo(() => getResponseContentType(draft.responseHeaders), [draft.responseHeaders])
+  const isSseResponse = useMemo(() => isSseContentType(responseContentType), [responseContentType])
+  const sseEvents = useMemo(() => (isSseResponse ? parseSseEvents(draft.responseBody) : []), [draft.responseBody, isSseResponse])
   const parsedResponseJson = useMemo(() => parseJsonValue(draft.responseBody), [draft.responseBody])
   const canPrettyFormatResponse = responseContentType?.includes('json') || parsedResponseJson !== null
   const [formatResponseJson, setFormatResponseJson] = useState(canPrettyFormatResponse)
+  const [sseViewMode, setSseViewMode] = useState<'rows' | 'raw'>('rows')
 
   useEffect(() => {
     if (!canPrettyFormatResponse) {
@@ -93,31 +98,62 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
       <section className="w-full border-b border-base-content/10">
         <div className="flex items-center justify-between gap-3 p-2">
           <div className="text-sm font-semibold text-base-content">Response Body</div>
-          <button
-            type="button"
-            className={[
-              'rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-              canPrettyFormatResponse
-                ? formatResponseJson
-                  ? 'border-info/30 bg-info/12 text-base-content'
-                  : 'border-base-content/10 bg-base-100/70 text-base-content/65 hover:border-base-content/20 hover:text-base-content'
-                : 'cursor-not-allowed border-base-content/10 bg-base-100/45 text-base-content/30',
-            ].join(' ')}
-            onClick={toggleResponseFormatting}
-            disabled={!canPrettyFormatResponse}
-          >
-            Pretty JSON
-          </button>
+          {isSseResponse ? (
+            <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+              <button
+                type="button"
+                className={[
+                  'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                  sseViewMode === 'rows' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => setSseViewMode('rows')}
+              >
+                Rows
+              </button>
+              <button
+                type="button"
+                className={[
+                  'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                  sseViewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => setSseViewMode('raw')}
+              >
+                Raw
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={[
+                'rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                canPrettyFormatResponse
+                  ? formatResponseJson
+                    ? 'border-info/30 bg-info/12 text-base-content'
+                    : 'border-base-content/10 bg-base-100/70 text-base-content/65 hover:border-base-content/20 hover:text-base-content'
+                  : 'cursor-not-allowed border-base-content/10 bg-base-100/45 text-base-content/30',
+              ].join(' ')}
+              onClick={toggleResponseFormatting}
+              disabled={!canPrettyFormatResponse}
+            >
+              Pretty JSON
+            </button>
+          )}
         </div>
-        <CodeEditor
-          value={prettyResponseBody}
-          language={formatResponseJson && parsedResponseJson !== null ? 'json' : 'plain'}
-          size="small"
-          minHeightClassName="min-h-40"
-          className="border-x-0 border-b-0"
-          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseBody: value })}
-          onBlur={() => undefined}
-        />
+        {isSseResponse && sseViewMode === 'rows' ? (
+          <div className="p-3">
+            <SseTranscript events={sseEvents} emptyMessage="No SSE events recorded." />
+          </div>
+        ) : (
+          <CodeEditor
+            value={prettyResponseBody}
+            language={formatResponseJson && parsedResponseJson !== null ? 'json' : 'plain'}
+            size="small"
+            minHeightClassName="min-h-40"
+            className="border-x-0 border-b-0"
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseBody: value })}
+            onBlur={() => undefined}
+          />
+        )}
       </section>
     </div>
   )

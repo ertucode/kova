@@ -81,7 +81,12 @@ export type SendRequestInput = {
   bodyType: RequestBodyType
   rawType: RequestRawType
   activeEnvironmentIds: string[]
+  saveToHistory: boolean
   historyKeepLast: number
+}
+
+export type CancelHttpRequestInput = {
+  requestId: string
 }
 
 export type WebSocketConnectInput = {
@@ -159,6 +164,29 @@ export type RequestConsoleEntry = {
   level: RequestConsoleLevel
   sourceName: string
   message: string
+}
+
+export type SseEventRecord = {
+  id: string | null
+  eventName: string | null
+  data: string
+  retryMs: number | null
+  sizeBytes: number
+  timestamp: number | null
+}
+
+export type HttpSseStreamState = {
+  executionId: string
+  requestId: string
+  requestName: string
+  status: number | null
+  statusText: string
+  headers: string
+  body: string
+  durationMs: number
+  state: 'streaming' | 'completed' | 'cancelled' | 'failed'
+  responseError: string | null
+  events: SseEventRecord[]
 }
 
 export type ExecutedRequestSnapshot = {
