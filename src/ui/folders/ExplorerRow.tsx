@@ -59,6 +59,22 @@ export function ExplorerRow({
 
     return isEntryDirty(entry)
   })
+  const draftMethod = useSelector(folderExplorerEditorStore, state => {
+    if (node.itemType !== 'request') {
+      return null
+    }
+
+    const entry = state.context.entries[`request:${node.id}`]
+    return entry?.current?.itemType === 'request' ? entry.current.method : null
+  })
+  const draftRequestType = useSelector(folderExplorerEditorStore, state => {
+    if (node.itemType !== 'request') {
+      return null
+    }
+
+    const entry = state.context.entries[`request:${node.id}`]
+    return entry?.current?.itemType === 'request' ? entry.current.requestType : null
+  })
 
   const hasChildren = (node.itemType === 'folder' || node.itemType === 'request') && node.children.length > 0
   const isExpanded = forceExpanded || expandedIds.includes(node.id)
@@ -125,7 +141,10 @@ export function ExplorerRow({
             {node.itemType === 'folder' ? (
               <FolderIcon className="size-4 shrink-0 text-base-content/55" />
             ) : node.itemType === 'request' ? (
-              <RequestMethodTag method={node.method} requestType={node.requestType} />
+              <RequestMethodTag
+                method={draftMethod ?? node.method}
+                requestType={draftRequestType ?? node.requestType}
+              />
             ) : (
               <ExampleGlyph exampleType={node.exampleType} />
             )}

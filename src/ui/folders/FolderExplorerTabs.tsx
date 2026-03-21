@@ -47,8 +47,9 @@ export function FolderExplorerTabs() {
           name: entry?.current?.name ?? item?.name ?? 'Untitled',
           isSaving: Boolean(entry?.saving),
           isDirty: Boolean(entry && isEntryDirty(entry)),
-          method: item?.itemType === 'request' ? item.method : null,
-          requestType: item?.itemType === 'request' ? item.requestType : null,
+          method: entry?.current?.itemType === 'request' ? entry.current.method : item?.itemType === 'request' ? item.method : null,
+          requestType:
+            entry?.current?.itemType === 'request' ? entry.current.requestType : item?.itemType === 'request' ? item.requestType : null,
           exampleType: item?.itemType === 'example' ? item.exampleType : null,
         }
       }),

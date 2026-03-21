@@ -1,5 +1,6 @@
 import { getAuthHeaders, getAuthQueryParams, getAuthVariableSources, resolveAuth, resolveInheritedAuth, type HttpAuth } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
+import { normalizeJson5ToJson } from '../common/Json5.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
@@ -112,7 +113,12 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
   applyAuthHeaders(headers, resolvedAuth)
   applyResolvedHeaders(headers, parseKeyValueRows(runtime.request.headers), variables)
 
-  const resolvedBody = buildResolvedRequestBody(runtime.request, variables)
+  const resolvedBodyResult = buildResolvedRequestBody(runtime.request, variables)
+  if (!resolvedBodyResult.success) {
+    return resolvedBodyResult
+  }
+
+  const resolvedBody = resolvedBodyResult.data
   applyDefaultBodyHeaders(headers, runtime.request.rawType, resolvedBody)
 
   return Result.Success({
@@ -210,17 +216,28 @@ export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'u
 }
 
 function buildResolvedRequestBody(
-  input: Pick<SendRequestInput, 'bodyType' | 'body'>,
+  input: Pick<SendRequestInput, 'bodyType' | 'body' | 'rawType'>,
   variables: Record<string, string>
-): ResolvedRequestBody {
+): GenericResult<ResolvedRequestBody> {
   switch (input.bodyType) {
     case 'none':
-      return { kind: 'none' }
-    case 'raw':
-      return { kind: 'raw', value: resolveTemplateVariables(input.body, variables) }
+      return Result.Success({ kind: 'none' })
+    case 'raw': {
+      const resolvedBody = resolveTemplateVariables(input.body, variables)
+
+      if (input.rawType !== 'json') {
+        return Result.Success({ kind: 'raw', value: resolvedBody })
+      }
+
+      try {
+        return Result.Success({ kind: 'raw', value: normalizeJson5ToJson(resolvedBody) })
+      } catch (error) {
+        return GenericError.Message(getInvalidJsonBodyMessage(error))
+      }
+    }
     case 'form-data': {
       const entries = resolveKeyValueEntries(input.body, variables)
-      return { kind: 'form-data', entries }
+      return Result.Success({ kind: 'form-data', entries })
     }
     case 'x-www-form-urlencoded': {
       const entries = resolveKeyValueEntries(input.body, variables)
@@ -228,9 +245,17 @@ function buildResolvedRequestBody(
       for (const entry of entries) {
         searchParams.append(entry.key, entry.value)
       }
-      return { kind: 'x-www-form-urlencoded', entries, serialized: searchParams.toString() }
+      return Result.Success({ kind: 'x-www-form-urlencoded', entries, serialized: searchParams.toString() })
     }
   }
+}
+
+function getInvalidJsonBodyMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return `Invalid JSON body: ${error.message.trim()}`
+  }
+
+  return 'Invalid JSON body'
 }
 
 function buildRuntimeRequestBody(input: ResolvedRequestBody) {

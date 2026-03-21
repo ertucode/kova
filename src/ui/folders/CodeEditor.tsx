@@ -3,6 +3,7 @@ import { EditorState, type Extension } from '@codemirror/state'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, foldGutter, syntaxHighlighting } from '@codemirror/language'
 import { json } from '@codemirror/lang-json'
+import { json5 as json5Language } from 'codemirror-json5'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
@@ -13,7 +14,7 @@ import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { twMerge } from 'tailwind-merge'
 
-export type CodeEditorLanguage = 'plain' | 'json' | 'javascript' | 'html' | 'css' | 'xml'
+export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'html' | 'css' | 'xml'
 
 const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
@@ -276,6 +277,10 @@ export function CodeEditor({
 
     if (language === 'json') {
       nextExtensions.push(json())
+    }
+
+    if (language === 'json5') {
+      nextExtensions.push(json5Language())
     }
 
     if (language === 'javascript') {

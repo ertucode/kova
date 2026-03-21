@@ -14,6 +14,7 @@ import {
   syncUrlWithSearchParams,
 } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
+import { formatJson5 } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import { toast } from '@/lib/components/toast'
@@ -449,7 +450,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const formatJsonBody = () => {
     try {
-      const formatted = JSON.stringify(JSON.parse(draft.body), null, 2)
+      const formatted = formatJson5(draft.body)
       FolderExplorerCoordinator.updateSelectedDraft({
         ...draft,
         body: formatted,
@@ -457,8 +458,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     } catch {
       toast.show({
         severity: 'warning',
-        title: 'Invalid JSON',
-        message: 'Fix JSON errors before formatting.',
+        title: 'Invalid JSON5',
+        message: 'Fix JSON5 errors before formatting.',
       })
     }
   }
@@ -1083,7 +1084,7 @@ function isParamBodyType(bodyType: RequestBodyType) {
 }
 
 function getRawEditorLanguage(rawType: RequestRawType): CodeEditorLanguage {
-  return rawType === 'json' ? 'json' : 'plain'
+  return rawType === 'json' ? 'json5' : 'plain'
 }
 
 function updateEnvironmentVariableDraft(environmentId: string, variableName: string, value: string) {
