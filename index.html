@@ -5,9 +5,30 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kova</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --boot-bg: #282a36;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--boot-bg);
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      #root {
+        height: 100vh;
+      }
+    </style>
   </head>
   <body>
-    <div style="height: 100vh" id="root"></div>
+    <div id="root"></div>
     <script type="module" src="/src/ui/main.tsx"></script>
   </body>
 </html>

@@ -92,6 +92,7 @@ async function createWindow(args?: WindowArgsWithoutStatic) {
     height: isSelectMode ? 600 : height,
     x: isSelectMode ? undefined : 0,
     y: isSelectMode ? undefined : 0,
+    backgroundColor: '#282a36',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 10, y: 16 },
     modal: isSelectMode,

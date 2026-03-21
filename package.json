@@ -96,6 +96,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/ui": "^3.2.4",
     "babel-plugin-react-compiler": "^1.0.0",
+    "baseline-browser-mapping": "^2.10.9",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.0",
     "electron": "^39.2.3",
