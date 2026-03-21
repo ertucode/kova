@@ -1,7 +1,7 @@
-import { useMemo, useRef } from 'react'
+import { createElement, useMemo, useRef } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
 import { javascript } from '@codemirror/lang-javascript'
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { HighlightStyle, foldGutter, syntaxHighlighting } from '@codemirror/language'
 import { json } from '@codemirror/lang-json'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
@@ -9,6 +9,8 @@ import { xml } from '@codemirror/lang-xml'
 import { EditorView, placeholder as placeholderExtension } from '@codemirror/view'
 import CodeMirror from '@uiw/react-codemirror'
 import { tags } from '@lezer/highlight'
+import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { twMerge } from 'tailwind-merge'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'javascript' | 'html' | 'css' | 'xml'
@@ -56,6 +58,38 @@ const editorTheme = EditorView.theme({
   },
   '.cm-scroller, .cm-gutters, .cm-layer': {
     backgroundColor: 'transparent !important',
+  },
+  '.cm-gutters': {
+    borderRight: '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
+  },
+  '.cm-foldGutter': {
+    width: '1.5rem',
+  },
+  '.cm-foldGutter .cm-gutterElement': {
+    alignItems: 'center',
+    cursor: 'pointer',
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '0',
+    transition: 'color 120ms ease',
+  },
+  '.cm-foldGutter .cm-gutterElement > span': {
+    alignItems: 'center',
+    display: 'inline-flex',
+    justifyContent: 'center',
+  },
+  '.cm-foldPlaceholder': {
+    border: '1px solid color-mix(in oklab, var(--color-base-content) 14%, transparent)',
+    backgroundColor: 'color-mix(in oklab, var(--color-base-200) 84%, transparent)',
+    color: 'color-mix(in oklab, var(--color-base-content) 58%, transparent)',
+    borderRadius: '999px',
+    padding: '0 0.35rem',
+  },
+  '.cm-gutterElement': {
+    color: 'color-mix(in oklab, var(--color-base-content) 42%, transparent)',
+  },
+  '.cm-foldGutter .cm-gutterElement:hover': {
+    color: 'var(--color-base-content)',
   },
   '.cm-tooltipLayer': {
     overflow: 'visible',
@@ -135,6 +169,19 @@ const editorTheme = EditorView.theme({
   },
 })
 
+function createFoldMarker(isOpen: boolean) {
+  const wrapper = document.createElement('span')
+  wrapper.setAttribute('aria-hidden', 'true')
+
+  const iconMarkup = renderToStaticMarkup(createElement(isOpen ? ChevronDownIcon : ChevronRightIcon, { size: 14, strokeWidth: 2.2 })).replace(
+    '<svg ',
+    '<svg focusable="false" '
+  )
+
+  wrapper.innerHTML = iconMarkup
+  return wrapper
+}
+
 export function CodeEditor({
   value,
   language,
@@ -147,6 +194,7 @@ export function CodeEditor({
   size = 'normal',
   hideFocusOutline,
   readOnly,
+  showFoldGutter,
   onPasteText,
   onChange,
   onBlur,
@@ -163,6 +211,7 @@ export function CodeEditor({
   size?: 'normal' | 'small'
   hideFocusOutline?: boolean
   readOnly?: boolean
+  showFoldGutter?: boolean
   onPasteText?: (text: string) => boolean
   onChange: (value: string, params: { caretPos: number; previousValue: string; previousCaretPos: number }) => void
   onBlur?: () => void
@@ -249,6 +298,14 @@ export function CodeEditor({
       nextExtensions.push(EditorState.readOnly.of(true))
     }
 
+    if (showFoldGutter) {
+      nextExtensions.push(
+        foldGutter({
+          markerDOM: open => createFoldMarker(open),
+        })
+      )
+    }
+
     if (singleLine) {
       nextExtensions.push(
         EditorView.theme({
@@ -303,7 +360,7 @@ export function CodeEditor({
     }
 
     return nextExtensions
-  }, [compact, extensions, hideFocusOutline, language, onPasteText, placeholder, singleLine, size])
+  }, [compact, extensions, hideFocusOutline, language, onPasteText, placeholder, showFoldGutter, singleLine, size])
 
   return (
     <div

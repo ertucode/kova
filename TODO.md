@@ -1,2 +1,1 @@
-- cmd + number to open tab
 - implement undo

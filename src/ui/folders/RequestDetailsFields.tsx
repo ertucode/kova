@@ -885,6 +885,7 @@ function ResponseBodyPanel({
   onSaveAsExample?: () => void
 }) {
   const language = detectResponseLanguage(contentType, value)
+  const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
 
   return (
     <div className="flex min-h-0 flex-[2] flex-col bg-base-100/35 p-2 overflow-hidden">
@@ -911,6 +912,7 @@ function ResponseBodyPanel({
             value={value}
             language={language}
             readOnly
+            showFoldGutter={supportsCollapsing}
             size="small"
             className="border-0 h-full"
             hideFocusOutline
