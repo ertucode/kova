@@ -8,11 +8,12 @@ import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
 import { EditorView, placeholder as placeholderExtension } from '@codemirror/view'
-import CodeMirror from '@uiw/react-codemirror'
+import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
 import { tags } from '@lezer/highlight'
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { twMerge } from 'tailwind-merge'
+import { Vim, getCM, vim } from '@replit/codemirror-vim'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'html' | 'css' | 'xml'
 
@@ -116,6 +117,14 @@ const editorTheme = EditorView.theme({
   },
   '.cm-cursor, .cm-dropCursor': {
     borderLeftColor: 'var(--color-base-content)',
+  },
+  '.cm-fat-cursor': {
+    backgroundColor: 'color-mix(in oklab, var(--color-base-content) 82%, var(--color-primary) 18%) !important',
+  },
+  '&:not(.cm-focused) .cm-fat-cursor': {
+    background: 'none !important',
+    outline: 'solid 1px color-mix(in oklab, var(--color-base-content) 82%, var(--color-primary) 18%) !important',
+    color: 'transparent !important',
   },
   '.cm-placeholder': {
     color: 'color-mix(in oklab, var(--color-base-content) 34%, transparent)',
@@ -221,7 +230,20 @@ export function CodeEditor({
   const editorViewRef = useRef<EditorView | null>(null)
 
   const resolvedExtensions = useMemo(() => {
-    const nextExtensions: Extension[] = [editorTheme, syntaxHighlighting(editorHighlightStyle)]
+    const nextExtensions: Extension[] = [
+      vim(),
+      ...codeMirrorBasicSetup({
+        lineNumbers: false,
+        foldGutter: false,
+        dropCursor: false,
+        allowMultipleSelections: false,
+        highlightActiveLine: false,
+        highlightActiveLineGutter: false,
+        searchKeymap: false,
+      }),
+      editorTheme,
+      syntaxHighlighting(editorHighlightStyle),
+    ]
 
     if (size === 'small') {
       nextExtensions.push(
@@ -381,18 +403,15 @@ export function CodeEditor({
         height="100%"
         className="h-full w-full"
         theme="dark"
-        basicSetup={{
-          lineNumbers: false,
-          foldGutter: false,
-          dropCursor: false,
-          allowMultipleSelections: false,
-          highlightActiveLine: false,
-          highlightActiveLineGutter: false,
-          searchKeymap: false,
-        }}
+        basicSetup={false}
         extensions={resolvedExtensions}
         onCreateEditor={view => {
           editorViewRef.current = view
+
+          const cm = getCM(view)
+          if (cm) {
+            Vim.handleKey(cm, 'i', 'user')
+          }
         }}
         onChange={(value, viewUpdate) => {
           const caretPos = viewUpdate.state.selection.main.head
