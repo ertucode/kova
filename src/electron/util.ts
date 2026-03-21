@@ -9,12 +9,22 @@ export function isDev() {
 
 export function ipcHandle<Key extends keyof EventResponseMapping>(
   key: Key,
-  handler: (request: EventRequest<Key>, event: Electron.IpcMainInvokeEvent) => EventResponseMapping[Key]
+  handler: (
+    request: EventRequest<Key>,
+    event: Electron.IpcMainInvokeEvent
+  ) => EventResponseMapping[Key] | Promise<EventResponseMapping[Key]>
 ) {
-  ipcMain.handle(key, (event, request) => {
+  ipcMain.handle(key, async (event, request) => {
     console.log('ipcHandle', key, request)
     event.senderFrame && validateEventFrame(event.senderFrame)
-    return handler(request, event)
+
+    const start = performance.now()
+
+    try {
+      return await handler(request, event)
+    } finally {
+      console.log(`ipcHandle ${String(key)} took ${(performance.now() - start).toFixed(1)}ms`)
+    }
   })
 }
 

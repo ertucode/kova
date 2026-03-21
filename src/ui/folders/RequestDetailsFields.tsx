@@ -44,6 +44,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
   const [metaTab, setMetaTab] = useState<'overview' | 'search-params' | 'scripts'>('overview')
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
+  const metaTabByRequestIdRef = useRef<Record<string, 'overview' | 'search-params' | 'scripts'>>({})
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
@@ -204,8 +205,29 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   }, [responsePaneHeight])
 
   useEffect(() => {
-    setMetaTab('overview')
-  }, [selectedRequestId])
+    if (!selectedRequestId) {
+      setMetaTab('overview')
+      return
+    }
+
+    const existingMetaTab = metaTabByRequestIdRef.current[selectedRequestId]
+    if (existingMetaTab) {
+      setMetaTab(existingMetaTab)
+      return
+    }
+
+    const initialMetaTab = shouldDefaultToSearchParamsTab(draft) ? 'search-params' : 'overview'
+    metaTabByRequestIdRef.current[selectedRequestId] = initialMetaTab
+    setMetaTab(initialMetaTab)
+  }, [draft, selectedRequestId])
+
+  const updateMetaTab = (nextMetaTab: 'overview' | 'search-params' | 'scripts') => {
+    if (selectedRequestId) {
+      metaTabByRequestIdRef.current[selectedRequestId] = nextMetaTab
+    }
+
+    setMetaTab(nextMetaTab)
+  }
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -399,7 +421,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       rawType: parsedCurl.rawType,
     })
 
-    setMetaTab(shouldShowSearchParams ? 'search-params' : 'overview')
+    updateMetaTab(shouldShowSearchParams ? 'search-params' : 'overview')
 
     toast.show({
       severity: 'success',
@@ -491,7 +513,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
         <VariableUsageBanner
           metaTab={metaTab}
-          onMetaTabChange={setMetaTab}
+          onMetaTabChange={updateMetaTab}
           usedVariableNames={usedVariableNames}
           hasPreRequestScript={hasPreRequestScript}
           hasPostRequestScript={hasPostRequestScript}
@@ -814,6 +836,10 @@ function getUsedRequestVariableNames(draft: RequestDetailsDraft) {
   }
 
   return Array.from(variableNames).sort((left, right) => left.localeCompare(right))
+}
+
+function shouldDefaultToSearchParamsTab(draft: RequestDetailsDraft) {
+  return draft.bodyType === 'none' && draft.searchParams.trim().length > 0
 }
 
 function MethodBadge({ method }: { method: RequestMethod }) {
