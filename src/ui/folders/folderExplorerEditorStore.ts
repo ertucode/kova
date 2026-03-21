@@ -428,13 +428,5 @@ function getNextExpandedIds(previousExpandedIds: string[], items: ExplorerItem[]
       .filter(item => item.itemType === 'folder' || item.itemType === 'request')
       .map(item => item.id)
   )
-  const nextExpandedIds = previousExpandedIds.filter(id => expandableItemIds.has(id))
-
-  if (nextExpandedIds.length > 0) {
-    return nextExpandedIds
-  }
-
-  return items
-    .filter(item => item.itemType === 'folder' && item.parentFolderId === null)
-    .map(item => item.id)
+  return previousExpandedIds.filter(id => expandableItemIds.has(id))
 }

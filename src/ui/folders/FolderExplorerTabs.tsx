@@ -245,7 +245,18 @@ function getTabMenuItems(
     })
   }
 
-  items.push({ isSeparator: true })
+  items.push(
+    { isSeparator: true },
+    {
+      view: 'Reveal in Explorer',
+      onClick: () => {
+        void FolderExplorerCoordinator.selectItem(
+          { itemType: tab.itemType, id: tab.itemId },
+          { mode: 'preview' }
+        )
+      },
+    }
+  )
 
   return items
 }
