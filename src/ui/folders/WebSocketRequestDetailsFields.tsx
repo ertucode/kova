@@ -110,6 +110,21 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     []
   )
 
+  const variableEditorExtensionsWithBrowserTabFallback = useMemo(
+    () => [
+      variableHighlightExtension({
+        getDefinedVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getEnvironments: () => variableTooltipRowsRef.current,
+        onToggleEnvironment: environmentId => EnvironmentCoordinator.toggleActiveEnvironment(environmentId),
+        onOpenEnvironment: environmentId => EnvironmentCoordinator.openEnvironmentDetails(environmentId),
+        onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
+        onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, { fallbackToBrowserTab: true }),
+    ],
+    []
+  )
+
   const urlEditorExtensions = useMemo(() => [searchParamHighlightExtension(), ...variableEditorExtensions], [variableEditorExtensions])
 
   useEffect(() => {
@@ -503,13 +518,13 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               value={draft.auth}
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
               allowInherit
-              valueEditorExtensions={variableEditorExtensions}
+              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             />
 
             <HeadersEditor
               value={draft.headers}
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
-              valueEditorExtensions={variableEditorExtensions}
+              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             />
           </div>
         </section>
@@ -530,7 +545,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
             keyPlaceholder="token"
             valuePlaceholder="123"
             valueEditorAsCode
-            valueEditorExtensions={variableEditorExtensions}
+            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             contentClassName="border-t-0"
           />
         </section>

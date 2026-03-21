@@ -183,10 +183,9 @@ function createFoldMarker(isOpen: boolean) {
   const wrapper = document.createElement('span')
   wrapper.setAttribute('aria-hidden', 'true')
 
-  const iconMarkup = renderToStaticMarkup(createElement(isOpen ? ChevronDownIcon : ChevronRightIcon, { size: 14, strokeWidth: 2.2 })).replace(
-    '<svg ',
-    '<svg focusable="false" '
-  )
+  const iconMarkup = renderToStaticMarkup(
+    createElement(isOpen ? ChevronDownIcon : ChevronRightIcon, { size: 14, strokeWidth: 2.2 })
+  ).replace('<svg ', '<svg focusable="false" ')
 
   wrapper.innerHTML = iconMarkup
   return wrapper
@@ -404,6 +403,7 @@ export function CodeEditor({
         className="h-full w-full"
         theme="dark"
         basicSetup={false}
+        indentWithTab={false}
         extensions={resolvedExtensions}
         onCreateEditor={view => {
           editorViewRef.current = view

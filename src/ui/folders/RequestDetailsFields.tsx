@@ -140,6 +140,22 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     []
   )
 
+  const variableEditorExtensionsWithBrowserTabFallback = useMemo(
+    () => [
+      variableHighlightExtension({
+        getDefinedVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getEnvironments: () => variableTooltipRowsRef.current,
+        onToggleEnvironment: environmentId => EnvironmentCoordinator.toggleActiveEnvironment(environmentId),
+        onOpenEnvironment: environmentId => EnvironmentCoordinator.openEnvironmentDetails(environmentId),
+        onChangeValue: (environmentId, variableName, value) =>
+          updateEnvironmentVariableDraft(environmentId, variableName, value),
+        onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, { fallbackToBrowserTab: true }),
+    ],
+    []
+  )
+
   const urlEditorExtensions = useMemo(
     () => [
       pathParamHighlightExtension({
@@ -610,12 +626,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               value={draft.auth}
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
               allowInherit
-              valueEditorExtensions={variableEditorExtensions}
+              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             />
 
             <HeadersEditor
               value={draft.headers}
-              valueEditorExtensions={variableEditorExtensions}
+              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
             />
 
@@ -626,7 +642,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               keyPlaceholder="userId"
               valuePlaceholder="123"
               valueEditorAsCode
-              valueEditorExtensions={variableEditorExtensions}
+              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             />
           </div>
         </section>

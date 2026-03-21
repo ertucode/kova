@@ -73,7 +73,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
 
-  const variableEditorExtensions = useMemo(
+  const variableEditorExtensionsWithBrowserTabFallback = useMemo(
     () => [
       variableHighlightExtension({
         getDefinedVariableNames: () => activeEnvironmentVariableNamesRef.current,
@@ -84,7 +84,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
-      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, { fallbackToBrowserTab: true }),
     ],
     []
   )
@@ -127,12 +127,12 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         value={draft.auth}
         onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
         allowInherit
-        valueEditorExtensions={variableEditorExtensions}
+        valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
       />
 
       <HeadersEditor
         value={draft.headers}
-        valueEditorExtensions={variableEditorExtensions}
+        valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
         onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
       />
       </div>

@@ -2,34 +2,28 @@ import {
   autocompletion,
   completionStatus,
   startCompletion,
-  acceptCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete'
-import { Prec, type Extension } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import type { Extension } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
 
-export function scriptAutocompleteExtension(options: {
+type ScriptAutocompleteOptions = {
   includeResponse: boolean
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
-}): Extension {
+  fallbackToBrowserTab?: boolean
+}
+
+export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions): Extension {
   const phase: ScriptAutocompletePhase = options.includeResponse ? 'post-request' : 'pre-request'
 
   return [
-    Prec.highest(
-      keymap.of([
-        {
-          key: 'Tab',
-          run: (view: EditorView) => {
-            return acceptCompletion(view) || false
-          },
-        },
-      ])
-    ),
+    codeEditorTabBehaviorExtension(options),
     autocompletion({
       activateOnTyping: true,
       override: [

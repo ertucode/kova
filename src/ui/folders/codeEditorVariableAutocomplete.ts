@@ -2,15 +2,14 @@ import {
   autocompletion,
   completionStatus,
   startCompletion,
-  acceptCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete'
-import { Prec } from '@codemirror/state'
 
 import type { Extension } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView } from '@codemirror/view'
+import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 
 export type VariableAutocompleteItem = {
   name: string
@@ -19,18 +18,16 @@ export type VariableAutocompleteItem = {
   inactiveEnvironmentNames: string[]
 }
 
-export function variableAutocompleteExtension(getVariables: () => VariableAutocompleteItem[]): Extension {
+type VariableAutocompleteOptions = {
+  fallbackToBrowserTab?: boolean
+}
+
+export function variableAutocompleteExtension(
+  getVariables: () => VariableAutocompleteItem[],
+  opts?: VariableAutocompleteOptions
+): Extension {
   return [
-    Prec.highest(
-      keymap.of([
-        {
-          key: 'Tab',
-          run: (view: EditorView) => {
-            return acceptCompletion(view)
-          },
-        },
-      ])
-    ),
+    codeEditorTabBehaviorExtension(opts),
     autocompletion({
       activateOnTyping: true,
       override: [context => completeVariables(context, getVariables)],
