@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangleIcon, CheckIcon, PencilIcon, Trash2Icon, XIcon } from 'lucide-react'
 import type { Extension } from '@codemirror/state'
 import type { KeyValueRow } from '@common/KeyValueRows'
@@ -34,15 +34,20 @@ export function KeyValueEditor({
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
   const [isBulkEditMode, setIsBulkEditMode] = useState(false)
   const [bulkEditValue, setBulkEditValue] = useState(value)
+  const lastEmittedValueRef = useRef(value)
   const duplicateRowIds = getDuplicateRowIds(rows)
   const bulkEditError = isBulkEditMode ? validateBulkEditValue(bulkEditValue) : null
 
   useEffect(() => {
-    setRows(currentRows => buildRows(value, currentRows))
+    if (value !== lastEmittedValueRef.current) {
+      setRows(currentRows => buildRows(value, currentRows))
+      lastEmittedValueRef.current = value
+    }
+
     if (!isBulkEditMode) {
       setBulkEditValue(value)
     }
-  }, [value])
+  }, [isBulkEditMode, value])
 
   const updateRow = (id: string, patch: Partial<KeyValueRow>) => {
     setRows(currentRows => {
@@ -53,7 +58,9 @@ export function KeyValueEditor({
         nextRows.push(createEmptyKeyValueRow())
       }
 
-      onChange(stringifyKeyValueRows(nextRows))
+      const nextValue = stringifyKeyValueRows(nextRows)
+      lastEmittedValueRef.current = nextValue
+      onChange(nextValue)
       return nextRows
     })
   }
@@ -61,7 +68,9 @@ export function KeyValueEditor({
   const removeRow = (id: string) => {
     setRows(currentRows => {
       const nextRows = ensureTrailingEmptyRow(currentRows.filter(row => row.id !== id))
-      onChange(stringifyKeyValueRows(nextRows))
+      const nextValue = stringifyKeyValueRows(nextRows)
+      lastEmittedValueRef.current = nextValue
+      onChange(nextValue)
       return nextRows
     })
   }
@@ -81,7 +90,9 @@ export function KeyValueEditor({
       return
     }
 
-    onChange(normalizeBulkEditValue(bulkEditValue))
+    const nextValue = normalizeBulkEditValue(bulkEditValue)
+    lastEmittedValueRef.current = nextValue
+    onChange(nextValue)
     setIsBulkEditMode(false)
   }
 
