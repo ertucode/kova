@@ -91,7 +91,7 @@ export function ExplorerRow({
       {showDropBefore ? <div className="pointer-events-none absolute inset-x-3 top-0 z-10 h-0.5 bg-primary" /> : null}
       <div
         className={[
-          'group flex h-8 items-center gap-1 border pr-1 transition',
+          'group flex h-7 items-center gap-1 border pr-1 transition',
           isSelected
             ? 'border-base-content/10 bg-base-100/95 shadow-[0_10px_28px_rgba(0,0,0,0.12)]'
             : 'border-transparent hover:border-base-content/8 hover:bg-base-100/55',
@@ -130,13 +130,17 @@ export function ExplorerRow({
           disabled={(node.itemType !== 'folder' && node.itemType !== 'request') || !hasChildren}
         >
           {(node.itemType === 'folder' || node.itemType === 'request') && hasChildren ? (
-            isExpanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />
+            isExpanded ? (
+              <ChevronDownIcon className="size-4" />
+            ) : (
+              <ChevronRightIcon className="size-4" />
+            )
           ) : (
             <span className="size-4" />
           )}
         </button>
 
-        <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <div className="flex min-w-0 flex-1 items-center gap-1 text-left">
           <div className="w-8 shrink-0 flex items-center justify-center">
             {node.itemType === 'folder' ? (
               <FolderIcon className="size-4 shrink-0 text-base-content/55" />
@@ -149,7 +153,7 @@ export function ExplorerRow({
               <ExampleGlyph exampleType={node.exampleType} />
             )}
           </div>
-          <div className="min-w-0 flex-1 truncate px-1 text-sm text-base-content">{node.name}</div>
+          <div className="min-w-0 flex-1 truncate px-1 text-[13px] leading-[1.2] text-base-content">{node.name}</div>
           {isItemDirty ? (
             <div
               className="size-2 shrink-0 rounded-full bg-warning"
@@ -164,9 +168,19 @@ export function ExplorerRow({
           itemType={node.itemType}
           requestType={node.itemType === 'request' ? node.requestType : undefined}
           activeEnvironmentIds={activeEnvironmentIds}
-          onAddFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined}
-          onAddHttpRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'http') : undefined}
-          onAddWebSocketRequest={node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'websocket') : undefined}
+          onAddFolder={
+            node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined
+          }
+          onAddHttpRequest={
+            node.itemType === 'folder'
+              ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'http')
+              : undefined
+          }
+          onAddWebSocketRequest={
+            node.itemType === 'folder'
+              ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'websocket')
+              : undefined
+          }
           onFlattenFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.flattenFolder(node) : undefined}
           onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
         />
@@ -217,12 +231,7 @@ function RequestMethodTag({ method, requestType }: { method: string; requestType
   const label = method === 'DELETE' ? 'DEL' : method
 
   return (
-    <div
-      className={[
-        'w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em]',
-        tone,
-      ].join(' ')}
-    >
+    <div className={['w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em]', tone].join(' ')}>
       {label}
     </div>
   )
@@ -283,10 +292,18 @@ export function DraftRow({
   return (
     <div className="py-1" style={{ paddingLeft: depth * 18 }}>
       <div className="flex items-center gap-2 border border-base-content/10 bg-base-100/90 px-2 pr-1">
-        {icon === 'folder' ? <FolderIcon className="size-4 text-base-content/55" /> : icon === 'request' ? <FileCode2Icon className="size-4 text-base-content/55" /> : <CopyIcon className="size-4 text-base-content/55" />}
+        <div className="pl-8 shrink-0 flex items-center justify-center">
+          {icon === 'folder' ? (
+            <FolderIcon className="size-4 text-base-content/55" />
+          ) : icon === 'request' ? (
+            <FileCode2Icon className="size-4 text-base-content/55" />
+          ) : (
+            <CopyIcon className="size-4 text-base-content/55" />
+          )}
+        </div>
         <input
           autoFocus
-          className="h-8 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-base-content/35"
+          className="h-7 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-base-content/35"
           value={value}
           onChange={event => onChange(event.target.value)}
           onKeyDown={event => {
@@ -390,9 +407,7 @@ function ExplorerMenu({
       }
 
       const nextVertical =
-        triggerRect.bottom + menuRect.height > window.innerHeight && triggerRect.top >= menuRect.height
-          ? 'up'
-          : 'down'
+        triggerRect.bottom + menuRect.height > window.innerHeight && triggerRect.top >= menuRect.height ? 'up' : 'down'
       const nextHorizontal =
         triggerRect.right - menuRect.width < 0 && triggerRect.left + menuRect.width <= window.innerWidth
           ? 'left'
@@ -439,7 +454,10 @@ function ExplorerMenu({
       toast.show({
         severity: 'success',
         title: format === 'curl' ? 'cURL copied' : 'Fetch copied',
-        message: format === 'curl' ? 'Resolved cURL command copied to clipboard.' : 'Resolved fetch snippet copied to clipboard.',
+        message:
+          format === 'curl'
+            ? 'Resolved cURL command copied to clipboard.'
+            : 'Resolved fetch snippet copied to clipboard.',
       })
     } catch {
       toast.show({
@@ -501,7 +519,14 @@ function ExplorerMenu({
           ) : null}
           {itemType === 'folder' ? (
             <li>
-              <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } }))}>
+              <button
+                type="button"
+                onClick={() =>
+                  runAction(() =>
+                    dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } })
+                  )
+                }
+              >
                 <FileJsonIcon className="size-4" />
                 Export Postman
               </button>
@@ -517,7 +542,17 @@ function ExplorerMenu({
           ) : null}
           {itemType === 'request' ? (
             <li>
-              <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'request', requestId: itemId } }))}>
+              <button
+                type="button"
+                onClick={() =>
+                  runAction(() =>
+                    dialogActions.open({
+                      component: PostmanExportDialog,
+                      props: { scope: 'request', requestId: itemId },
+                    })
+                  )
+                }
+              >
                 <FileJsonIcon className="size-4" />
                 Export Postman
               </button>
