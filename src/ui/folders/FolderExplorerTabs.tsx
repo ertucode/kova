@@ -60,12 +60,24 @@ export function FolderExplorerTabs() {
       if (activeTabId && event.metaKey && event.key.toLowerCase() === 'w') {
         event.preventDefault()
         void FolderExplorerCoordinator.closeActiveTab()
+        return
+      }
+
+      if (event.metaKey && !event.ctrlKey && !event.altKey && /^[1-9]$/.test(event.key)) {
+        const tabIndex = Number(event.key) - 1
+        const tab = tabsWithState[tabIndex]
+        if (!tab) {
+          return
+        }
+
+        event.preventDefault()
+        void FolderExplorerCoordinator.activateTab(tab.id)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTabId])
+  }, [activeTabId, tabsWithState])
 
   const clearDragState = () => {
     setDraggedTabId(null)
