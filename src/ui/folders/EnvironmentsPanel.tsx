@@ -61,7 +61,7 @@ export function EnvironmentsPanel() {
   }, [draft, focusEnvironmentId, selectedId])
 
   return (
-    <div className="flex min-h-0 flex-1 bg-base-100">
+    <div className="flex min-h-0 min-w-0 flex-1 bg-base-100">
       <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-100">
         <div className="border-b border-base-content/10 px-4 py-4">
           <div className="flex items-center justify-between gap-3">
@@ -197,7 +197,7 @@ export function EnvironmentsPanel() {
         </div>
       </aside>
 
-      <section className="min-h-0 flex-1 overflow-auto bg-base-100">
+      <section className="min-h-0 min-w-0 flex-1 overflow-auto bg-base-100">
         {draft && selectedId ? (
           <div className="min-h-full">
             <div className="border-b border-base-content/10 px-6 py-5">

@@ -74,8 +74,8 @@ export function DetailsPanel() {
   const renderSelected = selected ?? displayDraft!
 
   return (
-    <div className="min-h-0 flex-1 overflow-hidden">
-      <div className="flex h-full w-full flex-col items-stretch">
+    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div className="flex h-full min-w-0 w-full flex-col items-stretch">
         <div className="w-full">
           <div className="flex items-center gap-2">
             <div className="shrink-0 border-r border-base-content/10 bg-base-100/60 p-2 text-base-content/60">

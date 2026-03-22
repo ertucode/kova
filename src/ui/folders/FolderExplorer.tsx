@@ -223,7 +223,7 @@ export function FolderExplorer() {
         </aside>
       ) : null}
 
-      <main className="flex min-h-0 flex-1 flex-col bg-base-100">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-base-100">
         {sidebarTab === 'requests' ? <FolderExplorerTabs /> : null}
         {sidebarTab === 'requests' ? <DetailsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}

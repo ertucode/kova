@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { CopyIcon, FileCode2Icon, FolderIcon, XIcon } from 'lucide-react'
 import {
@@ -35,6 +35,7 @@ export function FolderExplorerTabs() {
   const items = useSelector(folderExplorerTreeStore, state => state.context.items)
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const tabsContainerRef = useRef<HTMLDivElement | null>(null)
   const menu = useContextMenu<FolderExplorerTabViewModel>()
 
   const tabsWithState = useMemo<FolderExplorerTabViewModel[]>(
@@ -80,6 +81,15 @@ export function FolderExplorerTabs() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeTabId, tabsWithState])
 
+  useEffect(() => {
+    if (!activeTabId) {
+      return
+    }
+
+    const activeTabElement = tabsContainerRef.current?.querySelector<HTMLElement>(`[data-tab-id="${activeTabId}"]`)
+    activeTabElement?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  }, [activeTabId, tabsWithState])
+
   const clearDragState = () => {
     setDraggedTabId(null)
     setDropIndex(null)
@@ -105,14 +115,34 @@ export function FolderExplorerTabs() {
 
   return (
     <>
-      <div className="flex h-11 items-stretch gap-1 overflow-x-auto border-b border-base-content/10 bg-base-100/95 px-2 py-1.5">
+      <div
+        ref={tabsContainerRef}
+        className="flex h-11 min-w-0 items-stretch gap-1 overflow-x-auto border-b border-base-content/10 bg-base-100/95 px-2 py-1.5"
+        onWheel={event => {
+          const container = tabsContainerRef.current
+          if (!container) {
+            return
+          }
+
+          if (Math.abs(event.deltaX) > 0) {
+            return
+          }
+
+          if (container.scrollWidth <= container.clientWidth) {
+            return
+          }
+
+          event.preventDefault()
+          container.scrollLeft += event.deltaY
+        }}
+      >
         {tabsWithState.map((tab, index) => {
           const isActive = tab.id === activeTabId
           const showDropBefore = dropIndex === index
           const showDropAfter = dropIndex === tabsWithState.length && index === tabsWithState.length - 1
 
           return (
-            <div key={tab.id} className="relative flex shrink-0">
+              <div key={tab.id} data-tab-id={tab.id} className="relative flex shrink-0">
               {showDropBefore ? <div className="absolute inset-y-1 -left-0.5 w-0.5 rounded-full bg-primary" /> : null}
               <div
                 draggable
