@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { Clock3Icon, FileCode2Icon, FileJsonIcon, FlaskConicalIcon, FolderIcon, MoreHorizontalIcon, SearchIcon } from 'lucide-react'
+import {
+  Clock3Icon,
+  FileCode2Icon,
+  FileJsonIcon,
+  FlaskConicalIcon,
+  FolderIcon,
+  MoreHorizontalIcon,
+  SearchIcon,
+} from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
 import { FolderExplorerTabs } from './FolderExplorerTabs'
@@ -133,18 +141,28 @@ export function FolderExplorer() {
       return
     }
 
-  const nextDropTarget = getRootEndDropTarget(roots, draggedItem)
-  if (!nextDropTarget) {
+    const nextDropTarget = getRootEndDropTarget(roots, draggedItem)
+    if (!nextDropTarget) {
+      clearDragState()
+      return
+    }
+    const itemToMove = draggedItem
     clearDragState()
-    return
-  }
-  const itemToMove = draggedItem
-  clearDragState()
 
     await FolderExplorerCoordinator.moveItem(
       itemToMove.itemType === 'example'
-        ? { itemType: 'example', id: itemToMove.id, targetRequestId: nextDropTarget.targetRequestId ?? '', targetPosition: nextDropTarget.targetPosition }
-        : { itemType: itemToMove.itemType, id: itemToMove.id, targetParentFolderId: nextDropTarget.targetParentFolderId, targetPosition: nextDropTarget.targetPosition }
+        ? {
+            itemType: 'example',
+            id: itemToMove.id,
+            targetRequestId: nextDropTarget.targetRequestId ?? '',
+            targetPosition: nextDropTarget.targetPosition,
+          }
+        : {
+            itemType: itemToMove.itemType,
+            id: itemToMove.id,
+            targetParentFolderId: nextDropTarget.targetParentFolderId,
+            targetPosition: nextDropTarget.targetPosition,
+          }
     )
   }
 
@@ -214,7 +232,9 @@ export function FolderExplorer() {
                     onDragOver={handleRootEndDragOver}
                     onDrop={event => void handleRootEndDrop(event)}
                   >
-                    {dropTarget?.indicatorId === 'root:end' ? <div className="translate-y-[9px] border-t border-primary" /> : null}
+                    {dropTarget?.indicatorId === 'root:end' ? (
+                      <div className="translate-y-[9px] border-t border-primary" />
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -281,37 +301,59 @@ function CreateMenuButton() {
       {isOpen ? (
         <ul className="menu absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
           <li>
-            <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('folder', null))}>
+            <button
+              type="button"
+              onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('folder', null))}
+            >
               <FolderIcon className="size-4" />
               Add Folder
             </button>
           </li>
-            <li>
-              <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'http'))}>
-                <FileCode2Icon className="size-4" />
-                Add HTTP Request
-              </button>
-            </li>
-            <li>
-              <button type="button" onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'websocket'))}>
-                <FileCode2Icon className="size-4" />
-                Add WebSocket
-              </button>
-            </li>
           <li>
-            <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'workspace' } }))}>
+            <button
+              type="button"
+              onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'http'))}
+            >
+              <FileCode2Icon className="size-4" />
+              Add HTTP Request
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'websocket'))}
+            >
+              <FileCode2Icon className="size-4" />
+              Add WebSocket
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() =>
+                runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'workspace' } }))
+              }
+            >
               <FileJsonIcon className="size-4" />
               Export Postman
             </button>
           </li>
           <li>
-            <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanImportDialog, props: {} }))}>
+            <button
+              type="button"
+              onClick={() => runAction(() => dialogActions.open({ component: PostmanImportDialog, props: {} }))}
+            >
               <FileCode2Icon className="size-4" />
               Import Postman
             </button>
           </li>
           <li>
-            <button type="button" onClick={() => runAction(() => dialogActions.open({ component: PostmanEnvironmentImportDialog, props: {} }))}>
+            <button
+              type="button"
+              onClick={() =>
+                runAction(() => dialogActions.open({ component: PostmanEnvironmentImportDialog, props: {} }))
+              }
+            >
               <FileCode2Icon className="size-4" />
               Import Environment
             </button>
@@ -342,10 +384,12 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
             className={[
               'flex w-full flex-col items-center gap-2 rounded-2xl px-2 py-3 text-center text-xs font-medium transition',
               tab.disabled ? 'cursor-not-allowed text-base-content/30' : '',
-              !tab.disabled && isActive ? 'bg-primary/16 text-primary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--color-primary)_24%,transparent)]' : '',
+              !tab.disabled && isActive
+                ? 'bg-primary/16 text-primary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--color-primary)_24%,transparent)]'
+                : '',
               !tab.disabled && !isActive ? 'text-base-content/62 hover:bg-base-100/60 hover:text-base-content' : '',
             ].join(' ')}
-            onClick={() => {
+            onPointerDown={() => {
               if (!tab.disabled) {
                 EnvironmentCoordinator.setSidebarTab(tab.id)
               }
@@ -389,9 +433,13 @@ function getRowDropTarget({
     }
 
     const requestId = node.itemType === 'request' ? node.id : node.requestId
-    const targetSiblings = getExampleSiblingNodes(itemMap, node).filter(sibling => !isSameSelection(sibling, draggedItem))
+    const targetSiblings = getExampleSiblingNodes(itemMap, node).filter(
+      sibling => !isSameSelection(sibling, draggedItem)
+    )
     const anchorNode = node.itemType === 'request' ? null : node
-    const targetIndex = anchorNode ? targetSiblings.findIndex(sibling => isSameSelection(sibling, anchorNode)) : targetSiblings.length
+    const targetIndex = anchorNode
+      ? targetSiblings.findIndex(sibling => isSameSelection(sibling, anchorNode))
+      : targetSiblings.length
     const nextPosition = anchorNode ? (ratio < 0.5 ? targetIndex : targetIndex + 1) : targetSiblings.length
 
     return {
@@ -407,7 +455,8 @@ function getRowDropTarget({
     return null
   }
 
-  const placement: DropPlacement = node.itemType === 'folder' && ratio > 0.28 && ratio < 0.72 ? 'inside' : ratio < 0.5 ? 'before' : 'after'
+  const placement: DropPlacement =
+    node.itemType === 'folder' && ratio > 0.28 && ratio < 0.72 ? 'inside' : ratio < 0.5 ? 'before' : 'after'
 
   if (placement === 'inside') {
     if (draggedItem.itemType === 'folder' && isFolderAncestor(itemMap, draggedItem.id, node.id)) {
