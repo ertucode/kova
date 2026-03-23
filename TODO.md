@@ -1,3 +1,2 @@
 - implement undo
-- warn on request (10 secs)
 - tag environments so you do not have same type opened

@@ -19,6 +19,9 @@ type PostmanEnvironmentDocument = {
   name: string
   values: PostmanEnvironmentValue[]
   color?: string
+  _kova: {
+    warnOnRequest: boolean
+  }
   _postman_variable_scope: 'environment'
 }
 
@@ -113,6 +116,9 @@ export function buildEnvironmentExportDocument(environment: EnvironmentRecord, e
   return {
     name: environmentName,
     color: environment.color ?? undefined,
+    _kova: {
+      warnOnRequest: environment.warnOnRequest,
+    },
     _postman_variable_scope: 'environment',
     values: parseKeyValueRows(environment.variables).map(row => ({
       key: row.key,

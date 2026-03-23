@@ -1,9 +1,11 @@
 // import "../../wdyr/wdyr.js";
 import './App.css'
+import { useEffect } from 'react'
 import { ConfirmationRenderer } from './lib/components/confirmation'
 import { ToastRenderer } from './lib/components/toast'
 import { subscribeToGenericEvents } from './global/genericEventListener'
 import { TaskMonitor } from './global/TaskMonitor'
+import { AppSettingsCoordinator } from './global/appSettingsStore'
 import { DialogStoreRenderer } from './global/dialogStore'
 import { subscribeToTasks } from './global/taskSubscription'
 import { CustomTitleBar } from './components/CustomTitleBar'
@@ -13,6 +15,10 @@ subscribeToTasks()
 subscribeToGenericEvents()
 
 function App() {
+  useEffect(() => {
+    void AppSettingsCoordinator.loadSettings()
+  }, [])
+
   return (
     <>
       <ToastRenderer />

@@ -26,6 +26,7 @@ const requestHistorySettingsPersistence = createAsyncStoragePersistence(
 )
 
 type RequestExecutionContext = {
+  lastRequestSentAt: number | null
   history: RequestHistoryListItem[]
   historySearchQuery: string
   historyLoading: boolean
@@ -44,6 +45,7 @@ const initialSettings = requestHistorySettingsPersistence.load({ keepLast: MAX_H
 export const requestExecutionStore = createStore({
   context: {
     history: [],
+    lastRequestSentAt: null,
     historySearchQuery: '',
     historyLoading: false,
     historyLoadingMore: false,
@@ -74,6 +76,10 @@ export const requestExecutionStore = createStore({
         },
       }
     },
+    requestStarted: (context, event: { sentAt: number }) => ({
+      ...context,
+      lastRequestSentAt: event.sentAt,
+    }),
     requestFailed: (context, event: { requestId: string; error: string }) => ({
       ...context,
       errorByRequestId: {

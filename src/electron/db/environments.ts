@@ -56,6 +56,7 @@ export async function createEnvironment(input: CreateEnvironmentInput): Promise<
         name,
         variables: '',
         color: null,
+        warnOnRequest: false,
         position: getNextEnvironmentPosition(db),
         priority: 0,
         createdAt: now,
@@ -88,6 +89,7 @@ export async function updateEnvironment(input: UpdateEnvironmentInput): Promise<
         name,
         variables: input.variables,
         color: normalizeEnvironmentColor(input.color),
+        warnOnRequest: input.warnOnRequest,
         priority: input.priority,
       })
       .where(and(eq(environments.id, input.id), isNull(environments.deletedAt)))
@@ -227,6 +229,7 @@ function toEnvironmentRecord(environment: EnvironmentRow): EnvironmentRecord {
     name: environment.name,
     variables: environment.variables,
     color: normalizeEnvironmentColor(environment.color),
+    warnOnRequest: environment.warnOnRequest,
     position: environment.position,
     priority: environment.priority,
     createdAt: environment.createdAt,

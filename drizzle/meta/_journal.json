@@ -141,6 +141,13 @@
       "when": 1774302440011,
       "tag": "0019_quick_solo",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1774303297396,
+      "tag": "0020_panoramic_dagger",
+      "breakpoints": true
     }
   ]
 }

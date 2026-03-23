@@ -5,6 +5,7 @@ describe('postman environment import', () => {
   it('reports duplicate overrides and disabled variables', () => {
     const analysis = analyzeEnvironmentDocument({
       name: 'preprod',
+      _kova: { warnOnRequest: true },
       values: [
         { key: 'foo', value: '1', enabled: true, _kova: { description: 'Main host' } },
         { key: 'foo', value: '2', enabled: true },
@@ -16,6 +17,7 @@ describe('postman environment import', () => {
 
     expect(analysis.environmentName).toBe('preprod')
     expect(analysis.color).toBe('#3b82f6')
+    expect(analysis.warnOnRequest).toBe(true)
     expect(analysis.variables).toBe('foo:1 // Main host\nfoo:2\n//bar:3')
     expect(analysis.warnings.map(warning => warning.code)).toEqual(
       expect.arrayContaining(['duplicate-keys-overridden', 'disabled-variables-commented', 'metadata-ignored'])

@@ -754,6 +754,7 @@ function updateEnvironmentVariableDraft(environmentId: string, variableName: str
     name: environment.name,
     variables: environment.variables,
     color: environment.color,
+    warnOnRequest: environment.warnOnRequest,
     priority: environment.priority,
   }
 

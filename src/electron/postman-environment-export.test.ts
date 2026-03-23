@@ -8,6 +8,7 @@ describe('postman environment export', () => {
       name: 'preprod',
       variables: 'foo:1 // API host\n//bar:2',
       color: '#ef4444',
+      warnOnRequest: false,
       position: 0,
       priority: 0,
       createdAt: 1,
@@ -23,6 +24,7 @@ describe('postman environment export', () => {
       name: 'preprod',
       variables: 'foo:1 // API host\n//bar:2',
       color: '#ef4444',
+      warnOnRequest: true,
       position: 0,
       priority: 0,
       createdAt: 1,
@@ -30,6 +32,7 @@ describe('postman environment export', () => {
     }, 'Preprod')
 
     expect(document.color).toBe('#ef4444')
+    expect(document._kova).toEqual({ warnOnRequest: true })
     expect(document.values).toEqual([
       { key: 'foo', value: '1', enabled: true, type: 'text', _kova: { description: 'API host' } },
       { key: 'bar', value: '2', enabled: false, type: 'text', _kova: undefined },

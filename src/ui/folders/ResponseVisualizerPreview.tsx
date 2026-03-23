@@ -72,13 +72,14 @@ export function ResponseVisualizerPreview({
   const payload = useMemo<VisualizerPayload>(() => {
     const activeEnvironments = environments
       .filter(environment => environment.isActive)
-      .map(environment => ({
-        id: environment.id,
-        name: environment.name,
-        color: null,
-        position: 0,
-        priority: environment.priority,
-        createdAt: environment.createdAt,
+        .map(environment => ({
+          id: environment.id,
+          name: environment.name,
+          color: null,
+          warnOnRequest: false,
+          position: 0,
+          priority: environment.priority,
+          createdAt: environment.createdAt,
         deletedAt: null,
         variables: serializeEnvironmentValues(environment.values),
       }))

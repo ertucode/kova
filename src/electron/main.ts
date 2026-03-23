@@ -5,6 +5,7 @@ import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { TaskManager } from './TaskManager.js'
 import { initializeDatabase } from './db/index.js'
+import { getAppSettings, updateAppSettings } from './db/app-settings.js'
 import { listExplorerItems } from './db/explorer.js'
 import { listFolderExplorerTabs, saveFolderExplorerTabs } from './db/folder-explorer-tabs.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
@@ -377,6 +378,10 @@ app.on('ready', () => {
     return listEnvironments()
   })
 
+  ipcHandle('getAppSettings', async () => {
+    return getAppSettings()
+  })
+
   ipcHandle('createEnvironment', async input => {
     return createEnvironment(input)
   })
@@ -387,6 +392,10 @@ app.on('ready', () => {
 
   ipcHandle('updateEnvironment', async input => {
     return updateEnvironment(input)
+  })
+
+  ipcHandle('updateAppSettings', async input => {
+    return updateAppSettings(input)
   })
 
   ipcHandle('deleteEnvironment', async input => {

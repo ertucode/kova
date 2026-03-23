@@ -73,6 +73,7 @@ export const environments = sqliteTable(
     name: text('name').notNull(),
     variables: text('variables').notNull().default(''),
     color: text('color'),
+    warnOnRequest: integer('warn_on_request', { mode: 'boolean' }).notNull().default(false),
     position: integer('position').notNull().default(0),
     priority: integer('priority').notNull().default(0),
     createdAt: integer('created_at').notNull(),
@@ -84,6 +85,13 @@ export const environments = sqliteTable(
     index('environments_position_idx').on(table.position),
   ]
 )
+
+export const appSettings = sqliteTable('app_settings', {
+  id: text('id').primaryKey(),
+  warnBeforeRequestAfterSeconds: integer('warn_before_request_after_seconds').notNull().default(10),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+})
 
 export const treeItems = sqliteTable(
   'tree_items',

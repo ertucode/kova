@@ -5,6 +5,7 @@ export type EnvironmentDetailsDraft = {
   name: string
   variables: string
   color: string | null
+  warnOnRequest: boolean
   priority: number
 }
 
@@ -183,6 +184,7 @@ export function toEnvironmentDetailsDraft(environment: EnvironmentRecord): Envir
     name: environment.name,
     variables: environment.variables,
     color: environment.color,
+    warnOnRequest: environment.warnOnRequest,
     priority: environment.priority,
   }
 }

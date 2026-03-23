@@ -8,6 +8,7 @@ describe('EnvironmentVariables', () => {
       name: 'Env',
       variables: 'foo:1\nfoo:2\n//foo:3',
       color: null,
+      warnOnRequest: false,
       position: 0,
       priority: 0,
       createdAt: 1,
@@ -20,8 +21,8 @@ describe('EnvironmentVariables', () => {
 
   it('keeps higher priority environment precedence while each environment resolves last-wins internally', () => {
     const environments = [
-      { id: 'env-1', name: 'A', variables: 'foo:1\nfoo:2', color: null, position: 0, priority: 1, createdAt: 1, deletedAt: null },
-      { id: 'env-2', name: 'B', variables: 'foo:3', color: null, position: 1, priority: 0, createdAt: 2, deletedAt: null },
+      { id: 'env-1', name: 'A', variables: 'foo:1\nfoo:2', color: null, warnOnRequest: false, position: 0, priority: 1, createdAt: 1, deletedAt: null },
+      { id: 'env-2', name: 'B', variables: 'foo:3', color: null, warnOnRequest: false, position: 1, priority: 0, createdAt: 2, deletedAt: null },
     ]
 
     expect(buildEnvironmentVariableMap(environments)).toEqual({ foo: '2' })

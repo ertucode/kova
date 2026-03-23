@@ -92,6 +92,7 @@ import {
   type PickPostmanEnvironmentExportFileResponse,
 } from './PostmanEnvironmentExport.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
+import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -133,9 +134,11 @@ export type EventResponseMapping = {
   deleteWebSocketExample: Promise<GenericResult<void>>
   moveWebSocketExample: Promise<GenericResult<void>>
   listEnvironments: Promise<EnvironmentRecord[]>
+  getAppSettings: Promise<AppSettingsRecord>
   createEnvironment: Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: Promise<GenericResult<EnvironmentRecord>>
+  updateAppSettings: Promise<GenericResult<AppSettingsRecord>>
   deleteEnvironment: Promise<GenericResult<void>>
   moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
@@ -202,9 +205,11 @@ export type EventRequestMapping = {
   deleteWebSocketExample: DeleteWebSocketExampleInput
   moveWebSocketExample: MoveWebSocketExampleInput
   listEnvironments: void
+  getAppSettings: void
   createEnvironment: CreateEnvironmentInput
   duplicateEnvironment: DuplicateEnvironmentInput
   updateEnvironment: UpdateEnvironmentInput
+  updateAppSettings: UpdateAppSettingsInput
   deleteEnvironment: DeleteEnvironmentInput
   moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
@@ -283,9 +288,11 @@ export type WindowElectron = {
   deleteWebSocketExample: (input: DeleteWebSocketExampleInput) => Promise<GenericResult<void>>
   moveWebSocketExample: (input: MoveWebSocketExampleInput) => Promise<GenericResult<void>>
   listEnvironments: () => Promise<EnvironmentRecord[]>
+  getAppSettings: () => Promise<AppSettingsRecord>
   createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: (input: DuplicateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: (input: UpdateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
+  updateAppSettings: (input: UpdateAppSettingsInput) => Promise<GenericResult<AppSettingsRecord>>
   deleteEnvironment: (input: DeleteEnvironmentInput) => Promise<GenericResult<void>>
   moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>

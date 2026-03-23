@@ -24,9 +24,11 @@ import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from
 import { formatJson5 } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
+import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { dialogActions } from '@/global/dialogStore'
+import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
 import { HeadersEditor } from './HeadersEditor'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
@@ -362,7 +364,38 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       return
     }
 
+    const activeEnvironments = environments
+      .filter(environment => state.activeEnvironmentIds.includes(environment.id))
+      .map(environment => {
+        const environmentDraft = environmentEntries[environment.id]?.current
+        return {
+          ...environment,
+          name: environmentDraft?.name ?? environment.name,
+          color: environmentDraft?.color ?? environment.color,
+          warnOnRequest: environmentDraft?.warnOnRequest ?? environment.warnOnRequest,
+        }
+      })
+
+    const shouldConfirmRequest = shouldWarnBeforeRequest(
+      requestExecutionStore.getSnapshot().context.lastRequestSentAt,
+      getWarnBeforeRequestAfterSeconds(),
+      activeEnvironments
+    )
+
+    if (shouldConfirmRequest) {
+      const confirmed = await confirmRequestWithActiveEnvironments(
+        activeEnvironments,
+        getWarnBeforeRequestAfterSeconds()
+      )
+      if (!confirmed) {
+        return
+      }
+    }
+
+    const sentAt = Date.now()
+
     setIsSending(true)
+    requestExecutionStore.trigger.requestStarted({ sentAt })
     requestExecutionStore.trigger.httpSseStreamCleared({ requestId: selected.id })
 
     const result = await getWindowElectron().sendRequest({
@@ -824,6 +857,79 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           </div>
         </div>
       </section>
+    </div>
+  )
+}
+
+function shouldWarnBeforeRequest(
+  lastRequestSentAt: number | null,
+  warnBeforeRequestAfterSeconds: number,
+  activeEnvironments: Array<{ warnOnRequest: boolean }>
+) {
+  if (!activeEnvironments.some(environment => environment.warnOnRequest)) {
+    return false
+  }
+
+  if (lastRequestSentAt === null) {
+    return false
+  }
+
+  return Date.now() - lastRequestSentAt > warnBeforeRequestAfterSeconds * 1000
+}
+
+function confirmRequestWithActiveEnvironments(
+  activeEnvironments: Array<{ id: string; name: string; color: string | null; warnOnRequest: boolean; priority: number }>,
+  warnBeforeRequestAfterSeconds: number
+) {
+  return new Promise<boolean>(resolve => {
+    confirmation.trigger.confirm({
+      title: 'Send request?',
+      message: (
+        <ActiveEnvironmentConfirmation
+          environments={activeEnvironments}
+          warnBeforeRequestAfterSeconds={warnBeforeRequestAfterSeconds}
+        />
+      ),
+      confirmText: 'Send request',
+      rejectText: 'Cancel',
+      onConfirm: () => resolve(true),
+      onReject: () => resolve(false),
+    })
+  })
+}
+
+function ActiveEnvironmentConfirmation({
+  environments,
+  warnBeforeRequestAfterSeconds,
+}: {
+  environments: Array<{ id: string; name: string; color: string | null; warnOnRequest: boolean; priority: number }>
+  warnBeforeRequestAfterSeconds: number
+}) {
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-base-content/70">
+        More than {warnBeforeRequestAfterSeconds} seconds passed since the last request. These active environments will be used for this request.
+      </p>
+
+      <div className="space-y-2">
+        {environments.map(environment => (
+          <div
+            key={environment.id}
+            className="flex items-center gap-3 rounded-xl border border-base-content/10 bg-base-200/40 px-3 py-2"
+          >
+            <span
+              className="size-2.5 shrink-0 rounded-full ring-1 ring-base-content/10"
+              style={{ backgroundColor: environment.color ?? 'var(--color-base-content)' }}
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-base-content">{environment.name}</span>
+            <span className="text-[11px] text-base-content/45">Priority {environment.priority}</span>
+            {environment.warnOnRequest ? (
+              <span className="rounded-full bg-warning/15 px-2 py-1 text-[11px] font-medium text-warning">Warn</span>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -1476,6 +1582,7 @@ function updateEnvironmentVariableDraft(environmentId: string, variableName: str
     name: environment.name,
     variables: environment.variables,
     color: environment.color,
+    warnOnRequest: environment.warnOnRequest,
     priority: environment.priority,
   }
 

@@ -78,7 +78,14 @@ export function EnvironmentsPanel() {
               <button
                 type="button"
                 className="flex h-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-200 disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() => selectedId ? dialogActions.open({ component: PostmanEnvironmentExportDialog, props: { environmentId: selectedId } }) : undefined}
+                onClick={() =>
+                  selectedId
+                    ? dialogActions.open({
+                        component: PostmanEnvironmentExportDialog,
+                        props: { environmentId: selectedId },
+                      })
+                    : undefined
+                }
                 disabled={!selectedId}
               >
                 Export
@@ -112,7 +119,9 @@ export function EnvironmentsPanel() {
 
               return (
                 <div key={item.id} className="relative">
-                  {showDropBefore ? <div className="pointer-events-none absolute inset-x-3 top-0 z-10 h-0.5 bg-primary" /> : null}
+                  {showDropBefore ? (
+                    <div className="pointer-events-none absolute inset-x-3 top-0 z-10 h-0.5 bg-primary" />
+                  ) : null}
                   <div
                     draggable
                     onDragStart={() => setDraggedEnvironmentId(item.id)}
@@ -147,7 +156,8 @@ export function EnvironmentsPanel() {
                       }
 
                       const nextTargetPosition = ratio < 0.5 ? targetIndex : targetIndex + 1
-                      const adjustedTargetPosition = sourceIndex < nextTargetPosition ? nextTargetPosition - 1 : nextTargetPosition
+                      const adjustedTargetPosition =
+                        sourceIndex < nextTargetPosition ? nextTargetPosition - 1 : nextTargetPosition
                       setDraggedEnvironmentId(null)
                       setDropIndicatorId(null)
                       void EnvironmentCoordinator.moveEnvironment(draggedEnvironmentId, adjustedTargetPosition)
@@ -181,7 +191,11 @@ export function EnvironmentsPanel() {
 
                     <button
                       type="button"
-                      className={isActive ? 'rounded-full bg-success/15 px-2 py-1 text-[11px] font-medium text-success' : 'rounded-full bg-base-content/8 px-2 py-1 text-[11px] font-medium text-base-content/45'}
+                      className={
+                        isActive
+                          ? 'rounded-full bg-success/15 px-2 py-1 text-[11px] font-medium text-success'
+                          : 'rounded-full bg-base-content/8 px-2 py-1 text-[11px] font-medium text-base-content/45'
+                      }
                       onClick={() => EnvironmentCoordinator.toggleActiveEnvironment(item.id)}
                       aria-pressed={isActive}
                       title={isActive ? 'Deactivate environment' : 'Activate environment'}
@@ -189,7 +203,9 @@ export function EnvironmentsPanel() {
                       {isActive ? 'Active' : 'Inactive'}
                     </button>
                   </div>
-                  {showDropAfter ? <div className="pointer-events-none absolute inset-x-3 bottom-0 z-10 h-0.5 bg-primary" /> : null}
+                  {showDropAfter ? (
+                    <div className="pointer-events-none absolute inset-x-3 bottom-0 z-10 h-0.5 bg-primary" />
+                  ) : null}
                 </div>
               )
             })}
@@ -207,7 +223,9 @@ export function EnvironmentsPanel() {
                   <button
                     type="button"
                     className="absolute inset-0 flex items-center justify-center rounded-2xl text-base-content/65 opacity-0 transition group-hover:opacity-100 hover:bg-error/12 hover:text-error"
-                    onClick={() => EnvironmentCoordinator.requestDeleteEnvironment(selectedId, draft.name || 'Untitled environment')}
+                    onClick={() =>
+                      EnvironmentCoordinator.requestDeleteEnvironment(selectedId, draft.name || 'Untitled environment')
+                    }
                     aria-label="Delete environment"
                     title="Delete environment"
                   >
@@ -221,18 +239,51 @@ export function EnvironmentsPanel() {
                     className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
                     value={draft.name}
                     placeholder="Environment name"
-                    onChange={event => EnvironmentCoordinator.updateDraft(selectedId, { ...draft, name: event.target.value })}
+                    onChange={event =>
+                      EnvironmentCoordinator.updateDraft(selectedId, { ...draft, name: event.target.value })
+                    }
                   />
                   <SaveIndicator isDirty={isDirty} isSaving={isSaving} />
                 </div>
               </div>
 
-              <div className="mt-5 flex flex-wrap items-end gap-3">
-                <label className="block w-[180px] max-w-full">
-                  <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Priority</div>
+              <div className="mt-6 flex flex-col divide-y divide-base-content/10 border-y border-base-content/10">
+                <label className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0 ">
+                    <div className="text-sm font-medium text-base-content">Warn before request</div>
+                    <div className="mt-1 text-sm leading-6 text-base-content/55">
+                      Show a confirmation before sending when this environment is active and the app-level warning
+                      threshold is exceeded.
+                    </div>
+                  </div>
+
+                  <div className="flex justify-start md:justify-end">
+                    <input
+                      type="checkbox"
+                      className="checkbox"
+                      checked={draft.warnOnRequest}
+                      onChange={event =>
+                        EnvironmentCoordinator.updateDraft(selectedId, {
+                          ...draft,
+                          warnOnRequest: event.target.checked,
+                        })
+                      }
+                      onBlur={() => void EnvironmentCoordinator.saveEnvironment(selectedId)}
+                    />
+                  </div>
+                </label>
+
+                <label className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-base-content">Priority</div>
+                    <div className="mt-1 text-sm text-base-content/55">
+                      Higher priority wins when variables overlap.
+                    </div>
+                  </div>
+
                   <input
                     type="number"
-                    className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
+                    className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100 md:w-[180px]"
                     value={draft.priority}
                     onChange={event =>
                       EnvironmentCoordinator.updateDraft(selectedId, {
@@ -243,44 +294,48 @@ export function EnvironmentsPanel() {
                   />
                 </label>
 
-                <div className="flex items-end gap-3">
-                  <div className="block w-[180px] max-w-full">
-                    <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Color</div>
-                    <div className="flex h-11 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100 px-3">
-                      <input
-                        type="color"
-                        className="h-7 w-14 cursor-pointer appearance-none border-0 bg-transparent p-0"
-                        value={draftColorValue}
-                        onChange={event => {
+                <div className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-base-content">Color</div>
+                    <div className="mt-1 text-sm text-base-content/55">
+                      Use a custom accent to make the environment easier to spot.
+                    </div>
+                  </div>
+
+                  <div className="flex w-full items-center gap-3 md:w-auto md:min-w-[280px] md:justify-end">
+                    <input
+                      type="color"
+                      className="h-10 w-16 cursor-pointer appearance-none rounded-xl border-0 bg-transparent p-0"
+                      value={draftColorValue}
+                      onChange={event => {
+                        EnvironmentCoordinator.updateDraft(selectedId, {
+                          ...draft,
+                          color: normalizeEnvironmentColor(event.target.value),
+                        })
+                        void EnvironmentCoordinator.saveEnvironment(selectedId)
+                      }}
+                      aria-label="Environment color"
+                    />
+                    <div className="min-w-0 flex-1 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5 text-sm text-base-content/70 md:max-w-[180px]">
+                      {draft.color ?? 'No custom color'}
+                    </div>
+                    {draft.color ? (
+                      <button
+                        type="button"
+                        className="rounded-xl border border-base-content/10 px-3 py-2 text-sm text-base-content/65 transition hover:border-base-content/20 hover:bg-base-200 hover:text-base-content"
+                        onClick={() => {
                           EnvironmentCoordinator.updateDraft(selectedId, {
                             ...draft,
-                            color: normalizeEnvironmentColor(event.target.value),
+                            color: null,
                           })
                           void EnvironmentCoordinator.saveEnvironment(selectedId)
                         }}
-                        aria-label="Environment color"
-                      />
-                      <div className="min-w-0 flex-1 truncate text-sm text-base-content/70">{draft.color ?? 'No custom color'}</div>
-                      {draft.color ? (
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-lg p-1.5 text-base-content/55 transition hover:bg-base-200 hover:text-base-content"
-                          onClick={() =>
-                            {
-                              EnvironmentCoordinator.updateDraft(selectedId, {
-                                ...draft,
-                                color: null,
-                              })
-                              void EnvironmentCoordinator.saveEnvironment(selectedId)
-                            }
-                          }
-                          title="Clear custom color"
-                          aria-label="Clear custom color"
-                        >
-                          <Trash2Icon className="size-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
+                        title="Clear custom color"
+                        aria-label="Clear custom color"
+                      >
+                        Clear
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -296,7 +351,9 @@ export function EnvironmentsPanel() {
             />
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center px-8 text-sm text-base-content/45">Select an environment</div>
+          <div className="flex h-full items-center justify-center px-8 text-sm text-base-content/45">
+            Select an environment
+          </div>
         )}
       </section>
     </div>
@@ -314,7 +371,9 @@ function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: bool
           : '',
         !isSaving && !isDirty ? 'bg-base-content/12' : '',
       ].join(' ')}
-      aria-label={isSaving ? 'Saving environment' : isDirty ? 'Environment has unsaved changes' : 'Environment is saved'}
+      aria-label={
+        isSaving ? 'Saving environment' : isDirty ? 'Environment has unsaved changes' : 'Environment is saved'
+      }
       title={isSaving ? 'Saving environment' : isDirty ? 'Environment has unsaved changes' : 'Environment is saved'}
     />
   )

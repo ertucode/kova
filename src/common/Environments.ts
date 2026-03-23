@@ -3,6 +3,7 @@ export type EnvironmentRecord = {
   name: string
   variables: string
   color: string | null
+  warnOnRequest: boolean
   position: number
   priority: number
   createdAt: number
@@ -18,6 +19,7 @@ export type UpdateEnvironmentInput = {
   name: string
   variables: string
   color: string | null
+  warnOnRequest: boolean
   priority: number
 }
 

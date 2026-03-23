@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckIcon, PinIcon, PinOffIcon, Minimize2Icon, Maximize2Icon } from 'lucide-react'
+import { CheckIcon, PinIcon, PinOffIcon, Minimize2Icon, Maximize2Icon, CogIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { windowStore, WindowStoreHelpers } from '@/global/windowStore'
 import { environmentEditorStore } from '@/folders/environmentEditorStore'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { folderExplorerEditorStore } from '@/folders/folderExplorerEditorStore'
+import { dialogActions } from '@/global/dialogStore'
+import { AppSettingsDialog } from '@/global/AppSettingsDialog'
 
 export function CustomTitleBar() {
   const state = useSelector(windowStore, s => s.context)
@@ -76,7 +78,11 @@ export function CustomTitleBar() {
               title="Toggle active environments"
             >
               <div className="flex max-w-[520px] min-w-0 items-center overflow-hidden rounded-full">
-                {activeEnvironments.length > 0 ? <ActiveEnvironmentTokens environments={activeEnvironments} /> : <span className="px-1">No Active Envs</span>}
+                {activeEnvironments.length > 0 ? (
+                  <ActiveEnvironmentTokens environments={activeEnvironments} />
+                ) : (
+                  <span className="px-1">No Active Envs</span>
+                )}
               </div>
             </button>
 
@@ -104,7 +110,9 @@ export function CustomTitleBar() {
                             <div
                               className={[
                                 'flex size-4 shrink-0 items-center justify-center rounded border',
-                                isActive ? 'border-success/30 bg-success/15 text-success' : 'border-base-content/12 text-transparent',
+                                isActive
+                                  ? 'border-success/30 bg-success/15 text-success'
+                                  : 'border-base-content/12 text-transparent',
                               ].join(' ')}
                             >
                               <CheckIcon className="size-3" />
@@ -139,6 +147,14 @@ export function CustomTitleBar() {
           } as React.CSSProperties
         }
       >
+        <button
+          className="btn btn-xs btn-soft btn-info"
+          onClick={() => dialogActions.open({ component: AppSettingsDialog, props: {} })}
+          title="Open settings"
+        >
+          <CogIcon className="size-4" />
+        </button>
+
         {/* Compact window size toggle */}
         <button
           className={`btn btn-xs ${isCompact ? 'btn-info' : 'btn-soft btn-info'}`}
@@ -165,7 +181,11 @@ export function CustomTitleBar() {
   )
 }
 
-function ActiveEnvironmentTokens({ environments }: { environments: Array<{ id: string; name: string; color: string | null }> }) {
+function ActiveEnvironmentTokens({
+  environments,
+}: {
+  environments: Array<{ id: string; name: string; color: string | null }>
+}) {
   return (
     <>
       {environments.map((environment, index) => (

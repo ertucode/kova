@@ -21,6 +21,7 @@ type PostmanEnvironment = {
   name?: string
   values?: Array<{ key?: string; value?: string; enabled?: boolean; type?: string; _kova?: { description?: unknown } }>
   color?: unknown
+  _kova?: { warnOnRequest?: unknown }
   id?: unknown
   _postman_variable_scope?: unknown
   _postman_exported_at?: unknown
@@ -30,6 +31,7 @@ type PostmanEnvironment = {
 type Analysis = {
   environmentName: string
   color: string | null
+  warnOnRequest: boolean
   variableCount: number
   warnings: PostmanEnvironmentImportWarning[]
   variables: string
@@ -73,6 +75,7 @@ export async function importPostmanEnvironment(input: ImportPostmanEnvironmentIn
       name: environmentName,
       variables: analysis.variables,
       color: analysis.color,
+      warnOnRequest: analysis.warnOnRequest,
       priority: created.data.priority,
     })
     if (!updated.success) {
@@ -94,6 +97,7 @@ export async function importPostmanEnvironment(input: ImportPostmanEnvironmentIn
 export function analyzeEnvironmentDocument(document: PostmanEnvironment): Analysis {
   const environmentName = sanitizeName(document.name, 'Imported Environment')
   const color = typeof document.color === 'string' ? normalizeEnvironmentColor(document.color) : null
+  const warnOnRequest = document._kova?.warnOnRequest === true
   const rows: KeyValueRow[] = []
   const warnings = new Map<PostmanEnvironmentImportWarningCode, { count: number; examples: string[] }>()
 
@@ -132,6 +136,7 @@ export function analyzeEnvironmentDocument(document: PostmanEnvironment): Analys
   return {
     environmentName,
     color,
+    warnOnRequest,
     variableCount: rows.length,
     warnings: buildWarnings(warnings),
     variables,
