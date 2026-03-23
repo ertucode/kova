@@ -248,6 +248,14 @@ export function CodeEditor({
       syntaxHighlighting(editorHighlightStyle),
     ]
 
+    nextExtensions.push(
+      EditorView.theme({
+        '& .cm-selectionMatch-main': {
+          backgroundColor: 'transparent !important',
+        },
+      })
+    )
+
     if (size === 'small') {
       nextExtensions.push(
         EditorView.theme({
