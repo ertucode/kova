@@ -43,6 +43,9 @@ export const requests = sqliteTable(
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
     responseVisualizer: text('response_visualizer').notNull().default(''),
+    responseTableAccessor: text('response_table_accessor').notNull().default(''),
+    preferredResponseBodyView: text('preferred_response_body_view').notNull().default('raw'),
+    // Legacy column kept to avoid destructive table rebuild migration. Unused by app code.
     prefersResponseVisualizer: integer('prefers_response_visualizer', { mode: 'boolean' }).notNull().default(false),
     headers: text('headers').notNull().default(''),
     body: text('body').notNull().default(''),
@@ -59,6 +62,7 @@ export const requests = sqliteTable(
     check('requests_request_type_check', sql`${table.requestType} in ('http', 'websocket')`),
     check('requests_body_type_check', sql`${table.bodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`),
     check('requests_raw_type_check', sql`${table.rawType} in ('json', 'text')`),
+    check('requests_preferred_response_body_view_check', sql`${table.preferredResponseBodyView} in ('raw', 'table', 'visualizer')`),
   ]
 )
 

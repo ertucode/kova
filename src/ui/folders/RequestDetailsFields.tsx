@@ -799,12 +799,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               <>
                 <ResponseBodyPanel
                   value={formattedResponseBody}
+                  rawBody={response?.body ?? ''}
                   description="Response body will appear here."
                   contentType={responseContentType}
                   responseVisualizer={draft.responseVisualizer}
-                  prefersResponseVisualizer={draft.prefersResponseVisualizer}
+                  responseTableAccessor={draft.responseTableAccessor}
+                  preferredResponseBodyView={draft.preferredResponseBodyView}
                   requestSelection={selectedRequestId ? { itemType: 'request', id: selectedRequestId } : null}
                   currentRequestDraft={draft}
+                  onUpdateResponseTableAccessor={value =>
+                    FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseTableAccessor: value })
+                  }
                   environments={visualizerEnvironments}
                   response={response}
                   responseError={responseError}
@@ -1000,24 +1005,30 @@ function getMethodTone(method: RequestMethod) {
 
 function ResponseBodyPanel({
   value,
+  rawBody,
   description,
   contentType,
   responseVisualizer,
-  prefersResponseVisualizer,
+  responseTableAccessor,
+  preferredResponseBodyView,
   requestSelection,
   currentRequestDraft,
+  onUpdateResponseTableAccessor,
   environments,
   response,
   responseError,
   onSaveAsExample,
 }: {
   value: string
+  rawBody: string
   description: string
   contentType: string | null
   responseVisualizer: string
-  prefersResponseVisualizer: boolean
+  responseTableAccessor: string
+  preferredResponseBodyView: 'raw' | 'table' | 'visualizer'
   requestSelection: { itemType: 'request'; id: string } | null
   currentRequestDraft: RequestDetailsDraft
+  onUpdateResponseTableAccessor: (value: string) => void
   environments: Array<{
     id: string
     name: string
@@ -1034,20 +1045,23 @@ function ResponseBodyPanel({
   const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
   const hasResponseVisualizer = responseVisualizer.trim().length > 0
   const canRenderVisualizer = hasResponseVisualizer && response !== null
-  const [viewMode, setViewMode] = useState<'raw' | 'visualizer'>(
-    hasResponseVisualizer && prefersResponseVisualizer ? 'visualizer' : 'raw'
+  const parsedStructuredResponse = useMemo(() => parseStructuredResponse(rawBody, contentType), [contentType, rawBody])
+  const tableResolution = useMemo(
+    () => resolveResponseTableRows(parsedStructuredResponse, responseTableAccessor),
+    [parsedStructuredResponse, responseTableAccessor]
   )
+  const [viewMode, setViewMode] = useState<'raw' | 'table' | 'visualizer'>(preferredResponseBodyView)
 
   useEffect(() => {
-    setViewMode(hasResponseVisualizer && prefersResponseVisualizer ? 'visualizer' : 'raw')
-  }, [hasResponseVisualizer, prefersResponseVisualizer])
+    setViewMode(preferredResponseBodyView)
+  }, [preferredResponseBodyView])
 
-  const updatePreferredVisualizer = async (nextPreferredVisualizer: boolean) => {
+  const updatePreferredResponseBodyView = async (nextView: 'raw' | 'table' | 'visualizer') => {
     if (!requestSelection) {
       return false
     }
 
-    return await FolderExplorerCoordinator.updateRequestResponseVisualizerPreference(requestSelection, nextPreferredVisualizer)
+    return await FolderExplorerCoordinator.updateRequestResponseBodyViewPreference(requestSelection, nextView)
   }
 
   return (
@@ -1055,44 +1069,58 @@ function ResponseBodyPanel({
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="text-sm font-medium text-base-content">Response Body</div>
         <div className="flex gap-2 items-center">
-          {hasResponseVisualizer ? (
-            <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
-              <button
-                type="button"
-                className={[
-                  'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                  viewMode === 'visualizer'
-                    ? 'bg-base-200/80 text-base-content'
-                    : 'text-base-content/55 hover:text-base-content',
-                ].join(' ')}
-                onClick={() => {
-                  void updatePreferredVisualizer(true).then(success => {
-                    if (success) {
-                      setViewMode('visualizer')
-                    }
-                  })
-                }}
-              >
-                Visualizer
-              </button>
-              <button
-                type="button"
-                className={[
-                  'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                  viewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
-                ].join(' ')}
-                onClick={() => {
-                  void updatePreferredVisualizer(false).then(success => {
-                    if (success) {
-                      setViewMode('raw')
-                    }
-                  })
-                }}
-              >
-                Raw
-              </button>
-            </div>
-          ) : null}
+          <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+            <button
+              type="button"
+              className={[
+                'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                viewMode === 'table' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+              ].join(' ')}
+              onClick={() => {
+                void updatePreferredResponseBodyView('table').then(success => {
+                  if (success) {
+                    setViewMode('table')
+                  }
+                })
+              }}
+            >
+              Table
+            </button>
+            <button
+              type="button"
+              className={[
+                'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                viewMode === 'visualizer'
+                  ? 'bg-base-200/80 text-base-content'
+                  : 'text-base-content/55 hover:text-base-content',
+              ].join(' ')}
+              onClick={() => {
+                void updatePreferredResponseBodyView('visualizer').then(success => {
+                  if (success) {
+                    setViewMode('visualizer')
+                  }
+                })
+              }}
+            >
+              Visualizer
+            </button>
+            <button
+              type="button"
+              className={[
+                'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                viewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+              ].join(' ')}
+              onClick={() => {
+                void updatePreferredResponseBodyView('raw').then(success => {
+                  if (success) {
+                    setViewMode('raw')
+                  }
+                })
+              }}
+            >
+              Raw
+            </button>
+          </div>
           <button
             type="button"
             className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
@@ -1128,6 +1156,47 @@ function ResponseBodyPanel({
         </div>
       ) : viewMode === 'visualizer' && hasResponseVisualizer ? (
         <div className="mt-2 text-sm text-base-content/50">Send the request to render the response visualizer.</div>
+      ) : viewMode === 'table' ? (
+        <div className="min-h-0 flex-1 overflow-hidden pt-3">
+          <div className="flex h-full min-h-0 flex-col gap-3">
+            <label className="flex shrink-0 flex-col gap-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">
+                Table Accessor
+              </span>
+              <input
+                type="text"
+                value={responseTableAccessor}
+                onChange={event => onUpdateResponseTableAccessor(event.target.value)}
+                placeholder={tableResolution.detectedAccessor ?? 'Auto detect or use r.items[0].children'}
+                className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content outline-none transition placeholder:text-base-content/30 focus:border-base-content/20"
+              />
+            </label>
+
+            {tableResolution.rows.length > 0 ? (
+              <ResponseTable rows={tableResolution.rows} />
+            ) : rawBody.trim() && !parsedStructuredResponse ? (
+              <div className="rounded-xl border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning-content/90">
+                Table view only supports JSON or XML responses. Switch to Raw for this response.
+              </div>
+            ) : value ? (
+              <div className="min-h-0 flex-1 overflow-hidden h-full">
+                <CodeEditor
+                  value={value}
+                  language={language}
+                  readOnly
+                  showFoldGutter={supportsCollapsing}
+                  size="small"
+                  className="border-0 h-full"
+                  hideFocusOutline
+                  onChange={() => undefined}
+                  compact
+                />
+              </div>
+            ) : (
+              <div className="mt-2 text-sm text-base-content/50">{description}</div>
+            )}
+          </div>
+        </div>
       ) : value ? (
         <div className="min-h-0 flex-1 overflow-hidden h-full">
           <CodeEditor
@@ -1145,6 +1214,56 @@ function ResponseBodyPanel({
       ) : (
         <div className="mt-2 text-sm text-base-content/50">{description}</div>
       )}
+    </div>
+  )
+}
+
+function ResponseTable({ rows }: { rows: Array<Record<string, unknown>> }) {
+  const columns = useMemo(() => {
+    const columnSet = new Set<string>()
+    for (const row of rows) {
+      for (const key of Object.keys(row)) {
+        columnSet.add(key)
+      }
+    }
+
+    return Array.from(columnSet)
+  }, [rows])
+
+  if (rows.length === 0 || columns.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-base-content/10 bg-base-100/70">
+      <table className="w-full border-collapse text-sm">
+        <thead className="sticky top-0 bg-base-200/80 backdrop-blur">
+          <tr>
+            {columns.map(column => (
+              <th
+                key={column}
+                className="border-b border-base-content/10 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55"
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={String(row.id ?? row.key ?? rowIndex)} className="align-top odd:bg-base-100/35">
+              {columns.map(column => (
+                <td
+                  key={`${rowIndex}-${column}`}
+                  className="border-b border-base-content/8 px-3 py-2 text-base-content last:border-b-base-content/10"
+                >
+                  <span className="break-words whitespace-pre-wrap">{formatResponseTableValue(row[column])}</span>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -1488,6 +1607,282 @@ function formatXml(xml: string): string {
   }
 
   return formatted.trim()
+}
+
+type ParsedStructuredResponse = {
+  format: 'json' | 'xml'
+  root: unknown
+}
+
+type ResponseTableResolution = {
+  isAvailable: boolean
+  rows: Array<Record<string, unknown>>
+  detectedAccessor: string | null
+}
+
+function parseStructuredResponse(body: string, contentType: string | null): ParsedStructuredResponse | null {
+  if (!body.trim()) {
+    return null
+  }
+
+  const language = detectResponseLanguage(contentType, body)
+
+  if (language === 'json') {
+    try {
+      return { format: 'json', root: JSON.parse(body) }
+    } catch {
+      return null
+    }
+  }
+
+  if (language === 'xml') {
+    return parseXmlToStructuredResponse(body)
+  }
+
+  return null
+}
+
+function parseXmlToStructuredResponse(xml: string): ParsedStructuredResponse | null {
+  try {
+    const parser = new DOMParser()
+    const documentNode = parser.parseFromString(xml, 'application/xml')
+    const parseError = documentNode.querySelector('parsererror')
+    if (parseError) {
+      return null
+    }
+
+    const rootElement = documentNode.documentElement
+    if (!rootElement) {
+      return null
+    }
+
+    return {
+      format: 'xml',
+      root: {
+        [rootElement.nodeName]: xmlElementToJson(rootElement),
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
+function xmlElementToJson(element: Element): unknown {
+  const attributes = Object.fromEntries(Array.from(element.attributes).map(attribute => [`@${attribute.name}`, attribute.value]))
+  const childElements = Array.from(element.children)
+  const textValue = element.textContent?.trim() ?? ''
+
+  if (childElements.length === 0) {
+    if (Object.keys(attributes).length === 0) {
+      return textValue
+    }
+
+    return textValue ? { ...attributes, '#text': textValue } : attributes
+  }
+
+  const children: Record<string, unknown> = { ...attributes }
+
+  for (const child of childElements) {
+    const nextValue = xmlElementToJson(child)
+    const existingValue = children[child.nodeName]
+
+    if (existingValue === undefined) {
+      children[child.nodeName] = nextValue
+      continue
+    }
+
+    children[child.nodeName] = Array.isArray(existingValue) ? [...existingValue, nextValue] : [existingValue, nextValue]
+  }
+
+  const directTextNodes = Array.from(element.childNodes)
+    .filter(node => node.nodeType === Node.TEXT_NODE)
+    .map(node => node.textContent?.trim() ?? '')
+    .filter(Boolean)
+
+  if (directTextNodes.length > 0) {
+    children['#text'] = directTextNodes.join(' ')
+  }
+
+  return children
+}
+
+function resolveResponseTableRows(
+  parsedStructuredResponse: ParsedStructuredResponse | null,
+  accessor: string
+): ResponseTableResolution {
+  if (!parsedStructuredResponse) {
+    return { isAvailable: false, rows: [], detectedAccessor: null }
+  }
+
+  const detectedMatch = findFirstObjectArray(parsedStructuredResponse.root)
+  const candidate = accessor.trim() ? resolveAccessor(parsedStructuredResponse.root, accessor.trim()) : detectedMatch?.value
+  const rows = normalizeResponseTableRows(candidate)
+
+  return {
+    isAvailable: true,
+    rows,
+    detectedAccessor: detectedMatch?.path ?? null,
+  }
+}
+
+function resolveAccessor(root: unknown, accessor: string): unknown {
+  const segments = parseAccessorSegments(accessor)
+  if (segments === null) {
+    return undefined
+  }
+
+  let current: unknown = root
+
+  for (const segment of segments) {
+    if (typeof segment === 'number') {
+      if (!Array.isArray(current) || segment < 0 || segment >= current.length) {
+        return undefined
+      }
+
+      current = current[segment]
+      continue
+    }
+
+    if (!isRecordLike(current) || !(segment in current)) {
+      return undefined
+    }
+
+    current = current[segment]
+  }
+
+  return current
+}
+
+function parseAccessorSegments(accessor: string): Array<string | number> | null {
+  const trimmed = accessor.trim()
+  if (!trimmed) {
+    return []
+  }
+
+  if (trimmed === 'r') {
+    return []
+  }
+
+  if (!trimmed.startsWith('r')) {
+    return null
+  }
+
+  const segments: Array<string | number> = []
+  let index = 1
+
+  while (index < trimmed.length) {
+    const currentChar = trimmed[index]
+
+    if (currentChar === '.') {
+      index += 1
+      const start = index
+      while (index < trimmed.length && /[A-Za-z0-9_$-]/.test(trimmed[index] ?? '')) {
+        index += 1
+      }
+
+      if (start === index) {
+        return null
+      }
+
+      segments.push(trimmed.slice(start, index))
+      continue
+    }
+
+    if (currentChar === '[') {
+      const closingIndex = trimmed.indexOf(']', index)
+      if (closingIndex < 0) {
+        return null
+      }
+
+      const innerValue = trimmed.slice(index + 1, closingIndex).trim()
+      if (/^\d+$/.test(innerValue)) {
+        segments.push(Number(innerValue))
+      } else {
+        const quotedMatch = innerValue.match(/^(['"])(.*)\1$/)
+        if (!quotedMatch) {
+          return null
+        }
+
+        segments.push(quotedMatch[2])
+      }
+
+      index = closingIndex + 1
+      continue
+    }
+
+    return null
+  }
+
+  return segments
+}
+
+function findFirstObjectArray(root: unknown): { path: string; value: unknown } | null {
+  const queue: Array<{ value: unknown; path: string }> = [{ value: root, path: 'r' }]
+  const visited = new Set<unknown>()
+
+  while (queue.length > 0) {
+    const currentEntry = queue.shift()
+    const current = currentEntry?.value
+
+    if (!currentEntry || current == null || visited.has(current)) {
+      continue
+    }
+
+    if (typeof current === 'object') {
+      visited.add(current)
+    }
+
+    if (Array.isArray(current) && current.length > 0 && current.every(isRecordLike)) {
+      return currentEntry
+    }
+
+    if (Array.isArray(current)) {
+      current.forEach((item, index) => {
+        queue.push({ value: item, path: `${currentEntry.path}[${index}]` })
+      })
+      continue
+    }
+
+    if (isRecordLike(current)) {
+      Object.entries(current).forEach(([key, value]) => {
+        queue.push({ value, path: `${currentEntry.path}${formatAccessorSegment(key)}` })
+      })
+    }
+  }
+
+  return null
+}
+
+function formatAccessorSegment(key: string) {
+  return /^[A-Za-z_$][A-Za-z0-9_$-]*$/.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`
+}
+
+function normalizeResponseTableRows(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter(isRecordLike)
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function formatResponseTableValue(value: unknown) {
+  if (value == null) {
+    return ''
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
 }
 
 function getResponseContentType(headers: string) {

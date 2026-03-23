@@ -7,12 +7,13 @@ import type {
   DuplicateRequestInput,
   GetRequestInput,
   HttpRequestRecord,
+  ResponseBodyView,
   RequestBodyType,
   RequestMethod,
   RequestRawType,
   RequestType,
   UpdateRequestInput,
-  UpdateRequestResponseVisualizerPreferenceInput,
+  UpdateRequestResponseBodyViewPreferenceInput,
 } from '../../common/Requests.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
@@ -27,6 +28,7 @@ const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE
 const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www-form-urlencoded', 'none']
 const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
 const REQUEST_TYPES: RequestType[] = ['http', 'websocket']
+const RESPONSE_BODY_VIEWS: ResponseBodyView[] = ['raw', 'table', 'visualizer']
 
 export async function createRequest(input: CreateRequestInput): Promise<GenericResult<HttpRequestRecord>> {
   const db = getDb()
@@ -57,6 +59,8 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         preRequestScript: '',
         postRequestScript: '',
         responseVisualizer: '',
+        responseTableAccessor: '',
+        preferredResponseBodyView: 'raw',
         prefersResponseVisualizer: false,
         headers: '',
         body: '',
@@ -134,6 +138,10 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
       return GenericError.Message('Invalid request raw type')
     }
 
+    if (!RESPONSE_BODY_VIEWS.includes(input.preferredResponseBodyView)) {
+      return GenericError.Message('Invalid preferred response body view')
+    }
+
     const result = db
       .update(requests)
       .set({
@@ -147,6 +155,8 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
         preRequestScript: input.preRequestScript,
         postRequestScript: input.postRequestScript,
         responseVisualizer: input.responseVisualizer,
+        responseTableAccessor: input.responseTableAccessor,
+        preferredResponseBodyView: input.preferredResponseBodyView,
         headers: input.headers,
         body: input.body,
         bodyType: input.bodyType,
@@ -177,15 +187,19 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
   }
 }
 
-export async function updateRequestResponseVisualizerPreference(
-  input: UpdateRequestResponseVisualizerPreferenceInput
+export async function updateRequestResponseBodyViewPreference(
+  input: UpdateRequestResponseBodyViewPreferenceInput
 ): Promise<GenericResult<HttpRequestRecord>> {
   const db = getDb()
+
+  if (!RESPONSE_BODY_VIEWS.includes(input.preferredResponseBodyView)) {
+    return GenericError.Message('Invalid preferred response body view')
+  }
 
   try {
     const result = db
       .update(requests)
-      .set({ prefersResponseVisualizer: input.prefersResponseVisualizer })
+      .set({ preferredResponseBodyView: input.preferredResponseBodyView })
       .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
       .run()
 
@@ -312,7 +326,10 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     preRequestScript: request.preRequestScript,
     postRequestScript: request.postRequestScript,
     responseVisualizer: request.responseVisualizer,
-    prefersResponseVisualizer: request.prefersResponseVisualizer,
+    responseTableAccessor: request.responseTableAccessor,
+    preferredResponseBodyView: (RESPONSE_BODY_VIEWS.includes(request.preferredResponseBodyView as ResponseBodyView)
+      ? request.preferredResponseBodyView
+      : 'raw') as ResponseBodyView,
     headers: request.headers,
     body: request.body,
     bodyType: request.bodyType as RequestBodyType,

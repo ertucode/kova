@@ -127,6 +127,20 @@
       "when": 1774278834426,
       "tag": "0017_dry_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1774299425549,
+      "tag": "0018_orange_photon",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1774302440011,
+      "tag": "0019_quick_solo",
+      "breakpoints": true
     }
   ]
 }

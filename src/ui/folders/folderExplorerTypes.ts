@@ -52,7 +52,8 @@ export type RequestDetailsDraft = {
   preRequestScript: string
   postRequestScript: string
   responseVisualizer: string
-  prefersResponseVisualizer: boolean
+  responseTableAccessor: string
+  preferredResponseBodyView: 'raw' | 'table' | 'visualizer'
   headers: string
   body: string
   bodyType: RequestBodyType

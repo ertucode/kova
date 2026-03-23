@@ -1,3 +1,3 @@
 - implement undo
 - warn on request (10 secs)
-- response table viewer
+- tag environments so you do not have same type opened

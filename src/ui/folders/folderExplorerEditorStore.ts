@@ -15,6 +15,7 @@ import {
 import type { RequestType } from '@common/Requests'
 
 const REQUEST_TYPES: RequestType[] = ['http', 'websocket']
+const RESPONSE_BODY_VIEWS = ['raw', 'table', 'visualizer'] as const
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 const DEFAULT_RESPONSE_PANE_HEIGHT = 320
@@ -64,7 +65,8 @@ const requestDetailsDraftSchema = z.object({
   preRequestScript: z.string(),
   postRequestScript: z.string(),
   responseVisualizer: z.string().default(''),
-  prefersResponseVisualizer: z.boolean().default(false),
+  responseTableAccessor: z.string().default(''),
+  preferredResponseBodyView: z.enum(RESPONSE_BODY_VIEWS).default('raw'),
   headers: z.string(),
   body: z.string(),
   bodyType: z.enum(REQUEST_BODY_TYPES),

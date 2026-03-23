@@ -272,14 +272,17 @@ export namespace FolderExplorerCoordinator {
     persistUnsavedDrafts()
   }
 
-  export async function updateRequestResponseVisualizerPreference(selection: Selection, prefersResponseVisualizer: boolean) {
+  export async function updateRequestResponseBodyViewPreference(
+    selection: Selection,
+    preferredResponseBodyView: 'raw' | 'table' | 'visualizer'
+  ) {
     if (selection.itemType !== 'request') {
       return false
     }
 
-    const result = await getWindowElectron().updateRequestResponseVisualizerPreference({
+    const result = await getWindowElectron().updateRequestResponseBodyViewPreference({
       id: selection.id,
-      prefersResponseVisualizer,
+      preferredResponseBodyView,
     })
 
     if (!result.success) {
@@ -289,10 +292,11 @@ export namespace FolderExplorerCoordinator {
 
     const key = toSelectionKey(selection)
     const entry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
-    const base = entry.base?.itemType === 'request' ? { ...entry.base, prefersResponseVisualizer } : toRequestDetailsDraft(result.data)
+    const base =
+      entry.base?.itemType === 'request' ? { ...entry.base, preferredResponseBodyView } : toRequestDetailsDraft(result.data)
     const current =
       entry.current?.itemType === 'request'
-        ? { ...entry.current, prefersResponseVisualizer }
+        ? { ...entry.current, preferredResponseBodyView }
         : toRequestDetailsDraft(result.data)
 
     folderExplorerEditorStore.trigger.entrySaved({
@@ -1089,6 +1093,8 @@ async function saveItem(selection: Selection) {
             preRequestScript: draft.preRequestScript,
             postRequestScript: draft.postRequestScript,
             responseVisualizer: draft.responseVisualizer,
+            responseTableAccessor: draft.responseTableAccessor,
+            preferredResponseBodyView: draft.preferredResponseBodyView,
             headers: draft.headers,
             body: draft.body,
             bodyType: draft.bodyType,

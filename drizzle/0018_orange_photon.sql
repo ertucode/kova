@@ -1,0 +1,1 @@
+ALTER TABLE `requests` ADD `response_table_accessor` text DEFAULT '' NOT NULL;

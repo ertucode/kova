@@ -23,7 +23,7 @@ import {
   duplicateRequest,
   getRequest,
   updateRequest,
-  updateRequestResponseVisualizerPreference,
+  updateRequestResponseBodyViewPreference,
 } from './db/requests.js'
 import {
   createRequestExample,
@@ -321,8 +321,8 @@ app.on('ready', () => {
     return updateRequest(input)
   })
 
-  ipcHandle('updateRequestResponseVisualizerPreference', async input => {
-    return updateRequestResponseVisualizerPreference(input)
+  ipcHandle('updateRequestResponseBodyViewPreference', async input => {
+    return updateRequestResponseBodyViewPreference(input)
   })
 
   ipcHandle('deleteRequest', async input => {

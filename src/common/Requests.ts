@@ -9,6 +9,8 @@ export type RequestBodyType = 'raw' | 'form-data' | 'x-www-form-urlencoded' | 'n
 
 export type RequestRawType = 'json' | 'text'
 
+export type ResponseBodyView = 'raw' | 'table' | 'visualizer'
+
 export type HttpRequestRecord = {
   id: string
   name: string
@@ -21,7 +23,8 @@ export type HttpRequestRecord = {
   preRequestScript: string
   postRequestScript: string
   responseVisualizer: string
-  prefersResponseVisualizer: boolean
+  responseTableAccessor: string
+  preferredResponseBodyView: ResponseBodyView
   headers: string
   body: string
   bodyType: RequestBodyType
@@ -54,6 +57,8 @@ export type UpdateRequestInput = {
   preRequestScript: string
   postRequestScript: string
   responseVisualizer: string
+  responseTableAccessor: string
+  preferredResponseBodyView: ResponseBodyView
   headers: string
   body: string
   bodyType: RequestBodyType
@@ -62,9 +67,9 @@ export type UpdateRequestInput = {
   saveToHistory: boolean
 }
 
-export type UpdateRequestResponseVisualizerPreferenceInput = {
+export type UpdateRequestResponseBodyViewPreferenceInput = {
   id: string
-  prefersResponseVisualizer: boolean
+  preferredResponseBodyView: ResponseBodyView
 }
 
 export type DeleteRequestInput = {
