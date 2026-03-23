@@ -256,6 +256,22 @@ export namespace FolderExplorerCoordinator {
     persistUnsavedDrafts()
   }
 
+  export function updateDraft(selection: Selection, draft: DetailsDraft | null) {
+    if (!draft) return
+
+    folderExplorerEditorStore.trigger.entryDraftUpdated({
+      key: toSelectionKey(selection),
+      draft,
+    })
+
+    const currentSelection = folderExplorerEditorStore.getSnapshot().context.selected
+    if (currentSelection?.itemType === selection.itemType && currentSelection.id === selection.id) {
+      void pinActivePreviewTabIfDirty()
+    }
+
+    persistUnsavedDrafts()
+  }
+
   export function discardSelectedChanges() {
     const selection = folderExplorerEditorStore.getSnapshot().context.selected
     if (!selection) {

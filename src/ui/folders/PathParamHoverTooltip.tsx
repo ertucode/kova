@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export function PathParamHoverTooltip({
   paramName,
@@ -12,15 +12,23 @@ export function PathParamHoverTooltip({
   onChangeValue: (value: string) => void
 }) {
   const [draftValue, setDraftValue] = useState(value)
+  const lastCommittedValueRef = useRef(value)
+  const hasPendingCommitRef = useRef(false)
 
   useEffect(() => {
     setDraftValue(value)
+    lastCommittedValueRef.current = value
+    hasPendingCommitRef.current = false
   }, [value])
 
   const commit = () => {
-    window.setTimeout(() => {
-      onChangeValue(draftValue)
-    }, 0)
+    if (!hasPendingCommitRef.current || draftValue === lastCommittedValueRef.current) {
+      return
+    }
+
+    lastCommittedValueRef.current = draftValue
+    hasPendingCommitRef.current = false
+    onChangeValue(draftValue)
   }
 
   return (
@@ -36,11 +44,16 @@ export function PathParamHoverTooltip({
           className="input input-sm h-10 w-full rounded-xl border-base-content/10 bg-base-100/85"
           value={draftValue}
           placeholder="Set value"
-          onChange={event => setDraftValue(event.target.value)}
+          onChange={event => {
+            const nextValue = event.target.value
+            setDraftValue(nextValue)
+            hasPendingCommitRef.current = nextValue !== lastCommittedValueRef.current
+          }}
           onBlur={commit}
           onKeyDown={event => {
             if (event.key === 'Enter') {
               event.preventDefault()
+              event.stopPropagation()
               commit()
             }
           }}

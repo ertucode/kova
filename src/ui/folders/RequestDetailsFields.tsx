@@ -53,9 +53,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const [metaTab, setMetaTab] = useState<'overview' | 'search-params' | 'scripts'>('overview')
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
   const metaTabByRequestIdRef = useRef<Record<string, 'overview' | 'search-params' | 'scripts'>>({})
+  const draftRef = useRef(draft)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
+  const selectedRequestIdRef = useRef<string | null>(selectedRequestId)
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const responsePaneHeight = useSelector(folderExplorerEditorStore, state => state.context.responsePaneHeight)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
@@ -69,6 +71,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const sseStream = useSelector(requestExecutionStore, state =>
     selectedRequestId ? (state.context.httpSseByRequestId[selectedRequestId] ?? null) : null
   )
+
+  draftRef.current = draft
+  selectedRequestIdRef.current = selectedRequestId
 
   const activeEnvironmentNames = useMemo(
     () =>
@@ -171,15 +176,29 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getPathParamDescription: name =>
           pathParamRowsRef.current.find(row => row.key.trim() === name)?.description ?? '',
         onChangeValue: (name, value) => {
-          const nextRows = pathParamRowsRef.current.map(row => (row.key.trim() === name ? { ...row, value } : row))
+          const requestId = selectedRequestId
+          const latestDraft = draftRef.current
+          if (!requestId || latestDraft.itemType !== 'request' || selectedRequestIdRef.current !== requestId) {
+            return
+          }
 
-          updatePathParams(stringifyKeyValueRows(nextRows))
+          const nextRows = pathParamRowsRef.current.map(row => (row.key.trim() === name ? { ...row, value } : row))
+          const nextPathParams = stringifyKeyValueRows(nextRows)
+
+          FolderExplorerCoordinator.updateDraft(
+            { itemType: 'request', id: requestId },
+            {
+              ...latestDraft,
+              pathParams: nextPathParams,
+              url: syncUrlWithSearchParams(syncUrlWithPathParams(latestDraft.url, nextPathParams), latestDraft.searchParams),
+            }
+          )
         },
       }),
       searchParamHighlightExtension(),
       ...variableEditorExtensions,
     ],
-    [variableEditorExtensions]
+    [selectedRequestId, variableEditorExtensions]
   )
 
   const preRequestScriptExtensions = useMemo(

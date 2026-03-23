@@ -1,1 +1,3 @@
 - implement undo
+- path param değiştirmek broken
+- warn on request (10 secs)

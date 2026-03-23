@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpRightIcon } from 'lucide-react'
 export type VariableTooltipEnvironmentRow = {
   id: string
@@ -27,18 +27,22 @@ export function VariableHoverTooltip({
 }) {
   const [draftRows, setDraftRows] = useState(rows)
   const activeCount = useMemo(() => draftRows.filter(row => row.isActive).length, [draftRows])
+  const lastCommittedValuesRef = useRef(new Map<string, string>())
 
   useEffect(() => {
     setDraftRows(rows)
+    lastCommittedValuesRef.current = new Map(rows.map(row => [row.id, row.value]))
   }, [rows])
 
   const commitValue = (environmentId: string) => {
     const nextValue = draftRows.find(row => row.id === environmentId)?.value ?? ''
+    if (lastCommittedValuesRef.current.get(environmentId) === nextValue) {
+      return
+    }
 
-    window.setTimeout(() => {
-      onChangeValue(environmentId, nextValue)
-      void onSaveValue(environmentId)
-    }, 0)
+    lastCommittedValuesRef.current.set(environmentId, nextValue)
+    onChangeValue(environmentId, nextValue)
+    void onSaveValue(environmentId)
   }
 
   return (
@@ -104,6 +108,7 @@ export function VariableHoverTooltip({
               placeholder="Set value"
               onChange={event => {
                 const nextValue = event.target.value
+                lastCommittedValuesRef.current.delete(row.id)
                 setDraftRows(current =>
                   current.map(currentRow => (currentRow.id === row.id ? { ...currentRow, value: nextValue } : currentRow))
                 )
@@ -114,6 +119,7 @@ export function VariableHoverTooltip({
               onKeyDown={event => {
                 if (event.key === 'Enter') {
                   event.preventDefault()
+                  event.stopPropagation()
                   commitValue(row.id)
                 }
               }}

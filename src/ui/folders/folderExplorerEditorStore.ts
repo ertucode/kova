@@ -256,6 +256,22 @@ export const folderExplorerEditorStore = createStore({
         },
       }
     },
+    entryDraftUpdated: (context, event: { key: string; draft: DetailsDraft }) => {
+      const entry = context.entries[event.key] ?? createEmptyEntry()
+
+      return {
+        ...context,
+        entries: {
+          ...context.entries,
+          [event.key]: {
+            ...entry,
+            current: event.draft,
+            error: null,
+            version: entry.version + 1,
+          },
+        },
+      }
+    },
     entryResetToBase: (context, event: { key: string }) => {
       const entry = context.entries[event.key] ?? createEmptyEntry()
       if (!entry.base) {
