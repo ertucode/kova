@@ -12,6 +12,7 @@ import type {
   RequestRawType,
   RequestType,
   UpdateRequestInput,
+  UpdateRequestResponseVisualizerPreferenceInput,
 } from '../../common/Requests.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
@@ -55,6 +56,8 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         authJson: serializeHttpAuth(createDefaultHttpAuth()),
         preRequestScript: '',
         postRequestScript: '',
+        responseVisualizer: '',
+        prefersResponseVisualizer: false,
         headers: '',
         body: '',
         bodyType: 'none',
@@ -143,6 +146,7 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
         authJson: serializeHttpAuth(input.auth),
         preRequestScript: input.preRequestScript,
         postRequestScript: input.postRequestScript,
+        responseVisualizer: input.responseVisualizer,
         headers: input.headers,
         body: input.body,
         bodyType: input.bodyType,
@@ -150,6 +154,38 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
         websocketSubprotocols: input.websocketSubprotocols,
         saveToHistory: input.saveToHistory,
       })
+      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
+      .run()
+
+    if (result.changes === 0) {
+      return GenericError.Message('Request not found')
+    }
+
+    const request = db
+      .select()
+      .from(requests)
+      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
+      .get()
+
+    if (!request) {
+      return GenericError.Message('Request not found')
+    }
+
+    return Result.Success(toRequestRecord(request))
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
+export async function updateRequestResponseVisualizerPreference(
+  input: UpdateRequestResponseVisualizerPreferenceInput
+): Promise<GenericResult<HttpRequestRecord>> {
+  const db = getDb()
+
+  try {
+    const result = db
+      .update(requests)
+      .set({ prefersResponseVisualizer: input.prefersResponseVisualizer })
       .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
       .run()
 
@@ -275,6 +311,8 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     auth: parseHttpAuth(request.authJson),
     preRequestScript: request.preRequestScript,
     postRequestScript: request.postRequestScript,
+    responseVisualizer: request.responseVisualizer,
+    prefersResponseVisualizer: request.prefersResponseVisualizer,
     headers: request.headers,
     body: request.body,
     bodyType: request.bodyType as RequestBodyType,

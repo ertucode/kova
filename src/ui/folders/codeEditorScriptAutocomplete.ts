@@ -14,13 +14,14 @@ import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
 
 type ScriptAutocompleteOptions = {
   includeResponse: boolean
+  phase?: ScriptAutocompletePhase
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
   fallbackToBrowserTab?: boolean
 }
 
 export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions): Extension {
-  const phase: ScriptAutocompletePhase = options.includeResponse ? 'post-request' : 'pre-request'
+  const phase: ScriptAutocompletePhase = options.phase ?? (options.includeResponse ? 'post-request' : 'pre-request')
 
   return [
     codeEditorTabBehaviorExtension(options),

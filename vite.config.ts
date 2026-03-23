@@ -22,6 +22,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         parallel: path.resolve(__dirname, 'parallel.html'),
+        responseVisualizer: path.resolve(__dirname, 'response-visualizer.html'),
       },
       output: {
         // Preserve original names for better debugging
@@ -30,6 +31,7 @@ export default defineConfig({
     },
   },
   server: {
+    cors: true,
     port: 5123,
     strictPort: true,
   },

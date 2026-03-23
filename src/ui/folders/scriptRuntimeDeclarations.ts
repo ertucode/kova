@@ -1,6 +1,56 @@
-export type ScriptAutocompletePhase = 'pre-request' | 'post-request'
+export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer'
 
 const sharedDeclarations = String.raw`
+type SafeParseSuccess<T> = {
+  success: true
+  data: T
+}
+
+type SafeParseFailure = {
+  success: false
+  error: {
+    message: string
+    format(): unknown
+  }
+}
+
+interface ZodSchema<T = unknown> {
+  parse(value: unknown): T
+  safeParse(value: unknown): SafeParseSuccess<T> | SafeParseFailure
+  optional(): ZodSchema<T | undefined>
+  nullable(): ZodSchema<T | null>
+  array(): ZodSchema<T[]>
+}
+
+interface ZodStringSchema extends ZodSchema<string> {
+  min(length: number): ZodStringSchema
+  max(length: number): ZodStringSchema
+}
+
+interface ZodNumberSchema extends ZodSchema<number> {
+  min(value: number): ZodNumberSchema
+  max(value: number): ZodNumberSchema
+  int(): ZodNumberSchema
+}
+
+interface ZodBooleanSchema extends ZodSchema<boolean> {}
+
+interface ZodObjectSchema<T extends Record<string, unknown>> extends ZodSchema<T> {
+  extend<U extends Record<string, unknown>>(shape: { [K in keyof U]: ZodSchema<U[K]> }): ZodObjectSchema<T & U>
+}
+
+interface ZodApi {
+  object<T extends Record<string, unknown>>(shape: { [K in keyof T]: ZodSchema<T[K]> }): ZodObjectSchema<T>
+  array<T>(schema: ZodSchema<T>): ZodSchema<T[]>
+  string(): ZodStringSchema
+  number(): ZodNumberSchema
+  boolean(): ZodBooleanSchema
+  unknown(): ZodSchema<unknown>
+  literal<T extends string | number | boolean | null>(value: T): ZodSchema<T>
+  enum<T extends readonly [string, ...string[]]>(values: T): ZodSchema<T[number]>
+  union<T extends readonly [ZodSchema<unknown>, ...ZodSchema<unknown>[]]>(schemas: T): ZodSchema<unknown>
+}
+
 type ScriptResponseBody =
   | {
       type: 'json'
@@ -82,6 +132,7 @@ declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
 declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
+declare const z: ZodApi
 `
 
 const postRequestDeclarations = String.raw`
@@ -99,6 +150,24 @@ interface ScriptResponseApi {
 declare const response: ScriptResponseApi
 `
 
+const responseVisualizerDeclarations = String.raw`
+interface TableProps {
+  list: unknown[]
+  columns?: string[]
+  emptyMessage?: string
+}
+
+declare function Table(props: TableProps): unknown
+`
+
 export function getScriptRuntimeDeclarations(phase: ScriptAutocompletePhase) {
-  return phase === 'post-request' ? `${sharedDeclarations}\n${postRequestDeclarations}` : sharedDeclarations
+  if (phase === 'pre-request') {
+    return sharedDeclarations
+  }
+
+  if (phase === 'response-visualizer') {
+    return `${sharedDeclarations}\n${postRequestDeclarations}\n${responseVisualizerDeclarations}`
+  }
+
+  return `${sharedDeclarations}\n${postRequestDeclarations}`
 }

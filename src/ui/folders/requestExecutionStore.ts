@@ -293,6 +293,7 @@ function normalizeSendRequestResponse(event: {
 
   return {
     ...event.response,
+    requestScope: event.response.requestScope ?? {},
     scriptErrors: event.response.scriptErrors ?? [],
     updatedEnvironments: event.response.updatedEnvironments ?? [],
     consoleEntries: event.response.consoleEntries ?? [],

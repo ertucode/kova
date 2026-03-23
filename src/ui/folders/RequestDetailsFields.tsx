@@ -46,13 +46,14 @@ import { AuthorizationEditor } from './AuthorizationEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { SseTranscript } from './SseTranscript'
+import { ResponseVisualizerPreview } from './ResponseVisualizerPreview'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
-  const [metaTab, setMetaTab] = useState<'overview' | 'search-params' | 'scripts'>('overview')
+  const [metaTab, setMetaTab] = useState<'overview' | 'search-params' | 'scripts' | 'response-visualizer'>('overview')
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
-  const metaTabByRequestIdRef = useRef<Record<string, 'overview' | 'search-params' | 'scripts'>>({})
+  const metaTabByRequestIdRef = useRef<Record<string, 'overview' | 'search-params' | 'scripts' | 'response-visualizer'>>({})
   const draftRef = useRef(draft)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
@@ -223,6 +224,31 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [activeEnvironmentNames, activeEnvironmentVariableNames]
   )
 
+  const responseVisualizerExtensions = useMemo(
+    () => [
+      scriptAutocompleteExtension({
+        phase: 'response-visualizer',
+        includeResponse: true,
+        getEnvironmentNames: () => activeEnvironmentNames,
+        getVariableNames: () => activeEnvironmentVariableNames,
+      }),
+    ],
+    [activeEnvironmentNames, activeEnvironmentVariableNames]
+  )
+
+  const visualizerEnvironments = useMemo(
+    () =>
+      variableTooltipRows.map(row => ({
+        id: row.id,
+        name: row.name,
+        isActive: row.isActive,
+        priority: row.priority,
+        createdAt: row.createdAt,
+        values: Object.fromEntries(row.valueByVariableName.entries()),
+      })),
+    [variableTooltipRows]
+  )
+
   const formattedResponseBody = useMemo(() => {
     if (!response) return ''
     return formatResponseBody(response.body, response.headers)
@@ -264,7 +290,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     setMetaTab(initialMetaTab)
   }, [draft, selectedRequestId])
 
-  const updateMetaTab = (nextMetaTab: 'overview' | 'search-params' | 'scripts') => {
+  const updateMetaTab = (nextMetaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => {
     if (selectedRequestId) {
       metaTabByRequestIdRef.current[selectedRequestId] = nextMetaTab
     }
@@ -717,6 +743,28 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </section>
       ) : null}
 
+      {metaTab === 'response-visualizer' ? (
+        <section className="min-h-0 flex-1">
+          <div className="relative h-full">
+            <ScriptDocumentationButton
+              phase="response-visualizer"
+              className="absolute right-3 top-3 z-10 h-8 w-8 rounded-lg border border-base-content/10 bg-base-100/90 backdrop-blur"
+            />
+            <CodeEditor
+              value={draft.responseVisualizer}
+              language="jsx"
+              size="small"
+              minHeightClassName="min-h-0 h-full"
+              className="h-full border-x-0 border-b-0 border-t-0"
+              placeholder={RESPONSE_VISUALIZER_PLACEHOLDER}
+              extensions={responseVisualizerExtensions}
+              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseVisualizer: value })}
+              onBlur={() => undefined}
+            />
+          </div>
+        </section>
+      ) : null}
+
       <section className="shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
         <button
           type="button"
@@ -753,6 +801,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                   value={formattedResponseBody}
                   description="Response body will appear here."
                   contentType={responseContentType}
+                  responseVisualizer={draft.responseVisualizer}
+                  prefersResponseVisualizer={draft.prefersResponseVisualizer}
+                  requestSelection={selectedRequestId ? { itemType: 'request', id: selectedRequestId } : null}
+                  currentRequestDraft={draft}
+                  environments={visualizerEnvironments}
                   response={response}
                   responseError={responseError}
                   onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
@@ -770,15 +823,31 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
 }
 
-function ScriptDocumentationButton({ phase }: { phase: 'pre-request' | 'post-request' }) {
+function ScriptDocumentationButton({
+  phase,
+  className,
+}: {
+  phase: 'pre-request' | 'post-request' | 'response-visualizer'
+  className?: string
+}) {
+  const ariaLabel =
+    phase === 'pre-request'
+      ? 'Open pre-request script documentation'
+      : phase === 'post-request'
+        ? 'Open post-request script documentation'
+        : 'Open response visualizer documentation'
+
   return (
     <button
       type="button"
-      className="grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content"
+      className={[
+        'grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
       onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase } })}
-      aria-label={
-        phase === 'pre-request' ? 'Open pre-request script documentation' : 'Open post-request script documentation'
-      }
+      aria-label={ariaLabel}
       title="Script documentation"
     >
       <InfoIcon className="size-3.5" />
@@ -805,8 +874,8 @@ function VariableUsageBanner({
   hasPreRequestScript,
   hasPostRequestScript,
 }: {
-  metaTab: 'overview' | 'search-params' | 'scripts'
-  onMetaTabChange: (tab: 'overview' | 'search-params' | 'scripts') => void
+  metaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer'
+  onMetaTabChange: (tab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => void
   usedVariableNames: string[]
   hasPreRequestScript: boolean
   hasPostRequestScript: boolean
@@ -854,6 +923,18 @@ function VariableUsageBanner({
             <span className="mx-1">/</span>
             <span className={hasPostRequestScript ? '' : 'opacity-45'}>Post</span>
           </span>
+        </button>
+        <button
+          type="button"
+          className={[
+            'flex h-10 items-center gap-2 border-l border-base-content/10 px-3 text-xs font-semibold transition',
+            metaTab === 'response-visualizer'
+              ? 'border-b-2 border-b-base-content text-base-content'
+              : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+          ].join(' ')}
+          onClick={() => onMetaTabChange('response-visualizer')}
+        >
+          <span>Response Visualizer</span>
         </button>
       </div>
 
@@ -921,6 +1002,11 @@ function ResponseBodyPanel({
   value,
   description,
   contentType,
+  responseVisualizer,
+  prefersResponseVisualizer,
+  requestSelection,
+  currentRequestDraft,
+  environments,
   response,
   responseError,
   onSaveAsExample,
@@ -928,18 +1014,85 @@ function ResponseBodyPanel({
   value: string
   description: string
   contentType: string | null
+  responseVisualizer: string
+  prefersResponseVisualizer: boolean
+  requestSelection: { itemType: 'request'; id: string } | null
+  currentRequestDraft: RequestDetailsDraft
+  environments: Array<{
+    id: string
+    name: string
+    isActive: boolean
+    priority: number
+    createdAt: number
+    values: Record<string, string>
+  }>
   response: SendRequestResponse | null
   responseError: string | null
   onSaveAsExample?: () => void
 }) {
   const language = detectResponseLanguage(contentType, value)
   const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
+  const hasResponseVisualizer = responseVisualizer.trim().length > 0
+  const canRenderVisualizer = hasResponseVisualizer && response !== null
+  const [viewMode, setViewMode] = useState<'raw' | 'visualizer'>(
+    hasResponseVisualizer && prefersResponseVisualizer ? 'visualizer' : 'raw'
+  )
+
+  useEffect(() => {
+    setViewMode(hasResponseVisualizer && prefersResponseVisualizer ? 'visualizer' : 'raw')
+  }, [hasResponseVisualizer, prefersResponseVisualizer])
+
+  const updatePreferredVisualizer = async (nextPreferredVisualizer: boolean) => {
+    if (!requestSelection) {
+      return false
+    }
+
+    return await FolderExplorerCoordinator.updateRequestResponseVisualizerPreference(requestSelection, nextPreferredVisualizer)
+  }
 
   return (
     <div className="flex min-h-0 flex-[2] flex-col bg-base-100/35 p-2 overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="text-sm font-medium text-base-content">Response Body</div>
         <div className="flex gap-2 items-center">
+          {hasResponseVisualizer ? (
+            <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+              <button
+                type="button"
+                className={[
+                  'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                  viewMode === 'visualizer'
+                    ? 'bg-base-200/80 text-base-content'
+                    : 'text-base-content/55 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => {
+                  void updatePreferredVisualizer(true).then(success => {
+                    if (success) {
+                      setViewMode('visualizer')
+                    }
+                  })
+                }}
+              >
+                Visualizer
+              </button>
+              <button
+                type="button"
+                className={[
+                  'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
+                  viewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => {
+                  void updatePreferredVisualizer(false).then(success => {
+                    if (success) {
+                      setViewMode('raw')
+                    }
+                  })
+                }}
+              >
+                Raw
+              </button>
+            </div>
+          ) : null}
           <button
             type="button"
             className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
@@ -963,7 +1116,19 @@ function ResponseBodyPanel({
         </div>
       </div>
 
-      {value ? (
+      {viewMode === 'visualizer' && canRenderVisualizer && response ? (
+        <div className="min-h-0 flex-1 overflow-hidden h-full pt-3">
+          <ResponseVisualizerPreview
+            source={responseVisualizer}
+            response={response}
+            contentType={contentType}
+            requestDraft={currentRequestDraft}
+            environments={environments}
+          />
+        </div>
+      ) : viewMode === 'visualizer' && hasResponseVisualizer ? (
+        <div className="mt-2 text-sm text-base-content/50">Send the request to render the response visualizer.</div>
+      ) : value ? (
         <div className="min-h-0 flex-1 overflow-hidden h-full">
           <CodeEditor
             value={value}
@@ -983,6 +1148,17 @@ function ResponseBodyPanel({
     </div>
   )
 }
+
+const RESPONSE_VISUALIZER_PLACEHOLDER = `export default function ResponseVisualizer() {
+  const data = response?.body.type === 'json' ? response.body.data : null
+
+  return (
+    <div style={{ padding: 16 }}>
+      <h2>Status: {response?.status ?? '...'}</h2>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+    </div>
+  )
+}`
 
 function SseResponsePanel({
   stream,

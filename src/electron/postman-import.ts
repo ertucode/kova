@@ -390,6 +390,8 @@ function importItem(
       authJson: JSON.stringify(mapAuth(item.request.auth ?? item.auth, true)),
       preRequestScript: mapScripts(item.event, 'prerequest', preserveScripts),
       postRequestScript: mapScripts(item.event, 'test', preserveScripts),
+      responseVisualizer: '',
+      prefersResponseVisualizer: false,
       headers: requestModel.headers,
       body: requestModel.body,
       bodyType: requestModel.bodyType,

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Response Visualizer</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+      }
+
+      #root {
+        overflow: auto;
+        padding: 16px;
+      }
+
+      .error {
+        white-space: pre-wrap;
+        border: 1px solid color-mix(in oklab, var(--color-error) 24%, transparent);
+        background: color-mix(in oklab, var(--color-error) 10%, transparent);
+        color: var(--color-error);
+        border-radius: 12px;
+        padding: 12px 14px;
+        font: 12px/1.55 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .empty {
+        color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+        font-size: 13px;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      img,
+      svg,
+      video,
+      canvas {
+        max-width: 100%;
+      }
+
+      a {
+        color: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/ui/responseVisualizer/main.tsx"></script>
+  </body>
+</html>

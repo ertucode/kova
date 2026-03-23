@@ -42,6 +42,8 @@ export const requests = sqliteTable(
     authJson: text('auth_json').notNull().default('{"type":"inherit"}'),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
+    responseVisualizer: text('response_visualizer').notNull().default(''),
+    prefersResponseVisualizer: integer('prefers_response_visualizer', { mode: 'boolean' }).notNull().default(false),
     headers: text('headers').notNull().default(''),
     body: text('body').notNull().default(''),
     bodyType: text('body_type').notNull().default('none'),

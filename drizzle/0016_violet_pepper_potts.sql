@@ -1,0 +1,1 @@
+ALTER TABLE `requests` ADD `response_visualizer` text DEFAULT '' NOT NULL;

@@ -49,6 +49,7 @@ import {
   type SendRequestResponse,
   type TrimRequestHistoryInput,
   type UpdateRequestInput,
+  type UpdateRequestResponseVisualizerPreferenceInput,
   type UpdateWebSocketSavedMessageInput,
   type WebSocketConnectInput,
   type WebSocketConnectResponse,
@@ -118,6 +119,7 @@ export type EventResponseMapping = {
   createRequest: Promise<GenericResult<HttpRequestRecord>>
   getRequest: Promise<GenericResult<HttpRequestRecord>>
   updateRequest: Promise<GenericResult<HttpRequestRecord>>
+  updateRequestResponseVisualizerPreference: Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: Promise<GenericResult<void>>
   duplicateRequest: Promise<GenericResult<HttpRequestRecord>>
   createRequestExample: Promise<GenericResult<RequestExampleRecord>>
@@ -186,6 +188,7 @@ export type EventRequestMapping = {
   createRequest: CreateRequestInput
   getRequest: GetRequestInput
   updateRequest: UpdateRequestInput
+  updateRequestResponseVisualizerPreference: UpdateRequestResponseVisualizerPreferenceInput
   deleteRequest: DeleteRequestInput
   duplicateRequest: DuplicateRequestInput
   createRequestExample: CreateRequestExampleInput
@@ -264,6 +267,9 @@ export type WindowElectron = {
   createRequest: (input: CreateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   getRequest: (input: GetRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   updateRequest: (input: UpdateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
+  updateRequestResponseVisualizerPreference: (
+    input: UpdateRequestResponseVisualizerPreferenceInput
+  ) => Promise<GenericResult<HttpRequestRecord>>
   deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<void>>
   duplicateRequest: (input: DuplicateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   createRequestExample: (input: CreateRequestExampleInput) => Promise<GenericResult<RequestExampleRecord>>

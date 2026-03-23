@@ -17,7 +17,14 @@ import {
   updateEnvironment,
 } from './db/environments.js'
 import { deleteRequestHistoryEntry, listRequestHistory, trimRequestHistory } from './db/request-history.js'
-import { createRequest, deleteRequest, duplicateRequest, getRequest, updateRequest } from './db/requests.js'
+import {
+  createRequest,
+  deleteRequest,
+  duplicateRequest,
+  getRequest,
+  updateRequest,
+  updateRequestResponseVisualizerPreference,
+} from './db/requests.js'
 import {
   createRequestExample,
   deleteRequestExample,
@@ -312,6 +319,10 @@ app.on('ready', () => {
 
   ipcHandle('updateRequest', async input => {
     return updateRequest(input)
+  })
+
+  ipcHandle('updateRequestResponseVisualizerPreference', async input => {
+    return updateRequestResponseVisualizerPreference(input)
   })
 
   ipcHandle('deleteRequest', async input => {

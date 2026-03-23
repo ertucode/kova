@@ -1,0 +1,1 @@
+ALTER TABLE `requests` ADD `prefers_response_visualizer` integer DEFAULT false NOT NULL;

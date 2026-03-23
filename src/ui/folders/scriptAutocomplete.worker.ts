@@ -160,12 +160,13 @@ const blockedKeywordCompletions = new Set([
   'type',
 ])
 
-const preferredSandboxGlobals = new Set(['env', 'scope', 'request', 'response', 'console', 'crypto'])
+const preferredSandboxGlobals = new Set(['env', 'scope', 'request', 'response', 'console', 'crypto', 'z'])
 const preferredBuiltinGlobals = new Set(['Date', 'Math', 'JSON', 'Promise', 'Object', 'Array', 'Map', 'Set', 'String', 'Number'])
 
 const phaseStates = new Map<ScriptAutocompletePhase, PhaseState>([
   ['pre-request', createPhaseState('pre-request')],
   ['post-request', createPhaseState('post-request')],
+  ['response-visualizer', createPhaseState('response-visualizer')],
 ])
 
 self.addEventListener('message', (event: MessageEvent<ScriptAutocompleteRequest>) => {
@@ -222,7 +223,7 @@ function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteRespons
 }
 
 function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
-  const userFileName = `${phase}.script.js`
+  const userFileName = phase === 'response-visualizer' ? `${phase}.script.tsx` : `${phase}.script.js`
   const declarationFileName = `${phase}.runtime.d.ts`
   const files = new Map(sharedFiles)
   files.set(declarationFileName, `${getScriptRuntimeDeclarations(phase)}\n/// <reference lib=\"esnext.iterator\" />\n`)
@@ -252,6 +253,10 @@ function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
       return content === undefined ? undefined : ts.ScriptSnapshot.fromString(content)
     },
     getScriptKind: fileName => {
+      if (fileName.endsWith('.tsx')) {
+        return ts.ScriptKind.TSX
+      }
+
       if (fileName.endsWith('.js')) {
         return ts.ScriptKind.JS
       }

@@ -42,6 +42,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   createRequest: input => ipcInvoke('createRequest', input),
   getRequest: input => ipcInvoke('getRequest', input),
   updateRequest: input => ipcInvoke('updateRequest', input),
+  updateRequestResponseVisualizerPreference: input => ipcInvoke('updateRequestResponseVisualizerPreference', input),
   deleteRequest: input => ipcInvoke('deleteRequest', input),
   duplicateRequest: input => ipcInvoke('duplicateRequest', input),
   createRequestExample: input => ipcInvoke('createRequestExample', input),

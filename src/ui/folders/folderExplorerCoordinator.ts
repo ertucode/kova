@@ -272,6 +272,38 @@ export namespace FolderExplorerCoordinator {
     persistUnsavedDrafts()
   }
 
+  export async function updateRequestResponseVisualizerPreference(selection: Selection, prefersResponseVisualizer: boolean) {
+    if (selection.itemType !== 'request') {
+      return false
+    }
+
+    const result = await getWindowElectron().updateRequestResponseVisualizerPreference({
+      id: selection.id,
+      prefersResponseVisualizer,
+    })
+
+    if (!result.success) {
+      toast.show(result)
+      return false
+    }
+
+    const key = toSelectionKey(selection)
+    const entry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
+    const base = entry.base?.itemType === 'request' ? { ...entry.base, prefersResponseVisualizer } : toRequestDetailsDraft(result.data)
+    const current =
+      entry.current?.itemType === 'request'
+        ? { ...entry.current, prefersResponseVisualizer }
+        : toRequestDetailsDraft(result.data)
+
+    folderExplorerEditorStore.trigger.entrySaved({
+      key,
+      base,
+      current,
+    })
+    persistUnsavedDrafts()
+    return true
+  }
+
   export function discardSelectedChanges() {
     const selection = folderExplorerEditorStore.getSnapshot().context.selected
     if (!selection) {
@@ -1056,6 +1088,7 @@ async function saveItem(selection: Selection) {
             auth: draft.auth,
             preRequestScript: draft.preRequestScript,
             postRequestScript: draft.postRequestScript,
+            responseVisualizer: draft.responseVisualizer,
             headers: draft.headers,
             body: draft.body,
             bodyType: draft.bodyType,

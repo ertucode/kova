@@ -98,6 +98,8 @@ export function toRequestDetailsDraft(request: HttpRequestRecord): RequestDetail
     auth: request.auth,
     preRequestScript: request.preRequestScript,
     postRequestScript: request.postRequestScript,
+    responseVisualizer: request.responseVisualizer,
+    prefersResponseVisualizer: request.prefersResponseVisualizer,
     headers: request.headers,
     body: request.body,
     bodyType: request.bodyType,

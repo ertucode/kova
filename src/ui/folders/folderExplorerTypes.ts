@@ -51,6 +51,8 @@ export type RequestDetailsDraft = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  responseVisualizer: string
+  prefersResponseVisualizer: boolean
   headers: string
   body: string
   bodyType: RequestBodyType

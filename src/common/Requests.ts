@@ -20,6 +20,8 @@ export type HttpRequestRecord = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  responseVisualizer: string
+  prefersResponseVisualizer: boolean
   headers: string
   body: string
   bodyType: RequestBodyType
@@ -51,12 +53,18 @@ export type UpdateRequestInput = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  responseVisualizer: string
   headers: string
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
   websocketSubprotocols: string
   saveToHistory: boolean
+}
+
+export type UpdateRequestResponseVisualizerPreferenceInput = {
+  id: string
+  prefersResponseVisualizer: boolean
 }
 
 export type DeleteRequestInput = {
@@ -263,6 +271,7 @@ export type SendRequestResponse = {
   headers: string
   body: string
   durationMs: number
+  requestScope: Record<string, string>
   scriptErrors: RequestScriptError[]
   updatedEnvironments: EnvironmentRecord[]
   consoleEntries: RequestConsoleEntry[]

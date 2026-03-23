@@ -1,5 +1,6 @@
 import vm from 'node:vm'
 import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import type { HttpAuth } from '../common/Auth.js'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolvedEnvironmentValue } from '../common/EnvironmentVariables.js'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
@@ -61,6 +62,7 @@ export type ScriptRuntime = {
   request: RuntimeRequestState
   requestScope: Map<string, string>
   getResolvedVariables: () => Record<string, string>
+  getRequestScopeValues: () => Record<string, string>
   getUpdatedEnvironments: () => EnvironmentRecord[]
   getConsoleEntries: () => RequestConsoleEntry[]
   runPreRequestScripts: (sources: ScriptSource[]) => Promise<void>
@@ -90,6 +92,7 @@ export function createRequestScriptRuntime(input: {
     request: runtimeRequest,
     requestScope,
     getResolvedVariables: () => ({ ...environmentValues, ...Object.fromEntries(requestScope.entries()) }),
+    getRequestScopeValues: () => Object.fromEntries(requestScope.entries()),
     getUpdatedEnvironments: () => environments.filter(environment => updatedEnvironmentIds.has(environment.id)),
     getConsoleEntries: () => consoleEntries.slice(),
     runPreRequestScripts: async sources => {
@@ -231,6 +234,7 @@ async function runScriptPhase(input: {
       env: createEnvironmentApi(input.environmentContext),
       scope: createScopeApi(input.requestScope),
       crypto: createCryptoApi(),
+      z,
     }
 
     try {

@@ -16,7 +16,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { twMerge } from 'tailwind-merge'
 import { Vim, getCM, vim } from '@replit/codemirror-vim'
 
-export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'html' | 'css' | 'xml'
+export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'
 
 const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
@@ -310,6 +310,10 @@ export function CodeEditor({
 
     if (language === 'javascript') {
       nextExtensions.push(javascript())
+    }
+
+    if (language === 'jsx') {
+      nextExtensions.push(javascript({ jsx: true, typescript: true }))
     }
 
     if (language === 'html') {
