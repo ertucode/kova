@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { ChevronDownIcon, ChevronRightIcon, SaveIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, CopyIcon, SaveIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type { RequestConsoleEntry, RequestExecutionRecord, RequestHistoryListItem, WebSocketSessionRecord } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -460,6 +460,24 @@ function ExecutionResponseSection({
           expanded={bodyExpanded}
           onToggle={onToggleBody}
           emptyValueMessage={execution.response.bodyOmitted ? 'Body omitted from history (over 500 KB)' : '(empty)'}
+          action={
+            <button
+              type="button"
+              className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
+              onClick={event => {
+                event.stopPropagation()
+                void copyTextToClipboard({
+                  text: execution.response?.body ?? '',
+                  successMessage: 'Response body copied to clipboard.',
+                  errorMessage: 'Could not write the response body to the clipboard.',
+                })
+              }}
+              aria-label="Copy response body"
+              title="Copy response body"
+            >
+              <CopyIcon className="size-4" />
+            </button>
+          }
         />
       </div>
     </div>
@@ -520,6 +538,23 @@ async function saveWebSocketSessionAsExample(session: WebSocketSessionRecord) {
   toast.show({ severity: 'success', title: 'Example saved', message: `Saved transcript example for ${session.requestName}.` })
 }
 
+async function copyTextToClipboard({
+  text,
+  successMessage,
+  errorMessage,
+}: {
+  text: string
+  successMessage: string
+  errorMessage: string
+}) {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.show({ severity: 'success', message: successMessage })
+  } catch {
+    toast.show({ severity: 'error', message: errorMessage })
+  }
+}
+
 function ExecutionSubsection({ title, value }: { title: string; value: string }) {
   return (
     <div>
@@ -540,23 +575,28 @@ function ExecutionCollapsiblePreSection({
   expanded,
   onToggle,
   emptyValueMessage,
+  action,
 }: {
   title: string
   value: string
   expanded: boolean
   onToggle: () => void
   emptyValueMessage?: string
+  action?: ReactNode
 }) {
   return (
     <div>
-      <button
-        type="button"
-        className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45 transition hover:text-base-content/70"
-        onClick={onToggle}
-      >
-        {expanded ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
-        <span>{title}</span>
-      </button>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45 transition hover:text-base-content/70"
+          onClick={onToggle}
+        >
+          {expanded ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
+          <span>{title}</span>
+        </button>
+        {action}
+      </div>
       {expanded ? (
         <pre
           className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"

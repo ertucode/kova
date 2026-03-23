@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { InfoIcon, SaveIcon } from 'lucide-react'
+import { CopyIcon, InfoIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { getAuthVariableSources } from '@common/Auth'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
@@ -921,6 +921,15 @@ function ResponseBodyPanel({
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="text-sm font-medium text-base-content">Response Body</div>
         <div className="flex gap-2 items-center">
+          <button
+            type="button"
+            className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
+            onClick={() => void copyTextToClipboard(value, 'Response body copied to clipboard.')}
+            title="Copy Response Body"
+            aria-label="Copy response body"
+          >
+            <CopyIcon className="w-4 h-4" />
+          </button>
           {onSaveAsExample ? (
             <button
               type="button"
@@ -982,6 +991,15 @@ function SseResponsePanel({
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="text-sm font-medium text-base-content">SSE Events</div>
         <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-base-content/45">
+          <button
+            type="button"
+            className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
+            onClick={() => void copyTextToClipboard(rawBody, 'Response body copied to clipboard.')}
+            title="Copy Response Body"
+            aria-label="Copy response body"
+          >
+            <CopyIcon className="h-4 w-4" />
+          </button>
           {onSaveAsExample ? (
             <button
               type="button"
@@ -1113,6 +1131,15 @@ function ResponseStatusSummary({
       </div>
     </div>
   )
+}
+
+async function copyTextToClipboard(value: string, successMessage: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.show({ severity: 'success', message: successMessage })
+  } catch {
+    toast.show({ severity: 'error', message: 'Could not write the response body to the clipboard.' })
+  }
 }
 
 function isParamBodyType(bodyType: RequestBodyType) {
