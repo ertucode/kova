@@ -372,7 +372,7 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
   ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
 
   return (
-    <aside className="flex h-full w-[84px] min-w-[84px] flex-col items-center gap-3 border-r border-base-content/10 bg-base-100 px-3 py-4">
+    <aside className="flex h-full w-[84px] min-w-[84px] flex-col items-center border-r border-base-content/10 bg-base-100">
       {tabs.map(tab => {
         const Icon = tab.icon
         const isActive = tab.id === sidebarTab
@@ -382,7 +382,7 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
             key={tab.id}
             type="button"
             className={[
-              'flex w-full flex-col items-center gap-2 rounded-2xl px-2 py-3 text-center text-xs font-medium transition',
+              'flex w-full flex-col items-center gap-2 px-1 py-3 text-center text-xs font-medium transition',
               tab.disabled ? 'cursor-not-allowed text-base-content/30' : '',
               !tab.disabled && isActive
                 ? 'bg-primary/16 text-primary shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--color-primary)_24%,transparent)]'

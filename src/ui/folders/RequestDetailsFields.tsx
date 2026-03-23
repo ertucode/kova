@@ -3,7 +3,14 @@ import { InfoIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { getAuthVariableSources } from '@common/Auth'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
-import type { HttpSseStreamState, RequestBodyType, RequestMethod, RequestRawType, SendRequestResponse, SseEventRecord } from '@common/Requests'
+import type {
+  HttpSseStreamState,
+  RequestBodyType,
+  RequestMethod,
+  RequestRawType,
+  SendRequestResponse,
+  SseEventRecord,
+} from '@common/Requests'
 import { parseCurlRequest } from '@common/curl'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
@@ -715,7 +722,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                 response={response}
                 responseError={responseError}
                 events={displayedSseEvents}
-                onSaveAsExample={response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseAsExample() : undefined}
+                onSaveAsExample={
+                  response || (sseStream && sseStream.body.trim())
+                    ? () => void saveCurrentResponseAsExample()
+                    : undefined
+                }
               />
             ) : (
               <>
@@ -727,7 +738,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                   responseError={responseError}
                   onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
                 />
-                <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
+                <ResponseHeadersPanel
+                  value={response?.headers ?? ''}
+                  description="Response headers will appear here."
+                />
               </>
             )}
           </div>
@@ -845,8 +859,6 @@ function getUsedRequestVariableNames(draft: RequestDetailsDraft) {
   collect(draft.searchParams)
   collect(draft.headers)
   collect(draft.body)
-  collect(draft.preRequestScript)
-  collect(draft.postRequestScript)
 
   for (const source of getAuthVariableSources(draft.auth)) {
     collect(source)
@@ -983,7 +995,11 @@ function SseResponsePanel({
           {headerContentType ? <span>{headerContentType}</span> : null}
           <span>{events.length} events</span>
           {durationMs !== null ? <span>{durationMs} ms</span> : null}
-          {status !== null ? <span className={`font-semibold ${statusTone.className}`}>{status} {statusText}</span> : null}
+          {status !== null ? (
+            <span className={`font-semibold ${statusTone.className}`}>
+              {status} {statusText}
+            </span>
+          ) : null}
           {stream ? <span>{stream.state}</span> : null}
           {responseError ? <span className="text-error">{responseError}</span> : null}
           <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
@@ -991,7 +1007,9 @@ function SseResponsePanel({
               type="button"
               className={[
                 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                viewMode === 'rows' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                viewMode === 'rows'
+                  ? 'bg-base-200/80 text-base-content'
+                  : 'text-base-content/55 hover:text-base-content',
               ].join(' ')}
               onClick={() => setViewMode('rows')}
             >
@@ -1001,7 +1019,9 @@ function SseResponsePanel({
               type="button"
               className={[
                 'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                viewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                viewMode === 'raw'
+                  ? 'bg-base-200/80 text-base-content'
+                  : 'text-base-content/55 hover:text-base-content',
               ].join(' ')}
               onClick={() => setViewMode('raw')}
             >
