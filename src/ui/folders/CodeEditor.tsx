@@ -1,5 +1,6 @@
 import { createElement, useMemo, useRef } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
+import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, foldGutter, syntaxHighlighting } from '@codemirror/language'
 import { json } from '@codemirror/lang-json'
@@ -231,6 +232,9 @@ export function CodeEditor({
   const resolvedExtensions = useMemo(() => {
     const nextExtensions: Extension[] = [
       vim(),
+      highlightSelectionMatches({
+        highlightWordAroundCursor: true,
+      }),
       ...codeMirrorBasicSetup({
         lineNumbers: false,
         foldGutter: false,
