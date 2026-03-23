@@ -4,6 +4,15 @@ import type { RequestType } from '@common/Requests'
 import type { CreateDraft, Selection } from './folderExplorerTypes'
 import { toSelectionKey } from './folderExplorerUtils'
 
+type ExplorerItemPatchEvent = {
+  selection: Selection
+  name?: string
+  method?: string
+  url?: string
+  responseStatus?: number | null
+  messageCount?: number | null
+}
+
 export type FolderExplorerTreeContext = {
   items: ExplorerItem[]
   searchQuery: string
@@ -53,11 +62,36 @@ export const folderExplorerTreeStore = createStore({
       ...context,
       createDraft: null,
     }),
-    itemNameUpdated: (context, event: { selection: Selection; name: string }) => ({
+    itemPatched: (context, event: ExplorerItemPatchEvent) => ({
       ...context,
-      items: context.items.map(item =>
-        item.id === event.selection.id && item.itemType === event.selection.itemType ? { ...item, name: event.name } : item
-      ),
+      items: context.items.map(item => {
+        if (item.id !== event.selection.id || item.itemType !== event.selection.itemType) {
+          return item
+        }
+
+        if (item.itemType === 'folder') {
+          return {
+            ...item,
+            ...(event.name === undefined ? {} : { name: event.name }),
+          }
+        }
+
+        if (item.itemType === 'request') {
+          return {
+            ...item,
+            ...(event.name === undefined ? {} : { name: event.name }),
+            ...(event.method === undefined ? {} : { method: event.method }),
+            ...(event.url === undefined ? {} : { url: event.url }),
+          }
+        }
+
+        return {
+          ...item,
+          ...(event.name === undefined ? {} : { name: event.name }),
+          ...(event.responseStatus === undefined ? {} : { responseStatus: event.responseStatus }),
+          ...(event.messageCount === undefined ? {} : { messageCount: event.messageCount }),
+        }
+      }),
     }),
   },
 })

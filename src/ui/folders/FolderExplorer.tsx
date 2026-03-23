@@ -17,7 +17,7 @@ import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { EnvironmentsPanel } from './EnvironmentsPanel'
 import { HistoryPanel } from './RequestExecutionPanels'
-import { buildTree, filterTree, toSelectionKey } from './folderExplorerUtils'
+import { buildTree, filterTreeWithDrafts, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { dialogActions } from '@/global/dialogStore'
@@ -32,6 +32,7 @@ export function FolderExplorer() {
   const searchQuery = useSelector(folderExplorerTreeStore, state => state.context.searchQuery)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const sidebarTab = useSelector(folderExplorerEditorStore, state => state.context.sidebarTab)
+  const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
 
@@ -42,7 +43,10 @@ export function FolderExplorer() {
 
   const { roots, itemMap } = useMemo(() => buildTree(items), [items])
   const normalizedSearch = searchQuery.trim().toLowerCase()
-  const visibleRoots = useMemo(() => filterTree(roots, normalizedSearch), [roots, normalizedSearch])
+  const visibleRoots = useMemo(
+    () => filterTreeWithDrafts(roots, normalizedSearch, entries),
+    [entries, roots, normalizedSearch]
+  )
   const canDrag = normalizedSearch.length === 0 && createDraft === null
 
   const clearDragState = () => {

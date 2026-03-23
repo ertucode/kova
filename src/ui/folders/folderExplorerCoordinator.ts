@@ -1050,7 +1050,7 @@ async function loadItem(selection: Selection) {
       : serverDraft
 
   folderExplorerEditorStore.trigger.entryLoaded({ key, base: serverDraft, current })
-  folderExplorerTreeStore.trigger.itemNameUpdated({ selection, name: result.data.name })
+  patchTreeItem(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord)
   persistUnsavedDrafts()
 }
 
@@ -1139,8 +1139,47 @@ async function saveItem(selection: Selection) {
     base: serverDraft,
     current: latestEntry.version === version ? serverDraft : nextCurrent,
   })
-  folderExplorerTreeStore.trigger.itemNameUpdated({ selection, name: result.data.name })
+  patchTreeItem(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord)
   persistUnsavedDrafts()
+}
+
+function patchTreeItem(selection: Selection, value: FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord) {
+  if (selection.itemType === 'request') {
+    const request = value as HttpRequestRecord
+    folderExplorerTreeStore.trigger.itemPatched({
+      selection,
+      name: request.name,
+      method: request.method,
+      url: request.url,
+    })
+    return
+  }
+
+  if (selection.itemType === 'folder') {
+    folderExplorerTreeStore.trigger.itemPatched({
+      selection,
+      name: (value as FolderRecord).name,
+    })
+    return
+  }
+
+  if ('messages' in value) {
+    folderExplorerTreeStore.trigger.itemPatched({
+      selection,
+      name: value.name,
+      messageCount: value.messages.length,
+      responseStatus: null,
+    })
+    return
+  }
+
+  const example = value as RequestExampleRecord
+  folderExplorerTreeStore.trigger.itemPatched({
+    selection,
+    name: example.name,
+    responseStatus: example.responseStatus,
+    messageCount: null,
+  })
 }
 
 function persistUnsavedDrafts() {

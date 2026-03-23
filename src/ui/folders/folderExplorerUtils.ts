@@ -56,15 +56,17 @@ export function buildTree(items: ExplorerItem[]) {
 }
 
 export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+  return filterTreeWithDrafts(nodes, query)
+}
+
+type SearchDraftEntries = Record<string, { base: DetailsDraft | null; current: DetailsDraft | null } | undefined>
+
+export function filterTreeWithDrafts(nodes: TreeNode[], query: string, entries?: SearchDraftEntries): TreeNode[] {
   if (!query) return nodes
 
   return nodes.flatMap(node => {
-    const filteredChildren = filterTree(node.children, query)
-    const requestMatch = node.itemType === 'request' ? `${node.method} ${node.url}`.toLowerCase().includes(query) : false
-    const exampleMatch = node.itemType === 'example'
-      ? `${node.name} ${node.responseStatus ?? ''} ${node.messageCount ?? ''}`.toLowerCase().includes(query)
-      : false
-    const isMatch = node.name.toLowerCase().includes(query) || requestMatch || exampleMatch
+    const filteredChildren = filterTreeWithDrafts(node.children, query, entries)
+    const isMatch = getSearchParts(node, entries).some(part => part.toLowerCase().includes(query))
 
     if (!isMatch && filteredChildren.length === 0) {
       return []
@@ -72,6 +74,32 @@ export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
 
     return [{ ...node, children: filteredChildren }]
   })
+}
+
+export function getSearchParts(node: TreeNode, entries?: SearchDraftEntries): string[] {
+  if (node.itemType === 'request') {
+    const entry = entries?.[toSelectionKey(node)]
+    const baseDraft = entry?.base?.itemType === 'request' ? entry.base : null
+    const currentDraft = entry?.current?.itemType === 'request' ? entry.current : null
+
+    return [...new Set([
+      node.name,
+      node.method,
+      node.url,
+      baseDraft?.name ?? '',
+      baseDraft?.method ?? '',
+      baseDraft?.url ?? '',
+      currentDraft?.name ?? '',
+      currentDraft?.method ?? '',
+      currentDraft?.url ?? '',
+    ].filter(Boolean))]
+  }
+
+  if (node.itemType === 'example') {
+    return [node.name, `${node.responseStatus ?? ''}`, `${node.messageCount ?? ''}`]
+  }
+
+  return [node.name]
 }
 
 export function toFolderDetailsDraft(folder: FolderRecord): FolderDetailsDraft {
