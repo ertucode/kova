@@ -3,7 +3,6 @@ import path from 'path'
 import os from 'os'
 import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
-import { xlsxWorkerPool } from './utils/xlsx-worker-pool.js'
 import { TaskManager } from './TaskManager.js'
 import { initializeDatabase } from './db/index.js'
 import { listExplorerItems } from './db/explorer.js'
@@ -641,9 +640,4 @@ function buildContextMenuTemplate(
 // Listen for window focus events and notify renderer
 app.on('browser-window-focus', (_event, window) => {
   window.webContents.send('window:focus')
-})
-
-// Clean up worker pool when app is quitting
-app.on('before-quit', async () => {
-  await xlsxWorkerPool.terminate()
 })
