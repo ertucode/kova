@@ -55,7 +55,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
   const [metaTab, setMetaTab] = useState<'overview' | 'search-params' | 'scripts' | 'response-visualizer'>('overview')
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
-  const metaTabByRequestIdRef = useRef<Record<string, 'overview' | 'search-params' | 'scripts' | 'response-visualizer'>>({})
+  const metaTabByRequestIdRef = useRef<
+    Record<string, 'overview' | 'search-params' | 'scripts' | 'response-visualizer'>
+  >({})
   const draftRef = useRef(draft)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
@@ -193,7 +195,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             {
               ...latestDraft,
               pathParams: nextPathParams,
-              url: syncUrlWithSearchParams(syncUrlWithPathParams(latestDraft.url, nextPathParams), latestDraft.searchParams),
+              url: syncUrlWithSearchParams(
+                syncUrlWithPathParams(latestDraft.url, nextPathParams),
+                latestDraft.searchParams
+              ),
             }
           )
         },
@@ -871,14 +876,20 @@ function shouldWarnBeforeRequest(
   }
 
   if (lastRequestSentAt === null) {
-    return false
+    return true
   }
 
   return Date.now() - lastRequestSentAt > warnBeforeRequestAfterSeconds * 1000
 }
 
 function confirmRequestWithActiveEnvironments(
-  activeEnvironments: Array<{ id: string; name: string; color: string | null; warnOnRequest: boolean; priority: number }>,
+  activeEnvironments: Array<{
+    id: string
+    name: string
+    color: string | null
+    warnOnRequest: boolean
+    priority: number
+  }>,
   warnBeforeRequestAfterSeconds: number
 ) {
   return new Promise<boolean>(resolve => {
@@ -908,7 +919,8 @@ function ActiveEnvironmentConfirmation({
   return (
     <div className="space-y-4">
       <p className="text-sm text-base-content/70">
-        More than {warnBeforeRequestAfterSeconds} seconds passed since the last request. These active environments will be used for this request.
+        More than {warnBeforeRequestAfterSeconds} seconds passed since the last request. These active environments will
+        be used for this request.
       </p>
 
       <div className="space-y-2">
@@ -1180,7 +1192,9 @@ function ResponseBodyPanel({
               type="button"
               className={[
                 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                viewMode === 'table' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                viewMode === 'table'
+                  ? 'bg-base-200/80 text-base-content'
+                  : 'text-base-content/55 hover:text-base-content',
               ].join(' ')}
               onClick={() => {
                 void updatePreferredResponseBodyView('table').then(success => {
@@ -1214,7 +1228,9 @@ function ResponseBodyPanel({
               type="button"
               className={[
                 'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                viewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                viewMode === 'raw'
+                  ? 'bg-base-200/80 text-base-content'
+                  : 'text-base-content/55 hover:text-base-content',
               ].join(' ')}
               onClick={() => {
                 void updatePreferredResponseBodyView('raw').then(success => {
@@ -1775,7 +1791,9 @@ function parseXmlToStructuredResponse(xml: string): ParsedStructuredResponse | n
 }
 
 function xmlElementToJson(element: Element): unknown {
-  const attributes = Object.fromEntries(Array.from(element.attributes).map(attribute => [`@${attribute.name}`, attribute.value]))
+  const attributes = Object.fromEntries(
+    Array.from(element.attributes).map(attribute => [`@${attribute.name}`, attribute.value])
+  )
   const childElements = Array.from(element.children)
   const textValue = element.textContent?.trim() ?? ''
 
@@ -1822,7 +1840,9 @@ function resolveResponseTableRows(
   }
 
   const detectedMatch = findFirstObjectArray(parsedStructuredResponse.root)
-  const candidate = accessor.trim() ? resolveAccessor(parsedStructuredResponse.root, accessor.trim()) : detectedMatch?.value
+  const candidate = accessor.trim()
+    ? resolveAccessor(parsedStructuredResponse.root, accessor.trim())
+    : detectedMatch?.value
   const rows = normalizeResponseTableRows(candidate)
 
   return {
