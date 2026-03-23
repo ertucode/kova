@@ -48,9 +48,18 @@ export function FolderExplorerTabs() {
           name: entry?.current?.name ?? item?.name ?? 'Untitled',
           isSaving: Boolean(entry?.saving),
           isDirty: Boolean(entry && isEntryDirty(entry)),
-          method: entry?.current?.itemType === 'request' ? entry.current.method : item?.itemType === 'request' ? item.method : null,
+          method:
+            entry?.current?.itemType === 'request'
+              ? entry.current.method
+              : item?.itemType === 'request'
+                ? item.method
+                : null,
           requestType:
-            entry?.current?.itemType === 'request' ? entry.current.requestType : item?.itemType === 'request' ? item.requestType : null,
+            entry?.current?.itemType === 'request'
+              ? entry.current.requestType
+              : item?.itemType === 'request'
+                ? item.requestType
+                : null,
           exampleType: item?.itemType === 'example' ? item.exampleType : null,
         }
       }),
@@ -142,7 +151,7 @@ export function FolderExplorerTabs() {
           const showDropAfter = dropIndex === tabsWithState.length && index === tabsWithState.length - 1
 
           return (
-              <div key={tab.id} data-tab-id={tab.id} className="relative flex shrink-0">
+            <div key={tab.id} data-tab-id={tab.id} className="relative flex shrink-0">
               {showDropBefore ? <div className="absolute inset-y-1 -left-0.5 w-0.5 rounded-full bg-primary" /> : null}
               <div
                 draggable
@@ -154,7 +163,16 @@ export function FolderExplorerTabs() {
                   draggedTabId === tab.id ? 'opacity-50' : '',
                 ].join(' ')}
                 onClick={() => void FolderExplorerCoordinator.activateTab(tab.id)}
-                onDoubleClick={() => void FolderExplorerCoordinator.pinTab(tab.id)}
+                onDoubleClick={async () => {
+                  const changed = await FolderExplorerCoordinator.pinTab(tab.id)
+                  if (!changed) {
+                    // reveal in explorer
+                    FolderExplorerCoordinator.selectItem(
+                      { itemType: tab.itemType, id: tab.itemId },
+                      { mode: 'preview' }
+                    )
+                  }
+                }}
                 onContextMenu={event => menu.onRightClick(event, tab)}
                 onDragStart={event => {
                   setDraggedTabId(tab.id)
@@ -293,10 +311,7 @@ function getTabMenuItems(
     {
       view: 'Reveal in Explorer',
       onClick: () => {
-        void FolderExplorerCoordinator.selectItem(
-          { itemType: tab.itemType, id: tab.itemId },
-          { mode: 'preview' }
-        )
+        void FolderExplorerCoordinator.selectItem({ itemType: tab.itemType, id: tab.itemId }, { mode: 'preview' })
       },
     }
   )

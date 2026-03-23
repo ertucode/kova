@@ -23,7 +23,14 @@ import {
   saveFolderExplorerUiState,
 } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore, getDeletedItemKeys } from './folderExplorerTreeStore'
-import { serializeDetails, toFolderDetailsDraft, toRequestDetailsDraft, toRequestExampleDetailsDraft, toSelectionKey, toWebSocketExampleDetailsDraft } from './folderExplorerUtils'
+import {
+  serializeDetails,
+  toFolderDetailsDraft,
+  toRequestDetailsDraft,
+  toRequestExampleDetailsDraft,
+  toSelectionKey,
+  toWebSocketExampleDetailsDraft,
+} from './folderExplorerUtils'
 import type { MoveExplorerItemInput } from '@common/Explorer'
 
 const loadTokens: Record<string, number> = {}
@@ -73,7 +80,11 @@ export namespace FolderExplorerCoordinator {
 
   export async function loadTabs() {
     const tabs = await getWindowElectron().listFolderExplorerTabs()
-    await replaceTabsState(tabs, getActiveTabIdFromTabs(tabs), { persist: false, loadActiveSelection: true, reconcile: true })
+    await replaceTabsState(tabs, getActiveTabIdFromTabs(tabs), {
+      persist: false,
+      loadActiveSelection: true,
+      reconcile: true,
+    })
     pruneEntryStatesToTabs()
   }
 
@@ -133,7 +144,7 @@ export namespace FolderExplorerCoordinator {
             updatedAt: now,
           } satisfies FolderExplorerTabRecord,
         ]
-    const nextActiveTabId = previewTab ? previewTab.id : nextTabsBase[nextTabsBase.length - 1]?.id ?? null
+    const nextActiveTabId = previewTab ? previewTab.id : (nextTabsBase[nextTabsBase.length - 1]?.id ?? null)
     const nextTabs = enforceTabLimit(nextTabsBase, nextActiveTabId)
     if (previewTab) {
       clearClosedTabEntries(state.tabs, nextTabs)
@@ -211,8 +222,15 @@ export namespace FolderExplorerCoordinator {
 
   export async function pinTab(tabId: string) {
     const { tabs, activeTabId } = folderExplorerEditorStore.getSnapshot().context
-    const nextTabs = tabs.map(tab => (tab.id === tabId && !tab.isPinned ? { ...tab, isPinned: true, updatedAt: Date.now() } : tab))
+    const isPinned = tabs.some(tab => tab.id === tabId && tab.isPinned)
+    if (isPinned) {
+      return false
+    }
+    const nextTabs = tabs.map(tab =>
+      tab.id === tabId && !tab.isPinned ? { ...tab, isPinned: true, updatedAt: Date.now() } : tab
+    )
     await replaceTabsState(nextTabs, activeTabId ?? tabId)
+    return true
   }
 
   export async function moveTab(tabId: string, targetPosition: number) {
@@ -271,7 +289,11 @@ export namespace FolderExplorerCoordinator {
     toast.show({ severity: 'success', title: 'Request duplicated', message: `Created ${result.data.name}.` })
   }
 
-  export function startCreate(itemType: Extract<ExplorerItem['itemType'], 'folder' | 'request'>, parentFolderId: string | null, requestType?: RequestType) {
+  export function startCreate(
+    itemType: Extract<ExplorerItem['itemType'], 'folder' | 'request'>,
+    parentFolderId: string | null,
+    requestType?: RequestType
+  ) {
     folderExplorerTreeStore.trigger.createStarted({ itemType, parentFolderId, requestType })
     if (parentFolderId) {
       folderExplorerEditorStore.trigger.expandedEnsured({ id: parentFolderId })
@@ -320,8 +342,16 @@ export namespace FolderExplorerCoordinator {
   }
 
   export function requestDelete(item: ExplorerItem) {
-      const title = item.itemType === 'folder' ? 'Delete folder?' : item.itemType === 'request' ? 'Delete request?' : 'Delete example?'
-      const message = item.itemType === 'folder' ? `"${item.name}" and all nested items will be deleted.` : `"${item.name}" will be deleted.`
+    const title =
+      item.itemType === 'folder'
+        ? 'Delete folder?'
+        : item.itemType === 'request'
+          ? 'Delete request?'
+          : 'Delete example?'
+    const message =
+      item.itemType === 'folder'
+        ? `"${item.name}" and all nested items will be deleted.`
+        : `"${item.name}" will be deleted.`
 
     confirmation.trigger.confirm({
       title,
@@ -329,13 +359,13 @@ export namespace FolderExplorerCoordinator {
       confirmText: 'Delete',
       onConfirm: async () => {
         const result =
-            item.itemType === 'folder'
-              ? await getWindowElectron().deleteFolder({ id: item.id })
-              : item.itemType === 'request'
-                ? await getWindowElectron().deleteRequest({ id: item.id })
-                : item.exampleType === 'websocket'
-                  ? await getWindowElectron().deleteWebSocketExample({ id: item.id })
-                  : await getWindowElectron().deleteRequestExample({ id: item.id })
+          item.itemType === 'folder'
+            ? await getWindowElectron().deleteFolder({ id: item.id })
+            : item.itemType === 'request'
+              ? await getWindowElectron().deleteRequest({ id: item.id })
+              : item.exampleType === 'websocket'
+                ? await getWindowElectron().deleteWebSocketExample({ id: item.id })
+                : await getWindowElectron().deleteRequestExample({ id: item.id })
 
         if (!result.success) {
           toast.show(result)
@@ -384,9 +414,18 @@ export namespace FolderExplorerCoordinator {
 
   export async function moveItem(input: MoveExplorerItemInput) {
     if (input.itemType === 'example') {
-      const result = getExampleType(input.id) === 'websocket'
-        ? await getWindowElectron().moveWebSocketExample({ id: input.id, requestId: input.targetRequestId, targetPosition: input.targetPosition })
-        : await getWindowElectron().moveRequestExample({ id: input.id, requestId: input.targetRequestId, targetPosition: input.targetPosition })
+      const result =
+        getExampleType(input.id) === 'websocket'
+          ? await getWindowElectron().moveWebSocketExample({
+              id: input.id,
+              requestId: input.targetRequestId,
+              targetPosition: input.targetPosition,
+            })
+          : await getWindowElectron().moveRequestExample({
+              id: input.id,
+              requestId: input.targetRequestId,
+              targetPosition: input.targetPosition,
+            })
       if (!result.success) {
         toast.show(result)
         return false
@@ -420,7 +459,9 @@ export namespace FolderExplorerCoordinator {
   }
 }
 
-function createMoveUndoEntry(input: Extract<MoveExplorerItemInput, { itemType: 'folder' | 'request' }>): MoveUndoEntry | null {
+function createMoveUndoEntry(
+  input: Extract<MoveExplorerItemInput, { itemType: 'folder' | 'request' }>
+): MoveUndoEntry | null {
   const items = folderExplorerTreeStore.getSnapshot().context.items
   const item = items.find(currentItem => currentItem.itemType === input.itemType && currentItem.id === input.id)
 
@@ -481,7 +522,11 @@ function showMoveUndoToast() {
     message: createElement(
       'div',
       { className: 'flex items-center gap-3' },
-      createElement('span', { className: 'min-w-0 flex-1' }, pendingCount === 1 ? summary : `${summary} ${pendingCount - 1} more in stack.`),
+      createElement(
+        'span',
+        { className: 'min-w-0 flex-1' },
+        pendingCount === 1 ? summary : `${summary} ${pendingCount - 1} more in stack.`
+      ),
       createElement(
         'button',
         {
@@ -521,7 +566,9 @@ async function getFlattenFolderWarning(folderId: string) {
   return buildFlattenFolderWarningMessage(toFolderDetailsDraft(result.data)) ?? undefined
 }
 
-function buildFlattenFolderWarningMessage(folder: Pick<FolderRecord, 'headers' | 'auth' | 'preRequestScript' | 'postRequestScript'>) {
+function buildFlattenFolderWarningMessage(
+  folder: Pick<FolderRecord, 'headers' | 'auth' | 'preRequestScript' | 'postRequestScript'>
+) {
   const warningItems: string[] = []
 
   if (folder.headers.trim()) {
@@ -544,9 +591,10 @@ function buildFlattenFolderWarningMessage(folder: Pick<FolderRecord, 'headers' |
     return null
   }
 
-  const summary = warningItems.length === 1
-    ? warningItems[0]
-    : `${warningItems.slice(0, -1).join(', ')} and ${warningItems[warningItems.length - 1]}`
+  const summary =
+    warningItems.length === 1
+      ? warningItems[0]
+      : `${warningItems.slice(0, -1).join(', ')} and ${warningItems[warningItems.length - 1]}`
 
   return `This folder has ${summary}. Flattening moves only direct children, so these folder-level settings will be discarded when the folder is deleted.`
 }
@@ -568,7 +616,9 @@ async function executeFlattenFolder(item: Extract<ExplorerItem, { itemType: 'fol
   const targetParentFolderId = item.parentFolderId
   let targetPosition = treeState.items.filter(
     (currentItem): currentItem is Extract<ExplorerItem, { itemType: 'folder' | 'request' }> =>
-      currentItem.itemType !== 'example' && currentItem.parentFolderId === targetParentFolderId && currentItem.id !== item.id
+      currentItem.itemType !== 'example' &&
+      currentItem.parentFolderId === targetParentFolderId &&
+      currentItem.id !== item.id
   ).length
 
   for (const child of children) {
@@ -605,9 +655,10 @@ async function executeFlattenFolder(item: Extract<ExplorerItem, { itemType: 'fol
   toast.show({
     severity: 'success',
     title: 'Folder flattened',
-    message: children.length === 0
-      ? `"${item.name}" was deleted.`
-      : `Moved ${children.length} item${children.length === 1 ? '' : 's'} out of "${item.name}" and deleted the folder.`,
+    message:
+      children.length === 0
+        ? `"${item.name}" was deleted.`
+        : `Moved ${children.length} item${children.length === 1 ? '' : 's'} out of "${item.name}" and deleted the folder.`,
   })
 }
 
@@ -717,7 +768,7 @@ async function closeTabInternal(tabId: string) {
 
   const nextTabs = tabs.filter(tab => tab.id !== tabId)
   const nextActiveTabId =
-    activeTabId === tabId ? nextTabs[Math.max(0, tabIndex - 1)]?.id ?? nextTabs[tabIndex]?.id ?? null : activeTabId
+    activeTabId === tabId ? (nextTabs[Math.max(0, tabIndex - 1)]?.id ?? nextTabs[tabIndex]?.id ?? null) : activeTabId
 
   clearClosedTabEntries(tabs, nextTabs)
   await replaceTabsState(nextTabs, getValidActiveTabId(nextTabs, nextActiveTabId))
@@ -786,7 +837,8 @@ function getTabById(tabId: string) {
 }
 
 function isTabDirty(tab: FolderExplorerTabRecord) {
-  const entry = folderExplorerEditorStore.getSnapshot().context.entries[toSelectionKey({ itemType: tab.itemType, id: tab.itemId })]
+  const entry =
+    folderExplorerEditorStore.getSnapshot().context.entries[toSelectionKey({ itemType: tab.itemType, id: tab.itemId })]
   return Boolean(entry && isEntryDirty(entry))
 }
 
@@ -939,9 +991,15 @@ async function loadItem(selection: Selection) {
     return
   }
 
-  const serverDraft = toServerDraft(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord)
+  const serverDraft = toServerDraft(
+    selection,
+    result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord
+  )
   const currentEntry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
-  const current = currentEntry.current && serializeDetails(currentEntry.current) !== serializeDetails(serverDraft) ? currentEntry.current : serverDraft
+  const current =
+    currentEntry.current && serializeDetails(currentEntry.current) !== serializeDetails(serverDraft)
+      ? currentEntry.current
+      : serverDraft
 
   folderExplorerEditorStore.trigger.entryLoaded({ key, base: serverDraft, current })
   folderExplorerTreeStore.trigger.itemNameUpdated({ selection, name: result.data.name })
@@ -972,23 +1030,23 @@ async function saveItem(selection: Selection) {
         })
       : draft.itemType === 'request'
         ? await getWindowElectron().updateRequest({
-          id: selection.id,
-          name: draft.name,
-          requestType: draft.requestType,
-          method: draft.method,
-          url: draft.url,
-          pathParams: draft.pathParams,
-          searchParams: draft.searchParams,
-          auth: draft.auth,
-          preRequestScript: draft.preRequestScript,
-          postRequestScript: draft.postRequestScript,
-          headers: draft.headers,
-          body: draft.body,
-          bodyType: draft.bodyType,
-          rawType: draft.rawType,
-          websocketSubprotocols: draft.websocketSubprotocols,
-          saveToHistory: draft.saveToHistory,
-        })
+            id: selection.id,
+            name: draft.name,
+            requestType: draft.requestType,
+            method: draft.method,
+            url: draft.url,
+            pathParams: draft.pathParams,
+            searchParams: draft.searchParams,
+            auth: draft.auth,
+            preRequestScript: draft.preRequestScript,
+            postRequestScript: draft.postRequestScript,
+            headers: draft.headers,
+            body: draft.body,
+            bodyType: draft.bodyType,
+            rawType: draft.rawType,
+            websocketSubprotocols: draft.websocketSubprotocols,
+            saveToHistory: draft.saveToHistory,
+          })
         : draft.exampleType === 'websocket'
           ? await getWindowElectron().updateWebSocketExample({
               id: selection.id,
@@ -1017,9 +1075,15 @@ async function saveItem(selection: Selection) {
     return
   }
 
-  const serverDraft = toServerDraft(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord)
+  const serverDraft = toServerDraft(
+    selection,
+    result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord
+  )
   const latestEntry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
-  const nextCurrent = latestEntry.current && serializeDetails(latestEntry.current) !== serializeDetails(serverDraft) ? latestEntry.current : serverDraft
+  const nextCurrent =
+    latestEntry.current && serializeDetails(latestEntry.current) !== serializeDetails(serverDraft)
+      ? latestEntry.current
+      : serverDraft
 
   folderExplorerEditorStore.trigger.entrySaved({
     key,
@@ -1039,7 +1103,12 @@ function persistUnsavedDrafts() {
   )
   const nextPersistedDrafts = Object.fromEntries(
     Object.entries(entries)
-      .filter(([key, entry]) => openKeys.has(key) && entry.current && (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base)))
+      .filter(
+        ([key, entry]) =>
+          openKeys.has(key) &&
+          entry.current &&
+          (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base))
+      )
       .map(([key, entry]) => [key, entry.current as DetailsDraft])
   )
 
@@ -1051,7 +1120,10 @@ function persistUiState() {
   saveFolderExplorerUiState(selected, expandedIds)
 }
 
-function toServerDraft(selection: Selection, value: FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord) {
+function toServerDraft(
+  selection: Selection,
+  value: FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord
+) {
   return selection.itemType === 'folder'
     ? toFolderDetailsDraft(value as FolderRecord)
     : selection.itemType === 'request'
@@ -1062,9 +1134,12 @@ function toServerDraft(selection: Selection, value: FolderRecord | HttpRequestRe
 }
 
 function getExampleType(exampleId: string) {
-  const item = folderExplorerTreeStore.getSnapshot().context.items.find(
-    (currentItem): currentItem is Extract<ExplorerItem, { itemType: 'example' }> => currentItem.itemType === 'example' && currentItem.id === exampleId
-  )
+  const item = folderExplorerTreeStore
+    .getSnapshot()
+    .context.items.find(
+      (currentItem): currentItem is Extract<ExplorerItem, { itemType: 'example' }> =>
+        currentItem.itemType === 'example' && currentItem.id === exampleId
+    )
   return item?.exampleType ?? 'http'
 }
 
@@ -1086,7 +1161,8 @@ function ensureSelectionVisible(selection: Selection) {
 
   if (selection.itemType === 'request') {
     const request = items.find(
-      (item): item is Extract<ExplorerItem, { itemType: 'request' }> => item.itemType === 'request' && item.id === selection.id
+      (item): item is Extract<ExplorerItem, { itemType: 'request' }> =>
+        item.itemType === 'request' && item.id === selection.id
     )
     expandFolderChain(request?.parentFolderId ?? null)
     persistUiState()
@@ -1095,7 +1171,8 @@ function ensureSelectionVisible(selection: Selection) {
 
   if (selection.itemType === 'example') {
     const example = items.find(
-      (item): item is Extract<ExplorerItem, { itemType: 'example' }> => item.itemType === 'example' && item.id === selection.id
+      (item): item is Extract<ExplorerItem, { itemType: 'example' }> =>
+        item.itemType === 'example' && item.id === selection.id
     )
     if (!example) {
       return
@@ -1103,7 +1180,8 @@ function ensureSelectionVisible(selection: Selection) {
 
     folderExplorerEditorStore.trigger.expandedEnsured({ id: example.requestId })
     const request = items.find(
-      (item): item is Extract<ExplorerItem, { itemType: 'request' }> => item.itemType === 'request' && item.id === example.requestId
+      (item): item is Extract<ExplorerItem, { itemType: 'request' }> =>
+        item.itemType === 'request' && item.id === example.requestId
     )
     expandFolderChain(request?.parentFolderId ?? null)
     persistUiState()
