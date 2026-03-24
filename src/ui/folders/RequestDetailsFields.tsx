@@ -49,6 +49,7 @@ import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { SseTranscript } from './SseTranscript'
 import { ResponseVisualizerPreview } from './ResponseVisualizerPreview'
+import { buildImportedHttpUrlFields } from './requestUrlImport'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -507,34 +508,64 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     })
   }
 
-  const handleUrlPaste = (value: string) => {
-    const parsedCurl = parseCurlRequest(value)
-    if (!parsedCurl) {
-      return false
-    }
-
-    const shouldShowSearchParams = parsedCurl.bodyType === 'none' && parsedCurl.searchParams.trim() !== ''
+  const importUrl = (nextUrl: string) => {
+    const importedUrlFields = buildImportedHttpUrlFields(nextUrl, draft.bodyType)
+    const { metaTab: nextMetaTab, ...nextUrlFields } = importedUrlFields
 
     FolderExplorerCoordinator.updateSelectedDraft({
       ...draft,
-      method: parsedCurl.method,
-      url: parsedCurl.url,
-      pathParams: parsedCurl.pathParams,
-      searchParams: parsedCurl.searchParams,
-      auth: parsedCurl.auth,
-      headers: parsedCurl.headers,
-      body: parsedCurl.body,
-      bodyType: parsedCurl.bodyType,
-      rawType: parsedCurl.rawType,
+      ...nextUrlFields,
     })
 
-    updateMetaTab(shouldShowSearchParams ? 'search-params' : 'overview')
+    updateMetaTab(nextMetaTab)
 
     toast.show({
       severity: 'success',
-      title: 'Imported cURL',
-      message: 'Updated request fields from pasted cURL command.',
+      title: 'Imported URL',
+      message: 'Rebuilt request URL fields from pasted URL.',
     })
+  }
+
+  const handleUrlPaste = (value: string) => {
+    const parsedCurl = parseCurlRequest(value)
+    if (parsedCurl) {
+      const shouldShowSearchParams = parsedCurl.bodyType === 'none' && parsedCurl.searchParams.trim() !== ''
+
+      FolderExplorerCoordinator.updateSelectedDraft({
+        ...draft,
+        method: parsedCurl.method,
+        url: parsedCurl.url,
+        pathParams: parsedCurl.pathParams,
+        searchParams: parsedCurl.searchParams,
+        auth: parsedCurl.auth,
+        headers: parsedCurl.headers,
+        body: parsedCurl.body,
+        bodyType: parsedCurl.bodyType,
+        rawType: parsedCurl.rawType,
+      })
+
+      updateMetaTab(shouldShowSearchParams ? 'search-params' : 'overview')
+
+      toast.show({
+        severity: 'success',
+        title: 'Imported cURL',
+        message: 'Updated request fields from pasted cURL command.',
+      })
+      return true
+    }
+
+    const nextUrl = value.trim()
+    if (!nextUrl || nextUrl.includes('\n')) {
+      return false
+    }
+
+    try {
+      new URL(nextUrl)
+    } catch {
+      return false
+    }
+
+    importUrl(nextUrl)
     return true
   }
 

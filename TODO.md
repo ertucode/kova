@@ -1,4 +1,2 @@
 - implement undo
 - tag environments so you do not have same type opened
-- url'e yapıştırınca clipboard gidiyo
-- url'e yapıştırınca eski search paramlar kaybolmuyo

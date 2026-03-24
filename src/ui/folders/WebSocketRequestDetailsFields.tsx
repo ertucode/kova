@@ -23,6 +23,7 @@ import { requestExecutionStore } from './requestExecutionStore'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
+import { buildImportedWebSocketUrlFields } from './requestUrlImport'
 
 type WebSocketMetaTab = 'overview' | 'search-params'
 type MessageFilter = 'all' | 'sent' | 'received'
@@ -352,6 +353,43 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     document.body.style.userSelect = 'none'
   }
 
+  const importUrl = (nextUrl: string) => {
+    const importedUrlFields = buildImportedWebSocketUrlFields(nextUrl)
+    const { metaTab: nextMetaTab, ...nextUrlFields } = importedUrlFields
+
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...draft,
+      ...nextUrlFields,
+    })
+
+    setMetaTab(nextMetaTab)
+
+    toast.show({
+      severity: 'success',
+      title: 'Imported URL',
+      message: 'Rebuilt request URL fields from pasted URL.',
+    })
+  }
+
+  const handleUrlPaste = (value: string) => {
+    const nextUrl = value.trim()
+    if (!nextUrl || nextUrl.includes('\n')) {
+      return false
+    }
+
+    try {
+      const parsedUrl = new URL(nextUrl)
+      if (parsedUrl.protocol !== 'ws:' && parsedUrl.protocol !== 'wss:') {
+        return false
+      }
+    } catch {
+      return false
+    }
+
+    importUrl(nextUrl)
+    return true
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <section className="w-full border-b border-base-content/10">
@@ -364,6 +402,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               className="min-w-0 flex-1 border-0"
               placeholder="wss://echo.websocket.events"
               extensions={urlEditorExtensions}
+              onPasteText={handleUrlPaste}
               onChange={value =>
                 FolderExplorerCoordinator.updateSelectedDraft({
                   ...draft,
