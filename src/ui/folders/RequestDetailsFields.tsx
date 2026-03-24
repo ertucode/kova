@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { CopyIcon, InfoIcon, SaveIcon } from 'lucide-react'
+import { CopyIcon, InfoIcon, LibraryBigIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { getAuthVariableSources } from '@common/Auth'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
@@ -795,7 +795,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             editorLanguage="javascript"
             editorSize="small"
             extensions={preRequestScriptExtensions}
-            headerActions={<ScriptDocumentationButton phase="pre-request" />}
+            headerActions={<ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -808,7 +808,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             editorLanguage="javascript"
             editorSize="small"
             extensions={postRequestScriptExtensions}
-            headerActions={<ScriptDocumentationButton phase="post-request" />}
+            headerActions={<ScriptDocumentationButton phase="post-request" tooltip="Documentation" />}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
           />
@@ -818,10 +818,29 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       {metaTab === 'response-visualizer' ? (
         <section className="min-h-0 flex-1">
           <div className="relative h-full">
-            <ScriptDocumentationButton
-              phase="response-visualizer"
-              className="absolute right-3 top-3 z-10 h-8 w-8 rounded-lg border border-base-content/10 bg-base-100/90 backdrop-blur"
-            />
+            <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+              <div className="tooltip tooltip-left" data-tip="Copy">
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
+                  onClick={() => void copyTextToClipboard(draft.responseVisualizer, 'Response visualizer copied to clipboard.')}
+                  aria-label="Copy response visualizer"
+                >
+                  <CopyIcon className="size-4" />
+                </button>
+              </div>
+              <ScriptDocumentationButton
+                phase="response-visualizer"
+                mode="examples"
+                tooltip="Examples"
+                className="h-8 rounded-lg border border-base-content/10 bg-base-100/90 px-0 backdrop-blur"
+              />
+              <ScriptDocumentationButton
+                phase="response-visualizer"
+                tooltip="Documentation"
+                className="h-8 w-8 rounded-lg border border-base-content/10 bg-base-100/90 backdrop-blur"
+              />
+            </div>
             <CodeEditor
               value={draft.responseVisualizer}
               language="jsx"
@@ -997,18 +1016,26 @@ function ActiveEnvironmentConfirmation({
 function ScriptDocumentationButton({
   phase,
   className,
+  mode = 'full',
+  tooltip,
 }: {
   phase: 'pre-request' | 'post-request' | 'response-visualizer'
   className?: string
+  mode?: 'full' | 'examples'
+  tooltip?: string
 }) {
   const ariaLabel =
-    phase === 'pre-request'
-      ? 'Open pre-request script documentation'
-      : phase === 'post-request'
-        ? 'Open post-request script documentation'
-        : 'Open response visualizer documentation'
+    mode === 'examples'
+      ? phase === 'response-visualizer'
+        ? 'Open response visualizer examples'
+        : 'Open script examples'
+      : phase === 'pre-request'
+        ? 'Open pre-request script documentation'
+        : phase === 'post-request'
+          ? 'Open post-request script documentation'
+          : 'Open response visualizer documentation'
 
-  return (
+  const button = (
     <button
       type="button"
       className={[
@@ -1017,12 +1044,21 @@ function ScriptDocumentationButton({
       ]
         .filter(Boolean)
         .join(' ')}
-      onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase } })}
+      onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase, mode } })}
       aria-label={ariaLabel}
-      title="Script documentation"
     >
-      <InfoIcon className="size-3.5" />
+      {mode === 'examples' ? <LibraryBigIcon className="size-3.5" /> : <InfoIcon className="size-3.5" />}
     </button>
+  )
+
+  if (!tooltip) {
+    return button
+  }
+
+  return (
+    <div className="tooltip tooltip-left" data-tip={tooltip}>
+      {button}
+    </div>
   )
 }
 

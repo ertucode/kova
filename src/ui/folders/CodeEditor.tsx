@@ -209,6 +209,7 @@ export function CodeEditor({
   onChange,
   onBlur,
   linePaddingOverride,
+  vimMode = true,
 }: {
   value: string
   language: CodeEditorLanguage
@@ -226,12 +227,12 @@ export function CodeEditor({
   onChange: (value: string, params: { caretPos: number; previousValue: string; previousCaretPos: number }) => void
   onBlur?: () => void
   linePaddingOverride?: string
+  vimMode?: boolean
 }) {
   const editorViewRef = useRef<EditorView | null>(null)
 
   const resolvedExtensions = useMemo(() => {
     const nextExtensions: Extension[] = [
-      vim(),
       highlightSelectionMatches({
         highlightWordAroundCursor: true,
       }),
@@ -247,6 +248,10 @@ export function CodeEditor({
       editorTheme,
       syntaxHighlighting(editorHighlightStyle),
     ]
+
+    if (vimMode) {
+      nextExtensions.unshift(vim())
+    }
 
     nextExtensions.push(
       EditorView.theme({
@@ -402,7 +407,7 @@ export function CodeEditor({
     }
 
     return nextExtensions
-  }, [compact, extensions, hideFocusOutline, language, onPasteText, placeholder, showFoldGutter, singleLine, size])
+  }, [compact, extensions, hideFocusOutline, language, onPasteText, placeholder, showFoldGutter, singleLine, size, vimMode])
 
   return (
     <div
@@ -424,8 +429,8 @@ export function CodeEditor({
         onCreateEditor={view => {
           editorViewRef.current = view
 
-          const cm = getCM(view)
-          if (cm) {
+          const cm = vimMode ? getCM(view) : null
+          if (cm && !readOnly) {
             Vim.handleKey(cm, 'i', 'user')
           }
         }}
