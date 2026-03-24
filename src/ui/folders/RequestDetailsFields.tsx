@@ -748,6 +748,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             valuePlaceholder="1"
             contentClassName="border-t-0"
             warnOnDuplicate={false}
+            valueEditorAsCode
+            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
           />
         </section>
       ) : null}

@@ -1,6 +1,4 @@
 - implement undo
 - tag environments so you do not have same type opened
-- sendleyince belli olmuyo
-- keyvelueditor cmd+d duplicate + bug editor çalışmıyo, enterlayınca alttakine geçmeli. rowlar arasına fareyle gelince buton gelmeli ekleme buyonu
 - url'e yapıştırınca clipboard gidiyo
 - url'e yapıştırınca eski search paramlar kaybolmuyo
