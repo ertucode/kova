@@ -747,6 +747,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             keyPlaceholder="page"
             valuePlaceholder="1"
             contentClassName="border-t-0"
+            warnOnDuplicate={false}
           />
         </section>
       ) : null}
@@ -803,7 +804,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </section>
       ) : null}
 
-      <section className="shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
+      <section
+        className="relative shrink-0 overflow-hidden bg-base-100/95"
+        style={{ height: `${responsePaneHeight}px` }}
+      >
         <button
           type="button"
           className={`block h-[3px] w-full cursor-ns-resize border-0 transition-colors ${
@@ -814,13 +818,24 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           title="Resize response panel"
         />
 
-        <div className="flex min-h-0 flex-col overflow-hidden h-[calc(100%-2px)]">
+        <div className="relative flex h-[calc(100%-2px)] min-h-0 flex-col overflow-hidden">
+          {isSending ? (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px overflow-hidden bg-base-content/8">
+                <div className="h-full w-1/3 animate-[request-loading_1.25s_ease-in-out_infinite] rounded-full bg-info/80 shadow-[0_0_18px_rgba(59,130,246,0.4)]" />
+              </div>
+            </>
+          ) : null}
           {/* <DetailsSectionHeader */}
           {/*   title="Response" */}
           {/*   actions={<ResponseStatusSummary response={response} responseError={responseError} />} */}
           {/* /> */}
           <ResponseScriptErrors errors={response?.scriptErrors ?? []} />
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div
+            className={`flex min-h-0 flex-1 overflow-hidden transition duration-200 ${
+              isSending ? 'pointer-events-none blur-[1.5px] saturate-50 opacity-60' : ''
+            }`}
+          >
             {shouldShowSsePanel ? (
               <SseResponsePanel
                 stream={sseStream}
@@ -1730,6 +1745,22 @@ function formatXml(xml: string): string {
   }
 
   return formatted.trim()
+}
+
+if (typeof document !== 'undefined' && !document.getElementById('request-loading-keyframes')) {
+  const styleElement = document.createElement('style')
+  styleElement.id = 'request-loading-keyframes'
+  styleElement.textContent = `
+    @keyframes request-loading {
+      0% {
+        transform: translateX(-120%);
+      }
+      100% {
+        transform: translateX(320%);
+      }
+    }
+  `
+  document.head.appendChild(styleElement)
 }
 
 type ParsedStructuredResponse = {
