@@ -1285,6 +1285,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
   const hasResponseVisualizer = responseVisualizer.trim().length > 0
   const canRenderVisualizer = hasResponseVisualizer && response !== null
+  const responseBodySize = useMemo(() => formatBytes(getByteLength(rawBody)), [rawBody])
   const parsedStructuredResponse = useMemo(() => parseStructuredResponse(rawBody, contentType), [contentType, rawBody])
   const tableResolution = useMemo(
     () => resolveResponseTableRows(parsedStructuredResponse, responseTableAccessor),
@@ -1384,6 +1385,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             </button>
           ) : null}
           {contentType ? <div className="text-xs text-base-content/45">{contentType}</div> : null}
+          {response ? <div className="text-xs text-base-content/45">{responseBodySize}</div> : null}
           <ResponseStatusSummary response={response} responseError={responseError} />
         </div>
       </div>
@@ -1838,6 +1840,20 @@ function formatResponseBody(body: string, headers: string) {
   }
 
   return body
+}
+
+function getByteLength(value: string) {
+  return new TextEncoder().encode(value).length
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function formatXml(xml: string): string {
