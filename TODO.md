@@ -1,4 +1,3 @@
 - implement undo
 - tag environments so you do not have same type opened
 - response boyutunu yazalim
-- url'e yazarken tek tek karakterler geliyo search params'ta

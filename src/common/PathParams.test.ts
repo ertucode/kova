@@ -40,14 +40,35 @@ describe('PathParams', () => {
   })
 
   it('keeps existing search param row order stable while syncing URL values', () => {
-    expect(syncSearchParamsWithUrl('https://api.example.com/users?sort=desc', 'page:1\nsort:asc\nfilter:active')).toBe(
-      'page:1\nsort:desc\nfilter:active'
-    )
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?sort=desc', 'page:1\nsort:asc\nfilter:active')).toBe('sort:desc')
   })
 
   it('appends newly introduced URL search params after existing rows', () => {
     expect(syncSearchParamsWithUrl('https://api.example.com/users?sort=desc&page=2', 'filter:active\nsort:asc')).toBe(
-      'filter:active\nsort:desc\npage:2'
+      'sort:desc\npage:2'
+    )
+  })
+
+  it('renames the same trailing search param row while typing in the URL', () => {
+    const initial = syncSearchParamsWithUrl(
+      'https://api.example.com/users?exchange=hisse&limit=10&n',
+      'exchange:hisse\nlimit:10'
+    )
+
+    expect(initial).toBe('exchange:hisse\nlimit:10\nn:')
+
+    const renamed = syncSearchParamsWithUrl('https://api.example.com/users?exchange=hisse&limit=10&newkey', initial)
+
+    expect(renamed).toBe('exchange:hisse\nlimit:10\nnewkey:')
+  })
+
+  it('removes search param rows when they are removed from the URL', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?limit=10', 'exchange:hisse\nlimit:10\nnewkey:')).toBe('limit:10')
+  })
+
+  it('preserves descriptions when a search param key is renamed in place', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?newkey=10', 'oldkey:10 // Keep this')).toBe(
+      'newkey:10 // Keep this'
     )
   })
 

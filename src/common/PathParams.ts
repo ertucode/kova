@@ -117,38 +117,34 @@ export function applyPathParamsToUrl(url: string, pathParams: string) {
 export function syncSearchParamsWithUrl(url: string, searchParams: string) {
   const urlRows = extractSearchParamRows(url)
   const existingRows = parseKeyValueRows(searchParams)
-  const remainingUrlRows = [...urlRows]
-  const nextRows = existingRows.map(existingRow => {
-    const existingKey = existingRow.key.trim()
-    const matchingIndex = remainingUrlRows.findIndex(urlRow => urlRow.key === existingKey)
+  const usedExistingRowIndexes = new Set<number>()
+  const nextRows = urlRows.map((urlRow, index) => {
+    const matchingIndexByKey = existingRows.findIndex(
+      (existingRow, existingIndex) => !usedExistingRowIndexes.has(existingIndex) && existingRow.key.trim() === urlRow.key
+    )
 
-    if (matchingIndex < 0) {
-      return existingRow
+    const matchingIndex =
+      matchingIndexByKey >= 0
+        ? matchingIndexByKey
+        : index < existingRows.length && !usedExistingRowIndexes.has(index)
+          ? index
+          : -1
+
+    const existingRow = matchingIndex >= 0 ? existingRows[matchingIndex] : null
+    if (matchingIndex >= 0) {
+      usedExistingRowIndexes.add(matchingIndex)
     }
 
-    const matchingRow = remainingUrlRows[matchingIndex]
-    remainingUrlRows.splice(matchingIndex, 1)
-
     return {
-      ...existingRow,
+      id: existingRow?.id ?? `search-param-${index}`,
       enabled: true,
-      key: matchingRow.key,
-      value: matchingRow.value,
+      key: urlRow.key,
+      value: urlRow.value,
+      description: existingRow?.description ?? '',
     } satisfies KeyValueRow
   })
 
-  const appendedRows = remainingUrlRows.map(
-    (row, index) =>
-      ({
-        id: `search-param-${existingRows.length + index}`,
-        enabled: true,
-        key: row.key,
-        value: row.value,
-        description: '',
-      }) satisfies KeyValueRow
-  )
-
-  return stringifyKeyValueRows([...nextRows, ...appendedRows])
+  return stringifyKeyValueRows(nextRows)
 }
 
 export function syncUrlWithSearchParams(url: string, searchParams: string) {
