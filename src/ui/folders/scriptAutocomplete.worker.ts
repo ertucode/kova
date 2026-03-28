@@ -62,7 +62,14 @@ import es2023CollectionLib from 'typescript/lib/lib.es2023.collection.d.ts?raw'
 import es2023IntlLib from 'typescript/lib/lib.es2023.intl.d.ts?raw'
 import esnextIteratorLib from 'typescript/lib/lib.esnext.iterator.d.ts?raw'
 import { getScriptRuntimeDeclarations, type ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
-import type { ScriptAutocompleteOption, ScriptAutocompleteRequest, ScriptAutocompleteResponse } from './scriptAutocompleteTypes'
+import type {
+  ScriptAutocompleteOption,
+  ScriptAutocompleteRequest,
+  ScriptAutocompleteResponse,
+  ScriptDiagnosticsRequest,
+  ScriptDiagnosticsResponse,
+  ScriptEditorDiagnostic,
+} from './scriptAutocompleteTypes'
 
 const rootLibFile = 'lib.es2023.d.ts'
 const sharedFiles = new Map<string, string>([
@@ -169,8 +176,8 @@ const phaseStates = new Map<ScriptAutocompletePhase, PhaseState>([
   ['response-visualizer', createPhaseState('response-visualizer')],
 ])
 
-self.addEventListener('message', (event: MessageEvent<ScriptAutocompleteRequest>) => {
-  const response = complete(event.data)
+self.addEventListener('message', (event: MessageEvent<ScriptAutocompleteRequest | ScriptDiagnosticsRequest>) => {
+  const response = event.data.type === 'autocomplete' ? complete(event.data) : getDiagnostics(event.data)
   self.postMessage(response)
 })
 
@@ -181,8 +188,7 @@ function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteRespons
       throw new Error(`Unknown script autocomplete phase: ${request.phase}`)
     }
 
-    phaseState.files.set(phaseState.userFileName, request.code)
-    phaseState.versions.set(phaseState.userFileName, (phaseState.versions.get(phaseState.userFileName) ?? 0) + 1)
+    updatePhaseSource(phaseState, request.code)
 
     const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, request.position, {
       includeCompletionsForModuleExports: false,
@@ -219,6 +225,89 @@ function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteRespons
       success: false,
       error: error instanceof Error ? error.message : String(error),
     }
+  }
+}
+
+function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsResponse {
+  try {
+    const phaseState = phaseStates.get(request.phase)
+    if (!phaseState) {
+      throw new Error(`Unknown script diagnostics phase: ${request.phase}`)
+    }
+
+    updatePhaseSource(phaseState, request.code)
+
+    return {
+      requestId: request.requestId,
+      success: true,
+      diagnostics: dedupeDiagnostics([
+        ...phaseState.service.getSyntacticDiagnostics(phaseState.userFileName),
+        ...phaseState.service.getSemanticDiagnostics(phaseState.userFileName),
+      ]).map(diagnostic => toEditorDiagnostic(diagnostic, request.code, phaseState.service, phaseState.userFileName)),
+    }
+  } catch (error) {
+    return {
+      requestId: request.requestId,
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+function updatePhaseSource(phaseState: PhaseState, code: string) {
+  phaseState.files.set(phaseState.userFileName, code)
+  phaseState.versions.set(phaseState.userFileName, (phaseState.versions.get(phaseState.userFileName) ?? 0) + 1)
+}
+
+function dedupeDiagnostics(diagnostics: readonly ts.Diagnostic[]) {
+  const seen = new Set<string>()
+  const result: ts.Diagnostic[] = []
+
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.category !== ts.DiagnosticCategory.Error) {
+      continue
+    }
+
+    const key = [
+      diagnostic.code,
+      diagnostic.start ?? -1,
+      diagnostic.length ?? -1,
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+    ].join(':')
+
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    result.push(diagnostic)
+  }
+
+  return result
+}
+
+function toEditorDiagnostic(
+  diagnostic: ts.Diagnostic,
+  source: string,
+  service: ts.LanguageService,
+  fileName: string
+): ScriptEditorDiagnostic {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+  const file = diagnostic.file ?? service.getProgram()?.getSourceFile(fileName)
+  const from = Math.max(0, typeof diagnostic.start === 'number' ? diagnostic.start : 0)
+  const to = Math.max(from + 1, from + (typeof diagnostic.length === 'number' && diagnostic.length > 0 ? diagnostic.length : 0))
+  const location = file ? file.getLineAndCharacterOfPosition(from) : null
+  const line = location ? location.line + 1 : null
+  const column = location ? location.character + 1 : null
+  const sourceLine = line ? source.split('\n')[line - 1]?.trimEnd() ?? null : null
+
+  return {
+    from,
+    to,
+    message,
+    line,
+    column,
+    sourceLine,
   }
 }
 

@@ -10,6 +10,7 @@ export function DetailsTextArea({
   sectionClassName,
   editorLanguage,
   editorSize,
+  showLineNumbers,
   placeholder,
   extensions,
   editorRef,
@@ -23,6 +24,7 @@ export function DetailsTextArea({
   sectionClassName?: string
   editorLanguage?: CodeEditorLanguage
   editorSize?: 'normal' | 'small'
+  showLineNumbers?: boolean
   placeholder?: string
   extensions?: Extension[]
   editorRef?: Ref<CodeEditorHandle>
@@ -39,6 +41,7 @@ export function DetailsTextArea({
           value={value}
           language={editorLanguage}
           size={editorSize}
+          showLineNumbers={showLineNumbers}
           minHeightClassName={minHeightClassName}
           className="flex-1 border-x-0 border-b-0"
           placeholder={placeholder}

@@ -3,12 +3,13 @@ import { EditorState, type Extension } from '@codemirror/state'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, foldGutter, syntaxHighlighting } from '@codemirror/language'
+import { lintGutter } from '@codemirror/lint'
 import { json } from '@codemirror/lang-json'
 import { json5 as json5Language } from 'codemirror-json5'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
-import { EditorView, placeholder as placeholderExtension } from '@codemirror/view'
+import { EditorView, lineNumbers, placeholder as placeholderExtension } from '@codemirror/view'
 import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
 import { tags } from '@lezer/highlight'
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
@@ -82,7 +83,8 @@ const singleLineTransactionFilter = EditorState.transactionFilter.of(transaction
 })
 const readOnlyExtension = EditorState.readOnly.of(true)
 const foldGutterExtension = foldGutter({ markerDOM: open => createFoldMarker(open) })
-const lineWrappingExtension = EditorView.lineWrapping
+const lintGutterExtension = lintGutter()
+const lineNumbersExtension = lineNumbers()
 const vimExtension = vim()
 const jsonLanguageExtension = json()
 const json5LanguageExtension = json5Language()
@@ -133,11 +135,25 @@ const editorTheme = EditorView.theme({
     outline: '2px solid var(--color-base-content)',
     outlineOffset: '-2px',
   },
-  '.cm-scroller, .cm-gutters, .cm-layer': {
+  '.cm-scroller, .cm-layer': {
     backgroundColor: 'transparent !important',
   },
   '.cm-gutters': {
+    backgroundColor: 'color-mix(in oklab, var(--color-base-100) 70%, transparent) !important',
     borderRight: '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
+    paddingRight: '0',
+  },
+  '.cm-lintGutter': {
+    width: '1.05rem',
+  },
+  '.cm-lintGutter .cm-gutterElement': {
+    padding: '0',
+    width: '1.05rem',
+    justifyContent: 'center',
+  },
+  '.cm-lineNumbers .cm-gutterElement': {
+    minWidth: '1rem',
+    padding: '0 0.2rem 0 0.3rem',
   },
   '.cm-foldGutter': {
     width: '1.5rem',
@@ -181,7 +197,7 @@ const editorTheme = EditorView.theme({
     minHeight: '100%',
   },
   '.cm-content': {
-    padding: '0.75rem 1rem',
+    padding: '0.75rem 0.75rem 0.75rem 0.5rem',
     fontFamily:
       'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
     lineHeight: '1.5rem',
@@ -280,6 +296,7 @@ export function CodeEditor({
   hideFocusOutline,
   readOnly,
   showFoldGutter,
+  showLineNumbers,
   onPasteText,
   onChange,
   onBlur,
@@ -300,6 +317,7 @@ export function CodeEditor({
   hideFocusOutline?: boolean
   readOnly?: boolean
   showFoldGutter?: boolean
+  showLineNumbers?: boolean
   onPasteText?: (text: string) => boolean
   onChange: (value: string, params: { caretPos: number; previousValue: string; previousCaretPos: number }) => void
   onBlur?: () => void
@@ -486,10 +504,6 @@ export function CodeEditor({
       nextExtensions.push(hideFocusOutlineTheme)
     }
 
-    if (!singleLine) {
-      nextExtensions.push(lineWrappingExtension)
-    }
-
     if (placeholderValueExtension) {
       nextExtensions.push(placeholderValueExtension)
     }
@@ -506,6 +520,12 @@ export function CodeEditor({
       nextExtensions.push(foldGutterExtension)
     }
 
+    nextExtensions.push(lintGutterExtension)
+
+    if (showLineNumbers) {
+      nextExtensions.push(lineNumbersExtension)
+    }
+
     if (singleLine) {
       nextExtensions.push(singleLineContentTheme, singleLineTransactionFilter)
     }
@@ -519,7 +539,7 @@ export function CodeEditor({
     }
 
     return nextExtensions
-  }, [compactTheme, extensions, hideFocusOutline, languageExtension, pasteHandlerExtension, placeholderValueExtension, readOnly, showFoldGutter, singleLine, size, vimMode])
+  }, [compactTheme, extensions, hideFocusOutline, languageExtension, pasteHandlerExtension, placeholderValueExtension, readOnly, showFoldGutter, showLineNumbers, singleLine, size, vimMode])
 
   return (
     <div

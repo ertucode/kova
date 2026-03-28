@@ -43,6 +43,7 @@ import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDet
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
+import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { AuthorizationEditor } from './AuthorizationEditor'
@@ -226,6 +227,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const preRequestScriptExtensions = useMemo(
     () => [
+      scriptDiagnosticsExtension('pre-request'),
       scriptAutocompleteExtension({
         includeResponse: false,
         getEnvironmentNames: () => activeEnvironmentNames,
@@ -237,6 +239,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const postRequestScriptExtensions = useMemo(
     () => [
+      scriptDiagnosticsExtension('post-request'),
       scriptAutocompleteExtension({
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNames,
@@ -248,6 +251,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const responseVisualizerExtensions = useMemo(
     () => [
+      scriptDiagnosticsExtension('response-visualizer'),
       scriptAutocompleteExtension({
         phase: 'response-visualizer',
         includeResponse: true,
@@ -861,6 +865,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             sectionClassName="flex min-h-0 flex-1 flex-col md:border-r md:border-base-content/10"
             editorLanguage="javascript"
             editorSize="small"
+            showLineNumbers
             extensions={preRequestScriptExtensions}
             editorRef={preRequestEditorRef}
             headerActions={<ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />}
@@ -875,6 +880,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             sectionClassName="flex min-h-0 flex-1 flex-col"
             editorLanguage="javascript"
             editorSize="small"
+            showLineNumbers
             extensions={postRequestScriptExtensions}
             editorRef={postRequestEditorRef}
             headerActions={<ScriptDocumentationButton phase="post-request" tooltip="Documentation" />}
@@ -915,6 +921,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               value={draft.responseVisualizer}
               language="jsx"
               size="small"
+              showLineNumbers
               minHeightClassName="min-h-0 h-full"
               className="h-full border-x-0 border-b-0 border-t-0"
               placeholder={RESPONSE_VISUALIZER_PLACEHOLDER}
