@@ -39,6 +39,7 @@ const MOVE_UNDO_TOAST_ID = 'folder-explorer-move-undo'
 const MOVE_UNDO_TIMEOUT_MS = 5000
 const MAX_MOVE_UNDO_STACK_SIZE = 20
 const MAX_FOLDER_EXPLORER_TABS = 20
+const UNSAVED_DRAFTS_PERSIST_DEBOUNCE_MS = 500
 
 type OpenTabMode = 'preview' | 'pin'
 
@@ -52,6 +53,7 @@ type MoveUndoEntry = {
 
 let isUndoingMove = false
 const moveUndoStack: MoveUndoEntry[] = []
+let persistUnsavedDraftsTimeout: ReturnType<typeof setTimeout> | null = null
 
 export namespace FolderExplorerCoordinator {
   export async function initialize() {
@@ -1189,24 +1191,32 @@ function patchTreeItem(selection: Selection, value: FolderRecord | HttpRequestRe
 }
 
 function persistUnsavedDrafts() {
-  const entries = folderExplorerEditorStore.getSnapshot().context.entries
-  const openKeys = new Set(
-    folderExplorerEditorStore
-      .getSnapshot()
-      .context.tabs.map(tab => toSelectionKey({ itemType: tab.itemType, id: tab.itemId }))
-  )
-  const nextPersistedDrafts = Object.fromEntries(
-    Object.entries(entries)
-      .filter(
-        ([key, entry]) =>
-          openKeys.has(key) &&
-          entry.current &&
-          (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base))
-      )
-      .map(([key, entry]) => [key, entry.current as DetailsDraft])
-  )
+  if (persistUnsavedDraftsTimeout !== null) {
+    clearTimeout(persistUnsavedDraftsTimeout)
+  }
 
-  void saveToAsyncStorage(AsyncStorageKeys.folderExplorerDrafts, persistedDraftsSchema, nextPersistedDrafts)
+  persistUnsavedDraftsTimeout = setTimeout(() => {
+    persistUnsavedDraftsTimeout = null
+
+    const entries = folderExplorerEditorStore.getSnapshot().context.entries
+    const openKeys = new Set(
+      folderExplorerEditorStore
+        .getSnapshot()
+        .context.tabs.map(tab => toSelectionKey({ itemType: tab.itemType, id: tab.itemId }))
+    )
+    const nextPersistedDrafts = Object.fromEntries(
+      Object.entries(entries)
+        .filter(
+          ([key, entry]) =>
+            openKeys.has(key) &&
+            entry.current &&
+            (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base))
+        )
+        .map(([key, entry]) => [key, entry.current as DetailsDraft])
+    )
+
+    void saveToAsyncStorage(AsyncStorageKeys.folderExplorerDrafts, persistedDraftsSchema, nextPersistedDrafts)
+  }, UNSAVED_DRAFTS_PERSIST_DEBOUNCE_MS)
 }
 
 function persistUiState() {

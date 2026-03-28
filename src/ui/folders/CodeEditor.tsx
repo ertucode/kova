@@ -18,6 +18,76 @@ import { Vim, getCM, vim } from '@replit/codemirror-vim'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'
 
+const selectionMatchesExtension = highlightSelectionMatches({ highlightWordAroundCursor: true })
+const baseSetupExtensions = codeMirrorBasicSetup({
+  lineNumbers: false,
+  foldGutter: false,
+  dropCursor: false,
+  allowMultipleSelections: false,
+  highlightActiveLine: false,
+  highlightActiveLineGutter: false,
+  searchKeymap: false,
+})
+const selectionMatchTheme = EditorView.theme({
+  '& .cm-selectionMatch-main': {
+    backgroundColor: 'transparent !important',
+  },
+})
+const smallSizeTheme = EditorView.theme({
+  '&': {
+    fontSize: '0.78rem !important',
+  },
+  '.cm-scroller': {
+    fontSize: '0.78rem !important',
+  },
+  '.cm-content': {
+    fontSize: '0.78rem !important',
+    lineHeight: '1.35rem !important',
+  },
+  '.cm-line': {
+    fontSize: '0.78rem !important',
+  },
+})
+const hideFocusOutlineTheme = EditorView.theme({
+  '&.cm-focused': {
+    outline: 'none !important',
+  },
+})
+const singleLineContentTheme = EditorView.theme({
+  '& .cm-content': {
+    minHeight: 'auto',
+    width: '100%',
+    paddingTop: '0.75rem !important',
+    paddingBottom: '0.75rem !important',
+  },
+})
+const singleLineTransactionFilter = EditorState.transactionFilter.of(transaction => {
+  if (!transaction.docChanged) {
+    return transaction
+  }
+
+  const nextText = transaction.newDoc.toString()
+  if (!nextText.includes('\n')) {
+    return transaction
+  }
+
+  return [
+    transaction,
+    { changes: { from: 0, to: transaction.newDoc.length, insert: nextText.replace(/\s*\n\s*/g, ' ') } },
+  ]
+})
+const readOnlyExtension = EditorState.readOnly.of(true)
+const foldGutterExtension = foldGutter({ markerDOM: open => createFoldMarker(open) })
+const lineWrappingExtension = EditorView.lineWrapping
+const vimExtension = vim()
+const jsonLanguageExtension = json()
+const json5LanguageExtension = json5Language()
+const javascriptLanguageExtension = javascript()
+const jsxLanguageExtension = javascript({ jsx: true, typescript: true })
+const htmlLanguageExtension = html()
+const cssLanguageExtension = css()
+const xmlLanguageExtension = xml()
+
 const editorHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
   { tag: [tags.string, tags.special(tags.string)], color: 'var(--color-accent)' },
@@ -290,175 +360,128 @@ export function CodeEditor({
     onBlurRef.current?.()
   }, [])
 
+  const handleCreateEditor = useCallback(
+    (view: EditorView) => {
+      editorViewRef.current = view
+
+      const cm = vimMode ? getCM(view) : null
+      if (cm && !readOnly) {
+        Vim.handleKey(cm, 'i', 'user')
+      }
+    },
+    [readOnly, vimMode]
+  )
+
+  const languageExtension = useMemo(() => {
+    switch (language) {
+      case 'json':
+        return jsonLanguageExtension
+      case 'json5':
+        return json5LanguageExtension
+      case 'javascript':
+        return javascriptLanguageExtension
+      case 'jsx':
+        return jsxLanguageExtension
+      case 'html':
+        return htmlLanguageExtension
+      case 'css':
+        return cssLanguageExtension
+      case 'xml':
+        return xmlLanguageExtension
+      default:
+        return null
+    }
+  }, [language])
+
+  const compactTheme = useMemo(() => {
+    if (!compact) {
+      return null
+    }
+
+    return EditorView.theme({
+      '& .cm-content': {
+        padding: '0.44rem 0 !important',
+        lineHeight: '1.25rem',
+      },
+      '& .cm-line': {
+        padding: linePaddingOverride ?? '0 !important',
+      },
+    })
+  }, [compact, linePaddingOverride])
+
+  const placeholderValueExtension = useMemo(
+    () => (placeholder ? placeholderExtension(placeholder) : null),
+    [placeholder]
+  )
+
+  const pasteHandlerExtension = useMemo(() => {
+    if (!onPasteText) {
+      return null
+    }
+
+    return EditorView.domEventHandlers({
+      paste(event) {
+        const text = event.clipboardData?.getData('text/plain')
+        if (!text) {
+          return false
+        }
+
+        const handled = onPasteTextRef.current?.(text) ?? false
+        if (handled) {
+          event.preventDefault()
+          return true
+        }
+
+        return false
+      },
+    })
+  }, [onPasteText])
+
   const resolvedExtensions = useMemo(() => {
-    const nextExtensions: Extension[] = [
-      highlightSelectionMatches({
-        highlightWordAroundCursor: true,
-      }),
-      ...codeMirrorBasicSetup({
-        lineNumbers: false,
-        foldGutter: false,
-        dropCursor: false,
-        allowMultipleSelections: false,
-        highlightActiveLine: false,
-        highlightActiveLineGutter: false,
-        searchKeymap: false,
-      }),
-      editorTheme,
-      syntaxHighlighting(editorHighlightStyle),
-    ]
+    const nextExtensions: Extension[] = [selectionMatchesExtension, ...baseSetupExtensions, editorTheme, syntaxHighlighting(editorHighlightStyle), selectionMatchTheme]
 
     if (vimMode) {
-      nextExtensions.unshift(vim())
+      nextExtensions.unshift(vimExtension)
     }
-
-    nextExtensions.push(
-      EditorView.theme({
-        '& .cm-selectionMatch-main': {
-          backgroundColor: 'transparent !important',
-        },
-      })
-    )
 
     if (size === 'small') {
-      nextExtensions.push(
-        EditorView.theme({
-          '&': {
-            fontSize: '0.78rem !important',
-          },
-          '.cm-scroller': {
-            fontSize: '0.78rem !important',
-          },
-          '.cm-content': {
-            fontSize: '0.78rem !important',
-            lineHeight: '1.35rem !important',
-          },
-          '.cm-line': {
-            fontSize: '0.78rem !important',
-          },
-        })
-      )
+      nextExtensions.push(smallSizeTheme)
     }
 
-    if (compact) {
-      nextExtensions.push(
-        EditorView.theme({
-          '& .cm-content': {
-            padding: '0.44rem 0 !important',
-            lineHeight: '1.25rem',
-          },
-          '& .cm-line': {
-            padding: linePaddingOverride ?? '0 !important',
-          },
-        })
-      )
+    if (compactTheme) {
+      nextExtensions.push(compactTheme)
     }
 
     if (hideFocusOutline) {
-      nextExtensions.push(
-        EditorView.theme({
-          '&.cm-focused': {
-            outline: 'none !important',
-          },
-        })
-      )
+      nextExtensions.push(hideFocusOutlineTheme)
     }
 
     if (!singleLine) {
-      nextExtensions.push(EditorView.lineWrapping)
+      nextExtensions.push(lineWrappingExtension)
     }
 
-    if (placeholder) {
-      nextExtensions.push(placeholderExtension(placeholder))
+    if (placeholderValueExtension) {
+      nextExtensions.push(placeholderValueExtension)
     }
 
-    if (language === 'json') {
-      nextExtensions.push(json())
-    }
-
-    if (language === 'json5') {
-      nextExtensions.push(json5Language())
-    }
-
-    if (language === 'javascript') {
-      nextExtensions.push(javascript())
-    }
-
-    if (language === 'jsx') {
-      nextExtensions.push(javascript({ jsx: true, typescript: true }))
-    }
-
-    if (language === 'html') {
-      nextExtensions.push(html())
-    }
-
-    if (language === 'css') {
-      nextExtensions.push(css())
-    }
-
-    if (language === 'xml') {
-      nextExtensions.push(xml())
+    if (languageExtension) {
+      nextExtensions.push(languageExtension)
     }
 
     if (readOnly) {
-      nextExtensions.push(EditorState.readOnly.of(true))
+      nextExtensions.push(readOnlyExtension)
     }
 
     if (showFoldGutter) {
-      nextExtensions.push(
-        foldGutter({
-          markerDOM: open => createFoldMarker(open),
-        })
-      )
+      nextExtensions.push(foldGutterExtension)
     }
 
     if (singleLine) {
-      nextExtensions.push(
-        EditorView.theme({
-          '& .cm-content': {
-            minHeight: 'auto',
-            width: '100%',
-            paddingTop: '0.75rem !important',
-            paddingBottom: '0.75rem !important',
-          },
-        }),
-        EditorState.transactionFilter.of(transaction => {
-          if (!transaction.docChanged) {
-            return transaction
-          }
-
-          const nextText = transaction.newDoc.toString()
-          if (!nextText.includes('\n')) {
-            return transaction
-          }
-
-          return [
-            transaction,
-            { changes: { from: 0, to: transaction.newDoc.length, insert: nextText.replace(/\s*\n\s*/g, ' ') } },
-          ]
-        })
-      )
+      nextExtensions.push(singleLineContentTheme, singleLineTransactionFilter)
     }
 
-    if (onPasteText) {
-      nextExtensions.push(
-        EditorView.domEventHandlers({
-          paste(event) {
-            const text = event.clipboardData?.getData('text/plain')
-            if (!text) {
-              return false
-            }
-
-            const handled = onPasteTextRef.current?.(text) ?? false
-            if (handled) {
-              event.preventDefault()
-              return true
-            }
-
-            return false
-          },
-        })
-      )
+    if (pasteHandlerExtension) {
+      nextExtensions.push(pasteHandlerExtension)
     }
 
     if (extensions) {
@@ -466,7 +489,7 @@ export function CodeEditor({
     }
 
     return nextExtensions
-  }, [compact, extensions, hideFocusOutline, language, placeholder, showFoldGutter, singleLine, size, vimMode])
+  }, [compactTheme, extensions, hideFocusOutline, languageExtension, pasteHandlerExtension, placeholderValueExtension, readOnly, showFoldGutter, singleLine, size, vimMode])
 
   return (
     <div
@@ -485,14 +508,7 @@ export function CodeEditor({
         basicSetup={false}
         indentWithTab={false}
         extensions={resolvedExtensions}
-        onCreateEditor={view => {
-          editorViewRef.current = view
-
-          const cm = vimMode ? getCM(view) : null
-          if (cm && !readOnly) {
-            Vim.handleKey(cm, 'i', 'user')
-          }
-        }}
+        onCreateEditor={handleCreateEditor}
         onChange={handleEditorChange}
         onBlur={handleEditorBlur}
       />

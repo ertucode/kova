@@ -30,6 +30,7 @@
     "build-vendor": "node scripts/build-all.mjs",
     "build-everything": "npm run build-vendor && npm run build",
     "build-icon": "node scripts/build-icon.mjs",
+    "analyze:trace": "node scripts/analyze-trace.mjs",
     "build-mas": "npm run build-code && electron-builder --mac mas",
     "upload-mas": "xcrun altool --upload-app --type osx --file \"dist/mas/Kova.pkg\" --bundle-id com.ertucode.kova",
     "fix:sqlite3": "npx electron-rebuild -f -w better-sqlite3"

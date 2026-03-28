@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CopyIcon, InfoIcon, LibraryBigIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { getAuthVariableSources } from '@common/Auth'
@@ -259,6 +259,23 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         values: Object.fromEntries(row.valueByVariableName.entries()),
       })),
     [variableTooltipRows]
+  )
+  const responseBodyRequestSelection = useMemo(
+    () => (selectedRequestId ? { itemType: 'request' as const, id: selectedRequestId } : null),
+    [selectedRequestId]
+  )
+  const responseVisualizerRequestDraft = useMemo<
+    Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  >(
+    () => ({
+      method: draft.method,
+      url: draft.url,
+      headers: draft.headers,
+      body: draft.body,
+      bodyType: draft.bodyType,
+      rawType: draft.rawType,
+    }),
+    [draft.body, draft.bodyType, draft.headers, draft.method, draft.rawType, draft.url]
   )
 
   const formattedResponseBody = useMemo(() => {
@@ -605,6 +622,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     }
   }
 
+  const handleUpdateResponseTableAccessor = useCallback(
+    (value: string) => {
+      FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseTableAccessor: value })
+    },
+    [draft]
+  )
+
+  const handleSaveCurrentResponseAsExample = useCallback(() => {
+    void saveCurrentResponseAsExample()
+  }, [response, sseStream, selectedRequestId, draft])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <section className="w-full border-b border-base-content/10">
@@ -920,15 +948,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                   responseVisualizer={draft.responseVisualizer}
                   responseTableAccessor={draft.responseTableAccessor}
                   preferredResponseBodyView={draft.preferredResponseBodyView}
-                  requestSelection={selectedRequestId ? { itemType: 'request', id: selectedRequestId } : null}
-                  currentRequestDraft={draft}
-                  onUpdateResponseTableAccessor={value =>
-                    FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseTableAccessor: value })
-                  }
+                  requestSelection={responseBodyRequestSelection}
+                  requestDraft={responseVisualizerRequestDraft}
+                  onUpdateResponseTableAccessor={handleUpdateResponseTableAccessor}
                   environments={visualizerEnvironments}
                   response={response}
                   responseError={responseError}
-                  onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
+                  onSaveAsExample={response ? handleSaveCurrentResponseAsExample : undefined}
                 />
                 <ResponseHeadersPanel
                   value={response?.headers ?? ''}
@@ -1072,7 +1098,9 @@ function ScriptDocumentationButton({
   )
 }
 
-function ResponseScriptErrors({ errors }: { errors: SendRequestResponse['scriptErrors'] }) {
+const readOnlyCodeEditorOnChange = () => undefined
+
+const ResponseScriptErrors = memo(function ResponseScriptErrors({ errors }: { errors: SendRequestResponse['scriptErrors'] }) {
   if (errors.length === 0) {
     return null
   }
@@ -1082,7 +1110,7 @@ function ResponseScriptErrors({ errors }: { errors: SendRequestResponse['scriptE
       {errors.map(error => `${error.sourceName}: ${error.message}`).join('\n')}
     </div>
   )
-}
+})
 
 function VariableUsageBanner({
   metaTab,
@@ -1215,7 +1243,7 @@ function getMethodTone(method: RequestMethod) {
   }
 }
 
-function ResponseBodyPanel({
+const ResponseBodyPanel = memo(function ResponseBodyPanel({
   value,
   rawBody,
   description,
@@ -1224,7 +1252,7 @@ function ResponseBodyPanel({
   responseTableAccessor,
   preferredResponseBodyView,
   requestSelection,
-  currentRequestDraft,
+  requestDraft,
   onUpdateResponseTableAccessor,
   environments,
   response,
@@ -1239,7 +1267,7 @@ function ResponseBodyPanel({
   responseTableAccessor: string
   preferredResponseBodyView: 'raw' | 'table' | 'visualizer'
   requestSelection: { itemType: 'request'; id: string } | null
-  currentRequestDraft: RequestDetailsDraft
+  requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   onUpdateResponseTableAccessor: (value: string) => void
   environments: Array<{
     id: string
@@ -1362,13 +1390,13 @@ function ResponseBodyPanel({
 
       {viewMode === 'visualizer' && canRenderVisualizer && response ? (
         <div className="min-h-0 flex-1 overflow-hidden h-full pt-3">
-          <ResponseVisualizerPreview
-            source={responseVisualizer}
-            response={response}
-            contentType={contentType}
-            requestDraft={currentRequestDraft}
-            environments={environments}
-          />
+            <ResponseVisualizerPreview
+              source={responseVisualizer}
+              response={response}
+              contentType={contentType}
+              requestDraft={requestDraft}
+              environments={environments}
+            />
         </div>
       ) : viewMode === 'visualizer' && hasResponseVisualizer ? (
         <div className="mt-2 text-sm text-base-content/50">Send the request to render the response visualizer.</div>
@@ -1404,7 +1432,7 @@ function ResponseBodyPanel({
                   size="small"
                   className="border-0 h-full"
                   hideFocusOutline
-                  onChange={() => undefined}
+                  onChange={readOnlyCodeEditorOnChange}
                   compact
                 />
               </div>
@@ -1423,7 +1451,7 @@ function ResponseBodyPanel({
             size="small"
             className="border-0 h-full"
             hideFocusOutline
-            onChange={() => undefined}
+            onChange={readOnlyCodeEditorOnChange}
             compact
           />
         </div>
@@ -1432,7 +1460,7 @@ function ResponseBodyPanel({
       )}
     </div>
   )
-}
+})
 
 function ResponseTable({ rows }: { rows: Array<Record<string, unknown>> }) {
   const columns = useMemo(() => {
@@ -1605,8 +1633,14 @@ function SseResponsePanel({
   )
 }
 
-function ResponseHeadersPanel({ value, description }: { value: string; description: string }) {
-  const rows = parseResponseHeaders(value)
+const ResponseHeadersPanel = memo(function ResponseHeadersPanel({
+  value,
+  description,
+}: {
+  value: string
+  description: string
+}) {
+  const rows = useMemo(() => parseResponseHeaders(value), [value])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col border-l border-base-content/12 bg-base-100/35 p-2 overflow-hidden">
@@ -1632,7 +1666,7 @@ function ResponseHeadersPanel({ value, description }: { value: string; descripti
       )}
     </div>
   )
-}
+})
 
 function ResponseStatusSummary({
   response,
