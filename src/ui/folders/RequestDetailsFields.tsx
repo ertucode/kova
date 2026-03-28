@@ -333,13 +333,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     setMetaTab(initialMetaTab)
   }, [draft, selectedRequestId])
 
-  const updateMetaTab = useCallback((nextMetaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => {
-    if (selectedRequestId) {
-      metaTabByRequestIdRef.current[selectedRequestId] = nextMetaTab
-    }
+  const updateMetaTab = useCallback(
+    (nextMetaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => {
+      if (selectedRequestId) {
+        metaTabByRequestIdRef.current[selectedRequestId] = nextMetaTab
+      }
 
-    setMetaTab(nextMetaTab)
-  }, [selectedRequestId])
+      setMetaTab(nextMetaTab)
+    },
+    [selectedRequestId]
+  )
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -898,7 +901,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                 <button
                   type="button"
                   className="inline-flex h-8 items-center justify-center rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
-                  onClick={() => void copyTextToClipboard(draft.responseVisualizer, 'Response visualizer copied to clipboard.')}
+                  onClick={() =>
+                    void copyTextToClipboard(draft.responseVisualizer, 'Response visualizer copied to clipboard.')
+                  }
                   aria-label="Copy response visualizer"
                 >
                   <CopyIcon className="size-4" />
@@ -1114,7 +1119,7 @@ function ScriptDocumentationButton({
     <button
       type="button"
       className={[
-        'grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content',
+        'grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content h-full cursor-pointer',
         className,
       ]
         .filter(Boolean)
@@ -1161,8 +1166,7 @@ const ResponseScriptErrors = memo(function ResponseScriptErrors({
             className="block w-full cursor-pointer border-b border-error/10 px-3 py-2 text-left transition last:border-b-0 hover:bg-error/8 hover:text-base-content"
             onClick={() => onJumpToError(error)}
           >
-            <span className="font-medium text-error">{error.compactLabel}</span>{' '}
-            <span>{error.compactMessage}</span>
+            <span className="font-medium text-error">{error.compactLabel}</span> <span>{error.compactMessage}</span>
           </button>
         ))}
       </div>
@@ -1485,13 +1489,13 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
 
       {viewMode === 'visualizer' && canRenderVisualizer && response ? (
         <div className="min-h-0 flex-1 overflow-hidden h-full pt-3">
-            <ResponseVisualizerPreview
-              source={responseVisualizer}
-              response={response}
-              contentType={contentType}
-              requestDraft={requestDraft}
-              environments={environments}
-            />
+          <ResponseVisualizerPreview
+            source={responseVisualizer}
+            response={response}
+            contentType={contentType}
+            requestDraft={requestDraft}
+            environments={environments}
+          />
         </div>
       ) : viewMode === 'visualizer' && hasResponseVisualizer ? (
         <div className="mt-2 text-sm text-base-content/50">Send the request to render the response visualizer.</div>

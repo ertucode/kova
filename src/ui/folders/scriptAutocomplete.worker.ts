@@ -72,6 +72,31 @@ import type {
 } from './scriptAutocompleteTypes'
 
 const rootLibFile = 'lib.es2023.d.ts'
+const reactJsxTypesFile = 'react-jsx-runtime.d.ts'
+const reactJsxTypes = String.raw`
+declare namespace JSX {
+  interface Element {}
+  interface ElementClass {}
+  interface IntrinsicAttributes {
+    key?: unknown
+  }
+  interface ElementAttributesProperty {
+    props: {}
+  }
+  interface ElementChildrenAttribute {
+    children: {}
+  }
+  interface IntrinsicElements {
+    [elementName: string]: Record<string, unknown>
+  }
+}
+
+declare module 'react/jsx-runtime' {
+  export const Fragment: unique symbol
+  export function jsx(type: unknown, props: unknown, key?: unknown): JSX.Element
+  export function jsxs(type: unknown, props: unknown, key?: unknown): JSX.Element
+}
+`
 const sharedFiles = new Map<string, string>([
   ['lib.decorators.d.ts', decoratorsLib],
   ['lib.decorators.legacy.d.ts', decoratorsLegacyLib],
@@ -135,6 +160,7 @@ const sharedFiles = new Map<string, string>([
   ['lib.es2023.collection.d.ts', es2023CollectionLib],
   ['lib.es2023.intl.d.ts', es2023IntlLib],
   ['lib.esnext.iterator.d.ts', esnextIteratorLib],
+  [reactJsxTypesFile, reactJsxTypes],
 ])
 
 type PhaseState = {
@@ -312,7 +338,7 @@ function toEditorDiagnostic(
 }
 
 function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
-  const userFileName = phase === 'response-visualizer' ? `${phase}.script.tsx` : `${phase}.script.js`
+  const userFileName = phase === 'response-visualizer' ? `${phase}.script.tsx` : `${phase}.script.ts`
   const declarationFileName = `${phase}.runtime.d.ts`
   const files = new Map(sharedFiles)
   files.set(declarationFileName, `${getScriptRuntimeDeclarations(phase)}\n/// <reference lib=\"esnext.iterator\" />\n`)
@@ -329,13 +355,15 @@ function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
       module: ts.ModuleKind.ESNext,
       lib: [rootLibFile],
       strict: true,
+      noImplicitAny: false,
       allowJs: true,
       checkJs: true,
+      jsx: ts.JsxEmit.ReactJSX,
       noEmit: true,
       noLib: false,
       types: [],
     }),
-    getScriptFileNames: () => [userFileName, declarationFileName, rootLibFile],
+    getScriptFileNames: () => [userFileName, declarationFileName, rootLibFile, reactJsxTypesFile],
     getScriptVersion: fileName => String(versions.get(fileName) ?? 0),
     getScriptSnapshot: fileName => {
       const content = files.get(fileName)

@@ -1,4 +1,4 @@
-import { setDiagnosticsEffect, type Diagnostic } from '@codemirror/lint'
+import { setDiagnostics, type Diagnostic } from '@codemirror/lint'
 import { StateEffect, StateField, type Extension, RangeSetBuilder } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { toast } from '@/lib/components/toast'
@@ -49,7 +49,11 @@ const inlineDiagnosticsTheme = EditorView.theme({
   },
   '.cm-lintRange-error': {
     backgroundColor: 'transparent',
-    textDecoration: 'underline wavy color-mix(in oklab, var(--color-error) 82%, transparent)',
+    backgroundImage: 'none !important',
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'solid',
+    textDecorationColor: 'color-mix(in oklab, var(--color-error) 82%, transparent)',
+    textDecorationThickness: '1px',
     textUnderlineOffset: '0.18rem',
   },
 })
@@ -86,18 +90,22 @@ export function scriptDiagnosticsExtension(phase: ScriptAutocompletePhase): Exte
               return
             }
 
+            const diagnostics = result.diagnostics.map(diagnostic => ({
+              from: diagnostic.from,
+              to: diagnostic.to,
+              severity: 'error',
+              message: diagnostic.message,
+            }) satisfies Diagnostic)
+
+            const lintTransaction = setDiagnostics(view.state, diagnostics)
+            const lintEffects = lintTransaction.effects
+              ? Array.isArray(lintTransaction.effects)
+                ? lintTransaction.effects
+                : [lintTransaction.effects]
+              : []
             view.dispatch({
-              effects: [
-                setDiagnosticsEffect.of(
-                  result.diagnostics.map(diagnostic => ({
-                    from: diagnostic.from,
-                    to: diagnostic.to,
-                    severity: 'error',
-                    message: diagnostic.message,
-                  }) satisfies Diagnostic)
-                ),
-                setInlineDiagnosticsEffect.of(result.diagnostics),
-              ],
+              ...lintTransaction,
+              effects: [...lintEffects, setInlineDiagnosticsEffect.of(result.diagnostics)],
             })
           })
           .catch(() => {
@@ -105,7 +113,16 @@ export function scriptDiagnosticsExtension(phase: ScriptAutocompletePhase): Exte
               return
             }
 
-            view.dispatch({ effects: [setDiagnosticsEffect.of([]), setInlineDiagnosticsEffect.of([])] })
+            const lintTransaction = setDiagnostics(view.state, [])
+            const lintEffects = lintTransaction.effects
+              ? Array.isArray(lintTransaction.effects)
+                ? lintTransaction.effects
+                : [lintTransaction.effects]
+              : []
+            view.dispatch({
+              ...lintTransaction,
+              effects: [...lintEffects, setInlineDiagnosticsEffect.of([])],
+            })
           })
       }, DIAGNOSTIC_DEBOUNCE_MS)
     }),

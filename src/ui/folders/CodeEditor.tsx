@@ -3,7 +3,7 @@ import { EditorState, type Extension } from '@codemirror/state'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, foldGutter, syntaxHighlighting } from '@codemirror/language'
-import { lintGutter } from '@codemirror/lint'
+import { forEachDiagnostic, lintGutter } from '@codemirror/lint'
 import { json } from '@codemirror/lang-json'
 import { json5 as json5Language } from 'codemirror-json5'
 import { html } from '@codemirror/lang-html'
@@ -88,7 +88,7 @@ const lineNumbersExtension = lineNumbers()
 const vimExtension = vim()
 const jsonLanguageExtension = json()
 const json5LanguageExtension = json5Language()
-const javascriptLanguageExtension = javascript()
+const javascriptLanguageExtension = javascript({ typescript: true })
 const jsxLanguageExtension = javascript({ jsx: true, typescript: true })
 const htmlLanguageExtension = html()
 const cssLanguageExtension = css()
@@ -139,7 +139,7 @@ const editorTheme = EditorView.theme({
     backgroundColor: 'transparent !important',
   },
   '.cm-gutters': {
-    backgroundColor: 'color-mix(in oklab, var(--color-base-100) 70%, transparent) !important',
+    backgroundColor: 'transparent !important',
     borderRight: '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
     paddingRight: '0',
   },
@@ -280,6 +280,95 @@ function createFoldMarker(isOpen: boolean) {
 
   wrapper.innerHTML = iconMarkup
   return wrapper
+}
+
+let diagnosticMappingsInstalled = false
+
+function installDiagnosticVimMappings() {
+  if (diagnosticMappingsInstalled) return
+  diagnosticMappingsInstalled = true
+
+  Vim.defineAction('nextDiagnosticAction', cm => {
+    const view = cm.cm6
+    if (!view) return
+    moveDiagnosticSelection(view, 'next')
+    view.focus()
+  })
+
+  Vim.defineAction('previousDiagnosticAction', cm => {
+    const view = cm.cm6
+    if (!view) return
+    moveDiagnosticSelection(view, 'previous')
+    view.focus()
+  })
+
+  Vim.mapCommand(']d', 'action', 'nextDiagnosticAction', undefined, { silent: true })
+
+  Vim.mapCommand('[d', 'action', 'previousDiagnosticAction', undefined, { silent: true })
+}
+
+installDiagnosticVimMappings()
+
+function moveDiagnosticSelection(view: EditorView, direction: 'next' | 'previous') {
+  const diagnostics: Array<{ from: number; to: number }> = []
+  forEachDiagnostic(view.state, (_diagnostic, from, to) => {
+    diagnostics.push({ from, to })
+  })
+
+  if (diagnostics.length === 0) {
+    return false
+  }
+
+  const selection = view.state.selection.main
+
+  if (direction === 'next') {
+    const nextDiagnostic = diagnostics.find(diagnostic => diagnostic.from > selection.to)
+    const target = nextDiagnostic ?? diagnostics[0]
+    if (!target) {
+      return false
+    }
+
+    view.dispatch({
+      selection: { anchor: target.from },
+    })
+    centerPositionInView(view, target.from)
+    return true
+  }
+
+  let previousMatch: { from: number; to: number } | null = null
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.to < selection.to) {
+      previousMatch = diagnostic
+      continue
+    }
+
+    break
+  }
+
+  const target = previousMatch ?? diagnostics[diagnostics.length - 1]
+  if (!target) {
+    return false
+  }
+
+  view.dispatch({
+    selection: { anchor: target.from },
+  })
+  centerPositionInView(view, target.from)
+  return true
+}
+
+function centerPositionInView(view: EditorView, position: number) {
+  window.requestAnimationFrame(() => {
+    if (!view.dom.isConnected) {
+      return
+    }
+
+    const lineBlock = view.lineBlockAt(position)
+    const lineCenter = (lineBlock.top + lineBlock.bottom) / 2
+    const targetScrollTop = Math.max(0, lineCenter - view.scrollDOM.clientHeight / 2)
+
+    view.scrollDOM.scrollTo({ top: targetScrollTop })
+  })
 }
 
 export function CodeEditor({
@@ -486,7 +575,13 @@ export function CodeEditor({
   }, [onPasteText])
 
   const resolvedExtensions = useMemo(() => {
-    const nextExtensions: Extension[] = [selectionMatchesExtension, ...baseSetupExtensions, editorTheme, syntaxHighlighting(editorHighlightStyle), selectionMatchTheme]
+    const nextExtensions: Extension[] = [
+      selectionMatchesExtension,
+      ...baseSetupExtensions,
+      editorTheme,
+      syntaxHighlighting(editorHighlightStyle),
+      selectionMatchTheme,
+    ]
 
     if (vimMode) {
       nextExtensions.unshift(vimExtension)
@@ -520,7 +615,9 @@ export function CodeEditor({
       nextExtensions.push(foldGutterExtension)
     }
 
-    nextExtensions.push(lintGutterExtension)
+    if (language === 'javascript' || language === 'jsx') {
+      nextExtensions.push(lintGutterExtension)
+    }
 
     if (showLineNumbers) {
       nextExtensions.push(lineNumbersExtension)
@@ -539,7 +636,20 @@ export function CodeEditor({
     }
 
     return nextExtensions
-  }, [compactTheme, extensions, hideFocusOutline, languageExtension, pasteHandlerExtension, placeholderValueExtension, readOnly, showFoldGutter, showLineNumbers, singleLine, size, vimMode])
+  }, [
+    compactTheme,
+    extensions,
+    hideFocusOutline,
+    languageExtension,
+    pasteHandlerExtension,
+    placeholderValueExtension,
+    readOnly,
+    showFoldGutter,
+    showLineNumbers,
+    singleLine,
+    size,
+    vimMode,
+  ])
 
   return (
     <div

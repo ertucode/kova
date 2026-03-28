@@ -1,5 +1,7 @@
 import vm from 'node:vm'
 import { randomUUID } from 'node:crypto'
+import ts from 'typescript'
+import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping'
 import { z } from 'zod'
 import type { HttpAuth } from '../common/Auth.js'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolvedEnvironmentValue } from '../common/EnvironmentVariables.js'
@@ -52,6 +54,20 @@ type ScriptErrorDetails = {
   compactLabel: string
   compactMessage: string
   detailedMessage: string
+  line: number | null
+  column: number | null
+  sourceLine: string | null
+}
+
+type CompiledRequestScript = {
+  code: string
+  sourceMap: TraceMap | null
+  sourceCode: string
+}
+
+type ScriptCompilerError = {
+  kind: 'compile-error'
+  message: string
   line: number | null
   column: number | null
   sourceLine: string | null
@@ -300,11 +316,20 @@ async function runScriptPhase(input: {
       z,
     }
 
+    let compiledScript: CompiledRequestScript | null = null
+
     try {
-      await executeScript(source.script, sandbox)
+      compiledScript = compileRequestScript(source.script)
+      await executeScript(compiledScript.code, sandbox)
       input.runtimeRequest.headers = headerEditor.serialize()
     } catch (error) {
-      return [buildScriptErrorDetails({ phase: input.phase, sourceName: source.name, error, sourceCode: source.script })]
+      return [buildScriptErrorDetails({
+        phase: input.phase,
+        sourceName: source.name,
+        error,
+        sourceCode: source.script,
+        compiledScript,
+      })]
     }
   }
 
@@ -316,9 +341,10 @@ function buildScriptErrorDetails(input: {
   sourceName: string
   error: unknown
   sourceCode: string
+  compiledScript: CompiledRequestScript | null
 }): ScriptErrorDetails {
   const message = getScriptErrorMessage(input.error)
-  const location = extractScriptLocation(input.error, input.sourceCode)
+  const location = extractScriptLocation(input.error, input.sourceCode, input.compiledScript)
   const compactLabel = buildCompactScriptErrorLabel(input.phase, location?.line ?? null, location?.column ?? null)
   const detailedLines = [`Source: ${input.sourceName}`, `Phase: ${formatScriptPhase(input.phase)}`]
 
@@ -363,7 +389,15 @@ function formatScriptPhase(phase: 'pre-request' | 'post-request') {
   return phase === 'pre-request' ? 'Pre-request' : 'Post-request'
 }
 
-function extractScriptLocation(error: unknown, sourceCode: string) {
+function extractScriptLocation(error: unknown, sourceCode: string, compiledScript: CompiledRequestScript | null) {
+  if (isScriptCompilerError(error)) {
+    return {
+      line: error.line,
+      column: error.column,
+      sourceLine: error.sourceLine,
+    }
+  }
+
   const stack = getScriptErrorStack(error)
   if (!stack) {
     return null
@@ -378,8 +412,30 @@ function extractScriptLocation(error: unknown, sourceCode: string) {
   }
 
   const rawColumn = runtimeMatch ? Number(runtimeMatch[2]) : extractSyntaxErrorColumn(stack)
-  const line = Math.max(1, rawLine - 1)
-  const column = typeof rawColumn === 'number' && Number.isFinite(rawColumn) ? Math.max(1, rawColumn) : null
+  const generatedLine = Math.max(1, rawLine - 1)
+  const generatedColumn = typeof rawColumn === 'number' && Number.isFinite(rawColumn) ? Math.max(1, rawColumn) : null
+
+  if (compiledScript?.sourceMap) {
+    const originalPosition = originalPositionFor(compiledScript.sourceMap, {
+      line: generatedLine,
+      column: Math.max(0, (generatedColumn ?? 1) - 1),
+    })
+
+    if (originalPosition.line !== null) {
+      const line = originalPosition.line
+      const column = originalPosition.column === null ? null : originalPosition.column + 1
+      const sourceLine = sourceCode.split('\n')[line - 1]?.trimEnd() ?? null
+
+      return {
+        line,
+        column,
+        sourceLine,
+      }
+    }
+  }
+
+  const line = generatedLine
+  const column = generatedColumn
   const sourceLine = sourceCode.split('\n')[line - 1]?.trimEnd() ?? null
 
   return {
@@ -402,6 +458,10 @@ function extractSyntaxErrorColumn(stack: string) {
 }
 
 function getScriptErrorMessage(error: unknown) {
+  if (isScriptCompilerError(error)) {
+    return error.message
+  }
+
   if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
     return error.message
   }
@@ -415,6 +475,55 @@ function getScriptErrorStack(error: unknown) {
   }
 
   return null
+}
+
+function compileRequestScript(sourceCode: string): CompiledRequestScript {
+  const result = ts.transpileModule(sourceCode, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2020,
+      module: ts.ModuleKind.CommonJS,
+      sourceMap: true,
+      inlineSources: true,
+      noImplicitAny: false,
+      strict: true,
+    },
+    fileName: 'request-script.ts',
+    reportDiagnostics: true,
+  })
+
+  const diagnostics = (result.diagnostics ?? []).filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
+  if (diagnostics.length > 0) {
+    throw toScriptCompilerError(diagnostics[0], sourceCode)
+  }
+
+  return {
+    code: result.outputText,
+    sourceMap: result.sourceMapText ? new TraceMap(result.sourceMapText) : null,
+    sourceCode,
+  }
+}
+
+function toScriptCompilerError(diagnostic: ts.Diagnostic, sourceCode: string): ScriptCompilerError {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+  const location =
+    diagnostic.file && typeof diagnostic.start === 'number'
+      ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
+      : null
+  const line = location ? location.line + 1 : null
+  const column = location ? location.character + 1 : null
+  const sourceLine = line ? sourceCode.split('\n')[line - 1]?.trimEnd() ?? null : null
+
+  return {
+    kind: 'compile-error',
+    message,
+    line,
+    column,
+    sourceLine,
+  }
+}
+
+function isScriptCompilerError(error: unknown): error is ScriptCompilerError {
+  return typeof error === 'object' && error !== null && 'kind' in error && error.kind === 'compile-error'
 }
 
 function createCryptoApi() {
