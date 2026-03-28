@@ -1,4 +1,4 @@
-import { createElement, useMemo, useRef } from 'react'
+import { createElement, useCallback, useEffect, useMemo, useRef } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
@@ -210,6 +210,7 @@ export function CodeEditor({
   onBlur,
   linePaddingOverride,
   vimMode = true,
+  refreshKey,
 }: {
   value: string
   language: CodeEditorLanguage
@@ -228,8 +229,66 @@ export function CodeEditor({
   onBlur?: () => void
   linePaddingOverride?: string
   vimMode?: boolean
+  refreshKey?: string
 }) {
   const editorViewRef = useRef<EditorView | null>(null)
+  const onChangeRef = useRef(onChange)
+  const onBlurRef = useRef(onBlur)
+  const onPasteTextRef = useRef(onPasteText)
+  const lastRefreshKeyRef = useRef(refreshKey)
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
+  useEffect(() => {
+    onBlurRef.current = onBlur
+  }, [onBlur])
+
+  useEffect(() => {
+    onPasteTextRef.current = onPasteText
+  }, [onPasteText])
+
+  useEffect(() => {
+    if (refreshKey === lastRefreshKeyRef.current) {
+      return
+    }
+
+    lastRefreshKeyRef.current = refreshKey
+
+    const view = editorViewRef.current
+    if (!view) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      if (!view.dom.isConnected) {
+        return
+      }
+
+      view.dispatch({})
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [refreshKey])
+
+  const handleEditorChange = useCallback(
+    (nextValue: string, viewUpdate: { state: EditorState; startState: EditorState }) => {
+      const caretPos = viewUpdate.state.selection.main.head
+      onChangeRef.current(nextValue, {
+        caretPos,
+        previousValue: viewUpdate.startState.doc.toString(),
+        previousCaretPos: viewUpdate.startState.selection.main.head,
+      })
+    },
+    []
+  )
+
+  const handleEditorBlur = useCallback(() => {
+    onBlurRef.current?.()
+  }, [])
 
   const resolvedExtensions = useMemo(() => {
     const nextExtensions: Extension[] = [
@@ -390,7 +449,7 @@ export function CodeEditor({
               return false
             }
 
-            const handled = onPasteText(text)
+            const handled = onPasteTextRef.current?.(text) ?? false
             if (handled) {
               event.preventDefault()
               return true
@@ -407,7 +466,7 @@ export function CodeEditor({
     }
 
     return nextExtensions
-  }, [compact, extensions, hideFocusOutline, language, onPasteText, placeholder, showFoldGutter, singleLine, size, vimMode])
+  }, [compact, extensions, hideFocusOutline, language, placeholder, showFoldGutter, singleLine, size, vimMode])
 
   return (
     <div
@@ -434,15 +493,8 @@ export function CodeEditor({
             Vim.handleKey(cm, 'i', 'user')
           }
         }}
-        onChange={(value, viewUpdate) => {
-          const caretPos = viewUpdate.state.selection.main.head
-          onChange(value, {
-            caretPos,
-            previousValue: viewUpdate.startState.doc.toString(),
-            previousCaretPos: viewUpdate.startState.selection.main.head,
-          })
-        }}
-        onBlur={onBlur}
+        onChange={handleEditorChange}
+        onBlur={handleEditorBlur}
       />
     </div>
   )

@@ -129,6 +129,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     () => buildVariableAutocompleteItems(variableTooltipRows),
     [variableTooltipRows]
   )
+  const variableHighlightRefreshKey = useMemo(
+    () => buildVariableHighlightRefreshKey(activeEnvironmentIds, activeEnvironmentVariableNames),
+    [activeEnvironmentIds, activeEnvironmentVariableNames]
+  )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
@@ -629,6 +633,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             className="border-0 w-[20px]"
             placeholder="https://api.example.com/users/:userId"
             extensions={urlEditorExtensions}
+            refreshKey={variableHighlightRefreshKey}
             onPasteText={handleUrlPaste}
             onChange={updateUrl}
           />
@@ -720,6 +725,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                   className="border-x-0 border-b-0"
                   placeholder={'{\n  "hello": "world"\n}'}
                   extensions={variableEditorExtensions}
+                  refreshKey={variableHighlightRefreshKey}
                   onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
                 />
               ) : null}
@@ -748,11 +754,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
               allowInherit
               valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+              valueEditorRefreshKey={variableHighlightRefreshKey}
             />
 
             <HeadersEditor
               value={draft.headers}
               valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+              valueEditorRefreshKey={variableHighlightRefreshKey}
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
             />
 
@@ -764,6 +772,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               valuePlaceholder="123"
               valueEditorAsCode
               valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+              valueEditorRefreshKey={variableHighlightRefreshKey}
             />
           </div>
         </section>
@@ -781,6 +790,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             warnOnDuplicate={false}
             valueEditorAsCode
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+            valueEditorRefreshKey={variableHighlightRefreshKey}
           />
         </section>
       ) : null}
@@ -1703,6 +1713,13 @@ function upsertVariableValue(variables: string, variableName: string, value: str
   nextRow.value = value
 
   return stringifyKeyValueRows([...rows, nextRow])
+}
+
+function buildVariableHighlightRefreshKey(activeEnvironmentIds: string[], variableNames: string[]) {
+  const normalizedActiveEnvironmentIds = [...activeEnvironmentIds].sort((left, right) => left.localeCompare(right))
+  const normalizedVariableNames = [...variableNames].sort((left, right) => left.localeCompare(right))
+
+  return `${normalizedActiveEnvironmentIds.join('|')}::${normalizedVariableNames.join('|')}`
 }
 
 function buildVariableAutocompleteItems(

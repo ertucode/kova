@@ -28,21 +28,46 @@ export function VariableHoverTooltip({
   const [draftRows, setDraftRows] = useState(rows)
   const activeCount = useMemo(() => draftRows.filter(row => row.isActive).length, [draftRows])
   const lastCommittedValuesRef = useRef(new Map<string, string>())
+  const draftRowsRef = useRef(draftRows)
+  const commitFrameByEnvironmentRef = useRef(new Map<string, number>())
+
+  draftRowsRef.current = draftRows
 
   useEffect(() => {
     setDraftRows(rows)
     lastCommittedValuesRef.current = new Map(rows.map(row => [row.id, row.value]))
   }, [rows])
 
+  useEffect(() => {
+    const commitFrameByEnvironment = commitFrameByEnvironmentRef.current
+
+    return () => {
+      for (const frameId of commitFrameByEnvironment.values()) {
+        window.cancelAnimationFrame(frameId)
+      }
+      commitFrameByEnvironment.clear()
+    }
+  }, [])
+
   const commitValue = (environmentId: string) => {
-    const nextValue = draftRows.find(row => row.id === environmentId)?.value ?? ''
+    const nextValue = draftRowsRef.current.find(row => row.id === environmentId)?.value ?? ''
     if (lastCommittedValuesRef.current.get(environmentId) === nextValue) {
       return
     }
 
     lastCommittedValuesRef.current.set(environmentId, nextValue)
-    onChangeValue(environmentId, nextValue)
-    void onSaveValue(environmentId)
+    const pendingFrameId = commitFrameByEnvironmentRef.current.get(environmentId)
+    if (pendingFrameId !== undefined) {
+      window.cancelAnimationFrame(pendingFrameId)
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      commitFrameByEnvironmentRef.current.delete(environmentId)
+      onChangeValue(environmentId, nextValue)
+      void onSaveValue(environmentId)
+    })
+
+    commitFrameByEnvironmentRef.current.set(environmentId, frameId)
   }
 
   return (

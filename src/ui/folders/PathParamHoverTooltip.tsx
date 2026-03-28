@@ -14,6 +14,10 @@ export function PathParamHoverTooltip({
   const [draftValue, setDraftValue] = useState(value)
   const lastCommittedValueRef = useRef(value)
   const hasPendingCommitRef = useRef(false)
+  const draftValueRef = useRef(draftValue)
+  const commitFrameRef = useRef<number | null>(null)
+
+  draftValueRef.current = draftValue
 
   useEffect(() => {
     setDraftValue(value)
@@ -21,14 +25,31 @@ export function PathParamHoverTooltip({
     hasPendingCommitRef.current = false
   }, [value])
 
+  useEffect(() => {
+    return () => {
+      if (commitFrameRef.current !== null) {
+        window.cancelAnimationFrame(commitFrameRef.current)
+      }
+    }
+  }, [])
+
   const commit = () => {
-    if (!hasPendingCommitRef.current || draftValue === lastCommittedValueRef.current) {
+    const nextValue = draftValueRef.current
+    if (!hasPendingCommitRef.current || nextValue === lastCommittedValueRef.current) {
       return
     }
 
-    lastCommittedValueRef.current = draftValue
+    lastCommittedValueRef.current = nextValue
     hasPendingCommitRef.current = false
-    onChangeValue(draftValue)
+
+    if (commitFrameRef.current !== null) {
+      window.cancelAnimationFrame(commitFrameRef.current)
+    }
+
+    commitFrameRef.current = window.requestAnimationFrame(() => {
+      commitFrameRef.current = null
+      onChangeValue(nextValue)
+    })
   }
 
   return (

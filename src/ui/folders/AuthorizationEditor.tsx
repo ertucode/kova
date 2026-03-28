@@ -11,11 +11,13 @@ export function AuthorizationEditor({
   onChange,
   allowInherit,
   valueEditorExtensions,
+  valueEditorRefreshKey,
 }: {
   value: HttpAuth
   onChange: (value: HttpAuth) => void
   allowInherit?: boolean
   valueEditorExtensions?: Extension[]
+  valueEditorRefreshKey?: string
 }) {
   const typeOptions = (allowInherit ? AUTH_TYPES : AUTH_TYPES_WITHOUT_INHERIT).map(type => ({
     value: type,
@@ -51,6 +53,7 @@ export function AuthorizationEditor({
                 className="h-9 border border-base-content/10 bg-base-100/70"
                 placeholder="{{IdToken}}"
                 extensions={valueEditorExtensions}
+                refreshKey={valueEditorRefreshKey}
                 onChange={nextValue => onChange({ ...value, token: nextValue })}
               />
             </Field>
@@ -65,11 +68,12 @@ export function AuthorizationEditor({
                   compact
                   size="small"
                   hideFocusOutline
-                  className="h-9 border border-base-content/10 bg-base-100/70"
-                  placeholder="username"
-                  extensions={valueEditorExtensions}
-                  onChange={nextValue => onChange({ ...value, username: nextValue })}
-                />
+                   className="h-9 border border-base-content/10 bg-base-100/70"
+                   placeholder="username"
+                   extensions={valueEditorExtensions}
+                   refreshKey={valueEditorRefreshKey}
+                   onChange={nextValue => onChange({ ...value, username: nextValue })}
+                 />
               </Field>
               <Field label="Password">
                 <CodeEditor
@@ -79,11 +83,12 @@ export function AuthorizationEditor({
                   compact
                   size="small"
                   hideFocusOutline
-                  className="h-9 border border-base-content/10 bg-base-100/70"
-                  placeholder="password"
-                  extensions={valueEditorExtensions}
-                  onChange={nextValue => onChange({ ...value, password: nextValue })}
-                />
+                   className="h-9 border border-base-content/10 bg-base-100/70"
+                   placeholder="password"
+                   extensions={valueEditorExtensions}
+                   refreshKey={valueEditorRefreshKey}
+                   onChange={nextValue => onChange({ ...value, password: nextValue })}
+                 />
               </Field>
             </div>
           ) : null}
@@ -97,11 +102,12 @@ export function AuthorizationEditor({
                   compact
                   size="small"
                   hideFocusOutline
-                  className="h-9 border border-base-content/10 bg-base-100/70"
-                  placeholder="Authorization"
-                  extensions={valueEditorExtensions}
-                  onChange={nextValue => onChange({ ...value, key: nextValue })}
-                />
+                   className="h-9 border border-base-content/10 bg-base-100/70"
+                   placeholder="Authorization"
+                   extensions={valueEditorExtensions}
+                   refreshKey={valueEditorRefreshKey}
+                   onChange={nextValue => onChange({ ...value, key: nextValue })}
+                 />
               </Field>
               <Field label="Value">
                 <CodeEditor
@@ -111,11 +117,12 @@ export function AuthorizationEditor({
                   compact
                   size="small"
                   hideFocusOutline
-                  className="h-9 border border-base-content/10 bg-base-100/70"
-                  placeholder="{{apiKey}}"
-                  extensions={valueEditorExtensions}
-                  onChange={nextValue => onChange({ ...value, value: nextValue })}
-                />
+                   className="h-9 border border-base-content/10 bg-base-100/70"
+                   placeholder="{{apiKey}}"
+                   extensions={valueEditorExtensions}
+                   refreshKey={valueEditorRefreshKey}
+                   onChange={nextValue => onChange({ ...value, value: nextValue })}
+                 />
               </Field>
               <Field label="Add To">
                 <DropdownSelect

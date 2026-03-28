@@ -64,6 +64,10 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     () => buildVariableAutocompleteItems(variableTooltipRows),
     [variableTooltipRows]
   )
+  const variableHighlightRefreshKey = useMemo(
+    () => buildVariableHighlightRefreshKey(activeEnvironmentIds, activeEnvironmentVariableNames),
+    [activeEnvironmentIds, activeEnvironmentVariableNames]
+  )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
@@ -128,11 +132,13 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
         allowInherit
         valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+        valueEditorRefreshKey={variableHighlightRefreshKey}
       />
 
       <HeadersEditor
         value={draft.headers}
         valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+        valueEditorRefreshKey={variableHighlightRefreshKey}
         onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
       />
       </div>
@@ -203,6 +209,13 @@ function updateEnvironmentVariableDraft(environmentId: string, variableName: str
       variables: nextVariables,
     },
   })
+}
+
+function buildVariableHighlightRefreshKey(activeEnvironmentIds: string[], variableNames: string[]) {
+  const normalizedActiveEnvironmentIds = [...activeEnvironmentIds].sort((left, right) => left.localeCompare(right))
+  const normalizedVariableNames = [...variableNames].sort((left, right) => left.localeCompare(right))
+
+  return `${normalizedActiveEnvironmentIds.join('|')}::${normalizedVariableNames.join('|')}`
 }
 
 function buildVariableAutocompleteItems(

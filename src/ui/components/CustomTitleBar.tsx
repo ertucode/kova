@@ -46,6 +46,7 @@ export function CustomTitleBar() {
     >
       {/* Space for macOS traffic lights */}
       <div className="w-20 flex-shrink-0" />
+      {import.meta.env.DEV && <div>DEVELOPMENT</div>}
 
       {/* Navigation buttons */}
       <div

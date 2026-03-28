@@ -28,6 +28,7 @@ type KeyValueEditorProps = {
   valueEditorAsCode?: boolean
   warnOnDuplicate?: boolean
   contentClassName?: string
+  valueEditorRefreshKey?: string
 }
 
 type KeyValueField = 'enabled' | 'key' | 'value' | 'description'
@@ -48,6 +49,7 @@ export function KeyValueEditor({
   valueEditorAsCode = false,
   warnOnDuplicate = true,
   contentClassName,
+  valueEditorRefreshKey,
 }: KeyValueEditorProps) {
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
   const [isBulkEditMode, setIsBulkEditMode] = useState(false)
@@ -470,6 +472,7 @@ export function KeyValueEditor({
               className="border-0"
               placeholder={`${keyPlaceholder}:${valuePlaceholder}`}
               extensions={valueEditorExtensions}
+              refreshKey={valueEditorRefreshKey}
               onChange={setBulkEditValue}
             />
 
@@ -622,6 +625,7 @@ export function KeyValueEditor({
                               className="h-9 border-0 bg-transparent"
                               extensions={resolvedValueEditorExtensions}
                               placeholder={valuePlaceholder}
+                              refreshKey={valueEditorRefreshKey}
                               onChange={nextValue => updateRow(row.id, { value: nextValue })}
                             />
                           </div>

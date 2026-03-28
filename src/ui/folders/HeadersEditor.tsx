@@ -5,10 +5,12 @@ export function HeadersEditor({
   value,
   onChange,
   valueEditorExtensions,
+  valueEditorRefreshKey,
 }: {
   value: string
   onChange: (value: string) => void
   valueEditorExtensions?: Extension[]
+  valueEditorRefreshKey?: string
 }) {
   return (
     <KeyValueEditor
@@ -19,6 +21,7 @@ export function HeadersEditor({
       valuePlaceholder="Bearer ..."
       valueEditorAsCode
       valueEditorExtensions={valueEditorExtensions}
+      valueEditorRefreshKey={valueEditorRefreshKey}
     />
   )
 }

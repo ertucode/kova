@@ -87,6 +87,10 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     () => buildVariableAutocompleteItems(variableTooltipRows),
     [variableTooltipRows]
   )
+  const variableHighlightRefreshKey = useMemo(
+    () => buildVariableHighlightRefreshKey(activeEnvironmentIds, activeEnvironmentVariableNames),
+    [activeEnvironmentIds, activeEnvironmentVariableNames]
+  )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
@@ -402,6 +406,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               className="min-w-0 flex-1 border-0"
               placeholder="wss://echo.websocket.events"
               extensions={urlEditorExtensions}
+              refreshKey={variableHighlightRefreshKey}
               onPasteText={handleUrlPaste}
               onChange={value =>
                 FolderExplorerCoordinator.updateSelectedDraft({
@@ -485,6 +490,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               className="border-x-0 border-b border-base-content/10"
               placeholder="Type a message to send after connecting"
               extensions={variableEditorExtensions}
+              refreshKey={variableHighlightRefreshKey}
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
             />
 
@@ -548,6 +554,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
                   className="h-11 rounded-2xl [&_.cm-content]:!pl-3 [&_.cm-content]:!pr-3"
                   placeholder="graphql-ws, {{protocolName}}"
                   extensions={variableEditorExtensions}
+                  refreshKey={variableHighlightRefreshKey}
                   onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketSubprotocols: value })}
                 />
               </div>
@@ -558,12 +565,14 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
               allowInherit
               valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+              valueEditorRefreshKey={variableHighlightRefreshKey}
             />
 
             <HeadersEditor
               value={draft.headers}
               onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
               valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+              valueEditorRefreshKey={variableHighlightRefreshKey}
             />
           </div>
         </section>
@@ -585,6 +594,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
             valuePlaceholder="123"
             valueEditorAsCode
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+            valueEditorRefreshKey={variableHighlightRefreshKey}
             contentClassName="border-t-0"
           />
         </section>
@@ -814,6 +824,13 @@ function upsertVariableValue(variables: string, variableName: string, value: str
   nextRow.value = value
 
   return stringifyKeyValueRows([...rows, nextRow])
+}
+
+function buildVariableHighlightRefreshKey(activeEnvironmentIds: string[], variableNames: string[]) {
+  const normalizedActiveEnvironmentIds = [...activeEnvironmentIds].sort((left, right) => left.localeCompare(right))
+  const normalizedVariableNames = [...variableNames].sort((left, right) => left.localeCompare(right))
+
+  return `${normalizedActiveEnvironmentIds.join('|')}::${normalizedVariableNames.join('|')}`
 }
 
 function buildVariableAutocompleteItems(
