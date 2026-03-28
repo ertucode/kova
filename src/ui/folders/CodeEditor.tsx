@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useMemo, useRef } from 'react'
+import { createElement, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
@@ -17,6 +17,10 @@ import { twMerge } from 'tailwind-merge'
 import { Vim, getCM, vim } from '@replit/codemirror-vim'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'
+
+export type CodeEditorHandle = {
+  focusLine: (line: number, column?: number | null) => void
+}
 
 const selectionMatchesExtension = highlightSelectionMatches({ highlightWordAroundCursor: true })
 const baseSetupExtensions = codeMirrorBasicSetup({
@@ -263,6 +267,7 @@ function createFoldMarker(isOpen: boolean) {
 }
 
 export function CodeEditor({
+  ref,
   value,
   language,
   placeholder,
@@ -282,6 +287,7 @@ export function CodeEditor({
   vimMode = true,
   refreshKey,
 }: {
+  ref?: Ref<CodeEditorHandle>
   value: string
   language: CodeEditorLanguage
   placeholder?: string
@@ -318,6 +324,30 @@ export function CodeEditor({
   useEffect(() => {
     onPasteTextRef.current = onPasteText
   }, [onPasteText])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusLine(line, column) {
+        const view = editorViewRef.current
+        if (!view) {
+          return
+        }
+
+        const clampedLine = Math.max(1, Math.min(line, view.state.doc.lines))
+        const lineInfo = view.state.doc.line(clampedLine)
+        const nextColumn = Math.max(1, column ?? 1)
+        const position = Math.min(lineInfo.from + nextColumn - 1, lineInfo.to)
+
+        view.dispatch({
+          selection: { anchor: position },
+          scrollIntoView: true,
+        })
+        view.focus()
+      },
+    }),
+    []
+  )
 
   useEffect(() => {
     if (refreshKey === lastRefreshKeyRef.current) {

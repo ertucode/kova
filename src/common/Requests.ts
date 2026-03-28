@@ -164,9 +164,15 @@ export type ScriptResponseBody =
     }
 
 export type RequestScriptError = {
-  phase: 'post-request'
+  phase: 'pre-request' | 'post-request'
   sourceName: string
   message: string
+  compactLabel: string
+  compactMessage: string
+  detailedMessage: string
+  line: number | null
+  column: number | null
+  sourceLine: string | null
 }
 
 export type RequestConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug'

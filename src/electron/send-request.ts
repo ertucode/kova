@@ -114,7 +114,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       request: executedRequest,
       response: responseSnapshot,
       responseError: null,
-      scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
+      scriptErrors,
       consoleEntries: runtime.getConsoleEntries(),
     }
 
@@ -134,7 +134,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       body: bodyText,
       durationMs,
       requestScope: runtime.getRequestScopeValues(),
-      scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
+      scriptErrors,
       updatedEnvironments,
       consoleEntries: runtime.getConsoleEntries(),
       execution: persistedExecution,
@@ -243,7 +243,7 @@ async function consumeSseResponse(input: {
       request: executedRequest,
       response: responseSnapshot,
       responseError: null,
-      scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
+      scriptErrors,
       consoleEntries: runtime.getConsoleEntries(),
     }
 
@@ -271,7 +271,7 @@ async function consumeSseResponse(input: {
       body: bodyText,
       durationMs,
       requestScope: runtime.getRequestScopeValues(),
-      scriptErrors: scriptErrors.map(error => ({ ...error, phase: 'post-request' as const })),
+      scriptErrors,
       updatedEnvironments,
       consoleEntries: runtime.getConsoleEntries(),
       execution: persistedExecution,

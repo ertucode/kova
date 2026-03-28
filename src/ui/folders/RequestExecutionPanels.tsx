@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon, SaveIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
-import type { RequestConsoleEntry, RequestExecutionRecord, RequestHistoryListItem, WebSocketSessionRecord } from '@common/Requests'
+import type { RequestConsoleEntry, RequestExecutionRecord, RequestHistoryListItem, RequestScriptError, WebSocketSessionRecord } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toast } from '@/lib/components/toast'
@@ -208,14 +208,22 @@ function ExecutionCard({ execution }: { execution: RequestExecutionRecord }) {
             bodyExpanded={responseBodyExpanded}
             onToggleBody={() => setResponseBodyExpanded(current => !current)}
           />
-          {scriptErrors.length > 0 ? (
-            <ExecutionSection
-              title="Script Errors"
-              value={scriptErrors.map(error => `${error.sourceName}: ${error.message}`).join('\n')}
-            />
-          ) : null}
+          {scriptErrors.length > 0 ? <ScriptErrorsSection errors={scriptErrors} /> : null}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function ScriptErrorsSection({ errors }: { errors: RequestScriptError[] }) {
+  const compactMessage = errors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n')
+  const detailedMessage = errors.map(error => error.detailedMessage).join('\n\n')
+
+  return (
+    <div className="tooltip tooltip-left before:max-w-[680px] before:whitespace-pre-wrap before:text-left" data-tip={detailedMessage}>
+      <div className="cursor-help">
+        <ExecutionSection title="Script Errors" value={compactMessage} />
+      </div>
     </div>
   )
 }

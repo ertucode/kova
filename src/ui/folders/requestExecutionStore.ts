@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { errorResponseToMessage } from '@common/GenericError'
 import type {
   HttpSseStreamState,
+  RequestScriptError,
   RequestExecutionRecord,
   RequestHistoryListItem,
   SendRequestResponse,
@@ -36,6 +37,7 @@ type RequestExecutionContext = {
   historyKeepLast: number
   responseByRequestId: Record<string, SendRequestResponse | null>
   errorByRequestId: Record<string, string | null>
+  scriptErrorsByRequestId: Record<string, RequestScriptError[]>
   httpSseByRequestId: Record<string, HttpSseStreamState | null>
   websocketSessionByRequestId: Record<string, WebSocketSessionRecord | null>
 }
@@ -54,6 +56,7 @@ export const requestExecutionStore = createStore({
     historyKeepLast: normalizeKeepLast(initialSettings.keepLast),
     responseByRequestId: {},
     errorByRequestId: {},
+    scriptErrorsByRequestId: {},
     httpSseByRequestId: {},
     websocketSessionByRequestId: {},
   } as RequestExecutionContext,
@@ -74,17 +77,33 @@ export const requestExecutionStore = createStore({
           ...context.errorByRequestId,
           [event.requestId]: null,
         },
+        scriptErrorsByRequestId: {
+          ...context.scriptErrorsByRequestId,
+          [event.requestId]: normalizedResponse.scriptErrors ?? [],
+        },
       }
     },
-    requestStarted: (context, event: { sentAt: number }) => ({
+    requestStarted: (context, event: { requestId: string; sentAt: number }) => ({
       ...context,
       lastRequestSentAt: event.sentAt,
+      errorByRequestId: {
+        ...context.errorByRequestId,
+        [event.requestId]: null,
+      },
+      scriptErrorsByRequestId: {
+        ...context.scriptErrorsByRequestId,
+        [event.requestId]: [],
+      },
     }),
-    requestFailed: (context, event: { requestId: string; error: string }) => ({
+    requestFailed: (context, event: { requestId: string; error: string; scriptErrors?: RequestScriptError[] }) => ({
       ...context,
       errorByRequestId: {
         ...context.errorByRequestId,
         [event.requestId]: event.error,
+      },
+      scriptErrorsByRequestId: {
+        ...context.scriptErrorsByRequestId,
+        [event.requestId]: normalizeScriptErrors(event.scriptErrors ?? []),
       },
     }),
     httpSseStreamUpdated: (context, event: { stream: HttpSseStreamState }) => ({
@@ -112,7 +131,9 @@ export const requestExecutionStore = createStore({
     }),
     historyLoaded: (context, event: { items: RequestHistoryListItem[]; nextOffset: number | null; append: boolean }) => ({
       ...context,
-      history: event.append ? [...context.history, ...event.items] : event.items,
+      history: event.append
+        ? [...context.history, ...event.items.map(normalizeHistoryItem)]
+        : event.items.map(normalizeHistoryItem),
       historyLoading: false,
       historyLoadingMore: false,
       historyLoaded: true,
@@ -247,6 +268,17 @@ function isRequestExecutionRecord(value: RequestHistoryListItem | RequestExecuti
   return Boolean(value && value.itemType === 'http')
 }
 
+function normalizeHistoryItem(item: RequestHistoryListItem): RequestHistoryListItem {
+  if (item.itemType !== 'http') {
+    return item
+  }
+
+  return {
+    ...item,
+    scriptErrors: normalizeScriptErrors(item.scriptErrors ?? []),
+  }
+}
+
 function normalizeExecutionRecord(event: {
   requestId: string
   requestName: string
@@ -284,7 +316,7 @@ function normalizeExecutionRecord(event: {
       receivedAt: Date.now(),
     },
     responseError: null,
-    scriptErrors: event.response.scriptErrors ?? [],
+    scriptErrors: normalizeScriptErrors(event.response.scriptErrors ?? []),
     consoleEntries: event.response.consoleEntries ?? [],
   }
 }
@@ -300,11 +332,45 @@ function normalizeSendRequestResponse(event: {
   return {
     ...event.response,
     requestScope: event.response.requestScope ?? {},
-    scriptErrors: event.response.scriptErrors ?? [],
+    scriptErrors: normalizeScriptErrors(event.response.scriptErrors ?? []),
     updatedEnvironments: event.response.updatedEnvironments ?? [],
     consoleEntries: event.response.consoleEntries ?? [],
     execution: execution ?? event.response.execution,
   }
+}
+
+function normalizeScriptErrors(errors: RequestScriptError[]): RequestScriptError[] {
+  return errors.map(error => {
+    const line = typeof error.line === 'number' ? error.line : null
+    const phase: RequestScriptError['phase'] = error.phase === 'pre-request' ? 'pre-request' : 'post-request'
+    const compactLabel = error.compactLabel || buildCompactScriptErrorLabel(phase, line, typeof error.column === 'number' ? error.column : null)
+    const compactMessage = error.compactMessage || error.message
+    const detailedMessage = error.detailedMessage || error.message
+
+    return {
+      ...error,
+      phase,
+      compactLabel,
+      compactMessage,
+      detailedMessage,
+      line,
+      column: typeof error.column === 'number' ? error.column : null,
+      sourceLine: typeof error.sourceLine === 'string' ? error.sourceLine : null,
+    } satisfies RequestScriptError
+  })
+}
+
+function buildCompactScriptErrorLabel(
+  phase: RequestScriptError['phase'],
+  line: number | null,
+  column: number | null
+) {
+  const phaseLabel = phase === 'pre-request' ? 'Pre-request' : 'Post-request'
+  if (line === null) {
+    return phaseLabel
+  }
+
+  return column === null ? `${phaseLabel}:${line}` : `${phaseLabel}:${line}:${column}`
 }
 
 function normalizeKeepLast(value: number) {

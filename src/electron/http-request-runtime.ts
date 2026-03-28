@@ -67,10 +67,15 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
     environments: activeEnvironments,
   })
 
-  await runtime.runPreRequestScripts([
+  const preRequestScriptErrors = await runtime.runPreRequestScripts([
     ...folders.map(folder => ({ name: `Folder: ${folder.name}`, script: folder.preRequestScript })),
     { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
   ])
+  if (preRequestScriptErrors.length > 0) {
+    return GenericError.Message(preRequestScriptErrors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n'), {
+      scriptErrors: preRequestScriptErrors,
+    })
+  }
 
   const variables = runtime.getResolvedVariables()
   const missingVariables = collectMissingVariables(runtime.request, variables)

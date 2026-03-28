@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import type { Extension } from '@codemirror/state'
-import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
+import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 export function DetailsTextArea({
@@ -12,6 +12,7 @@ export function DetailsTextArea({
   editorSize,
   placeholder,
   extensions,
+  editorRef,
   headerActions,
   onChange,
   onBlur,
@@ -24,6 +25,7 @@ export function DetailsTextArea({
   editorSize?: 'normal' | 'small'
   placeholder?: string
   extensions?: Extension[]
+  editorRef?: Ref<CodeEditorHandle>
   headerActions?: ReactNode
   onChange: (value: string) => void
   onBlur: () => void
@@ -33,6 +35,7 @@ export function DetailsTextArea({
       {label ? <DetailsSectionHeader title={label} actions={headerActions} /> : null}
       {editorLanguage ? (
         <CodeEditor
+          ref={editorRef}
           value={value}
           language={editorLanguage}
           size={editorSize}

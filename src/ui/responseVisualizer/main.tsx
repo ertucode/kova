@@ -41,6 +41,11 @@ type VisualizerPayload = {
   scope: Record<string, string>
 }
 
+type VisualizerErrorDetails = {
+  compactMessage: string
+  detailedMessage: string
+}
+
 const READY_EVENT = 'kova-response-visualizer-ready'
 const RENDER_EVENT = 'kova-response-visualizer-render'
 
@@ -70,7 +75,7 @@ window.addEventListener('message', event => {
     const rendered = runVisualizer(transpiled, payload ?? createEmptyPayload())
     renderIntoRoot(rendered)
   } catch (error) {
-    renderError(error instanceof Error ? error.stack || error.message : String(error))
+    renderError(formatVisualizerError(error, code))
   }
 })
 
@@ -84,16 +89,22 @@ function compileVisualizer(source: string) {
       jsxFragmentFactory: 'Fragment',
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.CommonJS,
+      inlineSourceMap: true,
+      inlineSources: true,
     },
+    fileName: 'response-visualizer.tsx',
     reportDiagnostics: true,
   })
 
   const diagnostics = (result.diagnostics ?? [])
     .filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
-    .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
+    .map(diagnostic => formatVisualizerDiagnostic(diagnostic, source))
 
   if (diagnostics.length > 0) {
-    throw new Error(diagnostics.join('\n\n'))
+    throw createVisualizerError({
+      compactMessage: diagnostics[0]?.compactMessage ?? 'Response Visualizer Compile Error',
+      detailedMessage: diagnostics.map(diagnostic => diagnostic.detailedMessage).join('\n\n'),
+    })
   }
 
   return result.outputText
@@ -129,7 +140,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     'crypto',
     'z',
     'Table',
-    code
+    `${code}\n//# sourceURL=response-visualizer.js`
   )(module, exports, h, Fragment, console, env, scope, request, response, crypto, z, Table)
 
   const component = module.exports.default || exports.default
@@ -249,11 +260,92 @@ function renderNode(node: unknown): Node {
   return element
 }
 
-function renderError(message: string) {
+function renderError(error: VisualizerErrorDetails) {
   const element = document.createElement('pre')
   element.className = 'error'
-  element.textContent = message
+  element.textContent = `${error.compactMessage}\n\n${error.detailedMessage}`.trim()
   root.replaceChildren(element)
+}
+
+function formatVisualizerDiagnostic(diagnostic: ts.Diagnostic, source: string): VisualizerErrorDetails {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+  const location = diagnostic.file && typeof diagnostic.start === 'number'
+    ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
+    : null
+  const line = location ? location.line + 1 : null
+  const column = location ? location.character + 1 : null
+  const sourceLine = line ? source.split('\n')[line - 1]?.trimEnd() ?? null : null
+  const compactMessage = line ? `Response Visualizer:${line} ${message}` : `Response Visualizer ${message}`
+  const detailedLines = ['Phase: Response Visualizer']
+
+  if (line !== null) {
+    detailedLines.push(column !== null ? `Location: line ${line}, column ${column}` : `Location: line ${line}`)
+  }
+  if (sourceLine) {
+    detailedLines.push(`Code: ${sourceLine}`)
+  }
+  detailedLines.push(`Error: ${message}`)
+
+  return {
+    compactMessage,
+    detailedMessage: detailedLines.join('\n'),
+  }
+}
+
+function formatVisualizerError(error: unknown, source: string): VisualizerErrorDetails {
+  if (isVisualizerError(error)) {
+    return error.details
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  const stack = error instanceof Error ? error.stack ?? '' : ''
+  const location = extractVisualizerRuntimeLocation(stack, source)
+  const compactMessage = location?.line ? `Response Visualizer:${location.line} ${message}` : `Response Visualizer ${message}`
+  const detailedLines = ['Phase: Response Visualizer']
+
+  if (location?.line !== undefined && location.line !== null) {
+    detailedLines.push(
+      location.column !== null ? `Location: line ${location.line}, column ${location.column}` : `Location: line ${location.line}`
+    )
+  }
+  if (location?.sourceLine) {
+    detailedLines.push(`Code: ${location.sourceLine}`)
+  }
+  detailedLines.push(`Error: ${message}`)
+
+  return {
+    compactMessage,
+    detailedMessage: detailedLines.join('\n'),
+  }
+}
+
+function extractVisualizerRuntimeLocation(stack: string, source: string) {
+  const match = stack.match(/(?:response-visualizer\.(?:tsx|js)|<anonymous>):(\d+):(\d+)/)
+  if (!match) {
+    return null
+  }
+
+  const line = Number(match[1])
+  const column = Number(match[2])
+  if (!Number.isFinite(line) || !Number.isFinite(column)) {
+    return null
+  }
+
+  return {
+    line,
+    column,
+    sourceLine: source.split('\n')[line - 1]?.trimEnd() ?? null,
+  }
+}
+
+function createVisualizerError(details: VisualizerErrorDetails) {
+  const error = new Error(details.compactMessage)
+  ;(error as Error & { details: VisualizerErrorDetails }).details = details
+  return error
+}
+
+function isVisualizerError(error: unknown): error is Error & { details: VisualizerErrorDetails } {
+  return typeof error === 'object' && error !== null && 'details' in error
 }
 
 function renderEmptyState() {

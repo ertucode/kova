@@ -1,3 +1,4 @@
+import type { RequestScriptError } from './Requests.js'
 import { errorToString } from "./errorToString.js";
 import { _ResultOnlyError, Result } from "./Result.js";
 
@@ -9,6 +10,7 @@ export type GenericError =
   | {
       type: "message";
       message: string;
+      scriptErrors?: RequestScriptError[];
     }
   | {
       type: "http";
@@ -27,11 +29,12 @@ export namespace GenericError {
     );
   }
 
-  export function Message(message: string) {
+  export function Message(message: string, options?: { scriptErrors?: RequestScriptError[] }) {
     return Result.ErrorTyped(
       {
         type: "message",
         message,
+        scriptErrors: options?.scriptErrors,
       } as const,
       GenericError.$type,
     );

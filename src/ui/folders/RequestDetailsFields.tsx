@@ -5,6 +5,7 @@ import { getAuthVariableSources } from '@common/Auth'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type {
   HttpSseStreamState,
+  RequestScriptError,
   RequestBodyType,
   RequestMethod,
   RequestRawType,
@@ -30,7 +31,7 @@ import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { dialogActions } from '@/global/dialogStore'
 import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
 import { HeadersEditor } from './HeadersEditor'
-import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
+import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { KeyValueEditor } from './KeyValueEditor'
 import { environmentEditorStore } from './environmentEditorStore'
@@ -60,6 +61,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     Record<string, 'overview' | 'search-params' | 'scripts' | 'response-visualizer'>
   >({})
   const draftRef = useRef(draft)
+  const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
+  const postRequestEditorRef = useRef<CodeEditorHandle | null>(null)
+  const responseVisualizerEditorRef = useRef<CodeEditorHandle | null>(null)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
@@ -74,9 +78,15 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const responseError = useSelector(requestExecutionStore, state =>
     selectedRequestId ? (state.context.errorByRequestId[selectedRequestId] ?? null) : null
   )
+  const scriptErrors = useSelector(requestExecutionStore, state =>
+    selectedRequestId
+      ? (state.context.scriptErrorsByRequestId[selectedRequestId] ?? EMPTY_SCRIPT_ERRORS)
+      : EMPTY_SCRIPT_ERRORS
+  )
   const sseStream = useSelector(requestExecutionStore, state =>
     selectedRequestId ? (state.context.httpSseByRequestId[selectedRequestId] ?? null) : null
   )
+  const visibleResponseError = scriptErrors.length > 0 ? null : responseError
 
   draftRef.current = draft
   selectedRequestIdRef.current = selectedRequestId
@@ -319,13 +329,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     setMetaTab(initialMetaTab)
   }, [draft, selectedRequestId])
 
-  const updateMetaTab = (nextMetaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => {
+  const updateMetaTab = useCallback((nextMetaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => {
     if (selectedRequestId) {
       metaTabByRequestIdRef.current[selectedRequestId] = nextMetaTab
     }
 
     setMetaTab(nextMetaTab)
-  }
+  }, [selectedRequestId])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -422,7 +432,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     const sentAt = Date.now()
 
     setIsSending(true)
-    requestExecutionStore.trigger.requestStarted({ sentAt })
+    requestExecutionStore.trigger.requestStarted({ requestId: selected.id, sentAt })
     requestExecutionStore.trigger.httpSseStreamCleared({ requestId: selected.id })
 
     const result = await getWindowElectron().sendRequest({
@@ -449,6 +459,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       requestExecutionStore.trigger.requestFailed({
         requestId: selected.id,
         error: errorResponseToMessage(result.error),
+        scriptErrors: result.error.type === 'message' ? result.error.scriptErrors : undefined,
       })
       return
     }
@@ -632,6 +643,24 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const handleSaveCurrentResponseAsExample = useCallback(() => {
     void saveCurrentResponseAsExample()
   }, [response, sseStream, selectedRequestId, draft])
+
+  const handleJumpToScriptError = useCallback(
+    (error: RequestScriptError) => {
+      if (error.phase === 'pre-request') {
+        updateMetaTab('scripts')
+        window.requestAnimationFrame(() => {
+          preRequestEditorRef.current?.focusLine(error.line ?? 1, error.column)
+        })
+        return
+      }
+
+      updateMetaTab('scripts')
+      window.requestAnimationFrame(() => {
+        postRequestEditorRef.current?.focusLine(error.line ?? 1, error.column)
+      })
+    },
+    [updateMetaTab]
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -833,6 +862,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             editorLanguage="javascript"
             editorSize="small"
             extensions={preRequestScriptExtensions}
+            editorRef={preRequestEditorRef}
             headerActions={<ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
             onBlur={() => undefined}
@@ -846,6 +876,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             editorLanguage="javascript"
             editorSize="small"
             extensions={postRequestScriptExtensions}
+            editorRef={postRequestEditorRef}
             headerActions={<ScriptDocumentationButton phase="post-request" tooltip="Documentation" />}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
             onBlur={() => undefined}
@@ -880,6 +911,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               />
             </div>
             <CodeEditor
+              ref={responseVisualizerEditorRef}
               value={draft.responseVisualizer}
               language="jsx"
               size="small"
@@ -920,7 +952,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           {/*   title="Response" */}
           {/*   actions={<ResponseStatusSummary response={response} responseError={responseError} />} */}
           {/* /> */}
-          <ResponseScriptErrors errors={response?.scriptErrors ?? []} />
+          <ResponseScriptErrors errors={scriptErrors} onJumpToError={handleJumpToScriptError} />
           <div
             className={`flex min-h-0 flex-1 overflow-hidden transition duration-200 ${
               isSending ? 'pointer-events-none blur-[1.5px] saturate-50 opacity-60' : ''
@@ -930,7 +962,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
               <SseResponsePanel
                 stream={sseStream}
                 response={response}
-                responseError={responseError}
+                responseError={visibleResponseError}
                 events={displayedSseEvents}
                 onSaveAsExample={
                   response || (sseStream && sseStream.body.trim())
@@ -953,7 +985,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                   onUpdateResponseTableAccessor={handleUpdateResponseTableAccessor}
                   environments={visualizerEnvironments}
                   response={response}
-                  responseError={responseError}
+                  responseError={visibleResponseError}
                   onSaveAsExample={response ? handleSaveCurrentResponseAsExample : undefined}
                 />
                 <ResponseHeadersPanel
@@ -1099,15 +1131,69 @@ function ScriptDocumentationButton({
 }
 
 const readOnlyCodeEditorOnChange = () => undefined
+const EMPTY_SCRIPT_ERRORS: RequestScriptError[] = []
 
-const ResponseScriptErrors = memo(function ResponseScriptErrors({ errors }: { errors: SendRequestResponse['scriptErrors'] }) {
+const ResponseScriptErrors = memo(function ResponseScriptErrors({
+  errors,
+  onJumpToError,
+}: {
+  errors: RequestScriptError[]
+  onJumpToError: (error: RequestScriptError) => void
+}) {
   if (errors.length === 0) {
     return null
   }
 
   return (
-    <div className="whitespace-pre-wrap border-b border-base-content/10 bg-warning/8 px-3 py-2 text-sm text-warning-content/90">
-      {errors.map(error => `${error.sourceName}: ${error.message}`).join('\n')}
+    <div className="group relative block">
+      <div className="border-b border-error/18 bg-error/6 text-sm text-base-content/82 shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-error)_10%,transparent)]">
+        {errors.map(error => (
+          <button
+            key={`${error.phase}-${error.sourceName}-${error.line ?? 'unknown'}-${error.compactMessage}`}
+            type="button"
+            className="block w-full cursor-pointer border-b border-error/10 px-3 py-2 text-left transition last:border-b-0 hover:bg-error/8 hover:text-base-content"
+            onClick={() => onJumpToError(error)}
+          >
+            <span className="font-medium text-error">{error.compactLabel}</span>{' '}
+            <span>{error.compactMessage}</span>
+          </button>
+        ))}
+      </div>
+      <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-[min(42rem,calc(100vw-2rem))] group-hover:block group-focus-within:block">
+        <div className="overflow-hidden rounded-xl border border-base-content/12 bg-base-100/98 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur">
+          <div className="border-b border-base-content/10 bg-base-200/65 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">
+            Script Error Details
+          </div>
+          <div className="max-h-[24rem] overflow-auto p-3">
+            {errors.map(error => (
+              <div
+                key={`detail-${error.phase}-${error.sourceName}-${error.line ?? 'unknown'}-${error.compactMessage}`}
+                className="border-b border-base-content/10 px-1 py-2 last:border-b-0"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium text-error">{error.compactLabel}</span>
+                  <span className="text-base-content/80">{error.compactMessage}</span>
+                </div>
+                <div className="mt-2 text-xs leading-5 text-base-content/58">
+                  <div>{error.sourceName}</div>
+                  {error.line !== null ? (
+                    <div>
+                      line {error.line}
+                      {error.column !== null ? `, column ${error.column}` : ''}
+                    </div>
+                  ) : null}
+                </div>
+                {error.sourceLine ? (
+                  <pre className="mt-2 overflow-auto rounded-lg border border-base-content/10 bg-base-200/55 px-3 py-2 text-xs leading-5 text-base-content/82">
+                    <code>{error.sourceLine}</code>
+                  </pre>
+                ) : null}
+                <div className="mt-2 text-xs leading-5 text-base-content/72">{error.message}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 })

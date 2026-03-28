@@ -1,3 +1,4 @@
 - implement undo
 - tag environments so you do not have same type opened
-- response boyutunu yazalim
+- paste into part of the url
+- requests should be able to read path params

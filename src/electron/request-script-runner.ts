@@ -6,6 +6,7 @@ import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolv
 import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type {
+  RequestScriptError,
   RequestBodyType,
   RequestConsoleEntry,
   RequestConsoleLevel,
@@ -45,8 +46,15 @@ type HeaderApi = {
 }
 
 type ScriptErrorDetails = {
+  phase: 'pre-request' | 'post-request'
   sourceName: string
   message: string
+  compactLabel: string
+  compactMessage: string
+  detailedMessage: string
+  line: number | null
+  column: number | null
+  sourceLine: string | null
 }
 
 type EnvironmentOwnerMap = Map<string, string>
@@ -65,11 +73,11 @@ export type ScriptRuntime = {
   getRequestScopeValues: () => Record<string, string>
   getUpdatedEnvironments: () => EnvironmentRecord[]
   getConsoleEntries: () => RequestConsoleEntry[]
-  runPreRequestScripts: (sources: ScriptSource[]) => Promise<void>
+  runPreRequestScripts: (sources: ScriptSource[]) => Promise<RequestScriptError[]>
   runPostRequestScripts: (
     sources: ScriptSource[],
     response: { status: number; statusText: string; headers: string; body: ScriptResponseBody }
-  ) => Promise<ScriptErrorDetails[]>
+  ) => Promise<RequestScriptError[]>
 }
 
 export function createRequestScriptRuntime(input: {
@@ -96,18 +104,19 @@ export function createRequestScriptRuntime(input: {
     getUpdatedEnvironments: () => environments.filter(environment => updatedEnvironmentIds.has(environment.id)),
     getConsoleEntries: () => consoleEntries.slice(),
     runPreRequestScripts: async sources => {
-      try {
-        await runScriptPhase({
-          sources,
-          runtimeRequest,
-          requestScope,
-          response: null,
-          environmentContext: createEnvironmentContext(),
-          consoleEntries,
-        })
-      } catch (error) {
-        const scriptError = toScriptErrorDetails(error)
-        throw new Error(`${scriptError.sourceName}: ${scriptError.message}`)
+      const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
+      const scriptErrors = await runScriptPhase({
+        phase: 'pre-request',
+        sources,
+        runtimeRequest,
+        requestScope,
+        response: null,
+        environmentContext: createEnvironmentContext(),
+        consoleEntries,
+      })
+      if (scriptErrors.length > 0) {
+        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+        return scriptErrors
       }
 
       if (pendingEnvironmentIds.size > 0) {
@@ -117,17 +126,15 @@ export function createRequestScriptRuntime(input: {
         pendingEnvironmentIds.forEach(id => updatedEnvironmentIds.add(id))
         pendingEnvironmentIds = new Set<string>()
       }
+
+      return []
     },
     runPostRequestScripts: async (sources, response) => {
-      const snapshot = {
-        environments: environments.map(environment => ({ ...environment })),
-        values: { ...environmentValues },
-        owners: new Map(environmentOwners),
-        pendingIds: new Set(pendingEnvironmentIds),
-      }
+      const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
 
       try {
-        await runScriptPhase({
+        const scriptErrors = await runScriptPhase({
+          phase: 'post-request',
           sources,
           runtimeRequest,
           requestScope,
@@ -135,6 +142,10 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
         })
+        if (scriptErrors.length > 0) {
+          ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+          return scriptErrors
+        }
 
         if (pendingEnvironmentIds.size > 0) {
           environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
@@ -146,19 +157,9 @@ export function createRequestScriptRuntime(input: {
 
         return []
       } catch (error) {
-        environments = snapshot.environments
-        environmentValues = snapshot.values
-        environmentOwners = snapshot.owners
-        pendingEnvironmentIds = snapshot.pendingIds
+        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
 
-        const scriptError = toScriptErrorDetails(error)
-
-        return [
-          {
-            sourceName: scriptError.sourceName,
-            message: scriptError.message,
-          },
-        ]
+        return [toScriptErrorDetails(error, 'post-request')]
       }
     },
   }
@@ -199,21 +200,83 @@ export function createRequestScriptRuntime(input: {
   }
 }
 
-function toScriptErrorDetails(error: unknown): ScriptErrorDetails {
+function createRuntimeSnapshot(input: {
+  runtimeRequest: RuntimeRequestState
+  requestScope: Map<string, string>
+  environments: EnvironmentRecord[]
+  environmentValues: Record<string, string>
+  environmentOwners: EnvironmentOwnerMap
+  pendingEnvironmentIds: Set<string>
+}) {
+  return {
+    runtimeRequest: { ...input.runtimeRequest },
+    requestScope: new Map(input.requestScope),
+    environments: input.environments.map(environment => ({ ...environment })),
+    values: { ...input.environmentValues },
+    owners: new Map(input.environmentOwners),
+    pendingIds: new Set(input.pendingEnvironmentIds),
+  }
+}
+
+function restoreRuntimeSnapshot(
+  snapshot: ReturnType<typeof createRuntimeSnapshot>,
+  runtimeRequest: RuntimeRequestState,
+  requestScope: Map<string, string>
+) {
+  runtimeRequest.method = snapshot.runtimeRequest.method
+  runtimeRequest.url = snapshot.runtimeRequest.url
+  runtimeRequest.pathParams = snapshot.runtimeRequest.pathParams
+  runtimeRequest.searchParams = snapshot.runtimeRequest.searchParams
+  runtimeRequest.auth = snapshot.runtimeRequest.auth
+  runtimeRequest.headers = snapshot.runtimeRequest.headers
+  runtimeRequest.body = snapshot.runtimeRequest.body
+  runtimeRequest.bodyType = snapshot.runtimeRequest.bodyType
+  runtimeRequest.rawType = snapshot.runtimeRequest.rawType
+
+  requestScope.clear()
+  for (const [key, value] of snapshot.requestScope.entries()) {
+    requestScope.set(key, value)
+  }
+
+  return {
+    environments: snapshot.environments,
+    environmentValues: snapshot.values,
+    environmentOwners: snapshot.owners,
+    pendingEnvironmentIds: snapshot.pendingIds,
+  }
+}
+
+function toScriptErrorDetails(error: unknown, fallbackPhase: 'pre-request' | 'post-request'): ScriptErrorDetails {
   if (typeof error === 'object' && error !== null && 'sourceName' in error && 'message' in error) {
     return {
+      phase: 'phase' in error && (error.phase === 'pre-request' || error.phase === 'post-request') ? error.phase : fallbackPhase,
       sourceName: String(error.sourceName),
       message: String(error.message),
+      compactLabel:
+        'compactLabel' in error ? String(error.compactLabel) : buildCompactScriptErrorLabel(fallbackPhase, null, null),
+      compactMessage: 'compactMessage' in error ? String(error.compactMessage) : String(error.message),
+      detailedMessage: 'detailedMessage' in error ? String(error.detailedMessage) : String(error.message),
+      line: 'line' in error && typeof error.line === 'number' ? error.line : null,
+      column: 'column' in error && typeof error.column === 'number' ? error.column : null,
+      sourceLine: 'sourceLine' in error && typeof error.sourceLine === 'string' ? error.sourceLine : null,
     }
   }
 
   return {
+    phase: fallbackPhase,
     sourceName: 'Script',
     message: error instanceof Error ? error.message : String(error),
+    compactLabel: buildCompactScriptErrorLabel(fallbackPhase, null, null),
+    compactMessage: error instanceof Error ? error.message : String(error),
+    detailedMessage: error instanceof Error ? error.message : String(error),
+    line: null,
+    column: null,
+    sourceLine: null,
   }
 }
 
 async function runScriptPhase(input: {
+  phase: 'pre-request' | 'post-request'
   sources: ScriptSource[]
   runtimeRequest: RuntimeRequestState
   requestScope: Map<string, string>
@@ -241,12 +304,117 @@ async function runScriptPhase(input: {
       await executeScript(source.script, sandbox)
       input.runtimeRequest.headers = headerEditor.serialize()
     } catch (error) {
-      throw {
-        sourceName: source.name,
-        message: error instanceof Error ? error.message : String(error),
-      }
+      return [buildScriptErrorDetails({ phase: input.phase, sourceName: source.name, error, sourceCode: source.script })]
     }
   }
+
+  return []
+}
+
+function buildScriptErrorDetails(input: {
+  phase: 'pre-request' | 'post-request'
+  sourceName: string
+  error: unknown
+  sourceCode: string
+}): ScriptErrorDetails {
+  const message = getScriptErrorMessage(input.error)
+  const location = extractScriptLocation(input.error, input.sourceCode)
+  const compactLabel = buildCompactScriptErrorLabel(input.phase, location?.line ?? null, location?.column ?? null)
+  const detailedLines = [`Source: ${input.sourceName}`, `Phase: ${formatScriptPhase(input.phase)}`]
+
+  if (location?.line !== undefined && location.line !== null) {
+    detailedLines.push(
+      location.column !== null ? `Location: line ${location.line}, column ${location.column}` : `Location: line ${location.line}`
+    )
+  }
+
+  if (location?.sourceLine) {
+    detailedLines.push(`Code: ${location.sourceLine}`)
+  }
+
+  detailedLines.push(`Error: ${message}`)
+
+  return {
+    phase: input.phase,
+    sourceName: input.sourceName,
+    message,
+    compactLabel,
+    compactMessage: message,
+    detailedMessage: detailedLines.join('\n'),
+    line: location?.line ?? null,
+    column: location?.column ?? null,
+    sourceLine: location?.sourceLine ?? null,
+  }
+}
+
+function buildCompactScriptErrorLabel(
+  phase: 'pre-request' | 'post-request',
+  line: number | null,
+  column: number | null
+) {
+  if (line === null) {
+    return formatScriptPhase(phase)
+  }
+
+  return column === null ? `${formatScriptPhase(phase)}:${line}` : `${formatScriptPhase(phase)}:${line}:${column}`
+}
+
+function formatScriptPhase(phase: 'pre-request' | 'post-request') {
+  return phase === 'pre-request' ? 'Pre-request' : 'Post-request'
+}
+
+function extractScriptLocation(error: unknown, sourceCode: string) {
+  const stack = getScriptErrorStack(error)
+  if (!stack) {
+    return null
+  }
+
+  const runtimeMatch = stack.match(/request-script\.js:(\d+):(\d+)/)
+  const syntaxMatch = stack.match(/request-script\.js:(\d+)(?!:)/)
+
+  const rawLine = Number(runtimeMatch?.[1] ?? syntaxMatch?.[1])
+  if (!Number.isFinite(rawLine)) {
+    return null
+  }
+
+  const rawColumn = runtimeMatch ? Number(runtimeMatch[2]) : extractSyntaxErrorColumn(stack)
+  const line = Math.max(1, rawLine - 1)
+  const column = typeof rawColumn === 'number' && Number.isFinite(rawColumn) ? Math.max(1, rawColumn) : null
+  const sourceLine = sourceCode.split('\n')[line - 1]?.trimEnd() ?? null
+
+  return {
+    line,
+    column,
+    sourceLine,
+  }
+}
+
+function extractSyntaxErrorColumn(stack: string) {
+  const lines = stack.split('\n')
+  for (const line of lines) {
+    const caretIndex = line.indexOf('^')
+    if (caretIndex >= 0) {
+      return caretIndex + 1
+    }
+  }
+
+  return null
+}
+
+function getScriptErrorMessage(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message
+  }
+
+  return String(error)
+}
+
+function getScriptErrorStack(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'stack' in error && typeof error.stack === 'string') {
+    return error.stack
+  }
+
+  return null
 }
 
 function createCryptoApi() {
