@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import {
   Clock3Icon,
@@ -32,6 +32,8 @@ export function FolderExplorer() {
   const searchQuery = useSelector(folderExplorerTreeStore, state => state.context.searchQuery)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const sidebarTab = useSelector(folderExplorerEditorStore, state => state.context.sidebarTab)
+  const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
+  const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
@@ -47,7 +49,36 @@ export function FolderExplorer() {
     () => filterTreeWithDrafts(roots, normalizedSearch, entries),
     [entries, roots, normalizedSearch]
   )
+  const visibleNodes = useMemo(
+    () => flattenVisibleNodes(visibleRoots, normalizedSearch.length > 0, expandedIds),
+    [expandedIds, normalizedSearch.length, visibleRoots]
+  )
   const canDrag = normalizedSearch.length === 0 && createDraft === null
+
+  const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+      return
+    }
+
+    const direction = event.key === 'j' ? 1 : event.key === 'k' ? -1 : 0
+    if (direction === 0 || visibleNodes.length === 0) {
+      return
+    }
+
+    event.preventDefault()
+
+    const currentIndex = selected
+      ? visibleNodes.findIndex(node => node.itemType === selected.itemType && node.id === selected.id)
+      : -1
+    const fallbackIndex = direction > 0 ? 0 : visibleNodes.length - 1
+    const nextIndex = currentIndex < 0 ? fallbackIndex : Math.max(0, Math.min(visibleNodes.length - 1, currentIndex + direction))
+    const nextNode = visibleNodes[nextIndex]
+    if (!nextNode) {
+      return
+    }
+
+    void FolderExplorerCoordinator.selectItem({ itemType: nextNode.itemType, id: nextNode.id }, { mode: 'preview' })
+  }
 
   const clearDragState = () => {
     setDraggedItem(null)
@@ -184,10 +215,12 @@ export function FolderExplorer() {
                 <SearchIcon className="size-4 shrink-0" />
                 <input
                   type="text"
+                  id="folder-explorer-search-input"
                   className="w-full bg-transparent outline-none placeholder:text-base-content/35"
                   placeholder="Search folders and requests"
                   value={searchQuery}
                   onChange={event => FolderExplorerCoordinator.updateTreeSearchQuery(event.target.value)}
+                  onKeyDown={handleSearchKeyDown}
                 />
               </label>
             </div>
@@ -255,6 +288,22 @@ export function FolderExplorer() {
       </main>
     </div>
   )
+}
+
+function flattenVisibleNodes(nodes: TreeNode[], forceExpanded: boolean, expandedIds: string[]) {
+  const flattened: TreeNode[] = []
+
+  const visit = (node: TreeNode) => {
+    flattened.push(node)
+
+    if ((forceExpanded || expandedIds.includes(node.id)) && (node.itemType === 'folder' || node.itemType === 'request')) {
+      node.children.forEach(visit)
+    }
+  }
+
+  nodes.forEach(visit)
+
+  return flattened
 }
 
 function CreateMenuButton() {

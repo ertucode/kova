@@ -79,10 +79,7 @@ export namespace GlobalShortcuts {
     }
   }
 
-  function applyCustomShortcuts(
-    shortcuts: ShortcutCommand[],
-    customShortcuts: Record<string, any>
-  ): ShortcutCommand[] {
+  function applyCustomShortcuts(shortcuts: ShortcutCommand[], customShortcuts: Record<string, any>): ShortcutCommand[] {
     return shortcuts.map(item => {
       // Skip if not customizable
       if (item.customizable === false) {
@@ -101,10 +98,7 @@ export namespace GlobalShortcuts {
     })
   }
 
-  function applyCustomSequences(
-    sequences: SequenceCommand[],
-    customShortcuts: Record<string, any>
-  ): SequenceCommand[] {
+  function applyCustomSequences(sequences: SequenceCommand[], customShortcuts: Record<string, any>): SequenceCommand[] {
     return sequences.map(item => {
       // Skip if not customizable
       if (item.customizable === false) {

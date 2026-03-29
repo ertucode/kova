@@ -10,6 +10,7 @@ import { DialogStoreRenderer } from './global/dialogStore'
 import { subscribeToTasks } from './global/taskSubscription'
 import { CustomTitleBar } from './components/CustomTitleBar'
 import { FolderExplorer } from './folders/FolderExplorer'
+import { useAppShortcuts } from './appShortcuts'
 
 subscribeToTasks()
 subscribeToGenericEvents()
@@ -18,6 +19,8 @@ function App() {
   useEffect(() => {
     void AppSettingsCoordinator.loadSettings()
   }, [])
+
+  useAppShortcuts()
 
   return (
     <>
