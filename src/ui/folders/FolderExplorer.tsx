@@ -8,6 +8,7 @@ import {
   FolderIcon,
   MoreHorizontalIcon,
   SearchIcon,
+  Undo2Icon,
 } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
@@ -16,6 +17,7 @@ import { DraftRow, EmptyState, ExplorerRow } from './ExplorerRow'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { EnvironmentsPanel } from './EnvironmentsPanel'
+import { ChangesPanel } from './ChangesPanel'
 import { HistoryPanel } from './RequestExecutionPanels'
 import { buildTree, filterTreeWithDrafts, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
@@ -285,6 +287,7 @@ export function FolderExplorer() {
         {sidebarTab === 'requests' ? <DetailsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
         {sidebarTab === 'history' ? <HistoryPanel /> : null}
+        {sidebarTab === 'changes' ? <ChangesPanel /> : null}
       </main>
     </div>
   )
@@ -422,6 +425,7 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
     { id: 'requests', label: 'Requests', icon: FileCode2Icon, disabled: false },
     { id: 'environments', label: 'Envs', icon: FlaskConicalIcon, disabled: false },
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },
+    { id: 'changes', label: 'Changes', icon: Undo2Icon, disabled: false },
   ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
 
   return (

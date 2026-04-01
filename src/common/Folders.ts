@@ -1,4 +1,5 @@
 import type { HttpAuth } from './Auth.js'
+import type { OperationRecord } from './Operations.js'
 
 export type FolderRecord = {
   id: string
@@ -38,4 +39,8 @@ export type UpdateFolderInput = {
 
 export type DeleteFolderInput = {
   id: string
+}
+
+export type DeleteFolderResponse = {
+  operation: OperationRecord
 }

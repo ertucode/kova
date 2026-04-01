@@ -1,8 +1,9 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createDefaultHttpAuth, parseHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
   CreateFolderInput,
+  DeleteFolderResponse,
   DeleteFolderInput,
   FolderRecord,
   GetFolderInput,
@@ -11,7 +12,8 @@ import type {
 } from '../../common/Folders.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
-import { folders, requestExamples, requests, treeItems } from './schema.js'
+import { folders, requestExamples, requests, treeItems, websocketExamples } from './schema.js'
+import { insertOperation } from './operations.js'
 import { ensureParentFolderExists, insertTreeItem } from './tree-items.js'
 
 type FolderRow = typeof folders.$inferSelect
@@ -141,80 +143,104 @@ export async function updateFolder(input: UpdateFolderInput): Promise<GenericRes
   }
 }
 
-export async function deleteFolder(input: DeleteFolderInput): Promise<GenericResult<void>> {
+export async function deleteFolder(input: DeleteFolderInput): Promise<GenericResult<DeleteFolderResponse>> {
   const db = getDb()
 
   try {
-    const now = Date.now()
-    const folderResult = db.run(sql`
-      WITH RECURSIVE subtree(id) AS (
-        SELECT id
-        FROM folders
-        WHERE id = ${input.id} AND deleted_at IS NULL
-        UNION ALL
-        SELECT child.id
-        FROM folders AS child
-        INNER JOIN subtree ON child.parent_id = subtree.id
-        WHERE child.deleted_at IS NULL
-      )
-      UPDATE folders
-      SET deleted_at = ${now}
-      WHERE id IN (SELECT id FROM subtree)
-    `)
+    const deleted = db.transaction(tx => {
+      const rootFolder = tx
+        .select({ id: folders.id, name: folders.name })
+        .from(folders)
+        .where(and(eq(folders.id, input.id), isNull(folders.deletedAt)))
+        .get()
 
-    if (folderResult.changes === 0) {
-      return GenericError.Message('Folder not found')
-    }
+      if (!rootFolder) {
+        throw new Error('Folder not found')
+      }
 
-    db.run(sql`
-      WITH RECURSIVE subtree(id) AS (
-        SELECT id
-        FROM folders
-        WHERE id = ${input.id}
-        UNION ALL
-        SELECT child.id
-        FROM folders AS child
-        INNER JOIN subtree ON child.parent_id = subtree.id
-        WHERE child.deleted_at IS NULL
-      )
-      UPDATE tree_items
-      SET deleted_at = ${now}
-      WHERE deleted_at IS NULL
-        AND (
-          (item_type = 'folder' AND item_id IN (SELECT id FROM subtree))
-          OR (item_type = 'request' AND parent_folder_id IN (SELECT id FROM subtree))
+      const folderRows = tx
+        .select({ id: folders.id, parentId: folders.parentId })
+        .from(folders)
+        .where(isNull(folders.deletedAt))
+        .all()
+
+      const subtreeFolderIds = new Set<string>([input.id])
+      let changed = true
+      while (changed) {
+        changed = false
+        folderRows.forEach(folder => {
+          if (folder.parentId && subtreeFolderIds.has(folder.parentId) && !subtreeFolderIds.has(folder.id)) {
+            subtreeFolderIds.add(folder.id)
+            changed = true
+          }
+        })
+      }
+
+      const folderIds = Array.from(subtreeFolderIds)
+      const requestIds = tx
+        .select({ itemId: treeItems.itemId })
+        .from(treeItems)
+        .where(and(eq(treeItems.itemType, 'request'), inArray(treeItems.parentFolderId, folderIds), isNull(treeItems.deletedAt)))
+        .all()
+        .map(row => row.itemId)
+
+      const now = Date.now()
+      const operation = insertOperation(tx, {
+        operationType: 'delete-folder',
+        title: `Deleted folder ${rootFolder.name}`,
+        summary: requestIds.length === 0 ? 'Folder deleted.' : `Deleted folder and ${requestIds.length} request${requestIds.length === 1 ? '' : 's'}.`,
+        createdAt: now,
+        metadata: {
+          rootItemType: 'folder',
+          rootItemId: rootFolder.id,
+          rootItemName: rootFolder.name,
+          deletedAt: now,
+          folderIds,
+          requestIds,
+        },
+      })
+
+      tx.update(folders)
+        .set({ deletedAt: now })
+        .where(and(inArray(folders.id, folderIds), isNull(folders.deletedAt)))
+        .run()
+
+      tx.update(treeItems)
+        .set({ deletedAt: now })
+        .where(
+          and(
+            isNull(treeItems.deletedAt),
+            inArray(treeItems.itemType, ['folder', 'request']),
+            inArray(treeItems.itemId, [...folderIds, ...requestIds])
+          )
         )
-    `)
+        .run()
 
-    db.run(sql`
-      UPDATE requests
-      SET deleted_at = ${now}
-      WHERE deleted_at IS NULL
-        AND id IN (
-          SELECT item_id
-          FROM tree_items
-          WHERE item_type = 'request'
-            AND deleted_at = ${now}
-        )
-    `)
+      if (requestIds.length > 0) {
+        tx.update(requests)
+          .set({ deletedAt: now })
+          .where(and(inArray(requests.id, requestIds), isNull(requests.deletedAt)))
+          .run()
 
-    db.update(requestExamples)
-      .set({ deletedAt: now })
-      .where(
-        and(
-          isNull(requestExamples.deletedAt),
-          sql`${requestExamples.requestId} IN (
-            SELECT item_id
-            FROM tree_items
-            WHERE item_type = 'request'
-              AND deleted_at = ${now}
-          )`
-        )
-      )
-      .run()
+        tx.update(requestExamples)
+          .set({ deletedAt: now })
+          .where(and(inArray(requestExamples.requestId, requestIds), isNull(requestExamples.deletedAt)))
+          .run()
 
-    return Result.Success(undefined)
+        tx.update(websocketExamples)
+          .set({ deletedAt: now })
+          .where(and(inArray(websocketExamples.requestId, requestIds), isNull(websocketExamples.deletedAt)))
+          .run()
+      }
+
+      return { operation }
+    })
+
+    return Result.Success(deleted)
   } catch (error) {
+    if (error instanceof Error && error.message === 'Folder not found') {
+      return GenericError.Message(error.message)
+    }
     return GenericError.Unknown(error)
   }
 }

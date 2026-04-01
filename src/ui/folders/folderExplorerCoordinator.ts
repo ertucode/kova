@@ -32,11 +32,13 @@ import {
   toWebSocketExampleDetailsDraft,
 } from './folderExplorerUtils'
 import type { MoveExplorerItemInput } from '@common/Explorer'
+import { ChangesCoordinator } from './changesCoordinator'
 
 const loadTokens: Record<string, number> = {}
 const saveTokens: Record<string, number> = {}
 const MOVE_UNDO_TOAST_ID = 'folder-explorer-move-undo'
 const MOVE_UNDO_TIMEOUT_MS = 5000
+const DELETE_UNDO_TIMEOUT_MS = 10000
 const MAX_MOVE_UNDO_STACK_SIZE = 20
 const MAX_FOLDER_EXPLORER_TABS = 20
 const UNSAVED_DRAFTS_PERSIST_DEBOUNCE_MS = 500
@@ -412,14 +414,52 @@ export namespace FolderExplorerCoordinator {
       message,
       confirmText: 'Delete',
       onConfirm: async () => {
+        if (item.itemType === 'folder') {
+          const result = await getWindowElectron().deleteFolder({ id: item.id })
+
+          if (!result.success) {
+            toast.show(result)
+            return
+          }
+
+          const treeState = folderExplorerTreeStore.getSnapshot().context
+          if (treeState.createDraft?.parentFolderId === item.id) {
+            cancelCreate()
+          }
+
+          const affectedKeys = getDeletedItemKeys(treeState.items, item)
+          folderExplorerEditorStore.trigger.itemStatesCleared({ keys: affectedKeys })
+          persistUiState()
+          persistUnsavedDrafts()
+          await loadItems()
+          void ChangesCoordinator.loadOperations()
+          showDeleteUndoToast(result.data.operation.id, item.itemType, item.name)
+          return
+        }
+
+        if (item.itemType === 'request') {
+          const result = await getWindowElectron().deleteRequest({ id: item.id })
+
+          if (!result.success) {
+            toast.show(result)
+            return
+          }
+
+          const treeState = folderExplorerTreeStore.getSnapshot().context
+          const affectedKeys = getDeletedItemKeys(treeState.items, item)
+          folderExplorerEditorStore.trigger.itemStatesCleared({ keys: affectedKeys })
+          persistUiState()
+          persistUnsavedDrafts()
+          await loadItems()
+          void ChangesCoordinator.loadOperations()
+          showDeleteUndoToast(result.data.operation.id, item.itemType, item.name)
+          return
+        }
+
         const result =
-          item.itemType === 'folder'
-            ? await getWindowElectron().deleteFolder({ id: item.id })
-            : item.itemType === 'request'
-              ? await getWindowElectron().deleteRequest({ id: item.id })
-              : item.exampleType === 'websocket'
-                ? await getWindowElectron().deleteWebSocketExample({ id: item.id })
-                : await getWindowElectron().deleteRequestExample({ id: item.id })
+          item.exampleType === 'websocket'
+            ? await getWindowElectron().deleteWebSocketExample({ id: item.id })
+            : await getWindowElectron().deleteRequestExample({ id: item.id })
 
         if (!result.success) {
           toast.show(result)
@@ -593,6 +633,28 @@ function showMoveUndoToast() {
         'Undo'
       )
     ),
+  })
+}
+
+function showDeleteUndoToast(operationId: string, itemType: 'folder' | 'request', name: string) {
+  toast.show({
+    severity: 'info',
+    title: itemType === 'folder' ? `Deleted folder ${name}` : `Deleted request ${name}`,
+    timeout: DELETE_UNDO_TIMEOUT_MS,
+    actionLabel: 'Undo',
+    onAction: () => {
+      void (async () => {
+        const undoResult = await getWindowElectron().undoOperation({ id: operationId })
+        if (!undoResult.success) {
+          toast.show(undoResult)
+          return
+        }
+
+        await FolderExplorerCoordinator.initialize()
+        void ChangesCoordinator.loadOperations()
+        toast.show({ severity: 'success', title: 'Change undone', message: undoResult.data.title })
+      })()
+    },
   })
 }
 

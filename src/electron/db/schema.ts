@@ -138,6 +138,29 @@ export const folderExplorerTabs = sqliteTable(
   ]
 )
 
+export const operations = sqliteTable(
+  'operations',
+  {
+    id: text('id').primaryKey(),
+    operationType: text('operation_type').notNull(),
+    status: text('status').notNull(),
+    title: text('title').notNull(),
+    summary: text('summary').notNull(),
+    metadataJson: text('metadata_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    completedAt: integer('completed_at'),
+    undoneAt: integer('undone_at'),
+  },
+  table => [
+    index('operations_created_at_idx').on(table.createdAt),
+    index('operations_operation_type_idx').on(table.operationType),
+    index('operations_status_idx').on(table.status),
+    check('operations_status_check', sql`${table.status} in ('active', 'undone', 'failed')`),
+    check('operations_type_check', sql`${table.operationType} in ('delete-folder', 'delete-request')`),
+  ]
+)
+
 export const requestHistory = sqliteTable(
   'request_history',
   {

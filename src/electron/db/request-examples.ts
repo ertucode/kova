@@ -160,8 +160,7 @@ export async function listRequestExamplesByRequestIds(requestIds: string[]) {
   return rows.map(toRequestExampleRecord)
 }
 
-export function markRequestExamplesDeleted(requestId: string, deletedAt: number) {
-  const db = getDb()
+export function markRequestExamplesDeleted(requestId: string, deletedAt: number, db: ReturnType<typeof getDb> = getDb()) {
   db.update(requestExamples).set({ deletedAt }).where(and(eq(requestExamples.requestId, requestId), isNull(requestExamples.deletedAt))).run()
 }
 

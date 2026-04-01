@@ -47,6 +47,7 @@ import {
   updateWebSocketSavedMessage,
 } from './db/websocket-saved-messages.js'
 import { moveExplorerItem } from './db/tree-items.js'
+import { deleteOperation, deleteOperations, listOperations, undoOperation, undoOperations } from './db/operations.js'
 import { cancelHttpRequest, sendRequest } from './send-request.js'
 import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
@@ -308,6 +309,26 @@ app.on('ready', () => {
 
   ipcHandle('deleteFolder', async input => {
     return deleteFolder(input)
+  })
+
+  ipcHandle('listOperations', async input => {
+    return listOperations(input ?? undefined)
+  })
+
+  ipcHandle('undoOperation', async input => {
+    return undoOperation(input)
+  })
+
+  ipcHandle('deleteOperation', async input => {
+    return deleteOperation(input)
+  })
+
+  ipcHandle('undoOperations', async input => {
+    return undoOperations(input)
+  })
+
+  ipcHandle('deleteOperations', async input => {
+    return deleteOperations(input)
   })
 
   ipcHandle('createRequest', async input => {

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, ReactNode, useRef } from "react";
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from "lucide-react";
 import { errorResponseToMessage, GenericError } from "@common/GenericError";
+import { Button } from "./button";
 
 export type ToastSeverity = "success" | "error" | "warning" | "info";
 export type ToastLocation =
@@ -132,9 +133,9 @@ const ToastItem: React.FC<{ toast: Toast; onClose: (id: string) => void }> = ({
           {toast.message && <div className="text-xs">{toast.message}</div>}
         </div>
         {toast.actionLabel && toast.onAction ? (
-          <button className="btn btn-xs btn-ghost mt-2 -ml-2" onClick={toast.onAction}>
+          <Button className="btn-xs mt-2" onClick={toast.onAction}>
             {toast.actionLabel}
-          </button>
+          </Button>
         ) : null}
       </div>
       <button

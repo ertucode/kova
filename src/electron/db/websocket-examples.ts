@@ -150,8 +150,8 @@ export async function moveWebSocketExample(input: MoveWebSocketExampleInput): Pr
   }
 }
 
-export function markWebSocketExamplesDeleted(requestId: string, deletedAt: number) {
-  getDb()
+export function markWebSocketExamplesDeleted(requestId: string, deletedAt: number, db: ReturnType<typeof getDb> = getDb()) {
+  db
     .update(websocketExamples)
     .set({ deletedAt })
     .where(and(eq(websocketExamples.requestId, requestId), isNull(websocketExamples.deletedAt)))

@@ -3,6 +3,7 @@ import { type FolderExplorerTabRecord, type SaveFolderExplorerTabsInput } from '
 import {
   type CreateFolderInput,
   type DeleteFolderInput,
+  type DeleteFolderResponse,
   type FolderRecord,
   type GetFolderInput,
   type RenameFolderInput,
@@ -36,6 +37,7 @@ import {
   type CancelHttpRequestInput,
   type CreateRequestInput,
   type CreateWebSocketSavedMessageInput,
+  type DeleteRequestResponse,
   type DeleteWebSocketSavedMessageInput,
   type DuplicateRequestInput,
   type DeleteRequestHistoryEntryInput,
@@ -93,6 +95,14 @@ import {
 } from './PostmanEnvironmentExport.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
+import {
+  type DeleteOperationInput,
+  type DeleteOperationsInput,
+  type ListOperationsInput,
+  type OperationRecord,
+  type UndoOperationInput,
+  type UndoOperationsInput,
+} from './Operations.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -116,12 +126,17 @@ export type EventResponseMapping = {
   getFolder: Promise<GenericResult<FolderRecord>>
   renameFolder: Promise<GenericResult<void>>
   updateFolder: Promise<GenericResult<FolderRecord>>
-  deleteFolder: Promise<GenericResult<void>>
+  deleteFolder: Promise<GenericResult<DeleteFolderResponse>>
   createRequest: Promise<GenericResult<HttpRequestRecord>>
   getRequest: Promise<GenericResult<HttpRequestRecord>>
   updateRequest: Promise<GenericResult<HttpRequestRecord>>
   updateRequestResponseBodyViewPreference: Promise<GenericResult<HttpRequestRecord>>
-  deleteRequest: Promise<GenericResult<void>>
+  deleteRequest: Promise<GenericResult<DeleteRequestResponse>>
+  listOperations: Promise<OperationRecord[]>
+  undoOperation: Promise<GenericResult<OperationRecord>>
+  deleteOperation: Promise<GenericResult<void>>
+  undoOperations: Promise<GenericResult<void>>
+  deleteOperations: Promise<GenericResult<void>>
   duplicateRequest: Promise<GenericResult<HttpRequestRecord>>
   createRequestExample: Promise<GenericResult<RequestExampleRecord>>
   getRequestExample: Promise<GenericResult<RequestExampleRecord>>
@@ -193,6 +208,11 @@ export type EventRequestMapping = {
   updateRequest: UpdateRequestInput
   updateRequestResponseBodyViewPreference: UpdateRequestResponseBodyViewPreferenceInput
   deleteRequest: DeleteRequestInput
+  listOperations: ListOperationsInput | void
+  undoOperation: UndoOperationInput
+  deleteOperation: DeleteOperationInput
+  undoOperations: UndoOperationsInput
+  deleteOperations: DeleteOperationsInput
   duplicateRequest: DuplicateRequestInput
   createRequestExample: CreateRequestExampleInput
   getRequestExample: GetRequestExampleInput
@@ -268,14 +288,19 @@ export type WindowElectron = {
   getFolder: (input: GetFolderInput) => Promise<GenericResult<FolderRecord>>
   renameFolder: (input: RenameFolderInput) => Promise<GenericResult<void>>
   updateFolder: (input: UpdateFolderInput) => Promise<GenericResult<FolderRecord>>
-  deleteFolder: (input: DeleteFolderInput) => Promise<GenericResult<void>>
+  deleteFolder: (input: DeleteFolderInput) => Promise<GenericResult<DeleteFolderResponse>>
   createRequest: (input: CreateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   getRequest: (input: GetRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   updateRequest: (input: UpdateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   updateRequestResponseBodyViewPreference: (
     input: UpdateRequestResponseBodyViewPreferenceInput
   ) => Promise<GenericResult<HttpRequestRecord>>
-  deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<void>>
+  deleteRequest: (input: DeleteRequestInput) => Promise<GenericResult<DeleteRequestResponse>>
+  listOperations: (input?: ListOperationsInput) => Promise<OperationRecord[]>
+  undoOperation: (input: UndoOperationInput) => Promise<GenericResult<OperationRecord>>
+  deleteOperation: (input: DeleteOperationInput) => Promise<GenericResult<void>>
+  undoOperations: (input: UndoOperationsInput) => Promise<GenericResult<void>>
+  deleteOperations: (input: DeleteOperationsInput) => Promise<GenericResult<void>>
   duplicateRequest: (input: DuplicateRequestInput) => Promise<GenericResult<HttpRequestRecord>>
   createRequestExample: (input: CreateRequestExampleInput) => Promise<GenericResult<RequestExampleRecord>>
   getRequestExample: (input: GetRequestExampleInput) => Promise<GenericResult<RequestExampleRecord>>

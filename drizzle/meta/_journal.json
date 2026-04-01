@@ -148,6 +148,13 @@
       "when": 1774303297396,
       "tag": "0020_panoramic_dagger",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1775059332308,
+      "tag": "0021_luxuriant_tombstone",
+      "breakpoints": true
     }
   ]
 }

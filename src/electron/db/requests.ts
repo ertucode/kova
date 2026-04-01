@@ -4,6 +4,7 @@ import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
   CreateRequestInput,
   DeleteRequestInput,
+  DeleteRequestResponse,
   DuplicateRequestInput,
   GetRequestInput,
   HttpRequestRecord,
@@ -19,6 +20,7 @@ import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
 import { markRequestExamplesDeleted } from './request-examples.js'
 import { markWebSocketExamplesDeleted } from './websocket-examples.js'
+import { insertOperation } from './operations.js'
 import { requests, treeItems } from './schema.js'
 import { ensureParentFolderExists, insertTreeItem, insertTreeItemAtPosition, markTreeItemDeleted } from './tree-items.js'
 
@@ -223,26 +225,59 @@ export async function updateRequestResponseBodyViewPreference(
   }
 }
 
-export async function deleteRequest(input: DeleteRequestInput): Promise<GenericResult<void>> {
+export async function deleteRequest(input: DeleteRequestInput): Promise<GenericResult<DeleteRequestResponse>> {
   const db = getDb()
 
   try {
-    const now = Date.now()
-    const result = db
-      .update(requests)
-      .set({ deletedAt: now })
-      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
-      .run()
+    const deleted = db.transaction(tx => {
+      const request = tx
+        .select({ id: requests.id, name: requests.name })
+        .from(requests)
+        .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
+        .get()
 
-    if (result.changes === 0) {
-      return GenericError.Message('Request not found')
-    }
+      if (!request) {
+        throw new Error('Request not found')
+      }
 
-    markTreeItemDeleted(db, { itemType: 'request', itemId: input.id, deletedAt: now })
-    markRequestExamplesDeleted(input.id, now)
-    markWebSocketExamplesDeleted(input.id, now)
-    return Result.Success(undefined)
+      const now = Date.now()
+      const operation = insertOperation(tx, {
+        operationType: 'delete-request',
+        title: `Deleted request ${request.name}`,
+        summary: 'Request deleted.',
+        createdAt: now,
+        metadata: {
+          rootItemType: 'request',
+          rootItemId: request.id,
+          rootItemName: request.name,
+          deletedAt: now,
+          folderIds: [],
+          requestIds: [request.id],
+        },
+      })
+
+      const result = tx
+        .update(requests)
+        .set({ deletedAt: now })
+        .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
+        .run()
+
+      if (result.changes === 0) {
+        throw new Error('Request not found')
+      }
+
+      markTreeItemDeleted(tx, { itemType: 'request', itemId: input.id, deletedAt: now })
+      markRequestExamplesDeleted(input.id, now, tx)
+      markWebSocketExamplesDeleted(input.id, now, tx)
+
+      return { operation }
+    })
+
+    return Result.Success(deleted)
   } catch (error) {
+    if (error instanceof Error && error.message === 'Request not found') {
+      return GenericError.Message(error.message)
+    }
     return GenericError.Unknown(error)
   }
 }

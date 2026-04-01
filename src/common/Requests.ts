@@ -1,5 +1,6 @@
 import type { HttpAuth } from './Auth.js'
 import type { EnvironmentRecord } from './Environments.js'
+import type { OperationRecord } from './Operations.js'
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
@@ -74,6 +75,10 @@ export type UpdateRequestResponseBodyViewPreferenceInput = {
 
 export type DeleteRequestInput = {
   id: string
+}
+
+export type DeleteRequestResponse = {
+  operation: OperationRecord
 }
 
 export type DuplicateRequestInput = {
