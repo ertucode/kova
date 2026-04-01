@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSelector } from '@xstate/store/react'
+import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES } from '@common/AppSettings'
 import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from './dialogStore'
 import { AppSettingsCoordinator, appSettingsStore } from './appSettingsStore'
@@ -8,10 +9,12 @@ export function AppSettingsDialog() {
   const settings = useSelector(appSettingsStore, state => state.context.settings)
   const saving = useSelector(appSettingsStore, state => state.context.saving)
   const [warnBeforeRequestAfterSeconds, setWarnBeforeRequestAfterSeconds] = useState('10')
+  const [responseBodyDisplayMode, setResponseBodyDisplayMode] = useState<(typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]>('raw')
 
   useEffect(() => {
     if (settings) {
       setWarnBeforeRequestAfterSeconds(String(settings.warnBeforeRequestAfterSeconds))
+      setResponseBodyDisplayMode(settings.responseBodyDisplayMode)
     }
   }, [settings])
 
@@ -24,6 +27,7 @@ export function AppSettingsDialog() {
 
     const success = await AppSettingsCoordinator.saveSettings({
       warnBeforeRequestAfterSeconds: nextValue,
+      responseBodyDisplayMode,
     })
 
     if (success) {
@@ -65,6 +69,31 @@ export function AppSettingsDialog() {
               onChange={event => setWarnBeforeRequestAfterSeconds(event.target.value)}
             />
           </label>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
+          <div className="text-sm font-medium text-base-content">Response body display</div>
+          <p className="mt-1 text-sm text-base-content/60">
+            Choose whether the Raw response view should default to the original payload or a formatted preview when formatting is available.
+          </p>
+
+          <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-base-content/10 bg-base-100/80">
+            {APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                className={[
+                  'px-4 py-2 text-sm font-medium capitalize transition',
+                  mode === responseBodyDisplayMode
+                    ? 'bg-base-200 text-base-content'
+                    : 'border-l border-base-content/10 text-base-content/60 first:border-l-0 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => setResponseBodyDisplayMode(mode)}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </Dialog>

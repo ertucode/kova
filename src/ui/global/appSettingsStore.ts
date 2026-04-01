@@ -1,6 +1,8 @@
 import { createStore } from '@xstate/store'
 import {
+  DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
+  type AppSettingsResponseBodyDisplayMode,
   type AppSettingsRecord,
 } from '@common/AppSettings'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -66,7 +68,10 @@ export namespace AppSettingsCoordinator {
     }
   }
 
-  export async function saveSettings(input: { warnBeforeRequestAfterSeconds: number }) {
+  export async function saveSettings(input: {
+    warnBeforeRequestAfterSeconds: number
+    responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
+  }) {
     appSettingsStore.trigger.savingStarted()
 
     const result = await getWindowElectron().updateAppSettings(input)
@@ -80,6 +85,22 @@ export namespace AppSettingsCoordinator {
     toast.show({ severity: 'success', title: 'Settings saved', message: 'App settings were updated.' })
     return true
   }
+
+  export async function saveResponseBodyDisplayMode(mode: AppSettingsResponseBodyDisplayMode) {
+    const current = appSettingsStore.getSnapshot().context.settings
+    const result = await getWindowElectron().updateAppSettings({
+      warnBeforeRequestAfterSeconds: current?.warnBeforeRequestAfterSeconds ?? DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
+      responseBodyDisplayMode: mode,
+    })
+
+    if (!result.success) {
+      toast.show(result)
+      return false
+    }
+
+    appSettingsStore.trigger.loaded({ settings: result.data })
+    return true
+  }
 }
 
 export function getWarnBeforeRequestAfterSeconds() {
@@ -87,4 +108,8 @@ export function getWarnBeforeRequestAfterSeconds() {
     appSettingsStore.getSnapshot().context.settings?.warnBeforeRequestAfterSeconds ??
     DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS
   )
+}
+
+export function getResponseBodyDisplayMode() {
+  return appSettingsStore.getSnapshot().context.settings?.responseBodyDisplayMode ?? DEFAULT_RESPONSE_BODY_DISPLAY_MODE
 }

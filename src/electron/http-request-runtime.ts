@@ -220,7 +220,7 @@ export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'u
   ].filter(Boolean).join('\n')
 }
 
-function buildResolvedRequestBody(
+export function buildResolvedRequestBody(
   input: Pick<SendRequestInput, 'bodyType' | 'body' | 'rawType'>,
   variables: Record<string, string>
 ): GenericResult<ResolvedRequestBody> {
@@ -232,6 +232,10 @@ function buildResolvedRequestBody(
 
       if (input.rawType !== 'json') {
         return Result.Success({ kind: 'raw', value: resolvedBody })
+      }
+
+      if (resolvedBody.trim() === '') {
+        return Result.Success({ kind: 'none' })
       }
 
       try {

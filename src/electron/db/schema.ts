@@ -89,6 +89,7 @@ export const environments = sqliteTable(
 export const appSettings = sqliteTable('app_settings', {
   id: text('id').primaryKey(),
   warnBeforeRequestAfterSeconds: integer('warn_before_request_after_seconds').notNull().default(10),
+  responseBodyDisplayMode: text('response_body_display_mode').notNull().default('raw'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })

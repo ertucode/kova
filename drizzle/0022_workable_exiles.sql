@@ -1,0 +1,1 @@
+ALTER TABLE `app_settings` ADD `response_body_display_mode` text DEFAULT 'raw' NOT NULL;
