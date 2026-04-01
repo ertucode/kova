@@ -132,11 +132,17 @@ function ExecutionPanelShell({ title, description, children }: { title: string; 
   )
 }
 
-function EmptyExecutionState({ message }: { message: string }) {
+export function EmptyExecutionState({ message }: { message: string }) {
   return <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">{message}</div>
 }
 
-function ExecutionCard({ execution }: { execution: RequestExecutionRecord }) {
+export function ExecutionCard({
+  execution,
+  onDelete,
+}: {
+  execution: RequestExecutionRecord
+  onDelete?: (id: string) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const [responseBodyExpanded, setResponseBodyExpanded] = useState(true)
   const tone = getExecutionTone(execution)
@@ -186,9 +192,13 @@ function ExecutionCard({ execution }: { execution: RequestExecutionRecord }) {
             className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
             onClick={event => {
               event.stopPropagation()
-              void RequestExecutionCoordinator.deleteHistoryEntry(execution.id).catch(error => {
-                console.error('deleteHistoryEntry failed', error)
-              })
+              void RequestExecutionCoordinator.deleteHistoryEntry(execution.id)
+                .then(() => {
+                  onDelete?.(execution.id)
+                })
+                .catch(error => {
+                  console.error('deleteHistoryEntry failed', error)
+                })
             }}
             aria-label="Delete history entry"
             title="Delete history entry"

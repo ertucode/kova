@@ -9,12 +9,14 @@ import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type { HttpSseStreamState, RequestScriptError, SendRequestResponse, SseEventRecord } from '@common/Requests'
 import { formatJson5 } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
+import { dialogActions } from '@/global/dialogStore'
 import { toast } from '@/lib/components/toast'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
 import { CodeEditor, type CodeEditorLanguage } from './CodeEditor'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { SseTranscript } from './SseTranscript'
+import { RequestHistoryDialog } from './RequestHistoryDialog'
 import { ResponseVisualizerPreview } from './ResponseVisualizerPreview'
 import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderExplorerEditorStore'
 import { requestExecutionStore } from './requestExecutionStore'
@@ -62,6 +64,7 @@ export function RequestDetailsResponsePanel({
     selectedRequestId ? (state.context.httpSseByRequestId[selectedRequestId] ?? null) : null
   )
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
+  const [requestHistoryCount, setRequestHistoryCount] = useState<number | null>(null)
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
   const responseBodyRequestSelection = useMemo(
     () => (selectedRequestId ? { itemType: 'request' as const, id: selectedRequestId } : null),
@@ -153,6 +156,31 @@ export function RequestDetailsResponsePanel({
   )
 
   useEffect(() => {
+    if (!selectedRequestId) {
+      setRequestHistoryCount(null)
+      return
+    }
+
+    let isCancelled = false
+    void getWindowElectron()
+      .getRequestHistoryCount({ requestId: selectedRequestId })
+      .then(result => {
+        if (!isCancelled) {
+          setRequestHistoryCount(result.totalCount)
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setRequestHistoryCount(0)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [selectedRequestId, isSending, response?.execution.response?.receivedAt, responseError, scriptErrors.length, sseStream?.state])
+
+  useEffect(() => {
     const clampedHeight = clampResponsePaneHeight(responsePaneHeight)
     if (clampedHeight !== responsePaneHeight) {
       folderExplorerEditorStore.trigger.responsePaneHeightChanged({ height: clampedHeight })
@@ -240,6 +268,9 @@ export function RequestDetailsResponsePanel({
               stream={sseStream}
               response={response}
               responseError={visibleResponseError}
+              requestId={selectedRequestId}
+              requestName={draft.name}
+              requestHistoryCount={requestHistoryCount}
               events={displayedSseEvents}
               onSaveAsExample={
                 response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseAsExample() : undefined
@@ -250,7 +281,12 @@ export function RequestDetailsResponsePanel({
               <ResponseBodyPanel
                 value={formattedResponseBody}
                 rawBody={response?.body ?? ''}
+                headers={response?.headers ?? ''}
+                requestId={selectedRequestId}
+                requestName={draft.name}
+                requestHistoryCount={requestHistoryCount}
                 description="Response body will appear here."
+                headersDescription="Response headers will appear here."
                 contentType={responseContentType}
                 responseVisualizer={draft.responseVisualizer}
                 responseTableAccessor={draft.responseTableAccessor}
@@ -265,7 +301,6 @@ export function RequestDetailsResponsePanel({
                 responseError={visibleResponseError}
                 onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
               />
-              <ResponseHeadersPanel value={response?.headers ?? ''} description="Response headers will appear here." />
             </>
           )}
         </div>
@@ -341,7 +376,12 @@ const ResponseScriptErrors = memo(function ResponseScriptErrors({
 const ResponseBodyPanel = memo(function ResponseBodyPanel({
   value,
   rawBody,
+  headers,
+  requestId,
+  requestName,
+  requestHistoryCount,
   description,
+  headersDescription,
   contentType,
   responseVisualizer,
   responseTableAccessor,
@@ -358,7 +398,12 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
 }: {
   value: string
   rawBody: string
+  headers: string
+  requestId: string | null
+  requestName: string
+  requestHistoryCount: number | null
   description: string
+  headersDescription: string
   contentType: string | null
   responseVisualizer: string
   responseTableAccessor: string
@@ -387,12 +432,24 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   const responseBodySize = useMemo(() => formatBytes(getByteLength(rawBody)), [rawBody])
   const hasFormattedBody = value.trim().length > 0 && value !== rawBody
   const displayedRawBody = responseBodyDisplayMode === 'formatted' && hasFormattedBody ? value : rawBody
+  const responseHeaderRows = useMemo(() => parseResponseHeaders(headers), [headers])
   const parsedStructuredResponse = useMemo(() => parseStructuredResponse(rawBody, contentType), [contentType, rawBody])
   const tableResolution = useMemo(
     () => resolveResponseTableRows(parsedStructuredResponse, responseTableAccessor),
     [parsedStructuredResponse, responseTableAccessor]
   )
   const [viewMode, setViewMode] = useState<'raw' | 'table' | 'visualizer'>(preferredResponseBodyView)
+  const [section, setSection] = useState<'body' | 'headers'>('body')
+  const canCopyResponseSection = section === 'body' ? displayedRawBody.trim().length > 0 : responseHeaderRows.length > 0
+  const historyButtonLabel =
+    requestHistoryCount === null ? 'Loading History...' : requestHistoryCount > 0 ? `Show History (${requestHistoryCount})` : 'No History'
+  const sectionOptions = useMemo(
+    () => [
+      { value: 'body' as const, label: 'Body' },
+      { value: 'headers' as const, label: 'Headers' },
+    ],
+    []
+  )
   const displayModeOptions = useMemo(
     () =>
       APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.map(mode => ({
@@ -423,25 +480,52 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-[2] flex-col overflow-hidden bg-base-100/35 p-2">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-2">
       <div className="flex shrink-0 items-center justify-between gap-3">
-        <div className="text-sm font-medium text-base-content">Response Body</div>
+        <div className="text-sm font-medium text-base-content">Response</div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold text-base-content/70 transition hover:border-base-content/20 hover:text-base-content disabled:cursor-default disabled:opacity-45"
+            onClick={() => {
+              if (!requestId || !requestHistoryCount) {
+                return
+              }
+
+              dialogActions.open({
+                component: RequestHistoryDialog,
+                props: { requestId, requestName },
+              })
+            }}
+            disabled={!requestId || requestHistoryCount === null || requestHistoryCount === 0}
+          >
+            {historyButtonLabel}
+          </button>
           <DropdownSelect
-            value={viewMode}
+            value={section}
             className="w-[132px]"
             triggerClassName="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold"
             menuClassName="w-[180px]"
-            options={viewModeOptions}
-            onChange={nextView => {
-              void updatePreferredResponseBodyView(nextView).then(success => {
-                if (success) {
-                  setViewMode(nextView)
-                }
-              })
-            }}
+            options={sectionOptions}
+            onChange={setSection}
           />
-          {viewMode === 'raw' && hasFormattedBody ? (
+          {section === 'body' ? (
+            <DropdownSelect
+              value={viewMode}
+              className="w-[132px]"
+              triggerClassName="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold"
+              menuClassName="w-[180px]"
+              options={viewModeOptions}
+              onChange={nextView => {
+                void updatePreferredResponseBodyView(nextView).then(success => {
+                  if (success) {
+                    setViewMode(nextView)
+                  }
+                })
+              }}
+            />
+          ) : null}
+          {section === 'body' && viewMode === 'raw' && hasFormattedBody ? (
             <DropdownSelect
               value={responseBodyDisplayMode}
               className="w-[132px]"
@@ -453,16 +537,23 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
               }}
             />
           ) : null}
-          <button
-            type="button"
-            className="rounded-lg bg-base-100/70 text-[11px] font-semibold text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
-            onClick={() => void copyTextToClipboard(displayedRawBody, 'Response body copied to clipboard.')}
-            title="Copy Response Body"
-            aria-label="Copy response body"
-          >
-            <CopyIcon className="h-4 w-4" />
-          </button>
-          {onSaveAsExample ? (
+          {canCopyResponseSection ? (
+            <button
+              type="button"
+              className="rounded-lg bg-base-100/70 text-[11px] font-semibold text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
+              onClick={() =>
+                void copyTextToClipboard(
+                  section === 'body' ? displayedRawBody : headers,
+                  section === 'body' ? 'Response body copied to clipboard.' : 'Response headers copied to clipboard.'
+                )
+              }
+              title={section === 'body' ? 'Copy Response Body' : 'Copy Response Headers'}
+              aria-label={section === 'body' ? 'Copy response body' : 'Copy response headers'}
+            >
+              <CopyIcon className="h-4 w-4" />
+            </button>
+          ) : null}
+          {section === 'body' && onSaveAsExample ? (
             <button
               type="button"
               className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
@@ -477,7 +568,24 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
         </div>
       </div>
 
-      {viewMode === 'visualizer' && canRenderVisualizer && response ? (
+      {section === 'headers' ? (
+        responseHeaderRows.length > 0 ? (
+          <div className="mt-3 min-h-0 flex-1 overflow-auto">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <tbody>
+                {responseHeaderRows.map(row => (
+                  <tr key={row.id} className="align-top">
+                    <td className="w-[42%] py-1.5 pr-4 text-base-content/55">{row.key}</td>
+                    <td className="break-words py-1.5 text-base-content">{row.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-2 text-sm text-base-content/50">{headersDescription}</div>
+        )
+      ) : viewMode === 'visualizer' && canRenderVisualizer && response ? (
         <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
           <ResponseVisualizerPreview
             source={responseVisualizer}
@@ -605,12 +713,18 @@ function SseResponsePanel({
   stream,
   response,
   responseError,
+  requestId,
+  requestName,
+  requestHistoryCount,
   events,
   onSaveAsExample,
 }: {
   stream: HttpSseStreamState | null
   response: SendRequestResponse | null
   responseError: string | null
+  requestId: string | null
+  requestName: string
+  requestHistoryCount: number | null
   events: SseEventRecord[]
   onSaveAsExample?: () => void
 }) {
@@ -621,12 +735,31 @@ function SseResponsePanel({
   const statusTone = getStatusTone(status ?? undefined)
   const [viewMode, setViewMode] = useState<'rows' | 'raw'>('rows')
   const rawBody = stream?.body ?? response?.body ?? ''
+  const historyButtonLabel =
+    requestHistoryCount === null ? 'Loading History...' : requestHistoryCount > 0 ? `Show History (${requestHistoryCount})` : 'No History'
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-3">
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="text-sm font-medium text-base-content">SSE Events</div>
         <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-base-content/45">
+          <button
+            type="button"
+            className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold text-base-content/70 transition hover:border-base-content/20 hover:text-base-content disabled:cursor-default disabled:opacity-45"
+            onClick={() => {
+              if (!requestId || !requestHistoryCount) {
+                return
+              }
+
+              dialogActions.open({
+                component: RequestHistoryDialog,
+                props: { requestId, requestName },
+              })
+            }}
+            disabled={!requestId || requestHistoryCount === null || requestHistoryCount === 0}
+          >
+            {historyButtonLabel}
+          </button>
           <button
             type="button"
             className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
@@ -706,41 +839,6 @@ function SseResponsePanel({
     </div>
   )
 }
-
-const ResponseHeadersPanel = memo(function ResponseHeadersPanel({
-  value,
-  description,
-}: {
-  value: string
-  description: string
-}) {
-  const rows = useMemo(() => parseResponseHeaders(value), [value])
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-l border-base-content/12 bg-base-100/35 p-2">
-      <div className="flex shrink-0 items-center justify-between gap-3">
-        <div className="text-sm font-medium text-base-content">Response Headers</div>
-      </div>
-
-      {rows.length > 0 ? (
-        <div className="mt-3 min-h-0 flex-1 overflow-auto">
-          <table className="w-full table-fixed border-collapse text-sm">
-            <tbody>
-              {rows.map(row => (
-                <tr key={row.id} className="align-top">
-                  <td className="w-[42%] py-1.5 pr-4 text-base-content/55">{row.key}</td>
-                  <td className="break-words py-1.5 text-base-content">{row.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="mt-2 text-sm text-base-content/50">{description}</div>
-      )}
-    </div>
-  )
-})
 
 function ResponseStatusSummary({
   response,

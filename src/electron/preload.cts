@@ -79,6 +79,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   createWebSocketSavedMessage: input => ipcInvoke('createWebSocketSavedMessage', input),
   updateWebSocketSavedMessage: input => ipcInvoke('updateWebSocketSavedMessage', input),
   deleteWebSocketSavedMessage: input => ipcInvoke('deleteWebSocketSavedMessage', input),
+  getRequestHistoryCount: input => ipcInvoke('getRequestHistoryCount', input),
   listRequestHistory: input => ipcInvoke('listRequestHistory', input),
   deleteRequestHistoryEntry: input => ipcInvoke('deleteRequestHistoryEntry', input),
   trimRequestHistory: input => ipcInvoke('trimRequestHistory', input),

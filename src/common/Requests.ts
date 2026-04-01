@@ -302,6 +302,7 @@ export type WebSocketConnectResponse = {
 
 export type ListRequestHistoryInput = {
   searchQuery: string
+  requestId?: string
   offset: number
   limit: number
 }
@@ -309,6 +310,15 @@ export type ListRequestHistoryInput = {
 export type ListRequestHistoryResponse = {
   items: RequestHistoryListItem[]
   nextOffset: number | null
+  totalCount: number
+}
+
+export type GetRequestHistoryCountInput = {
+  requestId: string
+}
+
+export type GetRequestHistoryCountResponse = {
+  totalCount: number
 }
 
 export type DeleteRequestHistoryEntryInput = {

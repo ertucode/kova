@@ -42,6 +42,8 @@ import {
   type DuplicateRequestInput,
   type DeleteRequestHistoryEntryInput,
   type DeleteRequestInput,
+  type GetRequestHistoryCountInput,
+  type GetRequestHistoryCountResponse,
   type GetRequestInput,
   type HttpRequestRecord,
   type ListRequestHistoryInput,
@@ -167,6 +169,7 @@ export type EventResponseMapping = {
   createWebSocketSavedMessage: Promise<GenericResult<WebSocketSavedMessageRecord>>
   updateWebSocketSavedMessage: Promise<GenericResult<WebSocketSavedMessageRecord>>
   deleteWebSocketSavedMessage: Promise<GenericResult<void>>
+  getRequestHistoryCount: Promise<GetRequestHistoryCountResponse>
   listRequestHistory: Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: Promise<GenericResult<void>>
   trimRequestHistory: Promise<GenericResult<void>>
@@ -243,6 +246,7 @@ export type EventRequestMapping = {
   createWebSocketSavedMessage: CreateWebSocketSavedMessageInput
   updateWebSocketSavedMessage: UpdateWebSocketSavedMessageInput
   deleteWebSocketSavedMessage: DeleteWebSocketSavedMessageInput
+  getRequestHistoryCount: GetRequestHistoryCountInput
   listRequestHistory: ListRequestHistoryInput
   deleteRequestHistoryEntry: DeleteRequestHistoryEntryInput
   trimRequestHistory: TrimRequestHistoryInput
@@ -331,6 +335,7 @@ export type WindowElectron = {
   createWebSocketSavedMessage: (input: CreateWebSocketSavedMessageInput) => Promise<GenericResult<WebSocketSavedMessageRecord>>
   updateWebSocketSavedMessage: (input: UpdateWebSocketSavedMessageInput) => Promise<GenericResult<WebSocketSavedMessageRecord>>
   deleteWebSocketSavedMessage: (input: DeleteWebSocketSavedMessageInput) => Promise<GenericResult<void>>
+  getRequestHistoryCount: (input: GetRequestHistoryCountInput) => Promise<GetRequestHistoryCountResponse>
   listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: (input: DeleteRequestHistoryEntryInput) => Promise<GenericResult<void>>
   trimRequestHistory: (input: TrimRequestHistoryInput) => Promise<GenericResult<void>>

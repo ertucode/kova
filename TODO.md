@@ -1,8 +1,4 @@
-- implement undo
 - tag environments so you do not have same type opened
-- paste into part of the url
 - requests should be able to read path params
 - give the ability of setting sqlite path
 - kendimizden import ederken bu hatayı basıyruz. (Some scripts use Postman-specific APIs that do not exist in Kova.)
-- response html format
-- save response toggle

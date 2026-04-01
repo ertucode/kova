@@ -17,7 +17,7 @@ import {
   moveEnvironment,
   updateEnvironment,
 } from './db/environments.js'
-import { deleteRequestHistoryEntry, listRequestHistory, trimRequestHistory } from './db/request-history.js'
+import { deleteRequestHistoryEntry, getRequestHistoryCount, listRequestHistory, trimRequestHistory } from './db/request-history.js'
 import {
   createRequest,
   deleteRequest,
@@ -502,6 +502,10 @@ app.on('ready', () => {
 
   ipcHandle('listRequestHistory', async input => {
     return listRequestHistory(input)
+  })
+
+  ipcHandle('getRequestHistoryCount', async input => {
+    return getRequestHistoryCount(input)
   })
 
   ipcHandle('deleteRequestHistoryEntry', async input => {

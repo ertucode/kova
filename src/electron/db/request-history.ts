@@ -1,8 +1,10 @@
-import { desc, eq, inArray, like, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, like, or, sql, type SQL } from 'drizzle-orm'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import { Result } from '../../common/Result.js'
 import type {
   DeleteRequestHistoryEntryInput,
+  GetRequestHistoryCountInput,
+  GetRequestHistoryCountResponse,
   ListRequestHistoryInput,
   ListRequestHistoryResponse,
   RequestHistoryListItem,
@@ -25,37 +27,21 @@ export async function listRequestHistory(input: ListRequestHistoryInput): Promis
   const db = getDb()
   const limit = normalizePageSize(input.limit)
   const offset = normalizeOffset(input.offset)
-  const searchQuery = input.searchQuery.trim().toLowerCase()
-  const searchPattern = `%${escapeLikePattern(searchQuery)}%`
+  const whereClause = buildRequestHistoryWhereClause(input)
 
-  const rows = await (searchQuery
-    ? db
-        .select()
-        .from(requestHistory)
-        .where(
-          or(
-            like(sql`lower(${requestHistory.requestName})`, searchPattern),
-            like(sql`lower(${requestHistory.method})`, searchPattern),
-            like(sql`lower(${requestHistory.url})`, searchPattern),
-            like(sql`lower(${requestHistory.requestHeaders})`, searchPattern),
-            like(sql`lower(${requestHistory.requestBody})`, searchPattern),
-            like(sql`lower(${requestHistory.requestVariablesJson})`, searchPattern),
-            like(sql`lower(${requestHistory.responseHeaders})`, searchPattern),
-            like(sql`lower(${requestHistory.responseBody})`, searchPattern),
-            like(sql`lower(${requestHistory.responseError})`, searchPattern),
-            like(sql`lower(${requestHistory.scriptErrorsJson})`, searchPattern),
-            like(sql`lower(${requestHistory.consoleEntriesJson})`, searchPattern)
-          )
-        )
-        .orderBy(desc(requestHistory.createdAt), desc(requestHistory.id))
-        .limit(limit + 1)
-        .offset(offset)
-    : db
-        .select()
-        .from(requestHistory)
-        .orderBy(desc(requestHistory.createdAt), desc(requestHistory.id))
-        .limit(limit + 1)
-        .offset(offset))
+  const rows = await db
+    .select()
+    .from(requestHistory)
+    .where(whereClause)
+    .orderBy(desc(requestHistory.createdAt), desc(requestHistory.id))
+    .limit(limit + 1)
+    .offset(offset)
+
+  const httpCount = db
+    .select({ count: sql<number>`count(*)` })
+    .from(requestHistory)
+    .where(whereClause)
+    .get()?.count ?? 0
 
   const httpItems = rows.slice(0, limit).map(toRequestExecutionRecord)
   const websocketResult = await listWebSocketHistory(input)
@@ -66,7 +52,19 @@ export async function listRequestHistory(input: ListRequestHistoryInput): Promis
   return {
     items,
     nextOffset: rows.length > limit || websocketResult.nextOffset !== null ? offset + limit : null,
+    totalCount: httpCount + websocketResult.totalCount,
   }
+}
+
+export async function getRequestHistoryCount(input: GetRequestHistoryCountInput): Promise<GetRequestHistoryCountResponse> {
+  const db = getDb()
+  const totalCount = db
+    .select({ count: sql<number>`count(*)` })
+    .from(requestHistory)
+    .where(eq(requestHistory.requestId, input.requestId))
+    .get()?.count ?? 0
+
+  return { totalCount }
 }
 
 export async function persistRequestHistory(input: { execution: RequestExecutionRecord; keepLast: number }) {
@@ -164,6 +162,36 @@ function omitLargeResponseBody(execution: RequestExecutionRecord): RequestExecut
       bodyOmitted: true,
     },
   }
+}
+
+function buildRequestHistoryWhereClause(input: ListRequestHistoryInput) {
+  const filters: SQL[] = []
+  const searchQuery = input.searchQuery.trim().toLowerCase()
+
+  if (input.requestId) {
+    filters.push(eq(requestHistory.requestId, input.requestId))
+  }
+
+  if (searchQuery) {
+    const searchPattern = `%${escapeLikePattern(searchQuery)}%`
+    filters.push(
+      or(
+        like(sql`lower(${requestHistory.requestName})`, searchPattern),
+        like(sql`lower(${requestHistory.method})`, searchPattern),
+        like(sql`lower(${requestHistory.url})`, searchPattern),
+        like(sql`lower(${requestHistory.requestHeaders})`, searchPattern),
+        like(sql`lower(${requestHistory.requestBody})`, searchPattern),
+        like(sql`lower(${requestHistory.requestVariablesJson})`, searchPattern),
+        like(sql`lower(${requestHistory.responseHeaders})`, searchPattern),
+        like(sql`lower(${requestHistory.responseBody})`, searchPattern),
+        like(sql`lower(${requestHistory.responseError})`, searchPattern),
+        like(sql`lower(${requestHistory.scriptErrorsJson})`, searchPattern),
+        like(sql`lower(${requestHistory.consoleEntriesJson})`, searchPattern)
+      ) as SQL
+    )
+  }
+
+  return filters.length > 0 ? and(...filters) : undefined
 }
 
 function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecord {

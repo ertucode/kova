@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, like, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, like, or, sql, type SQL } from 'drizzle-orm'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import { Result } from '../../common/Result.js'
 import type {
@@ -15,38 +15,34 @@ type WebSocketHistoryMessageRow = typeof websocketHistoryMessages.$inferSelect
 
 const MAX_HISTORY_PAGE_SIZE = 20
 
-export async function listWebSocketHistory(input: ListRequestHistoryInput): Promise<{ items: WebSocketSessionRecord[]; nextOffset: number | null }> {
+type WebSocketHistoryListResult = {
+  items: WebSocketSessionRecord[]
+  nextOffset: number | null
+  totalCount: number
+}
+
+export async function listWebSocketHistory(input: ListRequestHistoryInput): Promise<WebSocketHistoryListResult> {
   const db = getDb()
   const limit = normalizePageSize(input.limit)
   const offset = normalizeOffset(input.offset)
-  const searchQuery = input.searchQuery.trim().toLowerCase()
-  const searchPattern = `%${escapeLikePattern(searchQuery)}%`
+  const whereClause = buildWebSocketHistoryWhereClause(input)
 
-  const rows = await (searchQuery
-    ? db
-        .select()
-        .from(websocketHistory)
-        .where(
-          or(
-            like(sql`lower(${websocketHistory.requestName})`, searchPattern),
-            like(sql`lower(${websocketHistory.url})`, searchPattern),
-            like(sql`lower(${websocketHistory.requestHeaders})`, searchPattern),
-            like(sql`lower(${websocketHistory.responseError})`, searchPattern),
-            like(sql`lower(${websocketHistory.closeReason})`, searchPattern)
-          )
-        )
-        .orderBy(desc(websocketHistory.createdAt), desc(websocketHistory.id))
-        .limit(limit + 1)
-        .offset(offset)
-    : db
-        .select()
-        .from(websocketHistory)
-        .orderBy(desc(websocketHistory.createdAt), desc(websocketHistory.id))
-        .limit(limit + 1)
-        .offset(offset))
+  const rows = await db
+    .select()
+    .from(websocketHistory)
+    .where(whereClause)
+    .orderBy(desc(websocketHistory.createdAt), desc(websocketHistory.id))
+    .limit(limit + 1)
+    .offset(offset)
+
+  const totalCount = db
+    .select({ count: sql<number>`count(*)` })
+    .from(websocketHistory)
+    .where(whereClause)
+    .get()?.count ?? 0
 
   const items = await Promise.all(rows.slice(0, limit).map(toWebSocketSessionRecord))
-  return { items, nextOffset: rows.length > limit ? offset + limit : null }
+  return { items, nextOffset: rows.length > limit ? offset + limit : null, totalCount }
 }
 
 export async function createWebSocketHistory(input: Omit<WebSocketSessionRecord, 'messages' | 'itemType'>) {
@@ -168,6 +164,30 @@ function parseJson<T>(value: string, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function buildWebSocketHistoryWhereClause(input: ListRequestHistoryInput) {
+  const filters: SQL[] = []
+  const searchQuery = input.searchQuery.trim().toLowerCase()
+
+  if (input.requestId) {
+    filters.push(eq(websocketHistory.requestId, input.requestId))
+  }
+
+  if (searchQuery) {
+    const searchPattern = `%${escapeLikePattern(searchQuery)}%`
+    filters.push(
+      or(
+        like(sql`lower(${websocketHistory.requestName})`, searchPattern),
+        like(sql`lower(${websocketHistory.url})`, searchPattern),
+        like(sql`lower(${websocketHistory.requestHeaders})`, searchPattern),
+        like(sql`lower(${websocketHistory.responseError})`, searchPattern),
+        like(sql`lower(${websocketHistory.closeReason})`, searchPattern)
+      ) as SQL
+    )
+  }
+
+  return filters.length > 0 ? and(...filters) : undefined
 }
 
 function normalizePageSize(limit: number) {
