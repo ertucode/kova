@@ -1,3 +1,2 @@
 - tag environments so you do not have same type opened
 - requests should be able to read path params
-- give the ability of setting sqlite path

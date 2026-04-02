@@ -1,10 +1,12 @@
 import { app, BrowserWindow, Menu, screen, shell, clipboard, dialog } from 'electron'
 import path from 'path'
 import os from 'os'
+import { constants as fsConstants } from 'fs'
+import { copyFile, mkdir, rename, unlink } from 'fs/promises'
 import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { TaskManager } from './TaskManager.js'
-import { initializeDatabase } from './db/index.js'
+import { closeDatabase, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
 import { getAppSettings, updateAppSettings } from './db/app-settings.js'
 import { listExplorerItems } from './db/explorer.js'
 import { listFolderExplorerTabs, saveFolderExplorerTabs } from './db/folder-explorer-tabs.js'
@@ -57,7 +59,13 @@ import { analyzePostmanCollectionExport, exportPostmanCollection } from './postm
 import { analyzePostmanEnvironmentExport, exportPostmanEnvironment } from './postman-environment-export.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
-import { getServerConfig } from './server-config.js'
+import {
+  deleteCustomDatabaseConfig,
+  getResolvedDatabaseConfig,
+  getServerConfig,
+  setActiveDatabaseConfig,
+  upsertCustomDatabaseConfig,
+} from './server-config.js'
 import { GenericError } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
 
@@ -79,6 +87,53 @@ app.on('open-file', (event, path) => {
 type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev'>
 
 const homeDir = os.homedir()
+
+function getDefaultDatabasePath() {
+  return path.join(app.getPath('userData'), 'kova.sqlite')
+}
+
+function getMigrationsPath() {
+  return path.join(app.getAppPath(), 'drizzle')
+}
+
+async function syncConfiguredDatabase() {
+  const databaseConfig = await getResolvedDatabaseConfig(getDefaultDatabasePath())
+  const activeDatabase = databaseConfig.items.find(item => item.name === databaseConfig.activeName)
+
+  initializeDatabase({
+    dbPath: activeDatabase?.path ?? getDefaultDatabasePath(),
+    migrationsPath: getMigrationsPath(),
+  })
+
+  return databaseConfig
+}
+
+function isNodeErrorWithCode(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error
+}
+
+async function moveDatabaseFile(sourcePath: string, targetPath: string) {
+  const resolvedSourcePath = path.resolve(sourcePath)
+  const resolvedTargetPath = path.resolve(targetPath)
+
+  if (resolvedSourcePath === resolvedTargetPath) {
+    return
+  }
+
+  await mkdir(path.dirname(resolvedTargetPath), { recursive: true })
+
+  try {
+    await rename(resolvedSourcePath, resolvedTargetPath)
+  } catch (error) {
+    if (isNodeErrorWithCode(error) && error.code === 'EXDEV') {
+      await copyFile(resolvedSourcePath, resolvedTargetPath, fsConstants.COPYFILE_EXCL)
+      await unlink(resolvedSourcePath)
+      return
+    }
+
+    throw error
+  }
+}
 
 async function createWindow(args?: WindowArgsWithoutStatic) {
   const windowArgs: WindowArguments = {
@@ -121,7 +176,7 @@ async function createWindow(args?: WindowArgsWithoutStatic) {
   return mainWindow
 }
 
-app.on('ready', () => {
+app.on('ready', async () => {
   const menuTemplate: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'File',
@@ -193,10 +248,7 @@ app.on('ready', () => {
   })
 
   try {
-    initializeDatabase({
-      dbPath: path.join(app.getPath('userData'), 'kova.sqlite'),
-      migrationsPath: path.join(app.getAppPath(), 'drizzle'),
-    })
+    await syncConfiguredDatabase()
   } catch (error) {
     console.error('Failed to initialize database', error)
   }
@@ -514,6 +566,94 @@ app.on('ready', () => {
 
   ipcHandle('trimRequestHistory', async input => {
     return trimRequestHistory(input)
+  })
+
+  ipcHandle('getDatabaseConfigState', async () => {
+    return syncConfiguredDatabase()
+  })
+
+  ipcHandle('pickDatabaseFile', async (input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.SaveDialogOptions = {
+      filters: [{ name: 'SQLite Databases', extensions: ['sqlite', 'db', 'sqlite3'] }],
+      defaultPath: input?.suggestedPath,
+    }
+    const result = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
+
+    if (result.canceled || !result.filePath) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    return Result.Success({ filePath: result.filePath })
+  })
+
+  ipcHandle('upsertDatabaseConfig', async input => {
+    try {
+      const databaseConfig = await getResolvedDatabaseConfig(getDefaultDatabasePath())
+      const existingDatabase = input.previousName ? databaseConfig.items.find(item => item.name === input.previousName) : null
+      const shouldReload = !!existingDatabase && databaseConfig.activeName === input.previousName
+
+      if (!input.previousName && input.basedOnName) {
+        const sourceDatabase = databaseConfig.items.find(item => item.name === input.basedOnName)
+        if (!sourceDatabase) {
+          return GenericError.Message(`Database ${input.basedOnName} does not exist`)
+        }
+
+        const targetPath = path.resolve(input.path)
+        const sourcePath = path.resolve(sourceDatabase.path)
+        if (targetPath === sourcePath) {
+          return GenericError.Message('The new database path must be different from the source database path')
+        }
+
+        await mkdir(path.dirname(targetPath), { recursive: true })
+        await copyFile(sourcePath, targetPath, fsConstants.COPYFILE_EXCL)
+      }
+
+      if (existingDatabase && path.resolve(existingDatabase.path) !== path.resolve(input.path)) {
+        if (shouldReload) {
+          closeDatabase()
+        }
+
+        await moveDatabaseFile(existingDatabase.path, input.path)
+      }
+
+      if (shouldReload) {
+        verifyDatabaseConnection({
+          dbPath: input.path,
+          migrationsPath: getMigrationsPath(),
+        })
+      }
+
+      await upsertCustomDatabaseConfig(input)
+      return Result.Success(await syncConfiguredDatabase())
+    } catch (error) {
+      if (isNodeErrorWithCode(error) && error.code === 'EEXIST') {
+        return GenericError.Message('The target database file already exists. Choose another path or remove the existing file first.')
+      }
+
+      return GenericError.Unknown(error)
+    }
+  })
+
+  ipcHandle('deleteDatabaseConfig', async input => {
+    await deleteCustomDatabaseConfig(input.name)
+    return Result.Success(await syncConfiguredDatabase())
+  })
+
+  ipcHandle('setActiveDatabaseConfig', async input => {
+    const databaseConfig = await getResolvedDatabaseConfig(getDefaultDatabasePath())
+    const nextDatabase = databaseConfig.items.find(item => item.name === input.name)
+    if (!nextDatabase) {
+      throw new Error(`Database ${input.name} does not exist`)
+    }
+
+    verifyDatabaseConnection({
+      dbPath: nextDatabase.path,
+      migrationsPath: getMigrationsPath(),
+    })
+
+    await setActiveDatabaseConfig(input.name)
+    return Result.Success(await syncConfiguredDatabase())
   })
 
   ipcHandle('pickPostmanCollectionFile', async (_input, event) => {

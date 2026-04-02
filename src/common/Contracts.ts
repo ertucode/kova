@@ -98,6 +98,14 @@ import {
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
 import {
+  type DatabaseConfigState,
+  type DeleteDatabaseConfigInput,
+  type PickDatabaseFileInput,
+  type PickDatabaseFileResponse,
+  type SetActiveDatabaseConfigInput,
+  type UpsertDatabaseConfigInput,
+} from './DatabaseConfigs.js'
+import {
   type DeleteOperationInput,
   type DeleteOperationsInput,
   type ListOperationsInput,
@@ -173,6 +181,11 @@ export type EventResponseMapping = {
   listRequestHistory: Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: Promise<GenericResult<void>>
   trimRequestHistory: Promise<GenericResult<void>>
+  getDatabaseConfigState: Promise<DatabaseConfigState>
+  pickDatabaseFile: Promise<GenericResult<PickDatabaseFileResponse>>
+  upsertDatabaseConfig: Promise<GenericResult<DatabaseConfigState>>
+  deleteDatabaseConfig: Promise<GenericResult<DatabaseConfigState>>
+  setActiveDatabaseConfig: Promise<GenericResult<DatabaseConfigState>>
   pickPostmanCollectionFile: Promise<GenericResult<PickPostmanCollectionFileResponse>>
   analyzePostmanCollection: Promise<GenericResult<AnalyzePostmanCollectionResponse>>
   importPostmanCollection: Promise<GenericResult<ImportPostmanCollectionResponse>>
@@ -250,6 +263,11 @@ export type EventRequestMapping = {
   listRequestHistory: ListRequestHistoryInput
   deleteRequestHistoryEntry: DeleteRequestHistoryEntryInput
   trimRequestHistory: TrimRequestHistoryInput
+  getDatabaseConfigState: void
+  pickDatabaseFile: PickDatabaseFileInput
+  upsertDatabaseConfig: UpsertDatabaseConfigInput
+  deleteDatabaseConfig: DeleteDatabaseConfigInput
+  setActiveDatabaseConfig: SetActiveDatabaseConfigInput
   pickPostmanCollectionFile: void
   analyzePostmanCollection: AnalyzePostmanCollectionInput
   importPostmanCollection: ImportPostmanCollectionInput
@@ -339,6 +357,11 @@ export type WindowElectron = {
   listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: (input: DeleteRequestHistoryEntryInput) => Promise<GenericResult<void>>
   trimRequestHistory: (input: TrimRequestHistoryInput) => Promise<GenericResult<void>>
+  getDatabaseConfigState: () => Promise<DatabaseConfigState>
+  pickDatabaseFile: (input: PickDatabaseFileInput) => Promise<GenericResult<PickDatabaseFileResponse>>
+  upsertDatabaseConfig: (input: UpsertDatabaseConfigInput) => Promise<GenericResult<DatabaseConfigState>>
+  deleteDatabaseConfig: (input: DeleteDatabaseConfigInput) => Promise<GenericResult<DatabaseConfigState>>
+  setActiveDatabaseConfig: (input: SetActiveDatabaseConfigInput) => Promise<GenericResult<DatabaseConfigState>>
   pickPostmanCollectionFile: () => Promise<GenericResult<PickPostmanCollectionFileResponse>>
   analyzePostmanCollection: (input: AnalyzePostmanCollectionInput) => Promise<GenericResult<AnalyzePostmanCollectionResponse>>
   importPostmanCollection: (input: ImportPostmanCollectionInput) => Promise<GenericResult<ImportPostmanCollectionResponse>>
