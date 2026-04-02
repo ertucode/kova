@@ -1,4 +1,3 @@
 - tag environments so you do not have same type opened
 - requests should be able to read path params
 - give the ability of setting sqlite path
-- kendimizden import ederken bu hatayı basıyruz. (Some scripts use Postman-specific APIs that do not exist in Kova.)

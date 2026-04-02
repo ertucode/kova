@@ -102,17 +102,20 @@ describe('postman import', () => {
       '// pm.test("ok")'
     )
     expect(mapScripts([{ listen: 'test', script: { exec: ['console.log("kept")'] } }], 'test', true)).toBe('console.log("kept")')
+    expect(mapScripts([{ listen: 'test', script: { exec: ['pm.test("ok")', 'console.log("x")'] } }], 'test', true)).toBe(
+      'pm.test("ok")\nconsole.log("x")'
+    )
   })
 
-  it('does not add commented-script warnings for Kova exports', () => {
+  it('does not add script warnings for Kova exports', () => {
     const analysis = analyzeCollectionDocument({
       info: { name: 'Round Trip' },
       _kova: { exportedByKova: true },
-      event: [{ listen: 'prerequest', script: { exec: ['console.log("root")'] } }],
+      event: [{ listen: 'prerequest', script: { exec: ['pm.environment.set("token", "1")', 'console.log("root")'] } }],
       item: [
         {
           name: 'Request',
-          event: [{ listen: 'test', script: { exec: ['console.log("item")'] } }],
+          event: [{ listen: 'test', script: { exec: ['pm.test("item")', 'console.log("item")'] } }],
           request: { method: 'GET', url: 'https://api.example.com' },
         },
       ],
@@ -120,5 +123,6 @@ describe('postman import', () => {
 
     expect(analysis.exportedByKova).toBe(true)
     expect(analysis.warnings.map(warning => warning.code)).not.toContain('scripts-commented')
+    expect(analysis.warnings.map(warning => warning.code)).not.toContain('unsupported-script-api')
   })
 })

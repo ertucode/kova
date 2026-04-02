@@ -460,7 +460,11 @@ function inspectEvents(warnings: WarningAccumulator, pathLabel: string, events: 
     }))
     .filter(event => event.source !== '') ?? []
 
-  if (scripts.length > 0 && !exportedByKova) {
+  if (exportedByKova) {
+    return
+  }
+
+  if (scripts.length > 0) {
     addWarning(warnings, 'scripts-commented', scripts.length, [pathLabel])
   }
 
