@@ -3,9 +3,11 @@ import { randomUUID } from 'node:crypto'
 import ts from 'typescript'
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping'
 import { z } from 'zod'
-import type { HttpAuth } from '../common/Auth.js'
+import { getAuthQueryParams, resolveAuth, type HttpAuth } from '../common/Auth.js'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolvedEnvironmentValue } from '../common/EnvironmentVariables.js'
-import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
+import { parseKeyValueRows, stringifyKeyValueRows, type KeyValueRow } from '../common/KeyValueRows.js'
+import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
+import { resolveTemplateVariables } from '../common/RequestVariables.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type {
   RequestScriptError,
@@ -45,6 +47,24 @@ type HeaderApi = {
   entries: () => Array<[string, string]>
   toObject: () => Record<string, string>
   serialize: () => string
+}
+
+type ScriptPathParam = {
+  key: string
+  value: string
+  enabled: boolean
+  description: string
+}
+
+type RequestApi = {
+  method: RequestMethod
+  url: string
+  readonly bodyType: RequestBodyType
+  readonly rawType: RequestRawType
+  body: string
+  pathParams: ScriptPathParam[]
+  resolveUrl: () => string
+  headers: HeaderApi
 }
 
 type ScriptErrorDetails = {
@@ -308,7 +328,10 @@ async function runScriptPhase(input: {
     const headerEditor = createHeaderEditor(input.runtimeRequest)
     const sandbox = {
       console: createScriptConsole(source.name, input.consoleEntries),
-      request: createRequestApi(input.runtimeRequest, headerEditor),
+      request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
+        ...input.environmentContext.getValues(),
+        ...Object.fromEntries(input.requestScope.entries()),
+      })),
       response: input.response ? createResponseApi(input.response) : undefined,
       env: createEnvironmentApi(input.environmentContext),
       scope: createScopeApi(input.requestScope),
@@ -577,7 +600,11 @@ function formatConsoleValue(value: unknown) {
   return String(value)
 }
 
-function createRequestApi(runtimeRequest: RuntimeRequestState, headers: HeaderApi) {
+function createRequestApi(
+  runtimeRequest: RuntimeRequestState,
+  headers: HeaderApi,
+  getResolvedVariables: () => Record<string, string>
+): RequestApi {
   return {
     get method() {
       return runtimeRequest.method
@@ -603,7 +630,114 @@ function createRequestApi(runtimeRequest: RuntimeRequestState, headers: HeaderAp
     get rawType() {
       return runtimeRequest.rawType
     },
+    get pathParams() {
+      return createLiveScriptPathParams(runtimeRequest)
+    },
+    set pathParams(value: ScriptPathParam[]) {
+      runtimeRequest.pathParams = serializeScriptPathParams(value)
+    },
+    resolveUrl() {
+      return resolveRequestUrl(runtimeRequest, getResolvedVariables())
+    },
     headers,
+  }
+}
+
+function createLiveScriptPathParams(runtimeRequest: RuntimeRequestState): ScriptPathParam[] {
+  return parseKeyValueRows(runtimeRequest.pathParams).map((_, index) => createScriptPathParamProxy(runtimeRequest, index))
+}
+
+function createScriptPathParamProxy(runtimeRequest: RuntimeRequestState, index: number): ScriptPathParam {
+  return {
+    get key() {
+      return parseKeyValueRows(runtimeRequest.pathParams)[index]?.key ?? ''
+    },
+    set key(value: string) {
+      updateScriptPathParam(runtimeRequest, index, { key: value })
+    },
+    get value() {
+      return parseKeyValueRows(runtimeRequest.pathParams)[index]?.value ?? ''
+    },
+    set value(value: string) {
+      updateScriptPathParam(runtimeRequest, index, { value })
+    },
+    get enabled() {
+      return parseKeyValueRows(runtimeRequest.pathParams)[index]?.enabled ?? true
+    },
+    set enabled(value: boolean) {
+      updateScriptPathParam(runtimeRequest, index, { enabled: value })
+    },
+    get description() {
+      return parseKeyValueRows(runtimeRequest.pathParams)[index]?.description ?? ''
+    },
+    set description(value: string) {
+      updateScriptPathParam(runtimeRequest, index, { description: value })
+    },
+  }
+}
+
+function updateScriptPathParam(runtimeRequest: RuntimeRequestState, index: number, partial: Partial<ScriptPathParam>) {
+  const rows = parseKeyValueRows(runtimeRequest.pathParams)
+  const currentRow = rows[index]
+  if (!currentRow) {
+    return
+  }
+
+  rows[index] = {
+    ...currentRow,
+    ...normalizeScriptPathParam({
+      key: partial.key ?? currentRow.key,
+      value: partial.value ?? currentRow.value,
+      enabled: partial.enabled ?? currentRow.enabled,
+      description: partial.description ?? currentRow.description,
+    }),
+  }
+
+  runtimeRequest.pathParams = stringifyKeyValueRows(rows)
+}
+
+function serializeScriptPathParams(pathParams: ScriptPathParam[]) {
+  const rows: KeyValueRow[] = pathParams.map((row, index) => ({
+    id: `script-path-param-${index}`,
+    ...normalizeScriptPathParam(row),
+  }))
+
+  return stringifyKeyValueRows(rows)
+}
+
+function normalizeScriptPathParam(row: Partial<ScriptPathParam>): Omit<KeyValueRow, 'id'> {
+  return {
+    key: typeof row.key === 'string' ? row.key : '',
+    value: typeof row.value === 'string' ? row.value : '',
+    enabled: typeof row.enabled === 'boolean' ? row.enabled : true,
+    description: typeof row.description === 'string' ? row.description : '',
+  }
+}
+
+function resolveRequestUrl(runtimeRequest: RuntimeRequestState, variables: Record<string, string>) {
+  const urlWithTemplatesResolved = resolveTemplateVariables(runtimeRequest.url, variables).trim()
+  const resolvedPathParams = resolveTemplateVariables(runtimeRequest.pathParams, variables)
+  const { url: urlWithPathParams } = applyPathParamsToUrl(urlWithTemplatesResolved, resolvedPathParams)
+  const urlWithSearchParams = applySearchParamsToUrl(urlWithPathParams, runtimeRequest.searchParams, variables)
+
+  return applyAuthToUrl(urlWithSearchParams, resolveAuth(runtimeRequest.auth, variables))
+}
+
+function applyAuthToUrl(url: string, auth: HttpAuth) {
+  const entries = getAuthQueryParams(auth)
+  if (entries.length === 0 || !url) {
+    return url
+  }
+
+  try {
+    const nextUrl = new URL(url)
+    for (const entry of entries) {
+      nextUrl.searchParams.set(entry.key, entry.value)
+    }
+
+    return nextUrl.toString()
+  } catch {
+    return url
   }
 }
 

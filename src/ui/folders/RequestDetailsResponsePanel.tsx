@@ -7,7 +7,7 @@ import {
 } from '@common/AppSettings'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type { HttpSseStreamState, RequestScriptError, SendRequestResponse, SseEventRecord } from '@common/Requests'
-import { formatJson5 } from '@common/Json5'
+import { formatJson } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { dialogActions } from '@/global/dialogStore'
 import { toast } from '@/lib/components/toast'
@@ -897,7 +897,7 @@ function formatResponseBody(body: string, headers: string) {
   const looksJson = contentType?.includes('json') || /^[\[{]/.test(body.trim())
   if (looksJson) {
     try {
-      return formatJson5(body)
+      return formatJson(body)
     } catch {
       return body
     }

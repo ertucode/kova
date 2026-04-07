@@ -107,11 +107,26 @@ interface ScriptHeaderApi {
   toObject(): Record<string, string>
 }
 
+interface ScriptPathParam {
+  /** Path param name. */
+  key: string
+  /** Path param value. */
+  value: string
+  /** Whether this path param is enabled. */
+  enabled: boolean
+  /** Optional path param description. */
+  description: string
+}
+
 interface ScriptRequestApi {
   /** Current request method. */
   method: string
-  /** Current request URL. */
+  /** Draft request URL exactly as typed or mutated in the script. */
   url: string
+  /** Current path params as mutable JSON rows. */
+  pathParams: ScriptPathParam[]
+  /** Resolve the current request URL with variables, path params, search params, and auth query params applied. */
+  resolveUrl(): string
   /** Current request body string. */
   body: string
   /** Current request body mode. */

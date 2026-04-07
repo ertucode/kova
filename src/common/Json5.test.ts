@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatJson5, normalizeJson5ToJson } from './Json5.js'
+import { formatJson, formatJson5, normalizeJson5ToJson } from './Json5.js'
 
 describe('Json5', () => {
   it('formats JSON5 input as JSON5', () => {
@@ -10,6 +10,17 @@ describe('Json5', () => {
     1,
     2,
   ],
+}`)
+  })
+
+  it('formats JSON5 input as strict JSON', () => {
+    expect(formatJson("{foo:'bar', trailing:[1,2,],}"))
+      .toBe(`{
+  "foo": "bar",
+  "trailing": [
+    1,
+    2
+  ]
 }`)
   })
 

@@ -61,7 +61,9 @@ const sharedSections: ScriptDocumentationSection[] = [
     description: 'Inspect and change the outgoing request before or after execution.',
     entries: [
       { label: 'request.method', detail: 'HTTP method.' },
-      { label: 'request.url', detail: 'Full request URL.' },
+      { label: 'request.url', detail: 'Draft request URL exactly as typed or mutated in the script.' },
+      { label: 'request.resolveUrl()', detail: 'Returns the resolved URL after variables, path params, search params, and auth query params are applied.' },
+      { label: 'request.pathParams', detail: 'Path params as mutable JSON rows: [{ key, value, enabled, description }]. You can edit rows in place or assign a new array.' },
       { label: 'request.body', detail: 'Request body string.' },
       { label: 'request.bodyType', detail: 'Current body mode.' },
       { label: 'request.rawType', detail: 'Current raw body format.' },
@@ -134,6 +136,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         code: "const host = env.get('apiHost', 'Staging') ?? env.get('apiHost')\nif (host) {\n  request.url = `${host}/users`\n}",
       },
       {
+        title: 'Fill a path param from the environment',
+          code: "const userId = env.get('userId')\nif (userId) {\n  const userRow = request.pathParams.find(row => row.key === 'userId')\n  if (userRow) {\n    userRow.value = userId\n  }\n  console.info(request.resolveUrl())\n}",
+      },
+      {
         title: 'Validate required config',
         code: "const ConfigSchema = z.object({\n  apiHost: z.string(),\n  token: z.string(),\n})\n\nconst parsed = ConfigSchema.safeParse({\n  apiHost: env.get('apiHost'),\n  token: env.get('token'),\n})\n\nif (!parsed.success) {\n  throw new Error(parsed.error.message)\n}",
       },
@@ -190,6 +196,8 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
           { label: 'env.get(name, environmentName?)', detail: 'Read an environment value.' },
           { label: 'scope.get(name)', detail: 'Read a request-scoped value.' },
           { label: 'request.headers.get(name)', detail: 'Read a request header value.' },
+          { label: 'request.resolveUrl()', detail: 'Read the fully resolved request URL.' },
+          { label: 'request.pathParams', detail: 'Read or mutate request path params as JSON rows.' },
           { label: 'z.object(shape)', detail: 'Validate complex response payloads.' },
           { label: '<Table list={rows} />', detail: 'Render an inferred table from an array of objects.' },
         ],
