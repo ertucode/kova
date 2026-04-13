@@ -78,7 +78,7 @@ export async function sendRequest(input: SendRequestInput): Promise<GenericResul
       })
     }
 
-    const bodyText = await response.text()
+    const bodyText = await readResponseBody(response, responseHeaders)
     const durationMs = Date.now() - startedAt
 
     const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, {
@@ -516,6 +516,17 @@ function getResponseContentType(headers: string) {
       .join(':')
       .trim() ?? null
   )
+}
+
+async function readResponseBody(response: Response, headers: string) {
+  const contentType = getResponseContentType(headers)?.toLowerCase() ?? ''
+
+  if (!contentType.startsWith('image/')) {
+    return await response.text()
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer())
+  return buffer.toString('base64')
 }
 
 function formatRequestError(error: unknown) {

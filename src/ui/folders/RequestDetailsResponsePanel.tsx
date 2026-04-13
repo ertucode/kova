@@ -426,6 +426,8 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   onSaveAsExample?: () => void
 }) {
   const language = detectResponseLanguage(contentType, rawBody)
+  const isImageResponse = isImageContentType(contentType)
+  const imageSource = useMemo(() => getResponseImageSource(rawBody, contentType), [contentType, rawBody])
   const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
   const hasResponseVisualizer = responseVisualizer.trim().length > 0
   const canRenderVisualizer = hasResponseVisualizer && response !== null
@@ -509,7 +511,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             options={sectionOptions}
             onChange={setSection}
           />
-          {section === 'body' ? (
+          {section === 'body' && !isImageResponse ? (
             <DropdownSelect
               value={viewMode}
               className="w-[132px]"
@@ -525,7 +527,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
               }}
             />
           ) : null}
-          {section === 'body' && viewMode === 'raw' && hasFormattedBody ? (
+          {section === 'body' && !isImageResponse && viewMode === 'raw' && hasFormattedBody ? (
             <DropdownSelect
               value={responseBodyDisplayMode}
               className="w-[132px]"
@@ -585,6 +587,16 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
         ) : (
           <div className="mt-2 text-sm text-base-content/50">{headersDescription}</div>
         )
+      ) : isImageResponse && imageSource ? (
+        <div className="flex h-full min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+          <img
+            src={imageSource}
+            alt={contentType ?? 'Response image'}
+            className="max-h-full max-w-full rounded-lg border border-base-content/10 bg-base-100/70 object-contain shadow-sm"
+          />
+        </div>
+      ) : isImageResponse ? (
+        <div className="mt-2 text-sm text-base-content/50">Image response could not be previewed.</div>
       ) : viewMode === 'visualizer' && canRenderVisualizer && response ? (
         <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
           <ResponseVisualizerPreview
@@ -1319,6 +1331,40 @@ function detectResponseLanguage(contentType: string | null, body: string): CodeE
   }
 
   return 'plain'
+}
+
+function isImageContentType(contentType: string | null) {
+  return contentType?.toLowerCase().startsWith('image/') ?? false
+}
+
+function getResponseImageSource(body: string, contentType: string | null) {
+  if (!body.trim() || !contentType) {
+    return null
+  }
+
+  const normalizedContentType = contentType.toLowerCase()
+  if (body.startsWith('data:image/')) {
+    return body
+  }
+
+  if (normalizedContentType.includes('svg')) {
+    return `data:${contentType};charset=utf-8,${encodeURIComponent(body)}`
+  }
+
+  if (looksLikeBase64(body)) {
+    return `data:${contentType};base64,${body.trim()}`
+  }
+
+  try {
+    return `data:${contentType};base64,${btoa(body)}`
+  } catch {
+    return null
+  }
+}
+
+function looksLikeBase64(value: string) {
+  const trimmed = value.trim()
+  return trimmed.length > 0 && trimmed.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)
 }
 
 function parseResponseHeaders(value: string) {
