@@ -162,6 +162,20 @@
       "when": 1775070399810,
       "tag": "0022_workable_exiles",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1776346659310,
+      "tag": "0023_thick_blockbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1776346869825,
+      "tag": "0024_mature_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

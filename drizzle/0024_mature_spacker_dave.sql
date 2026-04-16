@@ -1,0 +1,1 @@
+ALTER TABLE `requests` ADD `websocket_auto_send_enabled` integer DEFAULT false NOT NULL;

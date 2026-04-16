@@ -59,6 +59,10 @@ export type RequestDetailsDraft = {
   bodyType: RequestBodyType
   rawType: RequestRawType
   websocketSubprotocols: string
+  websocketOnOpenMessage: string
+  websocketAutoSendEnabled: boolean
+  websocketAutoSendMessage: string
+  websocketAutoSendIntervalSeconds: number
   saveToHistory: boolean
 }
 

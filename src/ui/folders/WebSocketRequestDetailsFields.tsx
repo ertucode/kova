@@ -25,7 +25,7 @@ import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { buildImportedWebSocketUrlFields } from './requestUrlImport'
 
-type WebSocketMetaTab = 'overview' | 'search-params'
+type WebSocketMetaTab = 'overview' | 'search-params' | 'automation'
 type MessageFilter = 'all' | 'sent' | 'received'
 
 export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
@@ -231,6 +231,10 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
       postRequestScript: draft.postRequestScript,
       headers: draft.headers,
       websocketSubprotocols: draft.websocketSubprotocols,
+      websocketOnOpenMessage: draft.websocketOnOpenMessage,
+      websocketAutoSendEnabled: draft.websocketAutoSendEnabled,
+      websocketAutoSendMessage: draft.websocketAutoSendMessage,
+      websocketAutoSendIntervalSeconds: draft.websocketAutoSendIntervalSeconds,
       activeEnvironmentIds,
       saveToHistory: draft.saveToHistory,
       historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
@@ -453,6 +457,13 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
           >
             Search Params
           </button>
+          <button
+            type="button"
+            className={getTabClassName(metaTab === 'automation')}
+            onClick={() => setMetaTab('automation')}
+          >
+            Automation
+          </button>
         </div>
       </section>
 
@@ -600,6 +611,81 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         </section>
       ) : null}
 
+      {metaTab === 'automation' ? (
+        <section className="grid min-h-0 flex-1 gap-0 md:grid-cols-2">
+          <div className="flex min-h-0 flex-col border-r border-base-content/10">
+            <DetailsSectionHeader title="Send on Open" />
+            <CodeEditor
+              value={draft.websocketOnOpenMessage}
+              language="plain"
+              size="small"
+              minHeightClassName="min-h-[220px]"
+              className="border-x-0 border-b border-base-content/10"
+              placeholder="Sent once as soon as the socket opens"
+              extensions={variableEditorExtensions}
+              refreshKey={variableHighlightRefreshKey}
+              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketOnOpenMessage: value })}
+            />
+            <div className="px-3 py-3 text-sm text-base-content/45">
+              Leave empty to skip sending a message on connection open.
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-col">
+            <DetailsSectionHeader title="Recurring Message" />
+            <div className="border-b border-base-content/10 p-3">
+              <label className="mb-3 flex h-9 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-xs font-medium text-base-content/60">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm"
+                  checked={draft.websocketAutoSendEnabled}
+                  onChange={event =>
+                    FolderExplorerCoordinator.updateSelectedDraft({
+                      ...draft,
+                      websocketAutoSendEnabled: event.target.checked,
+                    })
+                  }
+                />
+                <span>Enable recurring message</span>
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-[0.08em] text-base-content/50">
+                Interval (seconds)
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  className="h-11 rounded-2xl border border-base-content/10 bg-base-100 px-3 text-sm text-base-content outline-none transition focus:border-base-content/25 disabled:cursor-not-allowed disabled:opacity-45"
+                  placeholder="10"
+                  value={draft.websocketAutoSendIntervalSeconds > 0 ? String(draft.websocketAutoSendIntervalSeconds) : ''}
+                  disabled={!draft.websocketAutoSendEnabled}
+                  onChange={event =>
+                    FolderExplorerCoordinator.updateSelectedDraft({
+                      ...draft,
+                      websocketAutoSendIntervalSeconds: parseIntervalSeconds(event.target.value),
+                    })
+                  }
+                />
+              </label>
+            </div>
+            <CodeEditor
+              value={draft.websocketAutoSendMessage}
+              language="plain"
+              size="small"
+              minHeightClassName="min-h-[220px]"
+              className="border-x-0 border-b border-base-content/10"
+              placeholder="Sent repeatedly while the socket stays open"
+              extensions={variableEditorExtensions}
+              refreshKey={variableHighlightRefreshKey}
+              readOnly={!draft.websocketAutoSendEnabled}
+              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketAutoSendMessage: value })}
+            />
+            <div className="px-3 py-3 text-sm text-base-content/45">
+              Enable this, then set `10` and `PING` to send a heartbeat every 10 seconds.
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
         <button
           type="button"
@@ -686,7 +772,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               </div>
             ) : (
               <div className="space-y-2">
-                {visibleMessages.map((message: WebSocketMessageRecord) => (
+                {[...visibleMessages].reverse().map((message: WebSocketMessageRecord) => (
                   <TranscriptRow key={message.id} message={message} />
                 ))}
               </div>
@@ -729,7 +815,9 @@ function TranscriptRow({
             </pre>
           ) : (
             <div className="mt-1 truncate font-mono text-xs text-base-content/75">
-              {getCollapsedMessagePreview(message.body)}
+              <span title={getCollapsedMessagePreview(message.body, 120)}>
+                {getCollapsedMessagePreview(message.body)}
+              </span>
             </div>
           )}
         </div>
@@ -782,13 +870,27 @@ function clampResponsePaneHeight(height: number) {
   return Math.max(180, Math.min(height, Math.floor(viewportHeight * 0.8)))
 }
 
-function getCollapsedMessagePreview(value: string) {
+function getCollapsedMessagePreview(value: string, maxLength = 40) {
   const normalized = value.replace(/\s+/g, ' ').trim()
   if (!normalized) {
     return '(empty)'
   }
 
-  return normalized.length > 40 ? `${normalized.slice(0, 40)}...` : normalized
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized
+}
+
+function parseIntervalSeconds(value: string) {
+  const normalized = value.trim()
+  if (!normalized) {
+    return 0
+  }
+
+  const parsed = Number.parseInt(normalized, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 0
+  }
+
+  return parsed
 }
 
 function updateEnvironmentVariableDraft(environmentId: string, variableName: string, value: string) {

@@ -1,4 +1,11 @@
-import { getAuthHeaders, getAuthQueryParams, getAuthVariableSources, resolveAuth, resolveInheritedAuth, type HttpAuth } from '../common/Auth.js'
+import {
+  getAuthHeaders,
+  getAuthQueryParams,
+  getAuthVariableSources,
+  resolveAuth,
+  resolveInheritedAuth,
+  type HttpAuth,
+} from '../common/Auth.js'
 import { buildEnvironmentVariableMap } from '../common/EnvironmentVariables.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { applySearchParamsToUrl } from '../common/PathParams.js'
@@ -17,7 +24,11 @@ import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
-import { createWebSocketHistory, appendWebSocketHistoryMessage, finalizeWebSocketHistory } from './db/websocket-history.js'
+import {
+  createWebSocketHistory,
+  appendWebSocketHistoryMessage,
+  finalizeWebSocketHistory,
+} from './db/websocket-history.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { emitGenericEvent } from './generic-events.js'
 import { createRequestScriptRuntime } from './request-script-runner.js'
@@ -25,8 +36,10 @@ import { createRequestScriptRuntime } from './request-script-runner.js'
 type ActiveWebSocketSession = {
   socket: WebSocket
   session: WebSocketSessionRecord
+  activeEnvironmentIds: string[]
   historyEnabled: boolean
   historyId: string | null
+  autoSendIntervalId: ReturnType<typeof setInterval> | null
 }
 
 const activeSessions = new Map<string, ActiveWebSocketSession>()
@@ -64,7 +77,10 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
         pathParams: '',
         searchParams: input.searchParams,
         auth: input.auth,
-        headers: mergeHeaderRows(folders.map(folder => folder.headers), input.headers),
+        headers: mergeHeaderRows(
+          folders.map(folder => folder.headers),
+          input.headers
+        ),
         body: '',
         bodyType: 'none',
         rawType: 'text',
@@ -77,31 +93,55 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
       { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
     ])
     if (preRequestScriptErrors.length > 0) {
-      return GenericError.Message(preRequestScriptErrors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n'), {
-        scriptErrors: preRequestScriptErrors,
-      })
+      return GenericError.Message(
+        preRequestScriptErrors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n'),
+        {
+          scriptErrors: preRequestScriptErrors,
+        }
+      )
     }
 
     const variables = runtime.getResolvedVariables()
-    const missingVariables = collectMissingVariables({
-      url: input.url,
-      searchParams: input.searchParams,
-      auth: input.auth,
-      headers: input.headers,
-      websocketSubprotocols: input.websocketSubprotocols,
-    }, variables)
+    const missingVariables = collectMissingVariables(
+      {
+        url: input.url,
+        searchParams: input.searchParams,
+        auth: input.auth,
+        headers: input.headers,
+        websocketSubprotocols: input.websocketSubprotocols,
+        websocketOnOpenMessage: input.websocketOnOpenMessage,
+        websocketAutoSendMessage: input.websocketAutoSendMessage,
+      },
+      variables
+    )
     if (missingVariables.length > 0) {
-      return GenericError.Message(`Missing environment variables: ${missingVariables.join(', ')}. Define them before connecting.`)
+      return GenericError.Message(
+        `Missing environment variables: ${missingVariables.join(', ')}. Define them before connecting.`
+      )
     }
 
-    const effectiveAuth = resolveInheritedAuth(folders.map(folder => folder.auth), runtime.request.auth)
-    const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source => findMissingTemplateVariables(source, variables))
+    const effectiveAuth = resolveInheritedAuth(
+      folders.map(folder => folder.auth),
+      runtime.request.auth
+    )
+    const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source =>
+      findMissingTemplateVariables(source, variables)
+    )
     if (missingAuthVariables.length > 0) {
-      return GenericError.Message(`Missing environment variables: ${Array.from(new Set(missingAuthVariables)).join(', ')}. Define them before connecting.`)
+      return GenericError.Message(
+        `Missing environment variables: ${Array.from(new Set(missingAuthVariables)).join(', ')}. Define them before connecting.`
+      )
     }
 
     const resolvedAuth = resolveAuth(effectiveAuth, variables)
-    const url = applyAuthToUrl(applySearchParamsToUrl(resolveTemplateVariables(runtime.request.url, variables).trim(), runtime.request.searchParams, variables), resolvedAuth)
+    const url = applyAuthToUrl(
+      applySearchParamsToUrl(
+        resolveTemplateVariables(runtime.request.url, variables).trim(),
+        runtime.request.searchParams,
+        variables
+      ),
+      resolvedAuth
+    )
 
     if (!url) {
       return GenericError.Message('Request URL is required')
@@ -130,7 +170,9 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
       requestId: input.requestId,
       requestName: requestResult.data.name,
       url,
-      requestHeaders: Array.from(headers.entries()).map(([key, value]) => `${key}: ${value}`).join('\n'),
+      requestHeaders: Array.from(headers.entries())
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\n'),
       requestVariables: variables,
       connectionState: 'connecting',
       connectedAt,
@@ -142,12 +184,17 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
       messages: [],
     }
 
-    const socket = new WebSocket(url, parseSubprotocols(resolveTemplateVariables(input.websocketSubprotocols, variables)))
+    const socket = new WebSocket(
+      url,
+      parseSubprotocols(resolveTemplateVariables(input.websocketSubprotocols, variables))
+    )
     const activeSession: ActiveWebSocketSession = {
       socket,
       session,
+      activeEnvironmentIds: input.activeEnvironmentIds,
       historyEnabled: input.saveToHistory,
       historyId: input.saveToHistory ? session.id : null,
+      autoSendIntervalId: null,
     }
     activeSessions.set(input.requestId, activeSession)
     emitSessionUpdated(activeSession.session)
@@ -179,6 +226,18 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
     }
     emitSessionUpdated(activeSession.session)
 
+    if (input.websocketOnOpenMessage.trim()) {
+      await sendResolvedWebSocketMessage(activeSession, input.websocketOnOpenMessage)
+    }
+
+    if (input.websocketAutoSendEnabled && input.websocketAutoSendMessage.trim() && input.websocketAutoSendIntervalSeconds > 0) {
+      activeSession.autoSendIntervalId = setInterval(() => {
+        void sendResolvedWebSocketMessage(activeSession, input.websocketAutoSendMessage).catch(error => {
+          console.error('sendResolvedWebSocketMessage failed', error)
+        })
+      }, input.websocketAutoSendIntervalSeconds * 1000)
+    }
+
     const updatedEnvironments = runtime.getUpdatedEnvironments()
     if (updatedEnvironments.length > 0) {
       emitGenericEvent({
@@ -193,6 +252,7 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
       consoleEntries: runtime.getConsoleEntries(),
     })
   } catch (error) {
+    console.error(error)
     return GenericError.Message(formatRuntimeError(error))
   }
 }
@@ -204,17 +264,7 @@ export async function sendWebSocketMessage(input: WebSocketSendMessageInput): Pr
   }
 
   try {
-    const activeEnvironments = await getEnvironmentsByIds(input.activeEnvironmentIds)
-    const variables = buildEnvironmentVariableMap(activeEnvironments)
-    const missingVariables = findMissingTemplateVariables(input.body, variables)
-    if (missingVariables.length > 0) {
-      return GenericError.Message(`Missing environment variables: ${Array.from(new Set(missingVariables)).join(', ')}. Define them before sending.`)
-    }
-
-    const resolvedBody = resolveTemplateVariables(input.body, variables)
-    activeSession.socket.send(resolvedBody)
-    const message = buildMessageRecord('sent', resolvedBody)
-    await appendMessage(activeSession, message)
+    await sendResolvedWebSocketMessage(activeSession, input.body, input.activeEnvironmentIds)
     return Result.Success(undefined)
   } catch (error) {
     return GenericError.Message(formatRuntimeError(error))
@@ -228,7 +278,10 @@ export async function disconnectWebSocket(input: WebSocketDisconnectInput): Prom
   }
 
   try {
-    if (activeSession.socket.readyState === WebSocket.OPEN || activeSession.socket.readyState === WebSocket.CONNECTING) {
+    if (
+      activeSession.socket.readyState === WebSocket.OPEN ||
+      activeSession.socket.readyState === WebSocket.CONNECTING
+    ) {
       activeSession.socket.close(1000, 'Disconnected')
     }
     return Result.Success(undefined)
@@ -268,7 +321,10 @@ function bindSocketEvents(activeSession: ActiveWebSocketSession) {
 
 async function handleIncomingMessage(activeSession: ActiveWebSocketSession, data: unknown) {
   const normalized = await normalizeWebSocketData(data)
-  await appendMessage(activeSession, buildMessageRecord('received', normalized.body, normalized.mimeType, normalized.sizeBytes))
+  await appendMessage(
+    activeSession,
+    buildMessageRecord('received', normalized.body, normalized.mimeType, normalized.sizeBytes)
+  )
 }
 
 async function appendMessage(activeSession: ActiveWebSocketSession, message: WebSocketMessageRecord) {
@@ -288,6 +344,11 @@ async function finalizeSession(
   activeSession: ActiveWebSocketSession,
   input: { disconnectedAt: number; closeCode: number | null; closeReason: string | null; responseError: string | null }
 ) {
+  if (activeSession.autoSendIntervalId !== null) {
+    clearInterval(activeSession.autoSendIntervalId)
+    activeSession.autoSendIntervalId = null
+  }
+
   activeSession.session = {
     ...activeSession.session,
     connectionState: 'closed',
@@ -386,7 +447,10 @@ async function normalizeWebSocketData(data: unknown) {
 }
 
 function collectMissingVariables(
-  input: Pick<WebSocketConnectInput, 'url' | 'searchParams' | 'auth' | 'headers' | 'websocketSubprotocols'>,
+  input: Pick<
+    WebSocketConnectInput,
+    'url' | 'searchParams' | 'auth' | 'headers' | 'websocketSubprotocols' | 'websocketOnOpenMessage' | 'websocketAutoSendMessage'
+  >,
   variables: Record<string, string>
 ) {
   const missingVariables = new Set<string>()
@@ -429,10 +493,45 @@ function collectMissingVariables(
     missingVariables.add(variableName)
   }
 
+  for (const variableName of findMissingTemplateVariables(input.websocketOnOpenMessage, variables)) {
+    missingVariables.add(variableName)
+  }
+
+  for (const variableName of findMissingTemplateVariables(input.websocketAutoSendMessage, variables)) {
+    missingVariables.add(variableName)
+  }
+
   return Array.from(missingVariables).sort((left, right) => left.localeCompare(right))
 }
 
-function applyResolvedHeaders(headers: Headers, rows: ReturnType<typeof parseKeyValueRows>, variables: Record<string, string>) {
+async function sendResolvedWebSocketMessage(
+  activeSession: ActiveWebSocketSession,
+  body: string,
+  activeEnvironmentIds = activeSession.activeEnvironmentIds
+) {
+  if (activeSession.session.connectionState !== 'open') {
+    throw new Error('WebSocket is not connected')
+  }
+
+  const activeEnvironments = await getEnvironmentsByIds(activeEnvironmentIds)
+  const variables = buildEnvironmentVariableMap(activeEnvironments)
+  const missingVariables = findMissingTemplateVariables(body, variables)
+  if (missingVariables.length > 0) {
+    throw new Error(
+      `Missing environment variables: ${Array.from(new Set(missingVariables)).join(', ')}. Define them before sending.`
+    )
+  }
+
+  const resolvedBody = resolveTemplateVariables(body, variables)
+  activeSession.socket.send(resolvedBody)
+  await appendMessage(activeSession, buildMessageRecord('sent', resolvedBody))
+}
+
+function applyResolvedHeaders(
+  headers: Headers,
+  rows: ReturnType<typeof parseKeyValueRows>,
+  variables: Record<string, string>
+) {
   for (const row of rows) {
     const key = resolveTemplateVariables(row.key, variables).trim()
     if (!row.enabled || !key) {

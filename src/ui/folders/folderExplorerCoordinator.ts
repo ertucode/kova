@@ -1164,6 +1164,10 @@ async function saveItem(selection: Selection) {
             bodyType: draft.bodyType,
             rawType: draft.rawType,
             websocketSubprotocols: draft.websocketSubprotocols,
+            websocketOnOpenMessage: draft.websocketOnOpenMessage,
+            websocketAutoSendEnabled: draft.websocketAutoSendEnabled,
+            websocketAutoSendMessage: draft.websocketAutoSendMessage,
+            websocketAutoSendIntervalSeconds: draft.websocketAutoSendIntervalSeconds,
             saveToHistory: draft.saveToHistory,
           })
         : draft.exampleType === 'websocket'

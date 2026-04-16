@@ -134,6 +134,10 @@ export function toRequestDetailsDraft(request: HttpRequestRecord): RequestDetail
     bodyType: request.bodyType,
     rawType: request.rawType,
     websocketSubprotocols: request.websocketSubprotocols,
+    websocketOnOpenMessage: request.websocketOnOpenMessage,
+    websocketAutoSendEnabled: request.websocketAutoSendEnabled,
+    websocketAutoSendMessage: request.websocketAutoSendMessage,
+    websocketAutoSendIntervalSeconds: request.websocketAutoSendIntervalSeconds,
     saveToHistory: request.saveToHistory,
   }
 }

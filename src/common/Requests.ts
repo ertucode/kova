@@ -31,6 +31,10 @@ export type HttpRequestRecord = {
   bodyType: RequestBodyType
   rawType: RequestRawType
   websocketSubprotocols: string
+  websocketOnOpenMessage: string
+  websocketAutoSendEnabled: boolean
+  websocketAutoSendMessage: string
+  websocketAutoSendIntervalSeconds: number
   saveToHistory: boolean
   createdAt: number
   deletedAt: number | null
@@ -65,6 +69,10 @@ export type UpdateRequestInput = {
   bodyType: RequestBodyType
   rawType: RequestRawType
   websocketSubprotocols: string
+  websocketOnOpenMessage: string
+  websocketAutoSendEnabled: boolean
+  websocketAutoSendMessage: string
+  websocketAutoSendIntervalSeconds: number
   saveToHistory: boolean
 }
 
@@ -116,6 +124,10 @@ export type WebSocketConnectInput = {
   postRequestScript: string
   headers: string
   websocketSubprotocols: string
+  websocketOnOpenMessage: string
+  websocketAutoSendEnabled: boolean
+  websocketAutoSendMessage: string
+  websocketAutoSendIntervalSeconds: number
   activeEnvironmentIds: string[]
   saveToHistory: boolean
   historyKeepLast: number

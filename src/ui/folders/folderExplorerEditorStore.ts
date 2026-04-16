@@ -78,6 +78,10 @@ const requestDetailsDraftSchema = z.object({
   bodyType: z.enum(REQUEST_BODY_TYPES),
   rawType: z.enum(REQUEST_RAW_TYPES),
   websocketSubprotocols: z.string().default(''),
+  websocketOnOpenMessage: z.string().default(''),
+  websocketAutoSendEnabled: z.boolean().default(false),
+  websocketAutoSendMessage: z.string().default(''),
+  websocketAutoSendIntervalSeconds: z.number().int().min(0).default(0),
   saveToHistory: z.boolean().default(true),
 })
 
