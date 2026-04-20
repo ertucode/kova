@@ -1,0 +1,1 @@
+- pasting part of a url deletes the other parts

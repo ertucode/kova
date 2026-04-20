@@ -22,7 +22,7 @@ import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { dialogActions } from '@/global/dialogStore'
 import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
 import { HeadersEditor } from './HeadersEditor'
-import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage } from './CodeEditor'
+import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage, type CodeEditorPasteParams } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { KeyValueEditor } from './KeyValueEditor'
 import { environmentEditorStore } from './environmentEditorStore'
@@ -42,6 +42,7 @@ import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { RequestDetailsResponsePanel } from './RequestDetailsResponsePanel'
 import { buildImportedHttpUrlFields } from './requestUrlImport'
+import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -409,8 +410,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     })
   }
 
-  const handleUrlPaste = (value: string) => {
-    const parsedCurl = parseCurlRequest(value)
+  const handleUrlPaste = ({ text, value, selectionFrom, selectionTo }: CodeEditorPasteParams) => {
+    const parsedCurl = parseCurlRequest(text)
     if (parsedCurl) {
       const shouldShowSearchParams = parsedCurl.bodyType === 'none' && parsedCurl.searchParams.trim() !== ''
 
@@ -437,7 +438,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       return true
     }
 
-    const nextUrl = value.trim()
+    const nextUrl = buildPastedValue({ value, pasteText: text, selectionFrom, selectionTo }).trim()
     if (!nextUrl || nextUrl.includes('\n')) {
       return false
     }
@@ -448,7 +449,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       return false
     }
 
-    importUrl(nextUrl)
+    if (isFullValueReplacement({ value, selectionFrom, selectionTo })) {
+      importUrl(nextUrl)
+      return true
+    }
+
+    updateUrl(nextUrl)
     return true
   }
 

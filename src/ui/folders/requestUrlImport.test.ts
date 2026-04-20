@@ -14,8 +14,8 @@ describe('requestUrlImport', () => {
     })
   })
 
-  it('does not preserve stale search params during HTTP URL import', () => {
-    expect(syncSearchParamsWithUrl('https://api.example.com/orders?page=2', 'stale:1\npage:1')).toBe('stale:1\npage:2')
+  it('rebuilds HTTP URL imports from scratch instead of preserving stale search params', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/orders?page=2', 'stale:1\npage:1')).toBe('page:2')
 
     const result = buildImportedHttpUrlFields('https://api.example.com/orders?page=2', 'none')
     expect(result.searchParams).toBe('page:2')

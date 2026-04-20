@@ -23,6 +23,14 @@ export type CodeEditorHandle = {
   focusLine: (line: number, column?: number | null) => void
 }
 
+export type CodeEditorPasteParams = {
+  text: string
+  value: string
+  selectionFrom: number
+  selectionTo: number
+  selectedText: string
+}
+
 const selectionMatchesExtension = highlightSelectionMatches({ highlightWordAroundCursor: true })
 const baseSetupExtensions = codeMirrorBasicSetup({
   lineNumbers: false,
@@ -407,7 +415,7 @@ export function CodeEditor({
   readOnly?: boolean
   showFoldGutter?: boolean
   showLineNumbers?: boolean
-  onPasteText?: (text: string) => boolean
+  onPasteText?: (params: CodeEditorPasteParams) => boolean
   onChange: (value: string, params: { caretPos: number; previousValue: string; previousCaretPos: number }) => void
   onBlur?: () => void
   linePaddingOverride?: string
@@ -563,7 +571,20 @@ export function CodeEditor({
           return false
         }
 
-        const handled = onPasteTextRef.current?.(text) ?? false
+        const selection = editorViewRef.current?.state.selection.main
+        const value = editorViewRef.current?.state.doc.toString() ?? ''
+        const selectionFrom = selection?.from ?? 0
+        const selectionTo = selection?.to ?? 0
+        const selectedText = value.slice(selectionFrom, selectionTo)
+
+        const handled =
+          onPasteTextRef.current?.({
+            text,
+            value,
+            selectionFrom,
+            selectionTo,
+            selectedText,
+          }) ?? false
         if (handled) {
           event.preventDefault()
           return true

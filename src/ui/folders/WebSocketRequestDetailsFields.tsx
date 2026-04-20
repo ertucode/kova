@@ -10,7 +10,7 @@ import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { AuthorizationEditor } from './AuthorizationEditor'
-import { CodeEditor } from './CodeEditor'
+import { CodeEditor, type CodeEditorPasteParams } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { KeyValueEditor } from './KeyValueEditor'
@@ -24,6 +24,7 @@ import { variableAutocompleteExtension, type VariableAutocompleteItem } from './
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { buildImportedWebSocketUrlFields } from './requestUrlImport'
+import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 
 type WebSocketMetaTab = 'overview' | 'search-params' | 'automation'
 type MessageFilter = 'all' | 'sent' | 'received'
@@ -379,8 +380,8 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     })
   }
 
-  const handleUrlPaste = (value: string) => {
-    const nextUrl = value.trim()
+  const handleUrlPaste = ({ text, value, selectionFrom, selectionTo }: CodeEditorPasteParams) => {
+    const nextUrl = buildPastedValue({ value, pasteText: text, selectionFrom, selectionTo }).trim()
     if (!nextUrl || nextUrl.includes('\n')) {
       return false
     }
@@ -394,7 +395,16 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
       return false
     }
 
-    importUrl(nextUrl)
+    if (isFullValueReplacement({ value, selectionFrom, selectionTo })) {
+      importUrl(nextUrl)
+      return true
+    }
+
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...draft,
+      url: nextUrl,
+      searchParams: syncSearchParamsWithUrl(nextUrl, draft.searchParams),
+    })
     return true
   }
 
