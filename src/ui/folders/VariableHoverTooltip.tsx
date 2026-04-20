@@ -29,7 +29,7 @@ export function VariableHoverTooltip({
   const activeCount = useMemo(() => draftRows.filter(row => row.isActive).length, [draftRows])
   const lastCommittedValuesRef = useRef(new Map<string, string>())
   const draftRowsRef = useRef(draftRows)
-  const commitFrameByEnvironmentRef = useRef(new Map<string, number>())
+  const commitTimeoutByEnvironmentRef = useRef(new Map<string, number>())
 
   draftRowsRef.current = draftRows
 
@@ -38,17 +38,6 @@ export function VariableHoverTooltip({
     lastCommittedValuesRef.current = new Map(rows.map(row => [row.id, row.value]))
   }, [rows])
 
-  useEffect(() => {
-    const commitFrameByEnvironment = commitFrameByEnvironmentRef.current
-
-    return () => {
-      for (const frameId of commitFrameByEnvironment.values()) {
-        window.cancelAnimationFrame(frameId)
-      }
-      commitFrameByEnvironment.clear()
-    }
-  }, [])
-
   const commitValue = (environmentId: string) => {
     const nextValue = draftRowsRef.current.find(row => row.id === environmentId)?.value ?? ''
     if (lastCommittedValuesRef.current.get(environmentId) === nextValue) {
@@ -56,18 +45,19 @@ export function VariableHoverTooltip({
     }
 
     lastCommittedValuesRef.current.set(environmentId, nextValue)
-    const pendingFrameId = commitFrameByEnvironmentRef.current.get(environmentId)
-    if (pendingFrameId !== undefined) {
-      window.cancelAnimationFrame(pendingFrameId)
+    const pendingTimeoutId = commitTimeoutByEnvironmentRef.current.get(environmentId)
+    if (pendingTimeoutId !== undefined) {
+      window.clearTimeout(pendingTimeoutId)
     }
 
-    const frameId = window.requestAnimationFrame(() => {
-      commitFrameByEnvironmentRef.current.delete(environmentId)
+    // Defer the editor write until after CodeMirror finishes the hover update cycle.
+    const timeoutId = window.setTimeout(() => {
+      commitTimeoutByEnvironmentRef.current.delete(environmentId)
       onChangeValue(environmentId, nextValue)
       void onSaveValue(environmentId)
-    })
+    }, 0)
 
-    commitFrameByEnvironmentRef.current.set(environmentId, frameId)
+    commitTimeoutByEnvironmentRef.current.set(environmentId, timeoutId)
   }
 
   return (
@@ -84,7 +74,10 @@ export function VariableHoverTooltip({
           const isEffective = getEffectiveEnvironmentId(draftRows) === row.id
 
           return (
-          <div key={row.id} className="grid grid-cols-[auto_minmax(0,120px)_minmax(0,2fr)_auto] items-center gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0">
+            <div
+              key={row.id}
+              className="grid grid-cols-[auto_minmax(0,120px)_minmax(0,2fr)_auto] items-center gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0"
+            >
             <label className="flex items-center justify-center px-1">
               <input
                 type="checkbox"
@@ -160,7 +153,7 @@ export function VariableHoverTooltip({
               <ArrowUpRightIcon className="size-4" />
             </button>
 
-          </div>
+            </div>
           )
         })}
       </div>

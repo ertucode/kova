@@ -15,7 +15,7 @@ export function PathParamHoverTooltip({
   const lastCommittedValueRef = useRef(value)
   const hasPendingCommitRef = useRef(false)
   const draftValueRef = useRef(draftValue)
-  const commitFrameRef = useRef<number | null>(null)
+  const commitTimeoutRef = useRef<number | null>(null)
 
   draftValueRef.current = draftValue
 
@@ -24,14 +24,6 @@ export function PathParamHoverTooltip({
     lastCommittedValueRef.current = value
     hasPendingCommitRef.current = false
   }, [value])
-
-  useEffect(() => {
-    return () => {
-      if (commitFrameRef.current !== null) {
-        window.cancelAnimationFrame(commitFrameRef.current)
-      }
-    }
-  }, [])
 
   const commit = () => {
     const nextValue = draftValueRef.current
@@ -42,14 +34,15 @@ export function PathParamHoverTooltip({
     lastCommittedValueRef.current = nextValue
     hasPendingCommitRef.current = false
 
-    if (commitFrameRef.current !== null) {
-      window.cancelAnimationFrame(commitFrameRef.current)
+    if (commitTimeoutRef.current !== null) {
+      window.clearTimeout(commitTimeoutRef.current)
     }
 
-    commitFrameRef.current = window.requestAnimationFrame(() => {
-      commitFrameRef.current = null
+    // Defer the editor write until after CodeMirror finishes the hover update cycle.
+    commitTimeoutRef.current = window.setTimeout(() => {
+      commitTimeoutRef.current = null
       onChangeValue(nextValue)
-    })
+    }, 0)
   }
 
   return (
