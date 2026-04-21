@@ -1,5 +1,6 @@
 import {
   Fragment,
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -57,22 +58,21 @@ export function KeyValueEditor({
   const [draggedRowId, setDraggedRowId] = useState<string | null>(null)
   const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null)
   const lastEmittedValueRef = useRef(value)
+  const hasMountedRef = useRef(false)
   const rootRef = useRef<HTMLElement | null>(null)
+  const rowsRef = useRef(rows)
   const focusedRowIdRef = useRef<string | null>(null)
   const pendingFocusTargetRef = useRef<PendingFocusTarget | null>(null)
   const duplicateRowIds = getDuplicateRowIds(rows)
   const bulkEditError = isBulkEditMode ? validateBulkEditValue(bulkEditValue) : null
   const populatedRowCount = getRowCountWithoutTrailingCreateRow(rows)
 
-  const commitRows = useCallback(
-    (nextRows: KeyValueRow[]) => {
-      const normalizedRows = ensureTrailingEmptyRow(stripTrailingCreateRow(nextRows))
-      const nextValue = stringifyKeyValueRows(normalizedRows)
-      lastEmittedValueRef.current = nextValue
-      onChange(nextValue)
-      return normalizedRows
-    },
-    [onChange]
+  rowsRef.current = rows
+
+  const normalizeRows = useCallback(
+    (nextRows: KeyValueRow[]) =>
+      ensureTrailingEmptyRow(stripTrailingCreateRow(nextRows), getNextTrailingCreateRow(rowsRef.current, nextRows)),
+    []
   )
 
   useEffect(() => {
@@ -85,6 +85,23 @@ export function KeyValueEditor({
       setBulkEditValue(value)
     }
   }, [isBulkEditMode, value])
+
+  useEffect(() => {
+    const nextValue = stringifyKeyValueRows(rows)
+
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true
+      lastEmittedValueRef.current = nextValue
+      return
+    }
+
+    if (nextValue === lastEmittedValueRef.current) {
+      return
+    }
+
+    lastEmittedValueRef.current = nextValue
+    onChange(nextValue)
+  }, [onChange, rows])
 
   useEffect(() => {
     const pendingFocusTarget = pendingFocusTargetRef.current
@@ -110,10 +127,10 @@ export function KeyValueEditor({
     (id: string, patch: Partial<KeyValueRow>) => {
       setRows(currentRows => {
         const nextRows = currentRows.map(row => (row.id === id ? { ...row, ...patch } : row))
-        return commitRows(nextRows)
+        return normalizeRows(nextRows)
       })
     },
-    [commitRows]
+    [normalizeRows]
   )
 
   const insertRowAt = useCallback(
@@ -124,10 +141,10 @@ export function KeyValueEditor({
         const nextRow = row ?? createEmptyKeyValueRow()
         pendingFocusTargetRef.current = { rowId: nextRow.id, field: focusField }
         nextRows.splice(safeIndex, 0, nextRow)
-        return commitRows(nextRows)
+        return normalizeRows(nextRows)
       })
     },
-    [commitRows]
+    [normalizeRows]
   )
 
   const duplicateRow = useCallback(
@@ -147,10 +164,10 @@ export function KeyValueEditor({
         const duplicatedRow = { ...sourceRow, id: crypto.randomUUID() }
         pendingFocusTargetRef.current = { rowId: duplicatedRow.id, field: 'key' }
         baseRows.splice(sourceIndex + 1, 0, duplicatedRow)
-        return commitRows(baseRows)
+        return normalizeRows(baseRows)
       })
     },
-    [commitRows]
+    [normalizeRows]
   )
 
   const moveRow = useCallback(
@@ -166,26 +183,29 @@ export function KeyValueEditor({
         const [movedRow] = baseRows.splice(sourceIndex, 1)
         const nextTargetIndex = sourceIndex < boundedTargetIndex ? boundedTargetIndex - 1 : boundedTargetIndex
         baseRows.splice(nextTargetIndex, 0, movedRow)
-        return commitRows(baseRows)
+        return normalizeRows(baseRows)
       })
     },
-    [commitRows]
+    [normalizeRows]
   )
 
-  const removeRow = (id: string, focusField: KeyValueField = 'key') => {
-    setRows(currentRows => {
-      const sourceIndex = currentRows.findIndex(row => row.id === id)
-      const nextRows = currentRows.filter(row => row.id !== id)
-      const committedRows = commitRows(nextRows)
-      if (sourceIndex >= 0) {
-        const fallbackRow = committedRows[Math.min(sourceIndex, committedRows.length - 1)]
-        if (fallbackRow) {
-          pendingFocusTargetRef.current = { rowId: fallbackRow.id, field: focusField }
+  const removeRow = useCallback(
+    (id: string, focusField: KeyValueField = 'key') => {
+      setRows(currentRows => {
+        const sourceIndex = currentRows.findIndex(row => row.id === id)
+        const nextRows = currentRows.filter(row => row.id !== id)
+        const committedRows = normalizeRows(nextRows)
+        if (sourceIndex >= 0) {
+          const fallbackRow = committedRows[Math.min(sourceIndex, committedRows.length - 1)]
+          if (fallbackRow) {
+            pendingFocusTargetRef.current = { rowId: fallbackRow.id, field: focusField }
+          }
         }
-      }
-      return committedRows
-    })
-  }
+        return committedRows
+      })
+    },
+    [normalizeRows]
+  )
 
   const setFocusedRowId = useCallback((rowId: string | null) => {
     focusedRowIdRef.current = rowId
@@ -207,14 +227,14 @@ export function KeyValueEditor({
       return false
     }
 
-    const rowToRemove = rows.find(row => row.id === focusedRowId)
+    const rowToRemove = rowsRef.current.find(row => row.id === focusedRowId)
     if (!rowToRemove || !hasKeyValueContent(rowToRemove)) {
       return false
     }
 
     removeRow(focusedRowId)
     return true
-  }, [rows])
+  }, [removeRow])
 
   const duplicateRowKeyBinding = useMemo(
     () =>
@@ -263,7 +283,7 @@ export function KeyValueEditor({
           return
         }
 
-        const rowIndex = rows.findIndex(row => row.id === rowId)
+        const rowIndex = rowsRef.current.findIndex(row => row.id === rowId)
         if (rowIndex < 0) {
           return
         }
@@ -288,7 +308,7 @@ export function KeyValueEditor({
       }
 
       if (normalizedKey === 'h' || normalizedKey === 'j' || normalizedKey === 'k' || normalizedKey === 'l') {
-        const nextFocusTarget = getNextFocusTarget(rows, rowId, field, normalizedKey)
+        const nextFocusTarget = getNextFocusTarget(rowsRef.current, rowId, field, normalizedKey)
         if (!nextFocusTarget) {
           return
         }
@@ -319,7 +339,7 @@ export function KeyValueEditor({
       setFocusedRowId(rowId)
       removeRow(rowId, field)
     },
-    [duplicateRow, insertRowAt, removeRow, rows, setFocusedRowId]
+    [duplicateRow, insertRowAt, removeRow, setFocusedRowId]
   )
 
   const renderInsertGap = (insertIndex: number) => {
@@ -507,177 +527,33 @@ export function KeyValueEditor({
               {populatedRowCount > 0 ? renderInsertGap(0) : null}
               {rows.map((row, index) => {
                 const isCreateRow = index === rows.length - 1
-                const isDragged = draggedRowId === row.id
                 const showInsertGapBefore = index > 0 && index <= populatedRowCount
-                const showDropBefore = !isCreateRow && draggedRowId !== null && dropInsertIndex === index
-                const showDropAfter = !isCreateRow && draggedRowId !== null && dropInsertIndex === index + 1
 
                 return (
                   <Fragment key={row.id}>
                     {showInsertGapBefore ? renderInsertGap(index) : null}
-                    <tr
-                      className={[
-                        'border-b border-base-content/10 last:border-b-0',
-                        isDragged ? 'opacity-45' : '',
-                      ].join(' ')}
-                      data-key-value-row-id={row.id}
-                      onDragOver={event => {
-                        if (isCreateRow) {
-                          return
-                        }
-
-                        updateDropInsertIndexFromRow(event, index)
-                      }}
-                      onDrop={event => {
-                        if (isCreateRow) {
-                          return
-                        }
-
-                        event.preventDefault()
-                        commitDroppedRow()
-                      }}
-                    >
-                      <td className="relative p-0 align-middle text-center">
-                        {showDropBefore ? (
-                          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
-                        ) : null}
-                        {showDropAfter ? (
-                          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
-                        ) : null}
-                        {!isCreateRow ? (
-                          <div className="flex items-center justify-center gap-0.5 px-1">
-                            <input
-                              type="checkbox"
-                              className="checkbox checkbox-sm rounded-none border-none"
-                              data-key-value-field="enabled"
-                              checked={row.enabled}
-                              onFocus={() => setFocusedRowId(row.id)}
-                              onChange={event => updateRow(row.id, { enabled: event.target.checked })}
-                            />
-                            <div
-                              className="flex size-8 cursor-grab items-center justify-center text-base-content/45 transition hover:text-base-content active:cursor-grabbing"
-                              draggable
-                              onDragStart={event => {
-                                setDraggedRowId(row.id)
-                                setDropInsertIndex(index)
-                                event.dataTransfer.effectAllowed = 'move'
-                                event.dataTransfer.dropEffect = 'move'
-                                event.dataTransfer.setData('text/plain', row.id)
-                              }}
-                              onDragEnd={() => {
-                                setDraggedRowId(null)
-                                setDropInsertIndex(null)
-                              }}
-                              aria-label="Reorder row"
-                              title="Reorder row"
-                            >
-                              <GripVerticalIcon className="size-4" />
-                            </div>
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="relative p-0 px-2 align-middle">
-                        {showDropBefore ? (
-                          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
-                        ) : null}
-                        {showDropAfter ? (
-                          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
-                        ) : null}
-                        <div className="flex items-center gap-1">
-                          <input
-                            className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
-                            data-key-value-field="key"
-                            data-key-value-focus-target="true"
-                            value={row.key}
-                            placeholder={keyPlaceholder}
-                            onFocus={() => setFocusedRowId(row.id)}
-                            onChange={event => updateRow(row.id, { key: event.target.value })}
-                          />
-                          {warnOnDuplicate && !isCreateRow && duplicateRowIds.has(row.id) ? (
-                            <div
-                              className="flex size-4 shrink-0 items-center justify-center text-warning"
-                              title="This key is overridden later by another enabled row."
-                              aria-label="Duplicate key overridden later"
-                            >
-                              <AlertTriangleIcon className="size-3.5" />
-                            </div>
-                          ) : (
-                            <div className="size-4 shrink-0" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="relative p-0 px-2 align-middle">
-                        {showDropBefore ? (
-                          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
-                        ) : null}
-                        {showDropAfter ? (
-                          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
-                        ) : null}
-                        {valueEditorAsCode ? (
-                          <div data-key-value-field="value" data-key-value-row-id={row.id} onFocusCapture={() => setFocusedRowId(row.id)}>
-                            <CodeEditor
-                              value={row.value}
-                              language="plain"
-                              singleLine
-                              compact
-                              size="small"
-                              hideFocusOutline
-                              className="h-9 border-0 bg-transparent"
-                              extensions={resolvedValueEditorExtensions}
-                              placeholder={valuePlaceholder}
-                              refreshKey={valueEditorRefreshKey}
-                              onChange={nextValue => updateRow(row.id, { value: nextValue })}
-                            />
-                          </div>
-                        ) : (
-                          <input
-                            className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
-                            data-key-value-field="value"
-                            data-key-value-focus-target="true"
-                            value={row.value}
-                            placeholder={valuePlaceholder}
-                            onFocus={() => setFocusedRowId(row.id)}
-                            onChange={event => updateRow(row.id, { value: event.target.value })}
-                          />
-                        )}
-                      </td>
-                      <td className="relative p-0 px-2 align-middle">
-                        {showDropBefore ? (
-                          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
-                        ) : null}
-                        {showDropAfter ? (
-                          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
-                        ) : null}
-                        <input
-                          className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
-                          data-key-value-field="description"
-                          data-key-value-focus-target="true"
-                          value={row.description}
-                          placeholder={descriptionPlaceholder}
-                          onFocus={() => setFocusedRowId(row.id)}
-                          onChange={event => updateRow(row.id, { description: event.target.value })}
-                        />
-                      </td>
-                      <td className="relative p-0 align-middle text-center">
-                        {showDropBefore ? (
-                          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
-                        ) : null}
-                        {showDropAfter ? (
-                          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
-                        ) : null}
-                        {!isCreateRow ? (
-                          <button
-                            type="button"
-                            className="flex size-8 items-center justify-center border-none bg-base-100/70 text-base-content/55 transition hover:bg-base-100 hover:text-base-content"
-                            onClick={() => removeRow(row.id)}
-                            aria-label="Remove row"
-                            title="Remove row"
-                          >
-                            <Trash2Icon className="size-4" />
-                          </button>
-                        ) : null}
-                      </td>
-                    </tr>
+                    <KeyValueEditorRow
+                      row={row}
+                      index={index}
+                      isCreateRow={isCreateRow}
+                      isDragged={draggedRowId === row.id}
+                      showDropBefore={!isCreateRow && draggedRowId !== null && dropInsertIndex === index}
+                      showDropAfter={!isCreateRow && draggedRowId !== null && dropInsertIndex === index + 1}
+                      isDuplicateRow={warnOnDuplicate && !isCreateRow && duplicateRowIds.has(row.id)}
+                      keyPlaceholder={keyPlaceholder}
+                      valuePlaceholder={valuePlaceholder}
+                      descriptionPlaceholder={descriptionPlaceholder}
+                      valueEditorAsCode={valueEditorAsCode}
+                      valueEditorRefreshKey={valueEditorRefreshKey}
+                      resolvedValueEditorExtensions={resolvedValueEditorExtensions}
+                      setFocusedRowId={setFocusedRowId}
+                      updateRow={updateRow}
+                      updateDropInsertIndexFromRow={updateDropInsertIndexFromRow}
+                      commitDroppedRow={commitDroppedRow}
+                      setDraggedRowId={setDraggedRowId}
+                      setDropInsertIndex={setDropInsertIndex}
+                      removeRow={removeRow}
+                    />
                   </Fragment>
                 )
               })}
@@ -688,6 +564,193 @@ export function KeyValueEditor({
     </section>
   )
 }
+
+const KeyValueEditorRow = memo(function KeyValueEditorRow({
+  row,
+  index,
+  isCreateRow,
+  isDragged,
+  showDropBefore,
+  showDropAfter,
+  isDuplicateRow,
+  keyPlaceholder,
+  valuePlaceholder,
+  descriptionPlaceholder,
+  valueEditorAsCode,
+  valueEditorRefreshKey,
+  resolvedValueEditorExtensions,
+  setFocusedRowId,
+  updateRow,
+  updateDropInsertIndexFromRow,
+  commitDroppedRow,
+  setDraggedRowId,
+  setDropInsertIndex,
+  removeRow,
+}: {
+  row: KeyValueRow
+  index: number
+  isCreateRow: boolean
+  isDragged: boolean
+  showDropBefore: boolean
+  showDropAfter: boolean
+  isDuplicateRow: boolean
+  keyPlaceholder: string
+  valuePlaceholder: string
+  descriptionPlaceholder: string
+  valueEditorAsCode: boolean
+  valueEditorRefreshKey?: string
+  resolvedValueEditorExtensions: Extension[]
+  setFocusedRowId: (rowId: string | null) => void
+  updateRow: (id: string, patch: Partial<KeyValueRow>) => void
+  updateDropInsertIndexFromRow: (event: ReactDragEvent<HTMLTableRowElement>, rowIndex: number) => void
+  commitDroppedRow: () => void
+  setDraggedRowId: (rowId: string | null) => void
+  setDropInsertIndex: (index: number | null) => void
+  removeRow: (id: string, focusField?: KeyValueField) => void
+}) {
+  return (
+    <tr
+      className={['border-b border-base-content/10 last:border-b-0', isDragged ? 'opacity-45' : ''].join(' ')}
+      data-key-value-row-id={row.id}
+      onDragOver={event => {
+        if (isCreateRow) {
+          return
+        }
+
+        updateDropInsertIndexFromRow(event, index)
+      }}
+      onDrop={event => {
+        if (isCreateRow) {
+          return
+        }
+
+        event.preventDefault()
+        commitDroppedRow()
+      }}
+    >
+      <td className="relative p-0 align-middle text-center">
+        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
+        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        {!isCreateRow ? (
+          <div className="flex items-center justify-center gap-0.5 px-1">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm rounded-none border-none"
+              data-key-value-field="enabled"
+              checked={row.enabled}
+              onFocus={() => setFocusedRowId(row.id)}
+              onChange={event => updateRow(row.id, { enabled: event.target.checked })}
+            />
+            <div
+              className="flex size-8 cursor-grab items-center justify-center text-base-content/45 transition hover:text-base-content active:cursor-grabbing"
+              draggable
+              onDragStart={event => {
+                setDraggedRowId(row.id)
+                setDropInsertIndex(index)
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.dropEffect = 'move'
+                event.dataTransfer.setData('text/plain', row.id)
+              }}
+              onDragEnd={() => {
+                setDraggedRowId(null)
+                setDropInsertIndex(null)
+              }}
+              aria-label="Reorder row"
+              title="Reorder row"
+            >
+              <GripVerticalIcon className="size-4" />
+            </div>
+          </div>
+        ) : null}
+      </td>
+      <td className="relative p-0 px-2 align-middle">
+        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
+        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        <div className="flex items-center gap-1">
+          <input
+            className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
+            data-key-value-field="key"
+            data-key-value-focus-target="true"
+            value={row.key}
+            placeholder={keyPlaceholder}
+            onFocus={() => setFocusedRowId(row.id)}
+            onChange={event => updateRow(row.id, { key: event.target.value })}
+          />
+          {isDuplicateRow ? (
+            <div
+              className="flex size-4 shrink-0 items-center justify-center text-warning"
+              title="This key is overridden later by another enabled row."
+              aria-label="Duplicate key overridden later"
+            >
+              <AlertTriangleIcon className="size-3.5" />
+            </div>
+          ) : (
+            <div className="size-4 shrink-0" />
+          )}
+        </div>
+      </td>
+      <td className="relative p-0 px-2 align-middle">
+        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
+        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        {valueEditorAsCode ? (
+          <div data-key-value-field="value" data-key-value-row-id={row.id} onFocusCapture={() => setFocusedRowId(row.id)}>
+            <CodeEditor
+              value={row.value}
+              language="plain"
+              singleLine
+              compact
+              size="small"
+              hideFocusOutline
+              className="h-9 border-0 bg-transparent"
+              extensions={resolvedValueEditorExtensions}
+              placeholder={valuePlaceholder}
+              refreshKey={valueEditorRefreshKey}
+              onChange={nextValue => updateRow(row.id, { value: nextValue })}
+            />
+          </div>
+        ) : (
+          <input
+            className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
+            data-key-value-field="value"
+            data-key-value-focus-target="true"
+            value={row.value}
+            placeholder={valuePlaceholder}
+            onFocus={() => setFocusedRowId(row.id)}
+            onChange={event => updateRow(row.id, { value: event.target.value })}
+          />
+        )}
+      </td>
+      <td className="relative p-0 px-2 align-middle">
+        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
+        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        <input
+          className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
+          data-key-value-field="description"
+          data-key-value-focus-target="true"
+          value={row.description}
+          placeholder={descriptionPlaceholder}
+          onFocus={() => setFocusedRowId(row.id)}
+          onChange={event => updateRow(row.id, { description: event.target.value })}
+        />
+      </td>
+      <td className="relative p-0 align-middle text-center">
+        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
+        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        {!isCreateRow ? (
+          <button
+            type="button"
+            className="flex size-8 items-center justify-center border-none bg-base-100/70 text-base-content/55 transition hover:bg-base-100 hover:text-base-content"
+            onClick={() => removeRow(row.id)}
+            aria-label="Remove row"
+            title="Remove row"
+          >
+            <Trash2Icon className="size-4" />
+          </button>
+        ) : null}
+      </td>
+    </tr>
+  )
+})
 
 function stripTrailingCreateRow(rows: KeyValueRow[]) {
   const lastRow = rows[rows.length - 1]
@@ -710,15 +773,32 @@ function buildRows(value: string, currentRows: KeyValueRow[]) {
     id: existingRows[index]?.id ?? row.id,
   }))
 
-  return ensureTrailingEmptyRow(nextRows)
+  return ensureTrailingEmptyRow(nextRows, getNextTrailingCreateRow(currentRows, nextRows))
 }
 
-function ensureTrailingEmptyRow(rows: KeyValueRow[]) {
+function ensureTrailingEmptyRow(rows: KeyValueRow[], trailingCreateRow?: KeyValueRow) {
   if (rows.length === 0 || hasKeyValueContent(rows[rows.length - 1])) {
-    return [...rows, createEmptyKeyValueRow()]
+    return [...rows, trailingCreateRow ?? createEmptyKeyValueRow()]
   }
 
   return rows
+}
+
+function getTrailingCreateRow(rows: KeyValueRow[]) {
+  const lastRow = rows[rows.length - 1]
+  return lastRow && !hasKeyValueContent(lastRow) ? lastRow : undefined
+}
+
+function getNextTrailingCreateRow(currentRows: KeyValueRow[], nextRows: KeyValueRow[]) {
+  const currentTrailingCreateRow = getTrailingCreateRow(currentRows)
+  if (!currentTrailingCreateRow) {
+    return createEmptyKeyValueRow()
+  }
+
+  const nextRowsWithoutTrailingCreateRow = stripTrailingCreateRow(nextRows)
+  const trailingCreateRowWasEdited = nextRowsWithoutTrailingCreateRow.some(row => row.id === currentTrailingCreateRow.id)
+
+  return trailingCreateRowWasEdited ? createEmptyKeyValueRow() : currentTrailingCreateRow
 }
 
 function hasKeyValueContent(row: KeyValueRow) {

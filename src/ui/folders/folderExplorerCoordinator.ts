@@ -1112,8 +1112,9 @@ async function loadItem(selection: Selection) {
     result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord
   )
   const currentEntry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
+  const serializedServerDraft = serializeDetails(serverDraft)
   const current =
-    currentEntry.current && serializeDetails(currentEntry.current) !== serializeDetails(serverDraft)
+    currentEntry.current && currentEntry.serializedCurrent !== serializedServerDraft
       ? currentEntry.current
       : serverDraft
 
@@ -1203,8 +1204,9 @@ async function saveItem(selection: Selection) {
     result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord
   )
   const latestEntry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? createEmptyEntry()
+  const serializedServerDraft = serializeDetails(serverDraft)
   const nextCurrent =
-    latestEntry.current && serializeDetails(latestEntry.current) !== serializeDetails(serverDraft)
+    latestEntry.current && latestEntry.serializedCurrent !== serializedServerDraft
       ? latestEntry.current
       : serverDraft
 
@@ -1274,9 +1276,7 @@ function persistUnsavedDrafts() {
       Object.entries(entries)
         .filter(
           ([key, entry]) =>
-            openKeys.has(key) &&
-            entry.current &&
-            (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base))
+            openKeys.has(key) && entry.current && entry.isDirty
         )
         .map(([key, entry]) => [key, entry.current as DetailsDraft])
     )

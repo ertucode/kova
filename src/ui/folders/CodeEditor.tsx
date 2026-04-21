@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from 'react'
+import { createElement, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
@@ -379,7 +379,7 @@ function centerPositionInView(view: EditorView, position: number) {
   })
 }
 
-export function CodeEditor({
+export const CodeEditor = memo(function CodeEditor({
   ref,
   value,
   language,
@@ -695,4 +695,6 @@ export function CodeEditor({
       />
     </div>
   )
-}
+})
+
+CodeEditor.displayName = 'CodeEditor'

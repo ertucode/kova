@@ -7,7 +7,7 @@ import { RequestDetailsFields } from './RequestDetailsFields'
 import { WebSocketRequestDetailsFields } from './WebSocketRequestDetailsFields'
 import { WebSocketExampleDetailsFields } from './WebSocketExampleDetailsFields'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
-import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
+import { toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 
 export function DetailsPanel() {
@@ -27,9 +27,7 @@ export function DetailsPanel() {
   const displayDraft = lastDraftRef.current ?? draft
   const isLoading = Boolean(selected && (!entry || entry.loading))
   const isSaving = Boolean(entry?.saving)
-  const isDirty = Boolean(
-    entry?.current && (entry.base === null || serializeDetails(entry.current) !== serializeDetails(entry.base))
-  )
+  const isDirty = Boolean(entry?.isDirty)
 
   useEffect(() => {
     if (!selected) {

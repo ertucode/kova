@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CopyIcon, InfoIcon, LibraryBigIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
+import type { Extension } from '@codemirror/state'
 import { getAuthVariableSources } from '@common/Auth'
 import type { RequestScriptError, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
 import { parseCurlRequest } from '@common/curl'
@@ -383,14 +384,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     void RequestExecutionCoordinator.refreshHistory()
   }
 
-  const updateUrl = (nextUrl: string) => {
+  const updateUrl = useCallback((nextUrl: string) => {
+    const latestDraft = draftRef.current
+
     FolderExplorerCoordinator.updateSelectedDraft({
-      ...draft,
+      ...latestDraft,
       url: nextUrl,
-      pathParams: syncPathParamsWithUrl(nextUrl, draft.pathParams),
-      searchParams: syncSearchParamsWithUrl(nextUrl, draft.searchParams),
+      pathParams: syncPathParamsWithUrl(nextUrl, latestDraft.pathParams),
+      searchParams: syncSearchParamsWithUrl(nextUrl, latestDraft.searchParams),
     })
-  }
+  }, [])
 
   const importUrl = (nextUrl: string) => {
     const importedUrlFields = buildImportedHttpUrlFields(nextUrl, draft.bodyType)
@@ -458,21 +461,25 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     return true
   }
 
-  const updatePathParams = (nextPathParams: string) => {
-    FolderExplorerCoordinator.updateSelectedDraft({
-      ...draft,
-      pathParams: nextPathParams,
-      url: syncUrlWithSearchParams(syncUrlWithPathParams(draft.url, nextPathParams), draft.searchParams),
-    })
-  }
+  const updatePathParams = useCallback((nextPathParams: string) => {
+    const latestDraft = draftRef.current
 
-  const updateSearchParams = (nextSearchParams: string) => {
     FolderExplorerCoordinator.updateSelectedDraft({
-      ...draft,
-      searchParams: nextSearchParams,
-      url: syncUrlWithSearchParams(draft.url, nextSearchParams),
+      ...latestDraft,
+      pathParams: nextPathParams,
+      url: syncUrlWithSearchParams(syncUrlWithPathParams(latestDraft.url, nextPathParams), latestDraft.searchParams),
     })
-  }
+  }, [])
+
+  const updateSearchParams = useCallback((nextSearchParams: string) => {
+    const latestDraft = draftRef.current
+
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...latestDraft,
+      searchParams: nextSearchParams,
+      url: syncUrlWithSearchParams(latestDraft.url, nextSearchParams),
+    })
+  }, [])
 
   const formatJsonBody = () => {
     try {
@@ -683,15 +690,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
       {metaTab === 'search-params' ? (
         <section className="min-h-0 flex-1 overflow-auto">
-          <KeyValueEditor
-            label={null}
+          <SearchParamsTab
             value={draft.searchParams}
             onChange={updateSearchParams}
-            keyPlaceholder="page"
-            valuePlaceholder="1"
-            contentClassName="border-t-0"
-            warnOnDuplicate={false}
-            valueEditorAsCode
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
           />
@@ -1013,6 +1014,33 @@ function VariableUsageBanner({
     </div>
   )
 }
+
+const SearchParamsTab = memo(function SearchParamsTab({
+  value,
+  onChange,
+  valueEditorExtensions,
+  valueEditorRefreshKey,
+}: {
+  value: string
+  onChange: (value: string) => void
+  valueEditorExtensions?: Extension[]
+  valueEditorRefreshKey?: string
+}) {
+  return (
+    <KeyValueEditor
+      label={null}
+      value={value}
+      onChange={onChange}
+      keyPlaceholder="page"
+      valuePlaceholder="1"
+      contentClassName="border-t-0"
+      warnOnDuplicate={false}
+      valueEditorAsCode
+      valueEditorExtensions={valueEditorExtensions}
+      valueEditorRefreshKey={valueEditorRefreshKey}
+    />
+  )
+})
 
 function getUsedRequestVariableNames(draft: RequestDetailsDraft) {
   const variableNames = new Set<string>()

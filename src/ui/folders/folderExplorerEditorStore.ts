@@ -125,6 +125,9 @@ export const persistedDraftsSchema = z.record(
 export type EditorEntry = {
   base: DetailsDraft | null
   current: DetailsDraft | null
+  serializedBase: string
+  serializedCurrent: string
+  isDirty: boolean
   loading: boolean
   saving: boolean
   error: string | null
@@ -152,6 +155,9 @@ const initialEntries = Object.fromEntries(
     {
       base: null,
       current: draft,
+      serializedBase: '',
+      serializedCurrent: serializeDetails(draft),
+      isDirty: true,
       loading: false,
       saving: false,
       error: null,
@@ -225,25 +231,36 @@ export const folderExplorerEditorStore = createStore({
         },
       },
     }),
-    entryLoaded: (context, event: { key: string; base: DetailsDraft; current: DetailsDraft }) => ({
-      ...context,
-      entries: {
-        ...context.entries,
-        [event.key]: {
-          ...(context.entries[event.key] ?? createEmptyEntry()),
-          base: event.base,
-          current: event.current,
-          loading: false,
-          error: null,
+    entryLoaded: (context, event: { key: string; base: DetailsDraft; current: DetailsDraft }) => {
+      const serializedBase = serializeDetails(event.base)
+      const serializedCurrent = serializeDetails(event.current)
+
+      return {
+        ...context,
+        entries: {
+          ...context.entries,
+          [event.key]: {
+            ...(context.entries[event.key] ?? createEmptyEntry()),
+            base: event.base,
+            current: event.current,
+            serializedBase,
+            serializedCurrent,
+            isDirty: serializedCurrent !== serializedBase,
+            loading: false,
+            error: null,
+          },
         },
-      },
-    }),
+      }
+    },
     entryLoadFailed: (context, event: { key: string; error: string }) => ({
       ...context,
       entries: {
         ...context.entries,
         [event.key]: {
           ...(context.entries[event.key] ?? createEmptyEntry()),
+          serializedBase: '',
+          serializedCurrent: '',
+          isDirty: false,
           loading: false,
           error: event.error,
         },
@@ -256,6 +273,7 @@ export const folderExplorerEditorStore = createStore({
 
       const key = toSelectionKey(context.selected)
       const entry = context.entries[key] ?? createEmptyEntry()
+      const serializedCurrent = serializeDetails(event.draft)
 
       return {
         ...context,
@@ -264,6 +282,8 @@ export const folderExplorerEditorStore = createStore({
           [key]: {
             ...entry,
             current: event.draft,
+            serializedCurrent,
+            isDirty: entry.base === null || serializedCurrent !== entry.serializedBase,
             error: null,
             version: entry.version + 1,
           },
@@ -272,6 +292,7 @@ export const folderExplorerEditorStore = createStore({
     },
     entryDraftUpdated: (context, event: { key: string; draft: DetailsDraft }) => {
       const entry = context.entries[event.key] ?? createEmptyEntry()
+      const serializedCurrent = serializeDetails(event.draft)
 
       return {
         ...context,
@@ -280,6 +301,8 @@ export const folderExplorerEditorStore = createStore({
           [event.key]: {
             ...entry,
             current: event.draft,
+            serializedCurrent,
+            isDirty: entry.base === null || serializedCurrent !== entry.serializedBase,
             error: null,
             version: entry.version + 1,
           },
@@ -299,6 +322,8 @@ export const folderExplorerEditorStore = createStore({
           [event.key]: {
             ...entry,
             current: entry.base,
+            serializedCurrent: entry.serializedBase,
+            isDirty: false,
             saving: false,
             error: null,
             version: entry.version + 1,
@@ -317,19 +342,27 @@ export const folderExplorerEditorStore = createStore({
         },
       },
     }),
-    entrySaved: (context, event: { key: string; base: DetailsDraft; current: DetailsDraft }) => ({
-      ...context,
-      entries: {
-        ...context.entries,
-        [event.key]: {
-          ...(context.entries[event.key] ?? createEmptyEntry()),
-          base: event.base,
-          current: event.current,
-          saving: false,
-          error: null,
+    entrySaved: (context, event: { key: string; base: DetailsDraft; current: DetailsDraft }) => {
+      const serializedBase = serializeDetails(event.base)
+      const serializedCurrent = serializeDetails(event.current)
+
+      return {
+        ...context,
+        entries: {
+          ...context.entries,
+          [event.key]: {
+            ...(context.entries[event.key] ?? createEmptyEntry()),
+            base: event.base,
+            current: event.current,
+            serializedBase,
+            serializedCurrent,
+            isDirty: serializedCurrent !== serializedBase,
+            saving: false,
+            error: null,
+          },
         },
-      },
-    }),
+      }
+    },
     entrySaveFailed: (context, event: { key: string; error: string }) => ({
       ...context,
       entries: {
@@ -361,6 +394,9 @@ export function createEmptyEntry(): EditorEntry {
   return {
     base: null,
     current: null,
+    serializedBase: '',
+    serializedCurrent: '',
+    isDirty: false,
     loading: false,
     saving: false,
     error: null,
@@ -369,9 +405,7 @@ export function createEmptyEntry(): EditorEntry {
 }
 
 export function isEntryDirty(entry: EditorEntry) {
-  if (!entry.current) return false
-  if (!entry.base) return true
-  return serializeDetails(entry.current) !== serializeDetails(entry.base)
+  return entry.isDirty
 }
 
 export function getSelectedEntry() {
