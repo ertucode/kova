@@ -535,6 +535,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           />
 
           <CodeEditor
+            testId="request-url-editor"
             value={draft.url}
             language="plain"
             singleLine
@@ -967,6 +968,7 @@ function VariableUsageBanner({
         </button>
         <button
           type="button"
+          data-testid="request-search-params-tab-button"
           className={[
             'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
             metaTab === 'search-params'
@@ -1027,18 +1029,20 @@ const SearchParamsTab = memo(function SearchParamsTab({
   valueEditorRefreshKey?: string
 }) {
   return (
-    <KeyValueEditor
-      label={null}
-      value={value}
-      onChange={onChange}
-      keyPlaceholder="page"
-      valuePlaceholder="1"
-      contentClassName="border-t-0"
-      warnOnDuplicate={false}
-      valueEditorAsCode
-      valueEditorExtensions={valueEditorExtensions}
-      valueEditorRefreshKey={valueEditorRefreshKey}
-    />
+    <div data-testid="search-params-tab">
+      <KeyValueEditor
+        label={null}
+        value={value}
+        onChange={onChange}
+        keyPlaceholder="page"
+        valuePlaceholder="1"
+        contentClassName="border-t-0"
+        warnOnDuplicate={false}
+        valueEditorAsCode
+        valueEditorExtensions={valueEditorExtensions}
+        valueEditorRefreshKey={valueEditorRefreshKey}
+      />
+    </div>
   )
 })
 

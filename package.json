@@ -17,6 +17,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest",
+    "test:e2e": "npm run transpile:electron && playwright test",
     "test:electron": "vitest run src/electron src/common",
     "test:frontend": "vitest run src/ui",
     "test:all": "vitest run",
@@ -92,6 +93,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/lodash": "^4.17.20",
     "@types/node": "^24.10.1",
@@ -112,6 +114,7 @@
     "globals": "^16.5.0",
     "happy-dom": "^20.0.11",
     "npm-run-all": "^4.1.5",
+    "playwright": "^1.59.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",

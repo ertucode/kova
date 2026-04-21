@@ -381,6 +381,7 @@ function centerPositionInView(view: EditorView, position: number) {
 
 export const CodeEditor = memo(function CodeEditor({
   ref,
+  testId,
   value,
   language,
   placeholder,
@@ -402,6 +403,7 @@ export const CodeEditor = memo(function CodeEditor({
   refreshKey,
 }: {
   ref?: Ref<CodeEditorHandle>
+  testId?: string
   value: string
   language: CodeEditorLanguage
   placeholder?: string
@@ -674,6 +676,7 @@ export const CodeEditor = memo(function CodeEditor({
 
   return (
     <div
+      data-testid={testId}
       className={twMerge(
         'flex w-full min-h-0 flex-1 overflow-visible rounded-none border border-base-content/10 bg-base-100/70 text-base-content',
         readOnly ? 'overflow-auto' : '',
