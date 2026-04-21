@@ -1,0 +1,1 @@
+- search param çok fazla varsa yukardakilere yazınca en aşağı scroll oluyo
