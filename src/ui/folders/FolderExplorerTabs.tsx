@@ -102,7 +102,7 @@ export function FolderExplorerTabs() {
     }
 
     const activeTabElement = tabsContainerRef.current?.querySelector<HTMLElement>(`[data-tab-id="${activeTabId}"]`)
-    activeTabElement?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+    activeTabElement?.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
   }, [activeTabId, tabsWithState])
 
   const clearDragState = () => {

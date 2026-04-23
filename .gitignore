@@ -28,3 +28,4 @@ vendor-bin/**
 *.sln
 *.sw?
 ORTAKAPP.postman_collection.json
+trace.json

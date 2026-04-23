@@ -69,7 +69,7 @@ export function FolderExplorer() {
       const selectedRow = sidebarScrollContainerRef.current?.querySelector<HTMLElement>(
         `[data-selection-key="${CSS.escape(selectionKey)}"]`
       )
-      selectedRow?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      selectedRow?.scrollIntoView({ behavior: 'instant', block: 'center' })
     })
 
     return () => window.cancelAnimationFrame(frameId)
