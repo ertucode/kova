@@ -69,7 +69,7 @@ export function FolderExplorer() {
       const selectedRow = sidebarScrollContainerRef.current?.querySelector<HTMLElement>(
         `[data-selection-key="${CSS.escape(selectionKey)}"]`
       )
-      selectedRow?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      selectedRow?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
 
     return () => window.cancelAnimationFrame(frameId)
@@ -91,7 +91,8 @@ export function FolderExplorer() {
       ? visibleNodes.findIndex(node => node.itemType === selected.itemType && node.id === selected.id)
       : -1
     const fallbackIndex = direction > 0 ? 0 : visibleNodes.length - 1
-    const nextIndex = currentIndex < 0 ? fallbackIndex : Math.max(0, Math.min(visibleNodes.length - 1, currentIndex + direction))
+    const nextIndex =
+      currentIndex < 0 ? fallbackIndex : Math.max(0, Math.min(visibleNodes.length - 1, currentIndex + direction))
     const nextNode = visibleNodes[nextIndex]
     if (!nextNode) {
       return
@@ -317,7 +318,10 @@ function flattenVisibleNodes(nodes: TreeNode[], forceExpanded: boolean, expanded
   const visit = (node: TreeNode) => {
     flattened.push(node)
 
-    if ((forceExpanded || expandedIds.includes(node.id)) && (node.itemType === 'folder' || node.itemType === 'request')) {
+    if (
+      (forceExpanded || expandedIds.includes(node.id)) &&
+      (node.itemType === 'folder' || node.itemType === 'request')
+    ) {
       node.children.forEach(visit)
     }
   }
