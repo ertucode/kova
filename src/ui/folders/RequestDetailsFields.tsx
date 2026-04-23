@@ -482,11 +482,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     })
   }, [])
 
-  const formatJsonBody = () => {
+  const formatJsonBody = async () => {
     try {
-      const formatted = formatJson5PreferringJson(draft.body)
+      const latestDraft = draftRef.current
+      const formatted = await formatJson5PreferringJson(latestDraft.body)
       FolderExplorerCoordinator.updateSelectedDraft({
-        ...draft,
+        ...latestDraft,
         body: formatted,
       })
     } catch {

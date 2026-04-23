@@ -90,6 +90,7 @@ const singleLineTransactionFilter = EditorState.transactionFilter.of(transaction
   ]
 })
 const readOnlyExtension = EditorState.readOnly.of(true)
+const tabSizeExtension = EditorState.tabSize.of(2)
 const foldGutterExtension = foldGutter({ markerDOM: open => createFoldMarker(open) })
 const lintGutterExtension = lintGutter()
 const lineNumbersExtension = lineNumbers()
@@ -601,6 +602,7 @@ export const CodeEditor = memo(function CodeEditor({
     const nextExtensions: Extension[] = [
       selectionMatchesExtension,
       ...baseSetupExtensions,
+      tabSizeExtension,
       editorTheme,
       syntaxHighlighting(editorHighlightStyle),
       selectionMatchTheme,
