@@ -167,10 +167,13 @@ export function FolderExplorerTabs() {
                   const changed = await FolderExplorerCoordinator.pinTab(tab.id)
                   if (!changed) {
                     // reveal in explorer
-                    FolderExplorerCoordinator.selectItem(
+                    await FolderExplorerCoordinator.selectItem(
                       { itemType: tab.itemType, id: tab.itemId },
                       { mode: 'preview' }
                     )
+                    folderExplorerEditorStore.trigger.selectionScrollRequested({
+                      selection: { itemType: tab.itemType, id: tab.itemId },
+                    })
                   }
                 }}
                 onContextMenu={event => menu.onRightClick(event, tab)}

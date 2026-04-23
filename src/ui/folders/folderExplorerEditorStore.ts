@@ -136,6 +136,7 @@ export type EditorEntry = {
 
 type FolderExplorerEditorContext = {
   selected: Selection | null
+  selectionScrollTarget: Selection | null
   tabs: FolderExplorerTabRecord[]
   activeTabId: string | null
   expandedIds: string[]
@@ -169,6 +170,7 @@ const initialEntries = Object.fromEntries(
 export const folderExplorerEditorStore = createStore({
   context: {
     selected: persistedUiState.selected,
+    selectionScrollTarget: null,
     tabs: [],
     activeTabId: null,
     expandedIds: persistedUiState.expandedIds,
@@ -181,6 +183,10 @@ export const folderExplorerEditorStore = createStore({
     selectionChanged: (context, event: { selection: Selection | null }) => ({
       ...context,
       selected: event.selection,
+    }),
+    selectionScrollRequested: (context, event: { selection: Selection }) => ({
+      ...context,
+      selectionScrollTarget: event.selection,
     }),
     tabsStateReplaced: (context, event: { tabs: FolderExplorerTabRecord[]; activeTabId: string | null }) => ({
       ...context,

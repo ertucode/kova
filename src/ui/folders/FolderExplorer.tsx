@@ -36,9 +36,11 @@ export function FolderExplorer() {
   const sidebarTab = useSelector(folderExplorerEditorStore, state => state.context.sidebarTab)
   const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const selectionScrollTarget = useSelector(folderExplorerEditorStore, state => state.context.selectionScrollTarget)
   const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
+  const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     void FolderExplorerCoordinator.initialize()
@@ -56,6 +58,22 @@ export function FolderExplorer() {
     [expandedIds, normalizedSearch.length, visibleRoots]
   )
   const canDrag = normalizedSearch.length === 0 && createDraft === null
+
+  useEffect(() => {
+    if (sidebarTab !== 'requests' || !selectionScrollTarget) {
+      return
+    }
+
+    const selectionKey = toSelectionKey(selectionScrollTarget)
+    const frameId = window.requestAnimationFrame(() => {
+      const selectedRow = sidebarScrollContainerRef.current?.querySelector<HTMLElement>(
+        `[data-selection-key="${CSS.escape(selectionKey)}"]`
+      )
+      selectedRow?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [selectionScrollTarget, sidebarTab])
 
   const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
@@ -228,7 +246,7 @@ export function FolderExplorer() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto py-3">
+          <div ref={sidebarScrollContainerRef} className="min-h-0 flex-1 overflow-auto py-3">
             {createDraft?.parentFolderId === null ? (
               <DraftRow
                 value={createDraft.name}

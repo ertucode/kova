@@ -90,6 +90,7 @@ export function ExplorerRow({
     <div className="relative">
       {showDropBefore ? <div className="pointer-events-none absolute inset-x-3 top-0 z-10 h-0.5 bg-primary" /> : null}
       <div
+        data-selection-key={rowKey}
         className={[
           'group flex h-7 items-center gap-1 border pr-1 transition',
           isSelected
