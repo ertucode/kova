@@ -14,7 +14,7 @@ import {
   syncUrlWithSearchParams,
 } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
-import { formatJson5 } from '@common/Json5'
+import { formatJson5PreferringJson } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import { confirmation } from '@/lib/components/confirmation'
@@ -484,7 +484,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const formatJsonBody = () => {
     try {
-      const formatted = formatJson5(draft.body)
+      const formatted = formatJson5PreferringJson(draft.body)
       FolderExplorerCoordinator.updateSelectedDraft({
         ...draft,
         body: formatted,
@@ -912,7 +912,11 @@ function ScriptDocumentationButton({
     return button
   }
 
-  return <Tooltip content={tooltip} placement="left">{button}</Tooltip>
+  return (
+    <Tooltip content={tooltip} placement="left">
+      {button}
+    </Tooltip>
+  )
 }
 
 const RESPONSE_VISUALIZER_PLACEHOLDER = `export default function ResponseVisualizer() {
@@ -1096,7 +1100,6 @@ function getMethodTone(method: RequestMethod) {
   }
 }
 
-
 function isParamBodyType(bodyType: RequestBodyType) {
   return bodyType === 'form-data' || bodyType === 'x-www-form-urlencoded'
 }
@@ -1220,7 +1223,6 @@ if (typeof document !== 'undefined' && !document.getElementById('request-loading
   `
   document.head.appendChild(styleElement)
 }
-
 
 export function getActiveSearchParam(url: string, caretPos: number) {
   const queryStart = url.indexOf('?')
