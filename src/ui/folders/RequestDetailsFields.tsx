@@ -22,6 +22,7 @@ import { toast } from '@/lib/components/toast'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { dialogActions } from '@/global/dialogStore'
 import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
+import { Tooltip } from '../components/Tooltip'
 import { HeadersEditor } from './HeadersEditor'
 import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage, type CodeEditorPasteParams } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
@@ -738,7 +739,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         <section className="min-h-0 flex-1">
           <div className="relative h-full">
             <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
-              <div className="tooltip tooltip-left" data-tip="Copy">
+              <Tooltip content="Copy" placement="left">
                 <button
                   type="button"
                   className="inline-flex h-8 items-center justify-center rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
@@ -749,7 +750,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                 >
                   <CopyIcon className="size-4" />
                 </button>
-              </div>
+              </Tooltip>
               <ScriptDocumentationButton
                 phase="response-visualizer"
                 mode="examples"
@@ -911,11 +912,7 @@ function ScriptDocumentationButton({
     return button
   }
 
-  return (
-    <div className="tooltip tooltip-left" data-tip={tooltip}>
-      {button}
-    </div>
-  )
+  return <Tooltip content={tooltip} placement="left">{button}</Tooltip>
 }
 
 const RESPONSE_VISUALIZER_PLACEHOLDER = `export default function ResponseVisualizer() {

@@ -7,9 +7,11 @@ import {
   type ForgivingContextMenuItem,
   useContextMenu,
 } from '@/lib/components/context-menu'
+import { Tooltip } from '../components/Tooltip'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+import type { ExplorerItem } from '@common/Explorer'
 
 type FolderExplorerTabViewModel = {
   id: string
@@ -21,6 +23,7 @@ type FolderExplorerTabViewModel = {
   createdAt: number
   updatedAt: number
   name: string
+  fullPath: string
   isSaving: boolean
   isDirty: boolean
   method: string | null
@@ -38,33 +41,36 @@ export function FolderExplorerTabs() {
   const tabsContainerRef = useRef<HTMLDivElement | null>(null)
   const menu = useContextMenu<FolderExplorerTabViewModel>()
 
-  const tabsWithState = useMemo<FolderExplorerTabViewModel[]>(
-    () =>
-      tabs.map(tab => {
-        const entry = entries[`${tab.itemType}:${tab.itemId}`]
-        const item = items.find(currentItem => currentItem.itemType === tab.itemType && currentItem.id === tab.itemId)
-        return {
-          ...tab,
-          name: entry?.current?.name ?? item?.name ?? 'Untitled',
-          isSaving: Boolean(entry?.saving),
-          isDirty: Boolean(entry && isEntryDirty(entry)),
-          method:
-            entry?.current?.itemType === 'request'
-              ? entry.current.method
-              : item?.itemType === 'request'
-                ? item.method
-                : null,
-          requestType:
-            entry?.current?.itemType === 'request'
-              ? entry.current.requestType
-              : item?.itemType === 'request'
-                ? item.requestType
-                : null,
-          exampleType: item?.itemType === 'example' ? item.exampleType : null,
-        }
-      }),
-    [entries, items, tabs]
-  )
+  const tabsWithState = useMemo<FolderExplorerTabViewModel[]>(() => {
+    const itemMap = new Map(items.map(item => [`${item.itemType}:${item.id}`, item] as const))
+
+    return tabs.map(tab => {
+      const entry = entries[`${tab.itemType}:${tab.itemId}`]
+      const item = itemMap.get(`${tab.itemType}:${tab.itemId}`)
+      const name = entry?.current?.name ?? item?.name ?? 'Untitled'
+
+      return {
+        ...tab,
+        name,
+        fullPath: buildItemPath(itemMap, { itemType: tab.itemType, id: tab.itemId }, name),
+        isSaving: Boolean(entry?.saving),
+        isDirty: Boolean(entry && isEntryDirty(entry)),
+        method:
+          entry?.current?.itemType === 'request'
+            ? entry.current.method
+            : item?.itemType === 'request'
+              ? item.method
+              : null,
+        requestType:
+          entry?.current?.itemType === 'request'
+            ? entry.current.requestType
+            : item?.itemType === 'request'
+              ? item.requestType
+              : null,
+        exampleType: item?.itemType === 'example' ? item.exampleType : null,
+      }
+    })
+  }, [entries, items, tabs])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -153,81 +159,88 @@ export function FolderExplorerTabs() {
           return (
             <div key={tab.id} data-tab-id={tab.id} className="relative flex shrink-0">
               {showDropBefore ? <div className="absolute inset-y-1 -left-0.5 w-0.5 rounded-full bg-primary" /> : null}
-              <div
-                draggable
-                className={[
-                  'group flex min-w-[180px] max-w-[280px] items-center gap-2 rounded-xl border px-3 text-sm transition',
-                  isActive
-                    ? 'border-base-content/12 bg-base-100 text-base-content shadow-[0_10px_24px_rgba(0,0,0,0.10)]'
-                    : 'border-transparent bg-base-200/40 text-base-content/70 hover:border-base-content/10 hover:bg-base-200/65',
-                  draggedTabId === tab.id ? 'opacity-50' : '',
-                ].join(' ')}
-                onClick={() => void FolderExplorerCoordinator.activateTab(tab.id)}
-                onDoubleClick={async () => {
-                  const changed = await FolderExplorerCoordinator.pinTab(tab.id)
-                  if (!changed) {
-                    // reveal in explorer
-                    await FolderExplorerCoordinator.selectItem(
-                      { itemType: tab.itemType, id: tab.itemId },
-                      { mode: 'preview' }
-                    )
-                    folderExplorerEditorStore.trigger.selectionScrollRequested({
-                      selection: { itemType: tab.itemType, id: tab.itemId },
-                    })
-                  }
-                }}
-                onContextMenu={event => menu.onRightClick(event, tab)}
-                onDragStart={event => {
-                  setDraggedTabId(tab.id)
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', tab.id)
-                }}
-                onDragEnd={clearDragState}
-                onDragOver={event => {
-                  event.preventDefault()
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  const nextIndex = event.clientX < rect.left + rect.width / 2 ? index : index + 1
-                  setDropIndex(nextIndex)
-                  event.dataTransfer.dropEffect = 'move'
-                }}
-                onDrop={event => {
-                  event.preventDefault()
-                  void handleDrop(dropIndex ?? index)
-                }}
+              <Tooltip
+                content={tab.fullPath}
+                placement="top"
+                className="h-full"
+                tooltipClassName="before:max-w-[520px] before:whitespace-pre-wrap before:text-left"
               >
-                <div className="flex shrink-0 items-center justify-center text-base-content/55">
-                  {tab.itemType === 'folder' ? (
-                    <FolderIcon className="size-4" />
-                  ) : tab.itemType === 'request' ? (
-                    <RequestMethodGlyph method={tab.method} requestType={tab.requestType} />
-                  ) : (
-                    <ExampleGlyph exampleType={tab.exampleType} />
-                  )}
-                </div>
-
-                <div className={['min-w-0 flex-1 truncate', tab.isPinned ? '' : 'italic'].join(' ')}>{tab.name}</div>
-
-                {tab.isSaving || tab.isDirty ? (
-                  <div
-                    className={['size-2 shrink-0 rounded-full', tab.isSaving ? 'bg-info' : 'bg-warning'].join(' ')}
-                    title={tab.isSaving ? 'Saving changes' : 'Unsaved changes'}
-                    aria-label={tab.isSaving ? 'Saving changes' : 'Unsaved changes'}
-                  />
-                ) : null}
-
-                <button
-                  type="button"
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-base-content/45 transition hover:bg-base-200 hover:text-base-content"
-                  onClick={event => {
-                    event.stopPropagation()
-                    void FolderExplorerCoordinator.closeTab(tab.id)
+                <div
+                  draggable
+                  className={[
+                    'group flex h-full w-[220px] shrink-0 items-center gap-2 rounded-xl border px-3 text-sm transition',
+                    isActive
+                      ? 'border-base-content/12 bg-base-100 text-base-content shadow-[0_10px_24px_rgba(0,0,0,0.10)]'
+                      : 'border-transparent bg-base-200/40 text-base-content/70 hover:border-base-content/10 hover:bg-base-200/65',
+                    draggedTabId === tab.id ? 'opacity-50' : '',
+                  ].join(' ')}
+                  onClick={() => void FolderExplorerCoordinator.activateTab(tab.id)}
+                  onDoubleClick={async () => {
+                    const changed = await FolderExplorerCoordinator.pinTab(tab.id)
+                    if (!changed) {
+                      // reveal in explorer
+                      await FolderExplorerCoordinator.selectItem(
+                        { itemType: tab.itemType, id: tab.itemId },
+                        { mode: 'preview' }
+                      )
+                      folderExplorerEditorStore.trigger.selectionScrollRequested({
+                        selection: { itemType: tab.itemType, id: tab.itemId },
+                      })
+                    }
                   }}
-                  aria-label="Close tab"
-                  title="Close tab"
+                  onContextMenu={event => menu.onRightClick(event, tab)}
+                  onDragStart={event => {
+                    setDraggedTabId(tab.id)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', tab.id)
+                  }}
+                  onDragEnd={clearDragState}
+                  onDragOver={event => {
+                    event.preventDefault()
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    const nextIndex = event.clientX < rect.left + rect.width / 2 ? index : index + 1
+                    setDropIndex(nextIndex)
+                    event.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDrop={event => {
+                    event.preventDefault()
+                    void handleDrop(dropIndex ?? index)
+                  }}
                 >
-                  <XIcon className="size-3.5" />
-                </button>
-              </div>
+                  <div className="flex shrink-0 items-center justify-center text-base-content/55">
+                    {tab.itemType === 'folder' ? (
+                      <FolderIcon className="size-4" />
+                    ) : tab.itemType === 'request' ? (
+                      <RequestMethodGlyph method={tab.method} requestType={tab.requestType} />
+                    ) : (
+                      <ExampleGlyph exampleType={tab.exampleType} />
+                    )}
+                  </div>
+
+                  <div className={['min-w-0 flex-1 truncate', tab.isPinned ? '' : 'italic'].join(' ')}>{tab.name}</div>
+
+                  {tab.isSaving || tab.isDirty ? (
+                    <div
+                      className={['size-2 shrink-0 rounded-full', tab.isSaving ? 'bg-info' : 'bg-warning'].join(' ')}
+                      title={tab.isSaving ? 'Saving changes' : 'Unsaved changes'}
+                      aria-label={tab.isSaving ? 'Saving changes' : 'Unsaved changes'}
+                    />
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-base-content/45 transition hover:bg-base-200 hover:text-base-content"
+                    onClick={event => {
+                      event.stopPropagation()
+                      void FolderExplorerCoordinator.closeTab(tab.id)
+                    }}
+                    aria-label="Close tab"
+                    title="Close tab"
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </div>
+              </Tooltip>
               {showDropAfter ? <div className="absolute inset-y-1 -right-0.5 w-0.5 rounded-full bg-primary" /> : null}
             </div>
           )
@@ -342,6 +355,48 @@ function RequestMethodGlyph({
       {method === 'DELETE' ? 'DEL' : method}
     </span>
   )
+}
+
+function buildItemPath(
+  itemMap: Map<string, ExplorerItem>,
+  selection: { itemType: 'folder' | 'request' | 'example'; id: string },
+  currentName: string
+) {
+  const item = itemMap.get(`${selection.itemType}:${selection.id}`)
+  if (!item) {
+    return currentName
+  }
+
+  if (item.itemType === 'folder') {
+    return [...getFolderPathSegments(itemMap, item.parentFolderId), currentName].join(' / ')
+  }
+
+  if (item.itemType === 'request') {
+    return [...getFolderPathSegments(itemMap, item.parentFolderId), currentName].join(' / ')
+  }
+
+  const request = itemMap.get(`request:${item.requestId}`)
+  const requestPath =
+    request?.itemType === 'request' ? [...getFolderPathSegments(itemMap, request.parentFolderId), request.name] : []
+
+  return [...requestPath, currentName].join(' / ')
+}
+
+function getFolderPathSegments(itemMap: Map<string, ExplorerItem>, parentFolderId: string | null) {
+  const segments: string[] = []
+  let currentFolderId = parentFolderId
+
+  while (currentFolderId) {
+    const folder = itemMap.get(`folder:${currentFolderId}`)
+    if (!folder || folder.itemType !== 'folder') {
+      break
+    }
+
+    segments.unshift(folder.name)
+    currentFolderId = folder.parentFolderId
+  }
+
+  return segments
 }
 
 function ExampleGlyph({ exampleType }: { exampleType: 'http' | 'websocket' | null }) {

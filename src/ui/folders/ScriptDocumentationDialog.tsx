@@ -2,6 +2,7 @@ import { CopyIcon } from 'lucide-react'
 import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
 import { toast } from '@/lib/components/toast'
+import { Tooltip } from '../components/Tooltip'
 import { CodeEditor } from './CodeEditor'
 import { scriptDocumentationByPhase, type ScriptDocumentationPhase } from './scriptDocumentation'
 
@@ -66,7 +67,7 @@ export function ScriptDocumentationDialog({
           <section key={example.title} className="mt-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h4 className="m-0">{example.title}</h4>
-              <div className="tooltip tooltip-left" data-tip="Copy example">
+              <Tooltip content="Copy example" placement="left">
                 <button
                   type="button"
                   className="inline-flex h-8 items-center justify-center rounded-lg border border-base-content/10 bg-base-100/80 px-2.5 text-base-content/60 transition hover:border-base-content/20 hover:text-base-content"
@@ -75,7 +76,7 @@ export function ScriptDocumentationDialog({
                 >
                   <CopyIcon className="size-4" />
                 </button>
-              </div>
+              </Tooltip>
             </div>
             <div className="overflow-hidden rounded-2xl border border-base-content/10 bg-base-200/40 shadow-sm">
               <CodeEditor

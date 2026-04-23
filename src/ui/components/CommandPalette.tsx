@@ -9,6 +9,7 @@ import Fuse from 'fuse.js'
 import { shortcutCustomizationHelpers, shortcutCustomizationStore } from '@/lib/hooks/shortcutCustomization'
 import { useSelector } from '@xstate/store/react'
 import { dialogActions } from '@/global/dialogStore'
+import { Tooltip } from './Tooltip'
 
 export const CommandPalette = function CommandPalette(_props: {}) {
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -288,7 +289,7 @@ export const CommandPalette = function CommandPalette(_props: {}) {
           )}
         />
 
-        <div className="tooltip tooltip-left" data-tip="Search by keymap (⌘+Esc)">
+        <Tooltip content="Search by keymap (⌘+Esc)" placement="left">
           <button
             onClick={() => {
               setIsSearchingByKeymap(!isSearchingByKeymap)
@@ -303,7 +304,7 @@ export const CommandPalette = function CommandPalette(_props: {}) {
           >
             <KeyboardIcon className="w-4 h-4" />
           </button>
-        </div>
+        </Tooltip>
       </div>
       <div className="overflow-y-auto max-h-[50vh] h-[50vh]" ref={containerRef}>
         <div className="space-y-1 min-h-full">

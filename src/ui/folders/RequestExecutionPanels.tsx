@@ -6,6 +6,7 @@ import type { RequestConsoleEntry, RequestExecutionRecord, RequestHistoryListIte
 import { getWindowElectron } from '@/getWindowElectron'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toast } from '@/lib/components/toast'
+import { Tooltip } from '../components/Tooltip'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { SseTranscript } from './SseTranscript'
 
@@ -230,11 +231,15 @@ function ScriptErrorsSection({ errors }: { errors: RequestScriptError[] }) {
   const detailedMessage = errors.map(error => error.detailedMessage).join('\n\n')
 
   return (
-    <div className="tooltip tooltip-left before:max-w-[680px] before:whitespace-pre-wrap before:text-left" data-tip={detailedMessage}>
+    <Tooltip
+      content={detailedMessage}
+      placement="left"
+      tooltipClassName="before:max-w-[680px] before:whitespace-pre-wrap before:text-left"
+    >
       <div className="cursor-help">
         <ExecutionSection title="Script Errors" value={compactMessage} />
       </div>
-    </div>
+    </Tooltip>
   )
 }
 
