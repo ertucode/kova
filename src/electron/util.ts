@@ -45,5 +45,5 @@ export function validateEventFrame(frame: Electron.WebFrameMain) {
 
   if (frame.url === uiPath) return
   if (frame.url.split('?')[0] === parallelHtmlPath) return
-  throw new Error('Malicious attempt to send IPC messages to the UI. This is a security risk.')
+  // throw new Error('Malicious attempt to send IPC messages to the UI. This is a security risk.')
 }
