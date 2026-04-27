@@ -3,6 +3,7 @@ import {
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+  DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
   type AppSettingsRecord,
   type UpdateAppSettingsInput,
@@ -30,6 +31,7 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
     warnBeforeRequestAfterSeconds: DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
     responseBodyDisplayMode: DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
     compactRequestView: DEFAULT_COMPACT_REQUEST_VIEW,
+    vimMode: DEFAULT_VIM_MODE,
     createdAt: now,
     updatedAt: now,
   }
@@ -51,6 +53,10 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
     return GenericError.Message('Invalid compact request view setting')
   }
 
+  if (typeof input.vimMode !== 'boolean') {
+    return GenericError.Message('Invalid vim mode setting')
+  }
+
   try {
     const db = getDb()
     const current = await getAppSettings()
@@ -60,6 +66,7 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
       warnBeforeRequestAfterSeconds: Math.trunc(input.warnBeforeRequestAfterSeconds),
       responseBodyDisplayMode: input.responseBodyDisplayMode,
       compactRequestView: input.compactRequestView,
+      vimMode: input.vimMode,
       createdAt: current.createdAt,
       updatedAt,
     }
@@ -83,6 +90,7 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     warnBeforeRequestAfterSeconds: value.warnBeforeRequestAfterSeconds,
     responseBodyDisplayMode,
     compactRequestView: value.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
+    vimMode: value.vimMode ?? DEFAULT_VIM_MODE,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }

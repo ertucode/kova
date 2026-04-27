@@ -16,6 +16,9 @@ import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { twMerge } from 'tailwind-merge'
 import { Vim, getCM, vim } from '@replit/codemirror-vim'
+import { useSelector } from '@xstate/store/react'
+import { DEFAULT_VIM_MODE } from '@common/AppSettings'
+import { appSettingsStore } from '@/global/appSettingsStore'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'
 
@@ -400,7 +403,7 @@ export const CodeEditor = memo(function CodeEditor({
   onChange,
   onBlur,
   linePaddingOverride,
-  vimMode = true,
+  vimMode,
   refreshKey,
 }: {
   ref?: Ref<CodeEditorHandle>
@@ -426,6 +429,8 @@ export const CodeEditor = memo(function CodeEditor({
   refreshKey?: string
 }) {
   const editorViewRef = useRef<EditorView | null>(null)
+  const vimModeSetting = useSelector(appSettingsStore, state => state.context.settings?.vimMode ?? DEFAULT_VIM_MODE)
+  const resolvedVimMode = vimMode ?? vimModeSetting
   const onChangeRef = useRef(onChange)
   const onBlurRef = useRef(onBlur)
   const onPasteTextRef = useRef(onPasteText)
@@ -512,12 +517,12 @@ export const CodeEditor = memo(function CodeEditor({
     (view: EditorView) => {
       editorViewRef.current = view
 
-      const cm = vimMode ? getCM(view) : null
+      const cm = resolvedVimMode ? getCM(view) : null
       if (cm && !readOnly) {
         Vim.handleKey(cm, 'i', 'user')
       }
     },
-    [readOnly, vimMode]
+    [readOnly, resolvedVimMode]
   )
 
   const languageExtension = useMemo(() => {
@@ -608,7 +613,7 @@ export const CodeEditor = memo(function CodeEditor({
       selectionMatchTheme,
     ]
 
-    if (vimMode) {
+    if (resolvedVimMode) {
       nextExtensions.unshift(vimExtension)
     }
 
@@ -673,7 +678,7 @@ export const CodeEditor = memo(function CodeEditor({
     showLineNumbers,
     singleLine,
     size,
-    vimMode,
+    resolvedVimMode,
   ])
 
   return (

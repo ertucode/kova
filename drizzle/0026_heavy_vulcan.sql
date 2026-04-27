@@ -1,0 +1,1 @@
+ALTER TABLE `app_settings` ADD `vim_mode` integer DEFAULT false NOT NULL;

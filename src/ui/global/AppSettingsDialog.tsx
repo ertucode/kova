@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GenericResult } from '@common/GenericError'
 import { errorResponseToMessage } from '@common/GenericError'
 import { useSelector } from '@xstate/store/react'
-import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
+import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, DEFAULT_COMPACT_REQUEST_VIEW, DEFAULT_VIM_MODE } from '@common/AppSettings'
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
 import { getWindowElectron } from '@/getWindowElectron'
 import { Dialog } from '@/lib/components/dialog'
@@ -17,6 +17,7 @@ export function AppSettingsDialog() {
   const [warnBeforeRequestAfterSeconds, setWarnBeforeRequestAfterSeconds] = useState('10')
   const [responseBodyDisplayMode, setResponseBodyDisplayMode] = useState<(typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]>('raw')
   const [compactRequestView, setCompactRequestView] = useState(DEFAULT_COMPACT_REQUEST_VIEW)
+  const [vimMode, setVimMode] = useState(DEFAULT_VIM_MODE)
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
   const [databaseDrafts, setDatabaseDrafts] = useState<Record<string, { name: string; path: string }>>({})
   const [databaseLoading, setDatabaseLoading] = useState(false)
@@ -31,6 +32,7 @@ export function AppSettingsDialog() {
       setWarnBeforeRequestAfterSeconds(String(settings.warnBeforeRequestAfterSeconds))
       setResponseBodyDisplayMode(settings.responseBodyDisplayMode)
       setCompactRequestView(settings.compactRequestView)
+      setVimMode(settings.vimMode)
     }
   }, [settings])
 
@@ -49,6 +51,7 @@ export function AppSettingsDialog() {
       warnBeforeRequestAfterSeconds: nextValue,
       responseBodyDisplayMode,
       compactRequestView,
+      vimMode,
     })
 
     if (success) {
@@ -314,6 +317,21 @@ export function AppSettingsDialog() {
               onChange={event => setCompactRequestView(event.target.checked)}
             />
             <span className="text-sm text-base-content">Compact request view</span>
+          </label>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
+          <div className="text-sm font-medium text-base-content">Editor behavior</div>
+          <p className="mt-1 text-sm text-base-content/60">Enable Vim keybindings in request and script editors.</p>
+
+          <label className="mt-4 inline-flex items-center gap-3">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm rounded-md"
+              checked={vimMode}
+              onChange={event => setVimMode(event.target.checked)}
+            />
+            <span className="text-sm text-base-content">Enable Vim mode</span>
           </label>
         </div>
 

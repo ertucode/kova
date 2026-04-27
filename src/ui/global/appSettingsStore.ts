@@ -2,6 +2,7 @@ import { createStore } from '@xstate/store'
 import {
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+  DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
   type AppSettingsResponseBodyDisplayMode,
   type AppSettingsRecord,
@@ -73,6 +74,7 @@ export namespace AppSettingsCoordinator {
     warnBeforeRequestAfterSeconds: number
     responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
     compactRequestView: boolean
+    vimMode: boolean
   }) {
     appSettingsStore.trigger.savingStarted()
 
@@ -94,6 +96,7 @@ export namespace AppSettingsCoordinator {
       warnBeforeRequestAfterSeconds: current?.warnBeforeRequestAfterSeconds ?? DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
       responseBodyDisplayMode: mode,
       compactRequestView: current?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
+      vimMode: current?.vimMode ?? DEFAULT_VIM_MODE,
     })
 
     if (!result.success) {
@@ -119,4 +122,8 @@ export function getResponseBodyDisplayMode() {
 
 export function getCompactRequestView() {
   return appSettingsStore.getSnapshot().context.settings?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW
+}
+
+export function getVimMode() {
+  return appSettingsStore.getSnapshot().context.settings?.vimMode ?? DEFAULT_VIM_MODE
 }

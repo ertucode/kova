@@ -95,6 +95,7 @@ export const appSettings = sqliteTable('app_settings', {
   warnBeforeRequestAfterSeconds: integer('warn_before_request_after_seconds').notNull().default(10),
   responseBodyDisplayMode: text('response_body_display_mode').notNull().default('raw'),
   compactRequestView: integer('compact_request_view', { mode: 'boolean' }).notNull().default(true),
+  vimMode: integer('vim_mode', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })
