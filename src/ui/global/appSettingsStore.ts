@@ -1,5 +1,6 @@
 import { createStore } from '@xstate/store'
 import {
+  DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
   type AppSettingsResponseBodyDisplayMode,
@@ -71,6 +72,7 @@ export namespace AppSettingsCoordinator {
   export async function saveSettings(input: {
     warnBeforeRequestAfterSeconds: number
     responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
+    compactRequestView: boolean
   }) {
     appSettingsStore.trigger.savingStarted()
 
@@ -91,6 +93,7 @@ export namespace AppSettingsCoordinator {
     const result = await getWindowElectron().updateAppSettings({
       warnBeforeRequestAfterSeconds: current?.warnBeforeRequestAfterSeconds ?? DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
       responseBodyDisplayMode: mode,
+      compactRequestView: current?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
     })
 
     if (!result.success) {
@@ -112,4 +115,8 @@ export function getWarnBeforeRequestAfterSeconds() {
 
 export function getResponseBodyDisplayMode() {
   return appSettingsStore.getSnapshot().context.settings?.responseBodyDisplayMode ?? DEFAULT_RESPONSE_BODY_DISPLAY_MODE
+}
+
+export function getCompactRequestView() {
+  return appSettingsStore.getSnapshot().context.settings?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW
 }

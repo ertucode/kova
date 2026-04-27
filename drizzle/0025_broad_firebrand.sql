@@ -1,0 +1,1 @@
+ALTER TABLE `app_settings` ADD `compact_request_view` integer DEFAULT true NOT NULL;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GenericResult } from '@common/GenericError'
 import { errorResponseToMessage } from '@common/GenericError'
 import { useSelector } from '@xstate/store/react'
-import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES } from '@common/AppSettings'
+import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
 import { getWindowElectron } from '@/getWindowElectron'
 import { Dialog } from '@/lib/components/dialog'
@@ -16,6 +16,7 @@ export function AppSettingsDialog() {
   const saving = useSelector(appSettingsStore, state => state.context.saving)
   const [warnBeforeRequestAfterSeconds, setWarnBeforeRequestAfterSeconds] = useState('10')
   const [responseBodyDisplayMode, setResponseBodyDisplayMode] = useState<(typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]>('raw')
+  const [compactRequestView, setCompactRequestView] = useState(DEFAULT_COMPACT_REQUEST_VIEW)
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
   const [databaseDrafts, setDatabaseDrafts] = useState<Record<string, { name: string; path: string }>>({})
   const [databaseLoading, setDatabaseLoading] = useState(false)
@@ -29,6 +30,7 @@ export function AppSettingsDialog() {
     if (settings) {
       setWarnBeforeRequestAfterSeconds(String(settings.warnBeforeRequestAfterSeconds))
       setResponseBodyDisplayMode(settings.responseBodyDisplayMode)
+      setCompactRequestView(settings.compactRequestView)
     }
   }, [settings])
 
@@ -46,6 +48,7 @@ export function AppSettingsDialog() {
     const success = await AppSettingsCoordinator.saveSettings({
       warnBeforeRequestAfterSeconds: nextValue,
       responseBodyDisplayMode,
+      compactRequestView,
     })
 
     if (success) {
@@ -294,6 +297,24 @@ export function AppSettingsDialog() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
+          <div className="text-sm font-medium text-base-content">Request details layout</div>
+          <p className="mt-1 text-sm text-base-content/60">
+            Keep request details compact by showing auth, headers, and path params beside the body. Turn it off to split
+            them into separate tabs.
+          </p>
+
+          <label className="mt-4 inline-flex items-center gap-3">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm rounded-md"
+              checked={compactRequestView}
+              onChange={event => setCompactRequestView(event.target.checked)}
+            />
+            <span className="text-sm text-base-content">Compact request view</span>
+          </label>
         </div>
 
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">

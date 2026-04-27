@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import {
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
+  DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
   type AppSettingsRecord,
@@ -28,6 +29,7 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
     id: DEFAULT_APP_SETTINGS_ID,
     warnBeforeRequestAfterSeconds: DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
     responseBodyDisplayMode: DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+    compactRequestView: DEFAULT_COMPACT_REQUEST_VIEW,
     createdAt: now,
     updatedAt: now,
   }
@@ -45,6 +47,10 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
     return GenericError.Message('Invalid response body display mode')
   }
 
+  if (typeof input.compactRequestView !== 'boolean') {
+    return GenericError.Message('Invalid compact request view setting')
+  }
+
   try {
     const db = getDb()
     const current = await getAppSettings()
@@ -53,6 +59,7 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
       id: current.id,
       warnBeforeRequestAfterSeconds: Math.trunc(input.warnBeforeRequestAfterSeconds),
       responseBodyDisplayMode: input.responseBodyDisplayMode,
+      compactRequestView: input.compactRequestView,
       createdAt: current.createdAt,
       updatedAt,
     }
@@ -75,6 +82,7 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     id: value.id,
     warnBeforeRequestAfterSeconds: value.warnBeforeRequestAfterSeconds,
     responseBodyDisplayMode,
+    compactRequestView: value.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }

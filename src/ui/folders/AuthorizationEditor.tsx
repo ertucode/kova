@@ -10,12 +10,14 @@ export function AuthorizationEditor({
   value,
   onChange,
   allowInherit,
+  showHeader = true,
   valueEditorExtensions,
   valueEditorRefreshKey,
 }: {
   value: HttpAuth
   onChange: (value: HttpAuth) => void
   allowInherit?: boolean
+  showHeader?: boolean
   valueEditorExtensions?: Extension[]
   valueEditorRefreshKey?: string
 }) {
@@ -26,7 +28,7 @@ export function AuthorizationEditor({
 
   return (
     <section className="w-full border-b border-base-content/10">
-      <DetailsSectionHeader title="Authorization" />
+      {showHeader ? <DetailsSectionHeader title="Authorization" /> : null}
 
       <div className="border border-base-content/10 bg-base-100/35 p-3">
         <DropdownSelect

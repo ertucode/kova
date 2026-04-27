@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { CopyIcon, InfoIcon, LibraryBigIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import type { Extension } from '@codemirror/state'
@@ -17,11 +17,12 @@ import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from
 import { formatJson5PreferringJson } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
+import { DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { dialogActions } from '@/global/dialogStore'
-import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
+import { appSettingsStore, getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
 import { Tooltip } from '../components/Tooltip'
 import { HeadersEditor } from './HeadersEditor'
 import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage, type CodeEditorPasteParams } from './CodeEditor'
@@ -46,12 +47,24 @@ import { RequestDetailsResponsePanel } from './RequestDetailsResponsePanel'
 import { buildImportedHttpUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 
+type RequestMetaTab =
+  | 'overview'
+  | 'body'
+  | 'search-params'
+  | 'headers'
+  | 'auth'
+  | 'path-params'
+  | 'scripts'
+  | 'response-visualizer'
+
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
-  const [metaTab, setMetaTab] = useState<'overview' | 'search-params' | 'scripts' | 'response-visualizer'>('overview')
-  const metaTabByRequestIdRef = useRef<
-    Record<string, 'overview' | 'search-params' | 'scripts' | 'response-visualizer'>
-  >({})
+  const compactRequestView = useSelector(
+    appSettingsStore,
+    state => state.context.settings?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW
+  )
+  const [metaTab, setMetaTab] = useState<RequestMetaTab>('overview')
+  const metaTabByRequestIdRef = useRef<Record<string, RequestMetaTab>>({})
   const draftRef = useRef(draft)
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const postRequestEditorRef = useRef<CodeEditorHandle | null>(null)
@@ -254,30 +267,32 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   useEffect(() => {
     if (!selectedRequestId) {
-      setMetaTab('overview')
+      setMetaTab(compactRequestView ? 'overview' : 'body')
       return
     }
 
     const existingMetaTab = metaTabByRequestIdRef.current[selectedRequestId]
     if (existingMetaTab) {
-      setMetaTab(existingMetaTab)
+      setMetaTab(normalizeMetaTabForLayout(existingMetaTab, compactRequestView))
       return
     }
 
-    const initialMetaTab = shouldDefaultToSearchParamsTab(draft) ? 'search-params' : 'overview'
+    const initialMetaTab = shouldDefaultToSearchParamsTab(draft) ? 'search-params' : compactRequestView ? 'overview' : 'body'
     metaTabByRequestIdRef.current[selectedRequestId] = initialMetaTab
     setMetaTab(initialMetaTab)
-  }, [draft, selectedRequestId])
+  }, [compactRequestView, draft, selectedRequestId])
 
   const updateMetaTab = useCallback(
-    (nextMetaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => {
+    (nextMetaTab: RequestMetaTab) => {
+      const normalizedMetaTab = normalizeMetaTabForLayout(nextMetaTab, compactRequestView)
+
       if (selectedRequestId) {
-        metaTabByRequestIdRef.current[selectedRequestId] = nextMetaTab
+        metaTabByRequestIdRef.current[selectedRequestId] = normalizedMetaTab
       }
 
-      setMetaTab(nextMetaTab)
+      setMetaTab(normalizedMetaTab)
     },
-    [selectedRequestId]
+    [compactRequestView, selectedRequestId]
   )
 
   useEffect(() => {
@@ -432,7 +447,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         rawType: parsedCurl.rawType,
       })
 
-      updateMetaTab(shouldShowSearchParams ? 'search-params' : 'overview')
+      updateMetaTab(shouldShowSearchParams ? 'search-params' : compactRequestView ? 'overview' : 'body')
 
       toast.show({
         severity: 'success',
@@ -517,6 +532,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [updateMetaTab]
   )
 
+  const bodyTab = (
+    <RequestBodyTab
+      draft={draft}
+      formatJsonBody={formatJsonBody}
+      showHeader={compactRequestView}
+      variableEditorExtensions={variableEditorExtensions}
+      variableHighlightRefreshKey={variableHighlightRefreshKey}
+    />
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <section className="w-full border-b border-base-content/10">
@@ -568,6 +593,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         </div>
 
         <VariableUsageBanner
+          compactRequestView={compactRequestView}
           metaTab={metaTab}
           onMetaTabChange={updateMetaTab}
           usedVariableNames={usedVariableNames}
@@ -577,125 +603,62 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       </section>
 
       {metaTab === 'overview' ? (
-        <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
-            <div className="flex h-full min-h-0 flex-col">
-              <DetailsSectionHeader
-                title="Body"
-                actions={
-                  <>
-                    <DropdownSelect
-                      value={draft.bodyType}
-                      className="w-[100px]"
-                      triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium capitalize"
-                      menuClassName="w-[220px]"
-                      options={REQUEST_BODY_TYPES.map(option => ({
-                        value: option,
-                        label: <span className="capitalize">{option}</span>,
-                      }))}
-                      onChange={value =>
-                        FolderExplorerCoordinator.updateSelectedDraft({
-                          ...draft,
-                          bodyType: value as RequestBodyType,
-                        })
-                      }
-                    />
-                    <DropdownSelect
-                      value={draft.rawType}
-                      className={`w-[120px] ${draft.bodyType !== 'raw' ? 'pointer-events-none opacity-45' : ''}`}
-                      triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase"
-                      menuClassName="w-[180px]"
-                      options={REQUEST_RAW_TYPES.map(option => ({
-                        value: option,
-                        label: <span className="uppercase">{option}</span>,
-                      }))}
-                      onChange={value =>
-                        FolderExplorerCoordinator.updateSelectedDraft({
-                          ...draft,
-                          rawType: value as RequestRawType,
-                        })
-                      }
-                    />
-                    {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
-                      <button
-                        type="button"
-                        className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
-                        onClick={formatJsonBody}
-                      >
-                        Format
-                      </button>
-                    ) : null}
-                  </>
-                }
-              />
-
-              {draft.bodyType === 'raw' ? (
-                <CodeEditor
-                  value={draft.body}
-                  language={getRawEditorLanguage(draft.rawType)}
-                  size="small"
-                  minHeightClassName="min-h-0 h-full"
-                  className="border-x-0 border-b-0"
-                  placeholder={'{\n  "hello": "world"\n}'}
-                  extensions={variableEditorExtensions}
-                  refreshKey={variableHighlightRefreshKey}
-                  onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
-                />
-              ) : null}
-
-              {isParamBodyType(draft.bodyType) ? (
-                <KeyValueEditor
-                  label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
-                  value={draft.body}
-                  onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
-                  keyPlaceholder="key"
-                  valuePlaceholder="value"
-                />
-              ) : null}
-
-              {draft.bodyType === 'none' ? (
-                <div className="flex min-h-0 h-full items-center justify-center bg-base-100/35 text-sm text-base-content/45">
-                  No request body
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="flex min-h-0 flex-col overflow-y-auto">
-            <AuthorizationEditor
-              value={draft.auth}
-              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
-              allowInherit
-              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-              valueEditorRefreshKey={variableHighlightRefreshKey}
-            />
-
-            <HeadersEditor
-              value={draft.headers}
-              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-              valueEditorRefreshKey={variableHighlightRefreshKey}
-              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
-            />
-
-            <KeyValueEditor
-              label="Path Params"
-              value={draft.pathParams}
-              onChange={updatePathParams}
-              keyPlaceholder="userId"
-              valuePlaceholder="123"
-              valueEditorAsCode
-              valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-              valueEditorRefreshKey={variableHighlightRefreshKey}
-            />
-          </div>
-        </section>
+        <RequestOverviewTab
+          body={bodyTab}
+          draft={draft}
+          updatePathParams={updatePathParams}
+          variableEditorExtensionsWithBrowserTabFallback={variableEditorExtensionsWithBrowserTabFallback}
+          variableHighlightRefreshKey={variableHighlightRefreshKey}
+        />
       ) : null}
+
+      {metaTab === 'body' ? bodyTab : null}
 
       {metaTab === 'search-params' ? (
         <section className="min-h-0 flex-1 overflow-auto">
           <SearchParamsTab
             value={draft.searchParams}
             onChange={updateSearchParams}
+            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+            valueEditorRefreshKey={variableHighlightRefreshKey}
+          />
+        </section>
+      ) : null}
+
+      {metaTab === 'headers' ? (
+        <section className="min-h-0 flex-1 overflow-auto">
+          <HeadersEditor
+            value={draft.headers}
+            showHeader={false}
+            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+            valueEditorRefreshKey={variableHighlightRefreshKey}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
+          />
+        </section>
+      ) : null}
+
+      {metaTab === 'auth' ? (
+        <section className="min-h-0 flex-1 overflow-auto">
+          <AuthorizationEditor
+            value={draft.auth}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
+            allowInherit
+            showHeader={false}
+            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+            valueEditorRefreshKey={variableHighlightRefreshKey}
+          />
+        </section>
+      ) : null}
+
+      {metaTab === 'path-params' ? (
+        <section className="min-h-0 flex-1 overflow-auto">
+          <KeyValueEditor
+            label={null}
+            value={draft.pathParams}
+            onChange={updatePathParams}
+            keyPlaceholder="userId"
+            valuePlaceholder="123"
+            valueEditorAsCode
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
           />
@@ -941,14 +904,16 @@ async function copyTextToClipboard(value: string, successMessage: string) {
 }
 
 function VariableUsageBanner({
+  compactRequestView,
   metaTab,
   onMetaTabChange,
   usedVariableNames,
   hasPreRequestScript,
   hasPostRequestScript,
 }: {
-  metaTab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer'
-  onMetaTabChange: (tab: 'overview' | 'search-params' | 'scripts' | 'response-visualizer') => void
+  compactRequestView: boolean
+  metaTab: RequestMetaTab
+  onMetaTabChange: (tab: RequestMetaTab) => void
   usedVariableNames: string[]
   hasPreRequestScript: boolean
   hasPostRequestScript: boolean
@@ -960,13 +925,13 @@ function VariableUsageBanner({
           type="button"
           className={[
             'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
-            metaTab === 'overview'
+            (compactRequestView ? metaTab === 'overview' : metaTab === 'body')
               ? 'border-b-2 border-b-base-content text-base-content'
               : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
           ].join(' ')}
-          onClick={() => onMetaTabChange('overview')}
+          onClick={() => onMetaTabChange(compactRequestView ? 'overview' : 'body')}
         >
-          Overview
+          {compactRequestView ? 'Overview' : 'Body'}
         </button>
         <button
           type="button"
@@ -981,6 +946,46 @@ function VariableUsageBanner({
         >
           Search Params
         </button>
+        {!compactRequestView ? (
+          <>
+            <button
+              type="button"
+              className={[
+                'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
+                metaTab === 'headers'
+                  ? 'border-b-2 border-b-base-content text-base-content'
+                  : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+              ].join(' ')}
+              onClick={() => onMetaTabChange('headers')}
+            >
+              Headers
+            </button>
+            <button
+              type="button"
+              className={[
+                'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
+                metaTab === 'auth'
+                  ? 'border-b-2 border-b-base-content text-base-content'
+                  : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+              ].join(' ')}
+              onClick={() => onMetaTabChange('auth')}
+            >
+              Authorization
+            </button>
+            <button
+              type="button"
+              className={[
+                'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
+                metaTab === 'path-params'
+                  ? 'border-b-2 border-b-base-content text-base-content'
+                  : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+              ].join(' ')}
+              onClick={() => onMetaTabChange('path-params')}
+            >
+              Path Params
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className={[
@@ -1016,6 +1021,181 @@ function VariableUsageBanner({
         {usedVariableNames.length > 0 ? `Vars: ${usedVariableNames.join(', ')}` : 'No vars used'}
       </div>
     </div>
+  )
+}
+
+function normalizeMetaTabForLayout(tab: RequestMetaTab, compactRequestView: boolean): RequestMetaTab {
+  if (compactRequestView) {
+    if (tab === 'body' || tab === 'headers' || tab === 'auth' || tab === 'path-params') {
+      return 'overview'
+    }
+
+    return tab
+  }
+
+  return tab === 'overview' ? 'body' : tab
+}
+
+function RequestOverviewTab({
+  body,
+  draft,
+  updatePathParams,
+  variableEditorExtensionsWithBrowserTabFallback,
+  variableHighlightRefreshKey,
+}: {
+  body: ReactNode
+  draft: RequestDetailsDraft
+  updatePathParams: (nextPathParams: string) => void
+  variableEditorExtensionsWithBrowserTabFallback: Extension[]
+  variableHighlightRefreshKey: string
+}) {
+  return (
+    <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">{body}</div>
+
+      <div className="flex min-h-0 flex-col overflow-y-auto">
+        <AuthorizationEditor
+          value={draft.auth}
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
+          allowInherit
+          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+          valueEditorRefreshKey={variableHighlightRefreshKey}
+        />
+
+        <HeadersEditor
+          value={draft.headers}
+          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+          valueEditorRefreshKey={variableHighlightRefreshKey}
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
+        />
+
+        <KeyValueEditor
+          label="Path Params"
+          value={draft.pathParams}
+          onChange={updatePathParams}
+          keyPlaceholder="userId"
+          valuePlaceholder="123"
+          valueEditorAsCode
+          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+          valueEditorRefreshKey={variableHighlightRefreshKey}
+        />
+      </div>
+    </section>
+  )
+}
+
+function RequestBodyTab({
+  draft,
+  formatJsonBody,
+  showHeader,
+  variableEditorExtensions,
+  variableHighlightRefreshKey,
+}: {
+  draft: RequestDetailsDraft
+  formatJsonBody: () => Promise<void>
+  showHeader: boolean
+  variableEditorExtensions: Extension[]
+  variableHighlightRefreshKey: string
+}) {
+  return (
+    <section className="h-full min-h-0 flex-1">
+      <div className="flex h-full min-h-0 flex-col">
+        {showHeader ? (
+          <DetailsSectionHeader
+            title="Body"
+            actions={<RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} />}
+          />
+        ) : (
+          <div className="flex h-12 min-h-12 max-h-12 items-stretch justify-start border-b border-base-content/10 bg-base-100/70">
+            <RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} />
+          </div>
+        )}
+
+        {draft.bodyType === 'raw' ? (
+          <CodeEditor
+            value={draft.body}
+            language={getRawEditorLanguage(draft.rawType)}
+            size="small"
+            minHeightClassName="min-h-0 h-full"
+            className="border-x-0 border-b-0"
+            placeholder={'{\n  "hello": "world"\n}'}
+            extensions={variableEditorExtensions}
+            refreshKey={variableHighlightRefreshKey}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
+          />
+        ) : null}
+
+        {isParamBodyType(draft.bodyType) ? (
+          <KeyValueEditor
+            label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
+            value={draft.body}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
+            keyPlaceholder="key"
+            valuePlaceholder="value"
+          />
+        ) : null}
+
+        {draft.bodyType === 'none' ? (
+          <div className="flex min-h-0 h-full items-center justify-center bg-base-100/35 text-sm text-base-content/45">
+            No request body
+          </div>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function RequestBodyTabActions({
+  draft,
+  formatJsonBody,
+}: {
+  draft: RequestDetailsDraft
+  formatJsonBody: () => Promise<void>
+}) {
+  return (
+    <>
+      <DropdownSelect
+        value={draft.bodyType}
+        className="w-[100px]"
+        triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium capitalize"
+        menuClassName="w-[220px]"
+        options={REQUEST_BODY_TYPES.map(option => ({
+          value: option,
+          label: <span className="capitalize">{option}</span>,
+        }))}
+        onChange={value =>
+          FolderExplorerCoordinator.updateSelectedDraft({
+            ...draft,
+            bodyType: value as RequestBodyType,
+          })
+        }
+      />
+      <DropdownSelect
+        value={draft.rawType}
+        className={`w-[120px] ${draft.bodyType !== 'raw' ? 'pointer-events-none opacity-45' : ''}`}
+        triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase"
+        menuClassName="w-[180px]"
+        options={REQUEST_RAW_TYPES.map(option => ({
+          value: option,
+          label: <span className="uppercase">{option}</span>,
+        }))}
+        onChange={value =>
+          FolderExplorerCoordinator.updateSelectedDraft({
+            ...draft,
+            rawType: value as RequestRawType,
+          })
+        }
+      />
+      {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
+        <button
+          type="button"
+          className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
+          onClick={() => void formatJsonBody()}
+        >
+          Format
+        </button>
+      ) : null}
+    </>
   )
 }
 
