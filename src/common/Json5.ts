@@ -87,3 +87,111 @@ export function normalizeJson5ToJson(value: string) {
 export async function formatJson5PreferringJson(value: string) {
   return hasJson5Comments(value) ? formatJson5(value) : formatJson(value)
 }
+
+export async function formatJson5PreferringJsonWithTemplates(value: string) {
+  const masked = maskBareTemplateTokens(value)
+  const formatted = await formatJson5PreferringJson(masked.value)
+  return restoreBareTemplateTokens(formatted, masked.tokens)
+}
+
+function maskBareTemplateTokens(value: string) {
+  const tokens: string[] = []
+  let result = ''
+  let index = 0
+  let inString = false
+  let stringQuote = ''
+  let isEscaped = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  while (index < value.length) {
+    const char = value[index]
+    const nextChar = value[index + 1]
+
+    if (inString) {
+      result += char
+      if (isEscaped) {
+        isEscaped = false
+      } else if (char === '\\') {
+        isEscaped = true
+      } else if (char === stringQuote) {
+        inString = false
+        stringQuote = ''
+      }
+      index += 1
+      continue
+    }
+
+    if (inLineComment) {
+      result += char
+      if (char === '\n') {
+        inLineComment = false
+      }
+      index += 1
+      continue
+    }
+
+    if (inBlockComment) {
+      result += char
+      if (char === '*' && nextChar === '/') {
+        result += nextChar
+        inBlockComment = false
+        index += 2
+        continue
+      }
+      index += 1
+      continue
+    }
+
+    if (char === '"' || char === "'") {
+      inString = true
+      stringQuote = char
+      result += char
+      index += 1
+      continue
+    }
+
+    if (char === '/' && nextChar === '/') {
+      inLineComment = true
+      result += '//'
+      index += 2
+      continue
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true
+      result += '/*'
+      index += 2
+      continue
+    }
+
+    if (char === '{' && nextChar === '{') {
+      const templateEnd = value.indexOf('}}', index + 2)
+      if (templateEnd >= 0) {
+        const token = value.slice(index, templateEnd + 2)
+        const placeholder = `"__KOVA_TEMPLATE_TOKEN_${tokens.length}__"`
+        tokens.push(token)
+        result += placeholder
+        index = templateEnd + 2
+        continue
+      }
+    }
+
+    result += char
+    index += 1
+  }
+
+  return { value: result, tokens }
+}
+
+function restoreBareTemplateTokens(value: string, tokens: string[]) {
+  let restored = value
+
+  for (const [index, token] of tokens.entries()) {
+    const placeholder = `__KOVA_TEMPLATE_TOKEN_${index}__`
+    restored = restored.replaceAll(`"${placeholder}"`, token)
+    restored = restored.replaceAll(`'${placeholder}'`, token)
+  }
+
+  return restored
+}

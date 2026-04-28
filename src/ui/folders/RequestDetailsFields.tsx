@@ -14,7 +14,7 @@ import {
   syncUrlWithSearchParams,
 } from '@common/PathParams'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
-import { formatJson5PreferringJson } from '@common/Json5'
+import { formatJson5PreferringJsonWithTemplates } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import { DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
@@ -525,7 +525,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const formatJsonBody = async () => {
     try {
       const latestDraft = draftRef.current
-      const formatted = await formatJson5PreferringJson(latestDraft.body)
+      const formatted = await formatJson5PreferringJsonWithTemplates(latestDraft.body)
       FolderExplorerCoordinator.updateSelectedDraft({
         ...latestDraft,
         body: formatted,
