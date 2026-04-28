@@ -1,4 +1,11 @@
-import { getAuthHeaders, getAuthQueryParams, getAuthVariableSources, resolveAuth, resolveInheritedAuth, type HttpAuth } from '../common/Auth.js'
+import {
+  getAuthHeaders,
+  getAuthQueryParams,
+  getAuthVariableSources,
+  resolveAuth,
+  resolveInheritedAuth,
+  type HttpAuth,
+} from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { normalizeJson5ToJson } from '../common/Json5.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
@@ -59,7 +66,10 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
       pathParams: input.pathParams,
       searchParams: input.searchParams,
       auth: input.auth,
-      headers: mergeHeaderRows(folders.map(folder => folder.headers), input.headers),
+      headers: mergeHeaderRows(
+        folders.map(folder => folder.headers),
+        input.headers
+      ),
       body: input.body,
       bodyType: input.bodyType,
       rawType: input.rawType,
@@ -72,26 +82,41 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
     { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
   ])
   if (preRequestScriptErrors.length > 0) {
-    return GenericError.Message(preRequestScriptErrors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n'), {
-      scriptErrors: preRequestScriptErrors,
-    })
+    return GenericError.Message(
+      preRequestScriptErrors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n'),
+      {
+        scriptErrors: preRequestScriptErrors,
+      }
+    )
   }
 
   const variables = runtime.getResolvedVariables()
   const missingVariables = collectMissingVariables(runtime.request, variables)
   if (missingVariables.length > 0) {
-    return GenericError.Message(`Missing environment variables: ${missingVariables.join(', ')}. Define them before sending the request.`)
+    return GenericError.Message(
+      `Missing environment variables: ${missingVariables.join(', ')}. Define them before sending the request.`
+    )
   }
 
   const urlWithTemplatesResolved = resolveTemplateVariables(runtime.request.url, variables).trim()
   const resolvedPathParams = resolveTemplateVariables(runtime.request.pathParams, variables)
-  const { url: urlWithPathParams, missingNames: missingPathParamNames } = applyPathParamsToUrl(urlWithTemplatesResolved, resolvedPathParams)
+  const { url: urlWithPathParams, missingNames: missingPathParamNames } = applyPathParamsToUrl(
+    urlWithTemplatesResolved,
+    resolvedPathParams
+  )
   if (missingPathParamNames.length > 0) {
-    return GenericError.Message(`Path variable values are required: ${missingPathParamNames.join(', ')}. Fill them in before sending the request.`)
+    return GenericError.Message(
+      `Path variable values are required: ${missingPathParamNames.join(', ')}. Fill them in before sending the request.`
+    )
   }
 
-  const effectiveAuth = resolveInheritedAuth(folders.map(folder => folder.auth), runtime.request.auth)
-  const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source => findMissingTemplateVariables(source, variables))
+  const effectiveAuth = resolveInheritedAuth(
+    folders.map(folder => folder.auth),
+    runtime.request.auth
+  )
+  const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source =>
+    findMissingTemplateVariables(source, variables)
+  )
   if (missingAuthVariables.length > 0) {
     return GenericError.Message(
       `Missing environment variables: ${Array.from(new Set(missingAuthVariables)).join(', ')}. Define them before sending the request.`
@@ -99,7 +124,10 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
   }
 
   const resolvedAuth = resolveAuth(effectiveAuth, variables)
-  const url = applyAuthToUrl(applySearchParamsToUrl(urlWithPathParams, runtime.request.searchParams, variables), resolvedAuth)
+  const url = applyAuthToUrl(
+    applySearchParamsToUrl(urlWithPathParams, runtime.request.searchParams, variables),
+    resolvedAuth
+  )
   if (!url) {
     return GenericError.Message('Request URL is required')
   }
@@ -175,7 +203,7 @@ export function buildCurlCommand(input: Pick<PreparedHttpRequest, 'method' | 'ur
 
   parts.push(shellQuote(input.url))
 
-  return parts.join(' \\\n+  ')
+  return parts.join(' \\\n  ')
 }
 
 export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'url' | 'headers' | 'resolvedBody'>) {
@@ -194,7 +222,9 @@ export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'u
     case 'x-www-form-urlencoded':
       setup = [
         'const searchParams = new URLSearchParams()',
-        ...input.resolvedBody.entries.map(entry => `searchParams.append(${serializeJsString(entry.key)}, ${serializeJsString(entry.value)})`),
+        ...input.resolvedBody.entries.map(
+          entry => `searchParams.append(${serializeJsString(entry.key)}, ${serializeJsString(entry.value)})`
+        ),
         '',
       ].join('\n')
       optionLines.push('body: searchParams')
@@ -202,7 +232,9 @@ export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'u
     case 'form-data':
       setup = [
         'const formData = new FormData()',
-        ...input.resolvedBody.entries.map(entry => `formData.append(${serializeJsString(entry.key)}, ${serializeJsString(entry.value)})`),
+        ...input.resolvedBody.entries.map(
+          entry => `formData.append(${serializeJsString(entry.key)}, ${serializeJsString(entry.value)})`
+        ),
         '',
       ].join('\n')
       optionLines.push('body: formData')
@@ -217,7 +249,9 @@ export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'u
     '',
     'const data = await response.text()',
     'console.log(data)',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export function buildResolvedRequestBody(
@@ -381,7 +415,11 @@ function collectMissingVariables(
   return Array.from(missingVariables).sort((left, right) => left.localeCompare(right))
 }
 
-function applyResolvedHeaders(headers: Headers, rows: ReturnType<typeof parseKeyValueRows>, variables: Record<string, string>) {
+function applyResolvedHeaders(
+  headers: Headers,
+  rows: ReturnType<typeof parseKeyValueRows>,
+  variables: Record<string, string>
+) {
   for (const row of rows) {
     const key = resolveTemplateVariables(row.key, variables).trim()
     if (!row.enabled || !key) {
@@ -468,9 +506,7 @@ function formatJsObject(entries: Array<[string, string]>) {
     return '{}'
   }
 
-  return [
-    '{',
-    ...entries.map(([key, value]) => `    ${JSON.stringify(key)}: ${JSON.stringify(value)},`),
-    '  }',
-  ].join('\n')
+  return ['{', ...entries.map(([key, value]) => `    ${JSON.stringify(key)}: ${JSON.stringify(value)},`), '  }'].join(
+    '\n'
+  )
 }
