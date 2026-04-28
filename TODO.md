@@ -1,0 +1,1 @@
+- bi json key'indeyken oraya giden yolu gösterelim responseda

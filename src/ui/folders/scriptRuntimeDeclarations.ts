@@ -166,12 +166,54 @@ declare const response: ScriptResponseApi
 `
 
 const responseVisualizerDeclarations = String.raw`
+type SetStateAction<T> = T | ((previousState: T) => T)
+type Dispatch<T> = (value: T) => void
+type DependencyList = readonly unknown[]
+
+interface RefObject<T> {
+  current: T
+}
+
+interface MutableRefObject<T> {
+  current: T
+}
+
+interface ReactApi {
+  Fragment: unique symbol
+  useState<T>(initialState: T | (() => T)): [T, Dispatch<SetStateAction<T>>]
+  useEffect(effect: () => void | (() => void), deps?: DependencyList): void
+  useEffectEvent<T extends (...args: never[]) => unknown>(callback: T): T
+  useLayoutEffect(effect: () => void | (() => void), deps?: DependencyList): void
+  useMemo<T>(factory: () => T, deps: DependencyList): T
+  useRef<T>(initialValue: T): MutableRefObject<T>
+  useRef<T>(initialValue: T | null): RefObject<T | null>
+  useId(): string
+  useReducer<TState, TAction>(
+    reducer: (state: TState, action: TAction) => TState,
+    initialState: TState
+  ): [TState, Dispatch<TAction>]
+  useDeferredValue<T>(value: T): T
+  startTransition(action: () => void): void
+}
+
 interface TableProps {
   list: unknown[]
   columns?: string[]
   emptyMessage?: string
 }
 
+declare const React: ReactApi
+declare const Fragment: ReactApi['Fragment']
+declare const useState: ReactApi['useState']
+declare const useEffect: ReactApi['useEffect']
+declare const useEffectEvent: ReactApi['useEffectEvent']
+declare const useLayoutEffect: ReactApi['useLayoutEffect']
+declare const useMemo: ReactApi['useMemo']
+declare const useRef: ReactApi['useRef']
+declare const useId: ReactApi['useId']
+declare const useReducer: ReactApi['useReducer']
+declare const useDeferredValue: ReactApi['useDeferredValue']
+declare const startTransition: ReactApi['startTransition']
 declare function Table(props: TableProps): unknown
 `
 

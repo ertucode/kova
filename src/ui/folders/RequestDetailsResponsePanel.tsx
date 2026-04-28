@@ -1,10 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { createRoot } from 'react-dom/client'
+import { type Extension } from '@codemirror/state'
+import { hoverTooltip } from '@codemirror/view'
+import { findNodeAtOffset, parseTree, type Node as JsonNode } from 'jsonc-parser'
 import { CopyIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
-import {
-  APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
-  type AppSettingsResponseBodyDisplayMode,
-} from '@common/AppSettings'
+import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, type AppSettingsResponseBodyDisplayMode } from '@common/AppSettings'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type { HttpSseStreamState, RequestScriptError, SendRequestResponse, SseEventRecord } from '@common/Requests'
 import { formatJson } from '@common/Json5'
@@ -23,6 +24,8 @@ import { requestExecutionStore } from './requestExecutionStore'
 import { AppSettingsCoordinator, appSettingsStore } from '@/global/appSettingsStore'
 
 const readOnlyCodeEditorOnChange = () => undefined
+const jsonResponsePathExtension = createJsonResponsePathExtension()
+
 export function RequestDetailsResponsePanel({
   isSending,
   draft,
@@ -178,7 +181,14 @@ export function RequestDetailsResponsePanel({
     return () => {
       isCancelled = true
     }
-  }, [selectedRequestId, isSending, response?.execution.response?.receivedAt, responseError, scriptErrors.length, sseStream?.state])
+  }, [
+    selectedRequestId,
+    isSending,
+    response?.execution.response?.receivedAt,
+    responseError,
+    scriptErrors.length,
+    sseStream?.state,
+  ])
 
   useEffect(() => {
     const clampedHeight = clampResponsePaneHeight(responsePaneHeight)
@@ -235,10 +245,7 @@ export function RequestDetailsResponsePanel({
   }
 
   return (
-    <section
-      className="relative shrink-0 overflow-hidden bg-base-100/95"
-      style={{ height: `${responsePaneHeight}px` }}
-    >
+    <section className="relative shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
       <button
         type="button"
         className={`block h-[3px] w-full cursor-ns-resize border-0 transition-colors ${
@@ -444,7 +451,11 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   const [section, setSection] = useState<'body' | 'headers'>('body')
   const canCopyResponseSection = section === 'body' ? displayedRawBody.trim().length > 0 : responseHeaderRows.length > 0
   const historyButtonLabel =
-    requestHistoryCount === null ? 'Loading History...' : requestHistoryCount > 0 ? `Show History (${requestHistoryCount})` : 'No History'
+    requestHistoryCount === null
+      ? 'Loading History...'
+      : requestHistoryCount > 0
+        ? `Show History (${requestHistoryCount})`
+        : 'No History'
   const sectionOptions = useMemo(
     () => [
       { value: 'body' as const, label: 'Body' },
@@ -467,6 +478,10 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
       { value: 'visualizer' as const, label: 'Visualizer' },
     ],
     []
+  )
+  const responseBodyEditorExtensions = useMemo(
+    () => (language === 'json' ? [jsonResponsePathExtension] : undefined),
+    [language]
   )
 
   useEffect(() => {
@@ -655,6 +670,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
           <CodeEditor
             value={displayedRawBody}
             language={language}
+            extensions={responseBodyEditorExtensions}
             readOnly
             showFoldGutter={supportsCollapsing}
             size="small"
@@ -748,7 +764,11 @@ function SseResponsePanel({
   const [viewMode, setViewMode] = useState<'rows' | 'raw'>('rows')
   const rawBody = stream?.body ?? response?.body ?? ''
   const historyButtonLabel =
-    requestHistoryCount === null ? 'Loading History...' : requestHistoryCount > 0 ? `Show History (${requestHistoryCount})` : 'No History'
+    requestHistoryCount === null
+      ? 'Loading History...'
+      : requestHistoryCount > 0
+        ? `Show History (${requestHistoryCount})`
+        : 'No History'
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-3">
@@ -806,7 +826,9 @@ function SseResponsePanel({
               type="button"
               className={[
                 'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                viewMode === 'rows' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                viewMode === 'rows'
+                  ? 'bg-base-200/80 text-base-content'
+                  : 'text-base-content/55 hover:text-base-content',
               ].join(' ')}
               onClick={() => setViewMode('rows')}
             >
@@ -816,7 +838,9 @@ function SseResponsePanel({
               type="button"
               className={[
                 'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                viewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                viewMode === 'raw'
+                  ? 'bg-base-200/80 text-base-content'
+                  : 'text-base-content/55 hover:text-base-content',
               ].join(' ')}
               onClick={() => setViewMode('raw')}
             >
@@ -862,7 +886,9 @@ function ResponseStatusSummary({
   const statusTone = getStatusTone(response?.status)
 
   if (responseError) {
-    return <div className="max-w-[420px] whitespace-pre-wrap break-words text-right text-sm text-error">{responseError}</div>
+    return (
+      <div className="max-w-[420px] whitespace-pre-wrap break-words text-right text-sm text-error">{responseError}</div>
+    )
   }
 
   if (!response) {
@@ -888,8 +914,160 @@ async function copyTextToClipboard(value: string, successMessage: string) {
   }
 }
 
+function JsonPathHoverTooltip({ path }: { path: string }) {
+  return (
+    <div className="max-w-[28rem] p-3">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/50">JSON Path</div>
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-base-content/10 bg-base-100/70 px-2.5 py-2 text-xs text-base-content">
+          {path}
+        </code>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-base-content/10 bg-base-100/80 p-2 text-base-content/70 transition hover:border-base-content/20 hover:text-base-content"
+          onClick={() => void copyTextToClipboard(path, 'JSON path copied to clipboard.')}
+          title="Copy JSON path"
+          aria-label="Copy JSON path"
+        >
+          <CopyIcon className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function getByteLength(value: string) {
   return new TextEncoder().encode(value).length
+}
+
+function createJsonResponsePathExtension(): Extension {
+  return [
+    hoverTooltip(
+      (view, pos, side) => {
+        const match = getJsonPropertyPathAtPosition(view.state.doc.toString(), pos, side)
+        if (!match) {
+          return null
+        }
+
+        return {
+          pos: match.from,
+          end: match.to,
+          create() {
+            const dom = document.createElement('div')
+            const root = createRoot(dom)
+
+            root.render(<JsonPathHoverTooltip path={match.path} />)
+
+            return {
+              dom,
+              destroy() {
+                root.unmount()
+              },
+            }
+          },
+        }
+      },
+      { hoverTime: 120 }
+    ),
+  ]
+}
+
+function getJsonPropertyPathAtPosition(
+  source: string,
+  pos: number,
+  side: number
+): { from: number; to: number; path: string } | null {
+  const root = parseTree(source)
+  if (!root) {
+    return null
+  }
+
+  const offsets = side < 0 ? [Math.max(0, pos - 1), pos] : [pos, Math.max(0, pos - 1)]
+
+  for (const offset of offsets) {
+    const node = findNodeAtOffset(root, offset, true)
+    const match = node ? getJsonPropertyPathMatch(source, node, offset) : null
+    if (match) {
+      return match
+    }
+  }
+
+  return null
+}
+
+function getJsonPropertyPathMatch(
+  source: string,
+  node: JsonNode,
+  offset: number
+): { from: number; to: number; path: string } | null {
+  let current: JsonNode | undefined = node
+
+  while (current) {
+    if (current.type === 'property') {
+      const keyNode = current.children?.[0]
+      if (keyNode?.type === 'string' && offset >= keyNode.offset && offset <= keyNode.offset + keyNode.length) {
+        return {
+          from: keyNode.offset,
+          to: keyNode.offset + keyNode.length,
+          path: formatJsonPath(buildJsonPathSegments(source, current)),
+        }
+      }
+    }
+
+    current = current.parent
+  }
+
+  return null
+}
+
+function buildJsonPathSegments(source: string, propertyNode: JsonNode): Array<string | number> {
+  const segments: Array<string | number> = []
+  let current: JsonNode | undefined = propertyNode
+
+  while (current) {
+    if (current.type === 'property') {
+      const keyNode = current.children?.[0]
+      const key = keyNode ? readJsonStringNodeValue(source, keyNode) : null
+      if (key !== null) {
+        segments.unshift(key)
+      }
+    }
+
+    const parent: JsonNode | undefined = current.parent
+    if (parent?.type === 'array') {
+      const index = parent.children?.indexOf(current) ?? -1
+      if (index >= 0) {
+        segments.unshift(index)
+      }
+    }
+
+    current = parent
+  }
+
+  return segments
+}
+
+function readJsonStringNodeValue(source: string, node: JsonNode) {
+  try {
+    const value = JSON.parse(source.slice(node.offset, node.offset + node.length))
+    return typeof value === 'string' ? value : null
+  } catch {
+    return null
+  }
+}
+
+function formatJsonPath(segments: Array<string | number>): string {
+  return segments.reduce<string>((path, segment) => {
+    if (typeof segment === 'number') {
+      return `${path}[${segment}]`
+    }
+
+    if (!path) {
+      return /^[A-Za-z_$][A-Za-z0-9_$-]*$/.test(segment) ? segment : `[${JSON.stringify(segment)}]`
+    }
+
+    return /^[A-Za-z_$][A-Za-z0-9_$-]*$/.test(segment) ? `${path}.${segment}` : `${path}[${JSON.stringify(segment)}]`
+  }, '')
 }
 
 function formatResponseBody(body: string, headers: string) {
@@ -1004,9 +1182,10 @@ function serializeXmlNode(node: Node, indentLevel: number, lines: string[]) {
     (childNodes[0]?.nodeType === Node.TEXT_NODE || childNodes[0]?.nodeType === Node.CDATA_SECTION_NODE)
 
   if (hasSingleTextChild) {
-    const content = childNodes[0]?.nodeType === Node.CDATA_SECTION_NODE
-      ? `<![CDATA[${childNodes[0].nodeValue ?? ''}]]>`
-      : childNodes[0]?.textContent?.trim() ?? ''
+    const content =
+      childNodes[0]?.nodeType === Node.CDATA_SECTION_NODE
+        ? `<![CDATA[${childNodes[0].nodeValue ?? ''}]]>`
+        : (childNodes[0]?.textContent?.trim() ?? '')
     lines.push(`${indent}${openingTag}${content}</${tagName}>`)
     return
   }
@@ -1038,7 +1217,15 @@ function formatMarkup(markup: string): string {
     if (!trimmed) continue
 
     const isClosing = /^<\//.test(trimmed)
-    const isSelfClosing = /\/>$/.test(trimmed) || /^<!/.test(trimmed) || /^<meta\b/i.test(trimmed) || /^<link\b/i.test(trimmed) || /^<img\b/i.test(trimmed) || /^<input\b/i.test(trimmed) || /^<br\b/i.test(trimmed) || /^<hr\b/i.test(trimmed)
+    const isSelfClosing =
+      /\/>$/.test(trimmed) ||
+      /^<!/.test(trimmed) ||
+      /^<meta\b/i.test(trimmed) ||
+      /^<link\b/i.test(trimmed) ||
+      /^<img\b/i.test(trimmed) ||
+      /^<input\b/i.test(trimmed) ||
+      /^<br\b/i.test(trimmed) ||
+      /^<hr\b/i.test(trimmed)
     const isInlineTextNode = /^(?!<).+/.test(trimmed)
     const isOpening = /^<[^/!][^>]*>$/.test(trimmed) && !isSelfClosing && !trimmed.includes('</')
 

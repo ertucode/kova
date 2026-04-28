@@ -1,5 +1,7 @@
 import '../App.css'
 import './responseVisualizer.css'
+import React, { type ErrorInfo, type ReactNode } from 'react'
+import { createRoot } from 'react-dom/client'
 import ts from 'typescript'
 import { z } from 'zod'
 
@@ -53,9 +55,7 @@ const rootElement = document.getElementById('root')
 if (!rootElement) {
   throw new Error('Response visualizer root not found')
 }
-const root = rootElement
-
-const Fragment = Symbol('Fragment')
+const root = createRoot(rootElement)
 
 window.addEventListener('message', event => {
   if (event.data?.type !== RENDER_EVENT) {
@@ -71,9 +71,7 @@ window.addEventListener('message', event => {
   }
 
   try {
-    const transpiled = compileVisualizer(code)
-    const rendered = runVisualizer(transpiled, payload ?? createEmptyPayload())
-    renderIntoRoot(rendered)
+    renderVisualizer(code, payload ?? createEmptyPayload())
   } catch (error) {
     renderError(formatVisualizerError(error, code))
   }
@@ -85,8 +83,8 @@ function compileVisualizer(source: string) {
   const result = ts.transpileModule(source, {
     compilerOptions: {
       jsx: ts.JsxEmit.React,
-      jsxFactory: 'h',
-      jsxFragmentFactory: 'Fragment',
+      jsxFactory: 'React.createElement',
+      jsxFragmentFactory: 'React.Fragment',
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.CommonJS,
       inlineSourceMap: true,
@@ -110,6 +108,17 @@ function compileVisualizer(source: string) {
   return result.outputText
 }
 
+function renderVisualizer(source: string, payload: VisualizerPayload) {
+  const transpiled = compileVisualizer(source)
+  const rendered = runVisualizer(transpiled, payload)
+
+  root.render(
+    <VisualizerErrorBoundary source={source}>
+      {rendered}
+    </VisualizerErrorBoundary>
+  )
+}
+
 function runVisualizer(code: string, payload: VisualizerPayload) {
   const module = { exports: {} as Record<string, unknown> }
   const exports = module.exports
@@ -126,12 +135,35 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
   const scope = createScopeApi(payload.scope)
   const response = payload.response
   const Table = createTableComponent()
+  const {
+    Fragment,
+    startTransition,
+    useDeferredValue,
+    useEffect,
+    useEffectEvent,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+  } = React
 
   new Function(
     'module',
     'exports',
-    'h',
+    'React',
     'Fragment',
+    'startTransition',
+    'useDeferredValue',
+    'useEffect',
+    'useEffectEvent',
+    'useId',
+    'useLayoutEffect',
+    'useMemo',
+    'useReducer',
+    'useRef',
+    'useState',
     'console',
     'env',
     'scope',
@@ -141,130 +173,45 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     'z',
     'Table',
     `${code}\n//# sourceURL=response-visualizer.js`
-  )(module, exports, h, Fragment, console, env, scope, request, response, crypto, z, Table)
+  )(
+    module,
+    exports,
+    React,
+    Fragment,
+    startTransition,
+    useDeferredValue,
+    useEffect,
+    useEffectEvent,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+    console,
+    env,
+    scope,
+    request,
+    response,
+    crypto,
+    z,
+    Table
+  )
 
   const component = module.exports.default || exports.default
   if (typeof component !== 'function') {
     throw new Error('Response visualizer must export default a component function.')
   }
 
-  return component({})
-}
-
-function h(type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) {
-  const normalizedProps = props || {}
-  const normalizedChildren: unknown[] = []
-
-  for (const child of children) {
-    if (Array.isArray(child)) {
-      normalizedChildren.push(...child)
-    } else {
-      normalizedChildren.push(child)
-    }
-  }
-
-  return { type, props: { ...normalizedProps, children: normalizedChildren } }
-}
-
-function renderIntoRoot(node: unknown) {
-  root.replaceChildren(renderNode(node))
-}
-
-function renderNode(node: unknown): Node {
-  if (node == null || node === false || node === true) {
-    return document.createTextNode('')
-  }
-
-  if (Array.isArray(node)) {
-    const fragment = document.createDocumentFragment()
-    for (const child of node) {
-      fragment.appendChild(renderNode(child))
-    }
-    return fragment
-  }
-
-  if (typeof node === 'string' || typeof node === 'number') {
-    return document.createTextNode(String(node))
-  }
-
-  if (node instanceof Node) {
-    return node
-  }
-
-  if (typeof node !== 'object' || !('type' in node)) {
-    return document.createTextNode(String(node))
-  }
-
-  const renderableNode = node as {
-    type: unknown
-    props?: Record<string, unknown>
-  }
-
-  if (renderableNode.type === Fragment) {
-    return renderNode(renderableNode.props?.children || [])
-  }
-
-  if (typeof renderableNode.type === 'function') {
-    return renderNode(renderableNode.type(renderableNode.props || {}))
-  }
-
-  if (typeof renderableNode.type !== 'string') {
-    throw new Error('Visualizer must return HTML-like JSX.')
-  }
-
-  const element = document.createElement(renderableNode.type)
-  const props = (renderableNode.props || {}) as Record<string, unknown>
-
-  for (const [key, value] of Object.entries(props)) {
-    if (key === 'children' || value == null || value === false) {
-      continue
-    }
-
-    if (key === 'className') {
-      element.setAttribute('class', String(value))
-      continue
-    }
-
-    if (key === 'style' && typeof value === 'object') {
-      for (const [styleKey, styleValue] of Object.entries(value)) {
-        element.style.setProperty(styleKey.replace(/[A-Z]/g, match => `-${match.toLowerCase()}`), String(styleValue))
-      }
-      continue
-    }
-
-    if (key === 'dangerouslySetInnerHTML' && typeof value === 'object' && '__html' in value) {
-      element.innerHTML = String(value.__html || '')
-      continue
-    }
-
-    if (key.startsWith('on') && typeof value === 'function') {
-      element.addEventListener(key.slice(2).toLowerCase(), value as EventListener)
-      continue
-    }
-
-    if (value === true) {
-      element.setAttribute(key, '')
-      continue
-    }
-
-    element.setAttribute(key, String(value))
-  }
-
-  if (!('dangerouslySetInnerHTML' in props)) {
-    const children = Array.isArray(props.children) ? props.children : [props.children]
-    for (const child of children) {
-      element.appendChild(renderNode(child))
-    }
-  }
-
-  return element
+  return React.createElement(component as React.ComponentType)
 }
 
 function renderError(error: VisualizerErrorDetails) {
-  const element = document.createElement('pre')
-  element.className = 'error'
-  element.textContent = `${error.compactMessage}\n\n${error.detailedMessage}`.trim()
-  root.replaceChildren(element)
+  root.render(
+    <pre className="error">
+      {`${error.compactMessage}\n\n${error.detailedMessage}`.trim()}
+    </pre>
+  )
 }
 
 function formatVisualizerDiagnostic(diagnostic: ts.Diagnostic, source: string): VisualizerErrorDetails {
@@ -349,10 +296,48 @@ function isVisualizerError(error: unknown): error is Error & { details: Visualiz
 }
 
 function renderEmptyState() {
-  const element = document.createElement('div')
-  element.className = 'empty'
-  element.textContent = 'Add a response visualizer to render custom JSX.'
-  root.replaceChildren(element)
+  root.render(<div className="empty">Add a response visualizer to render custom JSX.</div>)
+}
+
+type VisualizerErrorBoundaryProps = {
+  source: string
+  children: ReactNode
+}
+
+type VisualizerErrorBoundaryState = {
+  error: VisualizerErrorDetails | null
+}
+
+class VisualizerErrorBoundary extends React.Component<VisualizerErrorBoundaryProps, VisualizerErrorBoundaryState> {
+  state: VisualizerErrorBoundaryState = {
+    error: null,
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    const combinedStack = [error.stack, info.componentStack].filter(Boolean).join('\n')
+    error.stack = combinedStack
+    this.setState({
+      error: formatVisualizerError(error, this.props.source),
+    })
+  }
+
+  componentDidUpdate(previousProps: VisualizerErrorBoundaryProps) {
+    if (previousProps.source !== this.props.source && this.state.error) {
+      this.setState({ error: null })
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <pre className="error">
+          {`${this.state.error.compactMessage}\n\n${this.state.error.detailedMessage}`.trim()}
+        </pre>
+      )
+    }
+
+    return this.props.children
+  }
 }
 
 function createHeaderApi(initialHeaders: Array<{ key: string; value: string }>) {
