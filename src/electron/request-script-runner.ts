@@ -7,7 +7,7 @@ import { getAuthQueryParams, resolveAuth, type HttpAuth } from '../common/Auth.j
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolvedEnvironmentValue } from '../common/EnvironmentVariables.js'
 import { parseKeyValueRows, stringifyKeyValueRows, type KeyValueRow } from '../common/KeyValueRows.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
-import { resolveTemplateVariables } from '../common/RequestVariables.js'
+import { resolveTemplateExpressions as resolveTemplateExpressionTokens, resolveTemplateVariables } from '../common/RequestVariables.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type {
   RequestScriptError,
@@ -109,6 +109,9 @@ export type ScriptRuntime = {
   getRequestScopeValues: () => Record<string, string>
   getUpdatedEnvironments: () => EnvironmentRecord[]
   getConsoleEntries: () => RequestConsoleEntry[]
+   resolveTemplateExpressions: (value: string, sourceName: string) => Promise<string>
+   resolveHttpAuthTemplateExpressions: (auth: HttpAuth, sourceName: string) => Promise<HttpAuth>
+   resolveRequestTemplateExpressions: () => Promise<void>
   runPreRequestScripts: (sources: ScriptSource[]) => Promise<RequestScriptError[]>
   runPostRequestScripts: (
     sources: ScriptSource[],
@@ -139,6 +142,102 @@ export function createRequestScriptRuntime(input: {
     getRequestScopeValues: () => Object.fromEntries(requestScope.entries()),
     getUpdatedEnvironments: () => environments.filter(environment => updatedEnvironmentIds.has(environment.id)),
     getConsoleEntries: () => consoleEntries.slice(),
+    resolveTemplateExpressions: (value, sourceName) =>
+      resolveTemplateExpressionTokens(value, expressionSource =>
+        evaluateTemplateExpression({
+          sourceName,
+          expressionSource,
+          runtimeRequest,
+          requestScope,
+          response: null,
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+        })
+      ),
+    resolveHttpAuthTemplateExpressions: (auth, sourceName) =>
+      resolveHttpAuthExpressions(auth, (value, fieldName) =>
+        resolveTemplateExpressionTokens(value, expressionSource =>
+          evaluateTemplateExpression({
+            sourceName: `${sourceName} ${fieldName}`,
+            expressionSource,
+            runtimeRequest,
+            requestScope,
+            response: null,
+            environmentContext: createEnvironmentContext(),
+            consoleEntries,
+          })
+        )
+      ),
+    resolveRequestTemplateExpressions: async () => {
+      runtimeRequest.url = await resolveTemplateExpressionTokens(runtimeRequest.url, expressionSource =>
+        evaluateTemplateExpression({
+          sourceName: 'Request URL',
+          expressionSource,
+          runtimeRequest,
+          requestScope,
+          response: null,
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+        })
+      )
+      runtimeRequest.pathParams = await resolveTemplateExpressionTokens(runtimeRequest.pathParams, expressionSource =>
+        evaluateTemplateExpression({
+          sourceName: 'Request Path Params',
+          expressionSource,
+          runtimeRequest,
+          requestScope,
+          response: null,
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+        })
+      )
+      runtimeRequest.searchParams = await resolveTemplateExpressionTokens(runtimeRequest.searchParams, expressionSource =>
+        evaluateTemplateExpression({
+          sourceName: 'Request Search Params',
+          expressionSource,
+          runtimeRequest,
+          requestScope,
+          response: null,
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+        })
+      )
+      runtimeRequest.auth = await resolveHttpAuthExpressions(runtimeRequest.auth, (value, fieldName) =>
+        resolveTemplateExpressionTokens(value, expressionSource =>
+          evaluateTemplateExpression({
+            sourceName: `Request Auth ${fieldName}`,
+            expressionSource,
+            runtimeRequest,
+            requestScope,
+            response: null,
+            environmentContext: createEnvironmentContext(),
+            consoleEntries,
+          })
+        )
+      )
+      runtimeRequest.headers = await resolveTemplateExpressionTokens(runtimeRequest.headers, expressionSource =>
+        evaluateTemplateExpression({
+          sourceName: 'Request Headers',
+          expressionSource,
+          runtimeRequest,
+          requestScope,
+          response: null,
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+        })
+      )
+      runtimeRequest.body = await resolveTemplateExpressionTokens(runtimeRequest.body, expressionSource =>
+        evaluateTemplateExpression({
+          sourceName: 'Request Body',
+          expressionSource,
+          runtimeRequest,
+          requestScope,
+          response: null,
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+        })
+      )
+    },
     runPreRequestScripts: async sources => {
       const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
       const scriptErrors = await runScriptPhase({
@@ -786,6 +885,74 @@ function createScopeApi(requestScope: Map<string, string>) {
   }
 }
 
+async function evaluateTemplateExpression(input: {
+  sourceName: string
+  expressionSource: string
+  runtimeRequest: RuntimeRequestState
+  requestScope: Map<string, string>
+  response: { status: number; statusText: string; headers: string; body: ScriptResponseBody } | null
+  environmentContext: EnvironmentContext
+  consoleEntries: RequestConsoleEntry[]
+}) {
+  const headerEditor = createHeaderEditor(input.runtimeRequest)
+  const sandbox = {
+    console: createScriptConsole(input.sourceName, input.consoleEntries),
+    request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
+      ...input.environmentContext.getValues(),
+      ...Object.fromEntries(input.requestScope.entries()),
+    })),
+    response: input.response ? createResponseApi(input.response) : undefined,
+    env: createEnvironmentApi(input.environmentContext),
+    scope: createScopeApi(input.requestScope),
+    crypto: createCryptoApi(),
+    z,
+  }
+
+  let compiledScript: CompiledRequestScript | null = null
+
+  try {
+    compiledScript = compileTemplateExpressionScript(input.expressionSource)
+    const result = await executeScript(compiledScript.code, sandbox)
+    input.runtimeRequest.headers = headerEditor.serialize()
+    return stringifyTemplateExpressionResult(result)
+  } catch (error) {
+    const details = buildScriptErrorDetails({
+      phase: 'pre-request',
+      sourceName: input.sourceName,
+      error,
+      sourceCode: input.expressionSource,
+      compiledScript,
+    })
+
+    throw new Error(`Template expression failed in ${input.sourceName}: ${details.message}`)
+  }
+}
+
+function resolveHttpAuthExpressions(auth: HttpAuth, resolveValue: (value: string, fieldName: string) => Promise<string>) {
+  switch (auth.type) {
+    case 'inherit':
+    case 'noauth':
+      return Promise.resolve(auth)
+    case 'bearer':
+      return resolveValue(auth.token, 'Token').then(token => ({ type: 'bearer', token }) as const)
+    case 'apikey':
+      return Promise.all([resolveValue(auth.key, 'Key'), resolveValue(auth.value, 'Value')]).then(([key, value]) => ({
+        type: 'apikey',
+        key,
+        value,
+        addTo: auth.addTo,
+      }) as const)
+    case 'basic':
+      return Promise.all([resolveValue(auth.username, 'Username'), resolveValue(auth.password, 'Password')]).then(
+        ([username, password]) => ({
+          type: 'basic',
+          username,
+          password,
+        }) as const
+      )
+  }
+}
+
 async function executeScript(code: string, sandbox: Record<string, unknown>) {
   const context = vm.createContext(sandbox, {
     codeGeneration: {
@@ -797,12 +964,59 @@ async function executeScript(code: string, sandbox: Record<string, unknown>) {
   const script = new vm.Script(`(async () => {\n${code}\n})()`, { filename: 'request-script.js' })
   const result = script.runInContext(context, { timeout: SCRIPT_TIMEOUT_MS })
 
-  await Promise.race([
+  return await Promise.race([
     Promise.resolve(result),
     new Promise((_, reject) => {
       setTimeout(() => reject(new Error(`Script execution timed out after ${SCRIPT_TIMEOUT_MS}ms`)), SCRIPT_TIMEOUT_MS)
     }),
   ])
+}
+
+function compileTemplateExpressionScript(sourceCode: string): CompiledRequestScript {
+  try {
+    return compileRequestScript(`return (${sourceCode})`)
+  } catch (error) {
+    if (isScriptCompilerError(error)) {
+      return compileRequestScript(normalizeTemplateExpressionSource(sourceCode))
+    }
+
+    throw error
+  }
+}
+
+function normalizeTemplateExpressionSource(sourceCode: string) {
+  const sourceFile = ts.createSourceFile('request-template-expression.ts', sourceCode, ts.ScriptTarget.ES2020, true)
+  const lastStatement = sourceFile.statements[sourceFile.statements.length - 1]
+
+  if (!lastStatement || !ts.isExpressionStatement(lastStatement)) {
+    return sourceCode
+  }
+
+  const statementStart = lastStatement.getStart(sourceFile)
+  const statementEnd = lastStatement.getEnd()
+  const expressionText = lastStatement.expression.getText(sourceFile)
+
+  return `${sourceCode.slice(0, statementStart)}return (${expressionText})${sourceCode.slice(statementEnd)}`
+}
+
+function stringifyTemplateExpressionResult(value: unknown) {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+
+  return JSON.stringify(value)
 }
 
 function createHeaderEditor(runtimeRequest: RuntimeRequestState): HeaderApi {

@@ -88,6 +88,32 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
       environments: activeEnvironments,
     })
 
+    let resolvedFolderAuths: HttpAuth[]
+    let resolvedWebSocketSubprotocols: string
+    let resolvedWebSocketOnOpenMessage: string
+    let resolvedWebSocketAutoSendMessage: string
+
+    try {
+      await runtime.resolveRequestTemplateExpressions()
+      resolvedFolderAuths = await Promise.all(
+        folders.map(folder => runtime.resolveHttpAuthTemplateExpressions(folder.auth, `Folder Auth: ${folder.name}`))
+      )
+      resolvedWebSocketSubprotocols = await runtime.resolveTemplateExpressions(
+        input.websocketSubprotocols,
+        'WebSocket Subprotocols'
+      )
+      resolvedWebSocketOnOpenMessage = await runtime.resolveTemplateExpressions(
+        input.websocketOnOpenMessage,
+        'WebSocket On Open Message'
+      )
+      resolvedWebSocketAutoSendMessage = await runtime.resolveTemplateExpressions(
+        input.websocketAutoSendMessage,
+        'WebSocket Auto Send Message'
+      )
+    } catch (error) {
+      return GenericError.Message(error instanceof Error ? error.message : String(error))
+    }
+
     const preRequestScriptErrors = await runtime.runPreRequestScripts([
       ...folders.map(folder => ({ name: `Folder: ${folder.name}`, script: folder.preRequestScript })),
       { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
@@ -104,13 +130,13 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
     const variables = runtime.getResolvedVariables()
     const missingVariables = collectMissingVariables(
       {
-        url: input.url,
-        searchParams: input.searchParams,
-        auth: input.auth,
-        headers: input.headers,
-        websocketSubprotocols: input.websocketSubprotocols,
-        websocketOnOpenMessage: input.websocketOnOpenMessage,
-        websocketAutoSendMessage: input.websocketAutoSendMessage,
+        url: runtime.request.url,
+        searchParams: runtime.request.searchParams,
+        auth: runtime.request.auth,
+        headers: runtime.request.headers,
+        websocketSubprotocols: resolvedWebSocketSubprotocols,
+        websocketOnOpenMessage: resolvedWebSocketOnOpenMessage,
+        websocketAutoSendMessage: resolvedWebSocketAutoSendMessage,
       },
       variables
     )
@@ -121,7 +147,7 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
     }
 
     const effectiveAuth = resolveInheritedAuth(
-      folders.map(folder => folder.auth),
+      resolvedFolderAuths,
       runtime.request.auth
     )
     const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source =>
@@ -186,7 +212,7 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
 
     const socket = new WebSocket(
       url,
-      parseSubprotocols(resolveTemplateVariables(input.websocketSubprotocols, variables))
+      parseSubprotocols(resolveTemplateVariables(resolvedWebSocketSubprotocols, variables))
     )
     const activeSession: ActiveWebSocketSession = {
       socket,
@@ -226,13 +252,13 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
     }
     emitSessionUpdated(activeSession.session)
 
-    if (input.websocketOnOpenMessage.trim()) {
-      await sendResolvedWebSocketMessage(activeSession, input.websocketOnOpenMessage)
+    if (resolvedWebSocketOnOpenMessage.trim()) {
+      await sendResolvedWebSocketMessage(activeSession, resolvedWebSocketOnOpenMessage)
     }
 
-    if (input.websocketAutoSendEnabled && input.websocketAutoSendMessage.trim() && input.websocketAutoSendIntervalSeconds > 0) {
+    if (input.websocketAutoSendEnabled && resolvedWebSocketAutoSendMessage.trim() && input.websocketAutoSendIntervalSeconds > 0) {
       activeSession.autoSendIntervalId = setInterval(() => {
-        void sendResolvedWebSocketMessage(activeSession, input.websocketAutoSendMessage).catch(error => {
+        void sendResolvedWebSocketMessage(activeSession, resolvedWebSocketAutoSendMessage).catch(error => {
           console.error('sendResolvedWebSocketMessage failed', error)
         })
       }, input.websocketAutoSendIntervalSeconds * 1000)

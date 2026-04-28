@@ -1,1 +1,1 @@
-- bi json key'indeyken oraya giden yolu gösterelim responseda
+- variable gibi tanımlama ama fonksiyon çağırsın. {{$crypto.randomUUID()}}

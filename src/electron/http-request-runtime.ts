@@ -77,6 +77,16 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
     environments: activeEnvironments,
   })
 
+  let resolvedFolderAuths: HttpAuth[]
+  try {
+    await runtime.resolveRequestTemplateExpressions()
+    resolvedFolderAuths = await Promise.all(
+      folders.map(folder => runtime.resolveHttpAuthTemplateExpressions(folder.auth, `Folder Auth: ${folder.name}`))
+    )
+  } catch (error) {
+    return GenericError.Message(error instanceof Error ? error.message : String(error))
+  }
+
   const preRequestScriptErrors = await runtime.runPreRequestScripts([
     ...folders.map(folder => ({ name: `Folder: ${folder.name}`, script: folder.preRequestScript })),
     { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
@@ -111,7 +121,7 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
   }
 
   const effectiveAuth = resolveInheritedAuth(
-    folders.map(folder => folder.auth),
+    resolvedFolderAuths,
     runtime.request.auth
   )
   const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source =>
