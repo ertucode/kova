@@ -453,7 +453,7 @@ const templateScriptTheme = EditorView.baseTheme({
     color: 'color-mix(in oklab, var(--color-base-content) 88%, var(--color-secondary) 12%) !important',
   },
   '.cm-template-script-delimiter, .cm-template-script-delimiter *': {
-    color: 'color-mix(in oklab, var(--color-base-content) 76%, transparent) !important',
+    color: 'var(--color-warning) !important',
     fontWeight: '700',
   },
   '.cm-template-script-keyword, .cm-template-script-keyword *': {

@@ -1020,11 +1020,21 @@ function stringifyTemplateExpressionResult(value: unknown) {
     return String(value)
   }
 
-  if (value instanceof Date) {
+  if (isDateLikeValue(value)) {
     return value.toISOString()
   }
 
   return JSON.stringify(value)
+}
+
+function isDateLikeValue(value: unknown): value is { toISOString: () => string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'toISOString' in value &&
+    typeof value.toISOString === 'function' &&
+    Object.prototype.toString.call(value) === '[object Date]'
+  )
 }
 
 function createHeaderEditor(runtimeRequest: RuntimeRequestState): HeaderApi {

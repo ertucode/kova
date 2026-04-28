@@ -209,6 +209,27 @@ describe('createRequestScriptRuntime', () => {
     expect(runtime.request.body).toMatch(UUID_PATTERN)
   })
 
+  it('stringifies cross-context Date results as ISO strings', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '{{$const b = new Date("2026-04-29T12:34:56.000Z"); b}}',
+        bodyType: 'raw',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+
+    await runtime.resolveRequestTemplateExpressions()
+
+    expect(runtime.request.body).toBe('2026-04-29T12:34:56.000Z')
+  })
+
   it('leaves escaped template expressions untouched', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
