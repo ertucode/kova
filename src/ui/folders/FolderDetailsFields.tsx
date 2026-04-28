@@ -13,6 +13,7 @@ import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
+import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
@@ -88,9 +89,22 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
-      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, { fallbackToBrowserTab: true }),
+      templateScriptExtension({
+        getEnvironmentNames: () => activeEnvironmentNames,
+        getVariableNames: () => activeEnvironmentVariableNames,
+        fallbackToBrowserTab: true,
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
+        fallbackToBrowserTab: true,
+        extraSources: [
+          createTemplateCompletionSource({
+            getEnvironmentNames: () => activeEnvironmentNames,
+            getVariableNames: () => activeEnvironmentVariableNames,
+          }),
+        ],
+      }),
     ],
-    []
+    [activeEnvironmentNames, activeEnvironmentVariableNames]
   )
 
   const preRequestScriptExtensions = useMemo(

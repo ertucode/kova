@@ -40,6 +40,7 @@ import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
+import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
@@ -155,9 +156,20 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
-      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current),
+      templateScriptExtension({
+        getEnvironmentNames: () => activeEnvironmentNames,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
+        extraSources: [
+          createTemplateCompletionSource({
+            getEnvironmentNames: () => activeEnvironmentNames,
+            getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+          }),
+        ],
+      }),
     ],
-    []
+    [activeEnvironmentNames]
   )
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
@@ -171,9 +183,22 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
-      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, { fallbackToBrowserTab: true }),
+      templateScriptExtension({
+        getEnvironmentNames: () => activeEnvironmentNames,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        fallbackToBrowserTab: true,
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
+        fallbackToBrowserTab: true,
+        extraSources: [
+          createTemplateCompletionSource({
+            getEnvironmentNames: () => activeEnvironmentNames,
+            getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+          }),
+        ],
+      }),
     ],
-    []
+    [activeEnvironmentNames]
   )
 
   const urlEditorExtensions = useMemo(

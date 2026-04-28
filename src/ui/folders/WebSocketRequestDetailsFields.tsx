@@ -23,6 +23,7 @@ import { requestExecutionStore } from './requestExecutionStore'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
+import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { buildImportedWebSocketUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 
@@ -111,9 +112,22 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
-      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current),
+      templateScriptExtension({
+        getEnvironmentNames: () =>
+          environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
+        extraSources: [
+          createTemplateCompletionSource({
+            getEnvironmentNames: () =>
+              environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+            getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+          }),
+        ],
+      }),
     ],
-    []
+    [activeEnvironmentIds, environments]
   )
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
@@ -126,9 +140,24 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
-      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, { fallbackToBrowserTab: true }),
+      templateScriptExtension({
+        getEnvironmentNames: () =>
+          environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        fallbackToBrowserTab: true,
+      }),
+      variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
+        fallbackToBrowserTab: true,
+        extraSources: [
+          createTemplateCompletionSource({
+            getEnvironmentNames: () =>
+              environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+            getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+          }),
+        ],
+      }),
     ],
-    []
+    [activeEnvironmentIds, environments]
   )
 
   const urlEditorExtensions = useMemo(() => [searchParamHighlightExtension(), ...variableEditorExtensions], [variableEditorExtensions])

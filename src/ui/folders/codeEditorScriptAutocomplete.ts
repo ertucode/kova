@@ -80,9 +80,10 @@ function completeVariableName(
 
     const quote = match[1] ?? '"'
     const query = match[2] ?? ''
+    const suffix = getFirstArgumentCompletionSuffix(before)
     const options = buildVariableStringCompletions(getVariableNames)
       .filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
-      .map(option => buildQuotedStringCompletion(option, quote))
+      .map(option => buildQuotedStringCompletion(option, quote, suffix))
 
     if (options.length === 0) {
       return null
@@ -122,9 +123,10 @@ function completeEnvironmentName(
 
     const quote = match[match.length - 2] ?? '"'
     const query = match[match.length - 1] ?? ''
+    const suffix = ')'
     const options = buildEnvironmentStringCompletions(getEnvironmentNames)
       .filter(option => option.label.toLowerCase().includes(query.toLowerCase()))
-      .map(option => buildQuotedStringCompletion(option, quote))
+      .map(option => buildQuotedStringCompletion(option, quote, suffix))
 
     if (options.length === 0) {
       return null
@@ -226,13 +228,20 @@ function buildEnvironmentStringCompletions(getEnvironmentNames: (() => string[])
     }))
 }
 
-function buildQuotedStringCompletion(option: Completion, quote: string): Completion {
+function buildQuotedStringCompletion(option: Completion, quote: string, suffix = ''): Completion {
   return {
     ...option,
     apply(view, completion, from, to) {
-      const nextCharacter = view.state.doc.sliceString(to, to + 1)
-      const replacementTo = nextCharacter === quote ? to + 1 : to
-      const replacement = `${completion.label}${quote}`
+      let replacementTo = to
+      const trailingText = view.state.doc.sliceString(to, Math.min(view.state.doc.length, to + quote.length + suffix.length))
+
+      if (trailingText.startsWith(`${quote}${suffix}`)) {
+        replacementTo = to + quote.length + suffix.length
+      } else if (trailingText.startsWith(quote)) {
+        replacementTo = to + quote.length
+      }
+
+      const replacement = `${completion.label}${quote}${suffix}`
 
       view.dispatch({
         changes: { from, to: replacementTo, insert: replacement },
@@ -240,4 +249,32 @@ function buildQuotedStringCompletion(option: Completion, quote: string): Complet
       })
     },
   }
+}
+
+function getFirstArgumentCompletionSuffix(sourceBeforeCursor: string) {
+  if (/env\.(?:get|has)\(\s*(['"])[^'"]*$/.test(sourceBeforeCursor)) {
+    return ')'
+  }
+
+  if (/env\.set\(\s*(['"])[^'"]*$/.test(sourceBeforeCursor)) {
+    return ', '
+  }
+
+  if (/scope\.(?:get|has)\(\s*(['"])[^'"]*$/.test(sourceBeforeCursor)) {
+    return ')'
+  }
+
+  if (/scope\.set\(\s*(['"])[^'"]*$/.test(sourceBeforeCursor)) {
+    return ', '
+  }
+
+  if (/request\.headers\.(?:get|has|delete)\(\s*(['"])[^'"]*$/.test(sourceBeforeCursor)) {
+    return ')'
+  }
+
+  if (/request\.headers\.set\(\s*(['"])[^'"]*$/.test(sourceBeforeCursor)) {
+    return ', '
+  }
+
+  return ''
 }

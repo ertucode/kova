@@ -188,6 +188,27 @@ describe('createRequestScriptRuntime', () => {
     expect(runtime.request.body).toBe('2')
   })
 
+  it('calls zero-argument function results from template expressions', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '{{$crypto.randomUUID}}',
+        bodyType: 'raw',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+
+    await runtime.resolveRequestTemplateExpressions()
+
+    expect(runtime.request.body).toMatch(UUID_PATTERN)
+  })
+
   it('leaves escaped template expressions untouched', async () => {
     const runtime = createRequestScriptRuntime({
       request: {

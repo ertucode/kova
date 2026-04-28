@@ -5,6 +5,7 @@ import {
   type Completion,
   type CompletionContext,
   type CompletionResult,
+  type CompletionSource,
 } from '@codemirror/autocomplete'
 
 import type { Extension } from '@codemirror/state'
@@ -20,6 +21,7 @@ export type VariableAutocompleteItem = {
 
 type VariableAutocompleteOptions = {
   fallbackToBrowserTab?: boolean
+  extraSources?: CompletionSource[]
 }
 
 export function variableAutocompleteExtension(
@@ -30,7 +32,7 @@ export function variableAutocompleteExtension(
     codeEditorTabBehaviorExtension(opts),
     autocompletion({
       activateOnTyping: true,
-      override: [context => completeVariables(context, getVariables)],
+      override: [context => completeVariables(context, getVariables), ...(opts?.extraSources ?? [])],
     }),
     EditorView.updateListener.of(update => {
       if (!update.docChanged) {

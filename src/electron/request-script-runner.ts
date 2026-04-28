@@ -912,7 +912,7 @@ async function evaluateTemplateExpression(input: {
 
   try {
     compiledScript = compileTemplateExpressionScript(input.expressionSource)
-    const result = await executeScript(compiledScript.code, sandbox)
+    const result = await resolveTemplateExpressionResult(await executeScript(compiledScript.code, sandbox))
     input.runtimeRequest.headers = headerEditor.serialize()
     return stringifyTemplateExpressionResult(result)
   } catch (error) {
@@ -926,6 +926,14 @@ async function evaluateTemplateExpression(input: {
 
     throw new Error(`Template expression failed in ${input.sourceName}: ${details.message}`)
   }
+}
+
+async function resolveTemplateExpressionResult(value: unknown): Promise<unknown> {
+  if (typeof value !== 'function') {
+    return value
+  }
+
+  return await Promise.resolve(value())
 }
 
 function resolveHttpAuthExpressions(auth: HttpAuth, resolveValue: (value: string, fieldName: string) => Promise<string>) {
