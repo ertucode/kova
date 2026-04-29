@@ -22,6 +22,7 @@ import { ResponseVisualizerPreview } from './ResponseVisualizerPreview'
 import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderExplorerEditorStore'
 import { requestExecutionStore } from './requestExecutionStore'
 import { AppSettingsCoordinator, appSettingsStore } from '@/global/appSettingsStore'
+import { Tooltip } from '../components/Tooltip'
 
 const readOnlyCodeEditorOnChange = () => undefined
 const jsonResponsePathExtension = createJsonResponsePathExtension()
@@ -380,6 +381,48 @@ const ResponseScriptErrors = memo(function ResponseScriptErrors({
   )
 })
 
+type PersistedResponseBodyViewMode = RequestDetailsDraft['preferredResponseBodyView']
+type ResponseBodyPanelViewMode = PersistedResponseBodyViewMode | 'preview' | 'render-html'
+type ResponseHeaderRow = { id: string; key: string; value: string }
+type ResponseBodyContentState =
+  | { kind: 'message'; message: string }
+  | { kind: 'image'; source: string; alt: string }
+  | { kind: 'pdf'; source: string; title: string }
+  | { kind: 'html'; source: string; title: string }
+  | {
+      kind: 'visualizer'
+      source: string
+      response: SendRequestResponse
+      contentType: string | null
+      requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+      environments: Array<{
+        id: string
+        name: string
+        isActive: boolean
+        priority: number
+        createdAt: number
+        values: Record<string, string>
+      }>
+    }
+  | {
+      kind: 'table'
+      rows: Array<Record<string, unknown>>
+      accessor: string
+      placeholder: string
+      fallbackBody: string
+      language: CodeEditorLanguage
+      supportsCollapsing: boolean
+      supportsStructuredResponse: boolean
+      emptyMessage: string
+    }
+  | {
+      kind: 'editor'
+      value: string
+      language: CodeEditorLanguage
+      supportsCollapsing: boolean
+      extensions?: Extension[]
+    }
+
 const ResponseBodyPanel = memo(function ResponseBodyPanel({
   value,
   rawBody,
@@ -438,6 +481,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   const imageSource = useMemo(() => getResponseImageSource(rawBody, contentType), [contentType, rawBody])
   const pdfSource = useMemo(() => getResponsePdfSource(rawBody, contentType), [contentType, rawBody])
   const hasMediaPreview = (isImageResponse && imageSource !== null) || (isPdfResponse && pdfSource !== null)
+  const supportsHtmlRender = isRenderableHtmlContentType(contentType)
   const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
   const hasResponseVisualizer = responseVisualizer.trim().length > 0
   const canRenderVisualizer = hasResponseVisualizer && response !== null
@@ -450,9 +494,9 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     () => resolveResponseTableRows(parsedStructuredResponse, responseTableAccessor),
     [parsedStructuredResponse, responseTableAccessor]
   )
-  const [viewMode, setViewMode] = useState<'raw' | 'table' | 'visualizer' | 'preview'>(preferredResponseBodyView)
+  const [viewMode, setViewMode] = useState<ResponseBodyPanelViewMode>(preferredResponseBodyView)
   const [section, setSection] = useState<'body' | 'headers'>('body')
-  const mediaPreviewKeyRef = useRef<string | null>(null)
+  const bodyViewResetKeyRef = useRef<string | null>(null)
   const canCopyResponseSection = section === 'body' ? displayedRawBody.trim().length > 0 : responseHeaderRows.length > 0
   const historyButtonLabel =
     requestHistoryCount === null
@@ -460,13 +504,6 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
       : requestHistoryCount > 0
         ? `Show History (${requestHistoryCount})`
         : 'No History'
-  const sectionOptions = useMemo(
-    () => [
-      { value: 'body' as const, label: 'Body' },
-      { value: 'headers' as const, label: 'Headers' },
-    ],
-    []
-  )
   const displayModeOptions = useMemo(
     () =>
       APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.map(mode => ({
@@ -476,40 +513,43 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     []
   )
   const viewModeOptions = useMemo(
-    () =>
-      hasMediaPreview
-        ? [
-            { value: 'preview' as const, label: 'Preview' },
-            { value: 'raw' as const, label: 'Raw' },
-            { value: 'visualizer' as const, label: 'Visualizer' },
-          ]
-        : [
-            { value: 'raw' as const, label: 'Raw' },
-            { value: 'table' as const, label: 'Table' },
-            { value: 'visualizer' as const, label: 'Visualizer' },
-          ],
-    [hasMediaPreview]
+    () => getResponseBodyViewOptions({ hasMediaPreview, supportsHtmlRender }),
+    [hasMediaPreview, supportsHtmlRender]
   )
+  const availableViewModes = useMemo(() => viewModeOptions.map(option => option.value), [viewModeOptions])
   const responseBodyEditorExtensions = useMemo(
     () => (language === 'json' ? [jsonResponsePathExtension] : undefined),
     [language]
   )
 
   useEffect(() => {
-    const nextMediaPreviewKey = hasMediaPreview ? `${contentType ?? ''}:${rawBody}` : null
+    const nextBodyViewResetKey = `${contentType ?? ''}:${rawBody}`
+    const isNewBody = nextBodyViewResetKey !== bodyViewResetKeyRef.current
+    const fallbackViewMode = availableViewModes.includes(preferredResponseBodyView)
+      ? preferredResponseBodyView
+      : (availableViewModes[0] ?? 'raw')
 
-    if (nextMediaPreviewKey !== mediaPreviewKeyRef.current) {
-      mediaPreviewKeyRef.current = nextMediaPreviewKey
-      setViewMode(hasMediaPreview ? 'preview' : preferredResponseBodyView)
+    if (isNewBody) {
+      bodyViewResetKeyRef.current = nextBodyViewResetKey
+      setViewMode(hasMediaPreview ? 'preview' : fallbackViewMode)
       return
     }
 
-    if (!hasMediaPreview) {
+    if (!availableViewModes.includes(viewMode)) {
+      setViewMode(fallbackViewMode)
+      return
+    }
+
+    if (
+      availableViewModes.includes(preferredResponseBodyView) &&
+      isPersistedResponseBodyViewMode(viewMode) &&
+      viewMode !== preferredResponseBodyView
+    ) {
       setViewMode(preferredResponseBodyView)
     }
-  }, [contentType, hasMediaPreview, preferredResponseBodyView, rawBody])
+  }, [availableViewModes, contentType, hasMediaPreview, preferredResponseBodyView, rawBody, viewMode])
 
-  const updatePreferredResponseBodyView = async (nextView: 'raw' | 'table' | 'visualizer') => {
+  const updatePreferredResponseBodyView = async (nextView: PersistedResponseBodyViewMode) => {
     if (!requestSelection) {
       return false
     }
@@ -517,11 +557,193 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     return await FolderExplorerCoordinator.updateRequestResponseBodyViewPreference(requestSelection, nextView)
   }
 
+  const bodyContentState = useMemo<ResponseBodyContentState>(() => {
+    if (viewMode === 'preview') {
+      if (isImageResponse && imageSource) {
+        return { kind: 'image', source: imageSource, alt: contentType ?? 'Response image' }
+      }
+
+      if (isPdfResponse && pdfSource) {
+        return { kind: 'pdf', source: pdfSource, title: contentType ?? 'Response PDF' }
+      }
+
+      if (isPdfResponse) {
+        return { kind: 'message', message: 'PDF response could not be previewed.' }
+      }
+
+      if (isImageResponse) {
+        return { kind: 'message', message: 'Image response could not be previewed.' }
+      }
+    }
+
+    if (viewMode === 'render-html') {
+      return supportsHtmlRender
+        ? { kind: 'html', source: rawBody, title: contentType ?? 'Response HTML' }
+        : { kind: 'message', message: 'HTML render is not available for this response.' }
+    }
+
+    if (viewMode === 'visualizer') {
+      if (canRenderVisualizer && response) {
+        return {
+          kind: 'visualizer',
+          source: responseVisualizer,
+          response,
+          contentType,
+          requestDraft,
+          environments,
+        }
+      }
+
+      if (hasResponseVisualizer) {
+        return { kind: 'message', message: 'Send the request to render the response visualizer.' }
+      }
+    }
+
+    if (viewMode === 'table') {
+      return {
+        kind: 'table',
+        rows: tableResolution.rows,
+        accessor: responseTableAccessor,
+        placeholder: tableResolution.detectedAccessor ?? 'Auto detect or use r.items[0].children',
+        fallbackBody: value,
+        language,
+        supportsCollapsing,
+        supportsStructuredResponse: parsedStructuredResponse !== null,
+        emptyMessage: description,
+      }
+    }
+
+    if (value) {
+      return {
+        kind: 'editor',
+        value: displayedRawBody,
+        language,
+        supportsCollapsing,
+        extensions: responseBodyEditorExtensions,
+      }
+    }
+
+    return { kind: 'message', message: description }
+  }, [
+    canRenderVisualizer,
+    contentType,
+    description,
+    displayedRawBody,
+    environments,
+    hasResponseVisualizer,
+    imageSource,
+    isImageResponse,
+    isPdfResponse,
+    language,
+    parsedStructuredResponse,
+    pdfSource,
+    requestDraft,
+    response,
+    responseBodyEditorExtensions,
+    responseTableAccessor,
+    responseVisualizer,
+    rawBody,
+    supportsCollapsing,
+    supportsHtmlRender,
+    tableResolution.detectedAccessor,
+    tableResolution.rows,
+    value,
+    viewMode,
+  ])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-2">
-      <div className="flex shrink-0 items-center justify-between gap-3">
-        <div className="text-sm font-medium text-base-content">Response</div>
-        <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-3 pb-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="mr-1 text-sm font-medium text-base-content">Response</div>
+          <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+            {[
+              { value: 'body' as const, label: 'Body' },
+              { value: 'headers' as const, label: 'Headers' },
+            ].map(option => (
+              <button
+                key={option.value}
+                type="button"
+                className={[
+                  'px-3 py-2 text-[11px] font-semibold transition',
+                  section === option.value
+                    ? 'bg-base-200/80 text-base-content'
+                    : 'text-base-content/60 hover:text-base-content',
+                  option.value === 'headers' ? 'border-l border-base-content/10' : '',
+                ].join(' ')}
+                onClick={() => setSection(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {section === 'body' ? (
+            <LabeledSelect
+              label="View"
+              value={viewMode}
+              options={viewModeOptions}
+              className="w-[102px]"
+              onChange={nextView => {
+                if (!isPersistedResponseBodyViewMode(nextView)) {
+                  setViewMode(nextView)
+                  return
+                }
+
+                void updatePreferredResponseBodyView(nextView).then(success => {
+                  if (success) {
+                    setViewMode(nextView)
+                  }
+                })
+              }}
+            />
+          ) : null}
+          {section === 'body' && viewMode === 'raw' && hasFormattedBody ? (
+            <LabeledSelect
+              label="Format"
+              value={responseBodyDisplayMode}
+              options={displayModeOptions}
+              className="w-[102px]"
+              onChange={mode => {
+                void onUpdateResponseBodyDisplayMode(mode)
+              }}
+            />
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {canCopyResponseSection ? (
+            <Tooltip
+              content={section === 'body' ? 'Copy Response Body' : 'Copy Response Headers'}
+              placement="top"
+              className="flex"
+            >
+              <button
+                type="button"
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
+                onClick={() =>
+                  void copyTextToClipboard(
+                    section === 'body' ? displayedRawBody : headers,
+                    section === 'body' ? 'Response body copied to clipboard.' : 'Response headers copied to clipboard.'
+                  )
+                }
+                aria-label={section === 'body' ? 'Copy response body' : 'Copy response headers'}
+              >
+                <CopyIcon className="h-4 w-4" />
+              </button>
+            </Tooltip>
+          ) : null}
+          {section === 'body' && onSaveAsExample ? (
+            <Tooltip content="Save as Example" placement="top" className="flex">
+              <button
+                type="button"
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
+                onClick={onSaveAsExample}
+                aria-label="Save as example"
+              >
+                <SaveIcon className="h-4 w-4" />
+              </button>
+            </Tooltip>
+          ) : null}
           <button
             type="button"
             className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold text-base-content/70 transition hover:border-base-content/20 hover:text-base-content disabled:cursor-default disabled:opacity-45"
@@ -539,189 +761,223 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
           >
             {historyButtonLabel}
           </button>
-          <DropdownSelect
-            value={section}
-            className="w-[132px]"
-            triggerClassName="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold"
-            menuClassName="w-[180px]"
-            options={sectionOptions}
-            onChange={setSection}
-          />
-          {section === 'body' ? (
-            <DropdownSelect
-              value={viewMode}
-              className="w-[132px]"
-              triggerClassName="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold"
-              menuClassName="w-[180px]"
-              options={viewModeOptions}
-              onChange={nextView => {
-                if (nextView === 'preview') {
-                  setViewMode(nextView)
-                  return
-                }
-
-                void updatePreferredResponseBodyView(nextView).then(success => {
-                  if (success) {
-                    setViewMode(nextView)
-                  }
-                })
-              }}
-            />
-          ) : null}
-          {section === 'body' && viewMode === 'raw' && hasFormattedBody ? (
-            <DropdownSelect
-              value={responseBodyDisplayMode}
-              className="w-[132px]"
-              triggerClassName="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold"
-              menuClassName="w-[180px]"
-              options={displayModeOptions}
-              onChange={mode => {
-                void onUpdateResponseBodyDisplayMode(mode)
-              }}
-            />
-          ) : null}
-          {canCopyResponseSection ? (
-            <button
-              type="button"
-              className="rounded-lg bg-base-100/70 text-[11px] font-semibold text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
-              onClick={() =>
-                void copyTextToClipboard(
-                  section === 'body' ? displayedRawBody : headers,
-                  section === 'body' ? 'Response body copied to clipboard.' : 'Response headers copied to clipboard.'
-                )
-              }
-              title={section === 'body' ? 'Copy Response Body' : 'Copy Response Headers'}
-              aria-label={section === 'body' ? 'Copy response body' : 'Copy response headers'}
-            >
-              <CopyIcon className="h-4 w-4" />
-            </button>
-          ) : null}
-          {section === 'body' && onSaveAsExample ? (
-            <button
-              type="button"
-              className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
-              onClick={onSaveAsExample}
-            >
-              <SaveIcon className="h-4 w-4" />
-            </button>
-          ) : null}
-          {contentType ? <div className="text-xs text-base-content/45">{contentType}</div> : null}
-          {response ? <div className="text-xs text-base-content/45">{responseBodySize}</div> : null}
+          {contentType ? <span className="truncate text-xs text-base-content/45">{contentType}</span> : null}
+          {response ? <span className="shrink-0 text-xs text-base-content/45">{responseBodySize}</span> : null}
           <ResponseStatusSummary response={response} responseError={responseError} />
         </div>
       </div>
 
-      {section === 'headers' ? (
-        responseHeaderRows.length > 0 ? (
-          <div className="mt-3 min-h-0 flex-1 overflow-auto">
-            <table className="w-full table-fixed border-collapse text-sm">
-              <tbody>
-                {responseHeaderRows.map(row => (
-                  <tr key={row.id} className="align-top">
-                    <td className="w-[42%] py-1.5 pr-4 text-base-content/55">{row.key}</td>
-                    <td className="break-words py-1.5 text-base-content">{row.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="mt-2 text-sm text-base-content/50">{headersDescription}</div>
-        )
-      ) : viewMode === 'preview' && isImageResponse && imageSource ? (
-        <div className="flex h-full min-h-0 flex-1 items-center justify-center overflow-auto p-4">
-          <img
-            src={imageSource}
-            alt={contentType ?? 'Response image'}
-            className="max-h-full max-w-full rounded-lg border border-base-content/10 bg-base-100/70 object-contain shadow-sm"
-          />
-        </div>
-      ) : viewMode === 'preview' && isPdfResponse && pdfSource ? (
-        <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
-          <iframe
-            src={pdfSource}
-            title={contentType ?? 'Response PDF'}
-            className="h-full w-full rounded-lg border border-base-content/10 bg-base-100/70"
-          />
-        </div>
-      ) : viewMode === 'preview' && isPdfResponse ? (
-        <div className="mt-2 text-sm text-base-content/50">PDF response could not be previewed.</div>
-      ) : viewMode === 'preview' && isImageResponse ? (
-        <div className="mt-2 text-sm text-base-content/50">Image response could not be previewed.</div>
-      ) : viewMode === 'visualizer' && canRenderVisualizer && response ? (
-        <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
-          <ResponseVisualizerPreview
-            source={responseVisualizer}
-            response={response}
-            contentType={contentType}
-            requestDraft={requestDraft}
-            environments={environments}
-          />
-        </div>
-      ) : viewMode === 'visualizer' && hasResponseVisualizer ? (
-        <div className="mt-2 text-sm text-base-content/50">Send the request to render the response visualizer.</div>
-      ) : viewMode === 'table' ? (
-        <div className="min-h-0 flex-1 overflow-hidden pt-3">
-          <div className="flex h-full min-h-0 flex-col gap-3">
-            <label className="flex shrink-0 flex-col gap-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">
-                Table Accessor
-              </span>
-              <input
-                type="text"
-                value={responseTableAccessor}
-                onChange={event => onUpdateResponseTableAccessor(event.target.value)}
-                placeholder={tableResolution.detectedAccessor ?? 'Auto detect or use r.items[0].children'}
-                className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content outline-none transition placeholder:text-base-content/30 focus:border-base-content/20"
-              />
-            </label>
-
-            {tableResolution.rows.length > 0 ? (
-              <ResponseTable rows={tableResolution.rows} />
-            ) : rawBody.trim() && !parsedStructuredResponse ? (
-              <div className="rounded-xl border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning-content/90">
-                Table view only supports JSON or XML responses. Switch to Raw for this response.
-              </div>
-            ) : value ? (
-              <div className="h-full min-h-0 flex-1 overflow-hidden">
-                <CodeEditor
-                  value={value}
-                  language={language}
-                  readOnly
-                  showFoldGutter={supportsCollapsing}
-                  size="small"
-                  className="h-full border-0"
-                  hideFocusOutline
-                  onChange={readOnlyCodeEditorOnChange}
-                  compact
-                />
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-base-content/50">{description}</div>
-            )}
-          </div>
-        </div>
-      ) : value ? (
-        <div className="h-full min-h-0 flex-1 overflow-hidden">
-          <CodeEditor
-            value={displayedRawBody}
-            language={language}
-            extensions={responseBodyEditorExtensions}
-            readOnly
-            showFoldGutter={supportsCollapsing}
-            size="small"
-            className="h-full border-0"
-            hideFocusOutline
-            onChange={readOnlyCodeEditorOnChange}
-            compact
-          />
-        </div>
-      ) : (
-        <div className="mt-2 text-sm text-base-content/50">{description}</div>
-      )}
+      {section === 'headers'
+        ? renderResponseHeaders(responseHeaderRows, headersDescription)
+        : renderResponseBodyContent(bodyContentState, onUpdateResponseTableAccessor)}
     </div>
   )
 })
+
+function renderResponseHeaders(rows: ResponseHeaderRow[], emptyMessage: string) {
+  if (rows.length === 0) {
+    return <div className="mt-2 text-sm text-base-content/50">{emptyMessage}</div>
+  }
+
+  return (
+    <div className="mt-3 min-h-0 flex-1 overflow-auto">
+      <table className="w-full table-fixed border-collapse text-sm">
+        <tbody>
+          {rows.map(row => (
+            <tr key={row.id} className="align-top">
+              <td className="w-[42%] py-1.5 pr-4 text-base-content/55">{row.key}</td>
+              <td className="break-words py-1.5 text-base-content">{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function renderResponseBodyContent(
+  state: ResponseBodyContentState,
+  onUpdateResponseTableAccessor: (value: string) => void
+) {
+  if (state.kind === 'message') {
+    return <div className="mt-2 text-sm text-base-content/50">{state.message}</div>
+  }
+
+  if (state.kind === 'image') {
+    return (
+      <div className="flex h-full min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+        <img
+          src={state.source}
+          alt={state.alt}
+          className="max-h-full max-w-full rounded-lg border border-base-content/10 bg-base-100/70 object-contain shadow-sm"
+        />
+      </div>
+    )
+  }
+
+  if (state.kind === 'pdf') {
+    return (
+      <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
+        <iframe
+          src={state.source}
+          title={state.title}
+          className="h-full w-full rounded-lg border border-base-content/10 bg-base-100/70"
+        />
+      </div>
+    )
+  }
+
+  if (state.kind === 'html') {
+    return (
+      <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
+        <iframe
+          srcDoc={state.source}
+          title={state.title}
+          sandbox=""
+          className="h-full w-full rounded-lg border border-base-content/10 bg-white"
+        />
+      </div>
+    )
+  }
+
+  if (state.kind === 'visualizer') {
+    return (
+      <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
+        <ResponseVisualizerPreview
+          source={state.source}
+          response={state.response}
+          contentType={state.contentType}
+          requestDraft={state.requestDraft}
+          environments={state.environments}
+        />
+      </div>
+    )
+  }
+
+  if (state.kind === 'table') {
+    return (
+      <div className="min-h-0 flex-1 overflow-hidden pt-3">
+        <div className="flex h-full min-h-0 flex-col gap-3">
+          <label className="flex shrink-0 flex-col gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">
+              Table Accessor
+            </span>
+            <input
+              type="text"
+              value={state.accessor}
+              onChange={event => onUpdateResponseTableAccessor(event.target.value)}
+              placeholder={state.placeholder}
+              className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content outline-none transition placeholder:text-base-content/30 focus:border-base-content/20"
+            />
+          </label>
+
+          {state.rows.length > 0 ? (
+            <ResponseTable rows={state.rows} />
+          ) : state.fallbackBody.trim() && !state.supportsStructuredResponse ? (
+            <div className="rounded-xl border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning-content/90">
+              Table view only supports JSON or XML responses. Switch to Raw for this response.
+            </div>
+          ) : state.fallbackBody ? (
+            <div className="h-full min-h-0 flex-1 overflow-hidden">
+              <CodeEditor
+                value={state.fallbackBody}
+                language={state.language}
+                readOnly
+                showFoldGutter={state.supportsCollapsing}
+                size="small"
+                className="h-full border-0"
+                hideFocusOutline
+                onChange={readOnlyCodeEditorOnChange}
+                compact
+              />
+            </div>
+          ) : (
+            <div className="mt-2 text-sm text-base-content/50">{state.emptyMessage}</div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full min-h-0 flex-1 overflow-hidden">
+      <CodeEditor
+        value={state.value}
+        language={state.language}
+        extensions={state.extensions}
+        readOnly
+        showFoldGutter={state.supportsCollapsing}
+        size="small"
+        className="h-full border-0"
+        hideFocusOutline
+        onChange={readOnlyCodeEditorOnChange}
+        compact
+      />
+    </div>
+  )
+}
+
+function LabeledSelect<TValue extends string>({
+  label,
+  value,
+  options,
+  className,
+  onChange,
+}: {
+  label: string
+  value: TValue
+  options: Array<{ value: TValue; label: string }>
+  className: string
+  onChange: (value: TValue) => void
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-base-content/10 bg-base-100/70 px-2.5 py-0.5">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">{label}</span>
+      <DropdownSelect
+        value={value}
+        className={className}
+        triggerClassName="h-8 border-0 bg-transparent px-0 text-[11px] font-semibold shadow-none"
+        menuClassName="left-1/2 w-[180px] -translate-x-1/2"
+        options={options}
+        onChange={onChange}
+      />
+    </div>
+  )
+}
+
+function getResponseBodyViewOptions({
+  hasMediaPreview,
+  supportsHtmlRender,
+}: {
+  hasMediaPreview: boolean
+  supportsHtmlRender: boolean
+}): Array<{ value: ResponseBodyPanelViewMode; label: string }> {
+  const options: Array<{ value: ResponseBodyPanelViewMode; label: string }> = []
+
+  if (hasMediaPreview) {
+    options.push({ value: 'preview', label: 'Preview' })
+  }
+
+  if (supportsHtmlRender) {
+    options.push({ value: 'render-html', label: 'Render Html' })
+  }
+
+  options.push({ value: 'raw', label: 'Raw' })
+
+  if (!hasMediaPreview) {
+    options.push({ value: 'table', label: 'Table' })
+  }
+
+  options.push({ value: 'visualizer', label: 'Visualizer' })
+
+  return options
+}
+
+function isPersistedResponseBodyViewMode(
+  viewMode: ResponseBodyPanelViewMode
+): viewMode is PersistedResponseBodyViewMode {
+  return viewMode === 'raw' || viewMode === 'table' || viewMode === 'visualizer'
+}
 
 function ResponseTable({ rows }: { rows: Array<Record<string, unknown>> }) {
   const columns = useMemo(() => {
@@ -1608,6 +1864,10 @@ function detectResponseLanguage(contentType: string | null, body: string): CodeE
   }
 
   return 'plain'
+}
+
+function isRenderableHtmlContentType(contentType: string | null) {
+  return contentType?.toLowerCase().startsWith('text/html') ?? false
 }
 
 function isImageContentType(contentType: string | null) {
