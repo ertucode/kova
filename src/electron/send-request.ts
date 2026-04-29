@@ -521,7 +521,7 @@ function getResponseContentType(headers: string) {
 async function readResponseBody(response: Response, headers: string) {
   const contentType = getResponseContentType(headers)?.toLowerCase() ?? ''
 
-  if (!contentType.startsWith('image/')) {
+  if (!contentType.startsWith('image/') && !contentType.includes('application/pdf')) {
     return await response.text()
   }
 

@@ -1632,11 +1632,7 @@ function getResponsePdfSource(body: string, contentType: string | null) {
     return `data:${contentType};base64,${body.trim()}`
   }
 
-  try {
-    return `data:${contentType};base64,${btoa(body)}`
-  } catch {
-    return null
-  }
+  return null
 }
 
 function looksLikeBase64(value: string) {
