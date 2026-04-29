@@ -437,6 +437,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   const isPdfResponse = isPdfContentType(contentType)
   const imageSource = useMemo(() => getResponseImageSource(rawBody, contentType), [contentType, rawBody])
   const pdfSource = useMemo(() => getResponsePdfSource(rawBody, contentType), [contentType, rawBody])
+  const hasMediaPreview = (isImageResponse && imageSource !== null) || (isPdfResponse && pdfSource !== null)
   const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
   const hasResponseVisualizer = responseVisualizer.trim().length > 0
   const canRenderVisualizer = hasResponseVisualizer && response !== null
@@ -449,8 +450,9 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     () => resolveResponseTableRows(parsedStructuredResponse, responseTableAccessor),
     [parsedStructuredResponse, responseTableAccessor]
   )
-  const [viewMode, setViewMode] = useState<'raw' | 'table' | 'visualizer'>(preferredResponseBodyView)
+  const [viewMode, setViewMode] = useState<'raw' | 'table' | 'visualizer' | 'preview'>(preferredResponseBodyView)
   const [section, setSection] = useState<'body' | 'headers'>('body')
+  const mediaPreviewKeyRef = useRef<string | null>(null)
   const canCopyResponseSection = section === 'body' ? displayedRawBody.trim().length > 0 : responseHeaderRows.length > 0
   const historyButtonLabel =
     requestHistoryCount === null
@@ -474,12 +476,19 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     []
   )
   const viewModeOptions = useMemo(
-    () => [
-      { value: 'raw' as const, label: 'Raw' },
-      { value: 'table' as const, label: 'Table' },
-      { value: 'visualizer' as const, label: 'Visualizer' },
-    ],
-    []
+    () =>
+      hasMediaPreview
+        ? [
+            { value: 'preview' as const, label: 'Preview' },
+            { value: 'raw' as const, label: 'Raw' },
+            { value: 'visualizer' as const, label: 'Visualizer' },
+          ]
+        : [
+            { value: 'raw' as const, label: 'Raw' },
+            { value: 'table' as const, label: 'Table' },
+            { value: 'visualizer' as const, label: 'Visualizer' },
+          ],
+    [hasMediaPreview]
   )
   const responseBodyEditorExtensions = useMemo(
     () => (language === 'json' ? [jsonResponsePathExtension] : undefined),
@@ -487,8 +496,18 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   )
 
   useEffect(() => {
-    setViewMode(preferredResponseBodyView)
-  }, [preferredResponseBodyView])
+    const nextMediaPreviewKey = hasMediaPreview ? `${contentType ?? ''}:${rawBody}` : null
+
+    if (nextMediaPreviewKey !== mediaPreviewKeyRef.current) {
+      mediaPreviewKeyRef.current = nextMediaPreviewKey
+      setViewMode(hasMediaPreview ? 'preview' : preferredResponseBodyView)
+      return
+    }
+
+    if (!hasMediaPreview) {
+      setViewMode(preferredResponseBodyView)
+    }
+  }, [contentType, hasMediaPreview, preferredResponseBodyView, rawBody])
 
   const updatePreferredResponseBodyView = async (nextView: 'raw' | 'table' | 'visualizer') => {
     if (!requestSelection) {
@@ -528,7 +547,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             options={sectionOptions}
             onChange={setSection}
           />
-          {section === 'body' && !isImageResponse && !isPdfResponse ? (
+          {section === 'body' ? (
             <DropdownSelect
               value={viewMode}
               className="w-[132px]"
@@ -536,6 +555,11 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
               menuClassName="w-[180px]"
               options={viewModeOptions}
               onChange={nextView => {
+                if (nextView === 'preview') {
+                  setViewMode(nextView)
+                  return
+                }
+
                 void updatePreferredResponseBodyView(nextView).then(success => {
                   if (success) {
                     setViewMode(nextView)
@@ -544,7 +568,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
               }}
             />
           ) : null}
-          {section === 'body' && !isImageResponse && !isPdfResponse && viewMode === 'raw' && hasFormattedBody ? (
+          {section === 'body' && viewMode === 'raw' && hasFormattedBody ? (
             <DropdownSelect
               value={responseBodyDisplayMode}
               className="w-[132px]"
@@ -604,7 +628,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
         ) : (
           <div className="mt-2 text-sm text-base-content/50">{headersDescription}</div>
         )
-      ) : isImageResponse && imageSource ? (
+      ) : viewMode === 'preview' && isImageResponse && imageSource ? (
         <div className="flex h-full min-h-0 flex-1 items-center justify-center overflow-auto p-4">
           <img
             src={imageSource}
@@ -612,7 +636,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             className="max-h-full max-w-full rounded-lg border border-base-content/10 bg-base-100/70 object-contain shadow-sm"
           />
         </div>
-      ) : isPdfResponse && pdfSource ? (
+      ) : viewMode === 'preview' && isPdfResponse && pdfSource ? (
         <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
           <iframe
             src={pdfSource}
@@ -620,9 +644,9 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             className="h-full w-full rounded-lg border border-base-content/10 bg-base-100/70"
           />
         </div>
-      ) : isPdfResponse ? (
+      ) : viewMode === 'preview' && isPdfResponse ? (
         <div className="mt-2 text-sm text-base-content/50">PDF response could not be previewed.</div>
-      ) : isImageResponse ? (
+      ) : viewMode === 'preview' && isImageResponse ? (
         <div className="mt-2 text-sm text-base-content/50">Image response could not be previewed.</div>
       ) : viewMode === 'visualizer' && canRenderVisualizer && response ? (
         <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
