@@ -434,7 +434,9 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
 }) {
   const language = detectResponseLanguage(contentType, rawBody)
   const isImageResponse = isImageContentType(contentType)
+  const isPdfResponse = isPdfContentType(contentType)
   const imageSource = useMemo(() => getResponseImageSource(rawBody, contentType), [contentType, rawBody])
+  const pdfSource = useMemo(() => getResponsePdfSource(rawBody, contentType), [contentType, rawBody])
   const supportsCollapsing = language === 'json' || language === 'xml' || language === 'html'
   const hasResponseVisualizer = responseVisualizer.trim().length > 0
   const canRenderVisualizer = hasResponseVisualizer && response !== null
@@ -526,7 +528,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             options={sectionOptions}
             onChange={setSection}
           />
-          {section === 'body' && !isImageResponse ? (
+          {section === 'body' && !isImageResponse && !isPdfResponse ? (
             <DropdownSelect
               value={viewMode}
               className="w-[132px]"
@@ -542,7 +544,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
               }}
             />
           ) : null}
-          {section === 'body' && !isImageResponse && viewMode === 'raw' && hasFormattedBody ? (
+          {section === 'body' && !isImageResponse && !isPdfResponse && viewMode === 'raw' && hasFormattedBody ? (
             <DropdownSelect
               value={responseBodyDisplayMode}
               className="w-[132px]"
@@ -610,6 +612,16 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             className="max-h-full max-w-full rounded-lg border border-base-content/10 bg-base-100/70 object-contain shadow-sm"
           />
         </div>
+      ) : isPdfResponse && pdfSource ? (
+        <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
+          <iframe
+            src={pdfSource}
+            title={contentType ?? 'Response PDF'}
+            className="h-full w-full rounded-lg border border-base-content/10 bg-base-100/70"
+          />
+        </div>
+      ) : isPdfResponse ? (
+        <div className="mt-2 text-sm text-base-content/50">PDF response could not be previewed.</div>
       ) : isImageResponse ? (
         <div className="mt-2 text-sm text-base-content/50">Image response could not be previewed.</div>
       ) : viewMode === 'visualizer' && canRenderVisualizer && response ? (
@@ -1578,6 +1590,10 @@ function isImageContentType(contentType: string | null) {
   return contentType?.toLowerCase().startsWith('image/') ?? false
 }
 
+function isPdfContentType(contentType: string | null) {
+  return contentType?.toLowerCase().includes('application/pdf') ?? false
+}
+
 function getResponseImageSource(body: string, contentType: string | null) {
   if (!body.trim() || !contentType) {
     return null
@@ -1590,6 +1606,26 @@ function getResponseImageSource(body: string, contentType: string | null) {
 
   if (normalizedContentType.includes('svg')) {
     return `data:${contentType};charset=utf-8,${encodeURIComponent(body)}`
+  }
+
+  if (looksLikeBase64(body)) {
+    return `data:${contentType};base64,${body.trim()}`
+  }
+
+  try {
+    return `data:${contentType};base64,${btoa(body)}`
+  } catch {
+    return null
+  }
+}
+
+function getResponsePdfSource(body: string, contentType: string | null) {
+  if (!body.trim() || !contentType || !isPdfContentType(contentType)) {
+    return null
+  }
+
+  if (body.startsWith('data:application/pdf')) {
+    return body
   }
 
   if (looksLikeBase64(body)) {
