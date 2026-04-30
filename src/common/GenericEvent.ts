@@ -1,4 +1,5 @@
 import type { HttpSseStreamState, WebSocketSessionRecord } from './Requests.js'
+import type { ScriptPromptRequest } from './ScriptPrompt.js'
 import type { ScriptToastOptions } from './ScriptToast.js'
 
 export type GenericEvent = {
@@ -26,4 +27,7 @@ export type GenericEvent = {
 } | {
   type: 'script-toast-hide'
   id: string
+} | {
+  type: 'script-prompt-request'
+  prompt: ScriptPromptRequest
 }

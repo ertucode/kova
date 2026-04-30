@@ -97,6 +97,7 @@ import {
 } from './PostmanEnvironmentExport.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
+import { type ScriptPromptResponse } from './ScriptPrompt.js'
 import {
   type DatabaseConfigState,
   type DeleteDatabaseConfigInput,
@@ -122,6 +123,7 @@ export type EventResponseMapping = {
   openShell: Promise<void>
   openFileLocation: Promise<GenericResult<void>>
   runCommand: Promise<GenericResult<void>>
+  resolveScriptPrompt: Promise<void>
   getParallelPreloadPath: string
   setAlwaysOnTop: Promise<void>
   getAlwaysOnTop: Promise<boolean>
@@ -205,6 +207,7 @@ export type EventRequestMapping = {
   openShell: string
   openFileLocation: string
   runCommand: { name: string; filePath: string; parameters: any }
+  resolveScriptPrompt: ScriptPromptResponse
   setAlwaysOnTop: boolean
   getAlwaysOnTop: void
   setCompactWindowSize: void
@@ -298,6 +301,7 @@ export type WindowElectron = {
   openFileLocation: (filePath: string) => Promise<GenericResult<void>>
   getWindowArgs: () => string
   runCommand: (opts: { name: string; filePath: string; parameters: any }) => Promise<GenericResult<void>>
+  resolveScriptPrompt: (input: ScriptPromptResponse) => Promise<void>
   setAlwaysOnTop: (alwaysOnTop: boolean) => Promise<void>
   getAlwaysOnTop: () => Promise<boolean>
   setCompactWindowSize: () => Promise<void>

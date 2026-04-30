@@ -98,6 +98,16 @@ const sharedSections: ScriptDocumentationSection[] = [
     ],
   },
   {
+    title: 'User Prompt',
+    description: 'Ask the current user for a text value during script execution.',
+    entries: [
+      {
+        label: 'await prompt.text({ title, message?, defaultValue?, placeholder?, confirmText?, cancelText? })',
+        detail: 'Shows a prompt dialog and resolves to the entered text or null when cancelled.',
+      },
+    ],
+  },
+  {
     title: 'Validation',
     description: 'Use Zod schemas to validate request and response data inside scripts.',
     entries: [
@@ -158,6 +168,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         title: 'Show a setup warning',
         code: "if (!env.get('token')) {\n  toast.show({\n    severity: 'warning',\n    title: 'Missing token',\n    message: 'Set the token environment variable before sending this request.',\n    timeout: 4000,\n  })\n}",
       },
+      {
+        title: 'Ask before using an ad-hoc value',
+        code: "if (!env.get('userId')) {\n  const userId = await prompt.text({\n    title: 'User id required',\n    message: 'Enter the user id to send with this request.',\n    placeholder: '42',\n    confirmText: 'Use value',\n  })\n\n  if (userId) {\n    scope.set('userId', userId)\n  }\n}",
+      },
     ],
   },
   'post-request': {
@@ -190,6 +204,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Show and dismiss a progress toast',
         code: "const toastId = scope.get('requestToastId')\n\nif (response.status >= 400) {\n  if (toastId) {\n    toast.hide(toastId)\n  }\n\n  toast.show({\n    severity: 'error',\n    title: 'Request failed',\n    message: response.status + ' ' + response.statusText,\n  })\n} else if (toastId) {\n  toast.hide(toastId)\n}",
+      },
+      {
+        title: 'Ask whether to persist a value',
+        code: "if (response.body.type === 'json') {\n  const token = typeof response.body.data === 'object' && response.body.data !== null ? Reflect.get(response.body.data, 'token') : null\n\n  if (typeof token === 'string') {\n    const environmentName = await prompt.text({\n      title: 'Save token',\n      message: 'Enter an environment name to store the token, or cancel to skip.',\n      placeholder: 'Default',\n      confirmText: 'Save',\n      cancelText: 'Skip',\n    })\n\n    if (environmentName) {\n      env.set('token', token, environmentName)\n    }\n  }\n}",
       },
     ],
   },

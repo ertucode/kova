@@ -18,6 +18,7 @@ import type {
   RequestRawType,
   ScriptResponseBody,
 } from '../common/Requests.js'
+import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
 
@@ -124,6 +125,7 @@ export function createRequestScriptRuntime(input: {
   request: RuntimeRequestState
   environments: EnvironmentRecord[]
   toast?: ScriptToastBridge
+  prompt?: ScriptPromptBridge
 }): ScriptRuntime {
   const requestScope = new Map<string, string>()
   const runtimeRequest: RuntimeRequestState = { ...input.request }
@@ -251,6 +253,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           toastBridge: input.toast,
+          promptBridge: input.prompt,
         })
       if (scriptErrors.length > 0) {
         ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
@@ -280,6 +283,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           toastBridge: input.toast,
+          promptBridge: input.prompt,
         })
         if (scriptErrors.length > 0) {
           ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
@@ -423,6 +427,7 @@ async function runScriptPhase(input: {
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
   toastBridge?: ScriptToastBridge
+  promptBridge?: ScriptPromptBridge
 }) {
   for (const source of input.sources) {
     if (!source.script.trim()) {
@@ -430,6 +435,7 @@ async function runScriptPhase(input: {
     }
 
     const headerEditor = createHeaderEditor(input.runtimeRequest)
+    const executionController = createScriptExecutionController()
     const sandbox = {
       console: createScriptConsole(source.name, input.consoleEntries),
       request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
@@ -439,6 +445,7 @@ async function runScriptPhase(input: {
       response: input.response ? createResponseApi(input.response) : undefined,
       env: createEnvironmentApi(input.environmentContext),
       scope: createScopeApi(input.requestScope),
+      prompt: createScriptPromptApi(input.promptBridge, executionController),
       toast: createScriptToastApi(input.toastBridge),
       crypto: createCryptoApi(),
       z,
@@ -448,7 +455,7 @@ async function runScriptPhase(input: {
 
     try {
       compiledScript = compileRequestScript(source.script)
-      await executeScript(compiledScript.code, sandbox)
+      await executeScript(compiledScript.code, sandbox, executionController)
       input.runtimeRequest.headers = headerEditor.serialize()
     } catch (error) {
       return [buildScriptErrorDetails({
@@ -458,10 +465,91 @@ async function runScriptPhase(input: {
         sourceCode: source.script,
         compiledScript,
       })]
+    } finally {
+      executionController.cancel()
     }
   }
 
   return []
+}
+
+function createScriptExecutionController(timeoutMs = SCRIPT_TIMEOUT_MS): ScriptExecutionPauseController & {
+  timeoutPromise: Promise<never>
+  cancel: () => void
+} {
+  let remainingMs = timeoutMs
+  let pauseDepth = 0
+  let startedAt = performance.now()
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+  let isSettled = false
+  let rejectTimeout: ((reason?: unknown) => void) | null = null
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    rejectTimeout = reject
+  })
+
+  const rejectForTimeout = () => {
+    if (isSettled) {
+      return
+    }
+
+    isSettled = true
+    timeoutHandle = null
+    rejectTimeout?.(new Error(`Script execution timed out after ${timeoutMs}ms`))
+  }
+
+  const startTimer = () => {
+    if (isSettled || pauseDepth > 0) {
+      return
+    }
+
+    if (remainingMs <= 0) {
+      rejectForTimeout()
+      return
+    }
+
+    startedAt = performance.now()
+    timeoutHandle = setTimeout(rejectForTimeout, remainingMs)
+  }
+
+  startTimer()
+
+  return {
+    timeoutPromise,
+    pause() {
+      if (isSettled) {
+        return
+      }
+
+      pauseDepth += 1
+      if (pauseDepth > 1 || timeoutHandle === null) {
+        return
+      }
+
+      clearTimeout(timeoutHandle)
+      timeoutHandle = null
+      remainingMs = Math.max(0, remainingMs - (performance.now() - startedAt))
+    },
+    resume() {
+      if (isSettled || pauseDepth === 0) {
+        return
+      }
+
+      pauseDepth -= 1
+      if (pauseDepth > 0 || timeoutHandle !== null) {
+        return
+      }
+
+      startTimer()
+    },
+    cancel() {
+      isSettled = true
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+        timeoutHandle = null
+      }
+    },
+  }
 }
 
 function buildScriptErrorDetails(input: {
@@ -967,7 +1055,11 @@ function resolveHttpAuthExpressions(auth: HttpAuth, resolveValue: (value: string
   }
 }
 
-async function executeScript(code: string, sandbox: Record<string, unknown>) {
+async function executeScript(
+  code: string,
+  sandbox: Record<string, unknown>,
+  executionController = createScriptExecutionController()
+) {
   const context = vm.createContext(sandbox, {
     codeGeneration: {
       strings: false,
@@ -978,12 +1070,11 @@ async function executeScript(code: string, sandbox: Record<string, unknown>) {
   const script = new vm.Script(`(async () => {\n${code}\n})()`, { filename: 'request-script.js' })
   const result = script.runInContext(context, { timeout: SCRIPT_TIMEOUT_MS })
 
-  return await Promise.race([
-    Promise.resolve(result),
-    new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`Script execution timed out after ${SCRIPT_TIMEOUT_MS}ms`)), SCRIPT_TIMEOUT_MS)
-    }),
-  ])
+  try {
+    return await Promise.race([Promise.resolve(result), executionController.timeoutPromise])
+  } finally {
+    executionController.cancel()
+  }
 }
 
 function compileTemplateExpressionScript(sourceCode: string): CompiledRequestScript {

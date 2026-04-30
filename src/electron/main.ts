@@ -67,9 +67,8 @@ import {
   upsertCustomDatabaseConfig,
 } from './server-config.js'
 import { GenericError } from '../common/GenericError.js'
-import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import { Result } from '../common/Result.js'
-import { emitGenericEventTo } from './generic-events.js'
+import { createScriptPromptRegistry, createScriptToastBridge } from './script-ui-bridges.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -89,17 +88,7 @@ app.on('open-file', (event, path) => {
 type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev'>
 
 const homeDir = os.homedir()
-
-function createScriptToastBridge(webContents: Electron.WebContents) {
-  return {
-    show: (toast: ScriptToastOptions) => {
-      emitGenericEventTo(webContents, { type: 'script-toast-show', toast })
-    },
-    hide: (id: string) => {
-      emitGenericEventTo(webContents, { type: 'script-toast-hide', id })
-    },
-  }
-}
+const scriptPromptRegistry = createScriptPromptRegistry()
 
 function getDefaultDatabasePath() {
   return path.join(app.getPath('userData'), 'kova.sqlite')
@@ -285,6 +274,10 @@ app.on('ready', async () => {
   })
 
   ipcHandle('runCommand', runCommand)
+
+  ipcHandle('resolveScriptPrompt', async (input, event) => {
+    scriptPromptRegistry.resolveResponse(input, event.sender)
+  })
 
   ipcHandle('setAlwaysOnTop', async (alwaysOnTop: boolean, event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
@@ -497,7 +490,10 @@ app.on('ready', async () => {
   })
 
   ipcHandle('sendRequest', async (input, event) => {
-    return sendRequest(input, { toast: createScriptToastBridge(event.sender) })
+    return sendRequest(input, {
+      toast: createScriptToastBridge(event.sender),
+      prompt: scriptPromptRegistry.createBridge(event.sender),
+    })
   })
 
   ipcHandle('cancelHttpRequest', async input => {
@@ -538,7 +534,10 @@ app.on('ready', async () => {
   })
 
   ipcHandle('connectWebSocket', async (input, event) => {
-    return connectWebSocket(input, { toast: createScriptToastBridge(event.sender) })
+    return connectWebSocket(input, {
+      toast: createScriptToastBridge(event.sender),
+      prompt: scriptPromptRegistry.createBridge(event.sender),
+    })
   })
 
   ipcHandle('sendWebSocketMessage', async input => {

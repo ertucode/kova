@@ -2,6 +2,7 @@ import { getAuthVariableSources } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { extractTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
+import type { ScriptPromptBridge } from './script-prompt.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import { isSseContentType, parseSseBlock, stringifySseEvent } from '../common/Sse.js'
 import type {
@@ -34,13 +35,16 @@ export async function cancelHttpRequest(input: CancelHttpRequestInput): Promise<
 
 export async function sendRequest(
   input: SendRequestInput,
-  options?: { toast?: ScriptToastBridge }
+  options?: { toast?: ScriptToastBridge; prompt?: ScriptPromptBridge }
 ): Promise<GenericResult<SendRequestResponse>> {
   const executionId = crypto.randomUUID()
   const abortController = new AbortController()
 
   try {
-    const preparedRequest = await prepareHttpRequest(input, { toast: options?.toast })
+    const preparedRequest = await prepareHttpRequest(input, {
+      toast: options?.toast,
+      prompt: options?.prompt,
+    })
     if (!preparedRequest.success) {
       return preparedRequest
     }

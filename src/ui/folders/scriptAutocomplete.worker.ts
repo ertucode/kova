@@ -193,8 +193,12 @@ const blockedKeywordCompletions = new Set([
   'type',
 ])
 
-const preferredSandboxGlobals = new Set(['env', 'scope', 'request', 'response', 'console', 'crypto', 'toast', 'z'])
+const preferredSandboxGlobals = new Set(['env', 'scope', 'request', 'response', 'console', 'crypto', 'prompt', 'toast', 'z'])
 const preferredBuiltinGlobals = new Set(['Date', 'Math', 'JSON', 'Promise', 'Object', 'Array', 'Map', 'Set', 'String', 'Number'])
+const allowedTopLevelScriptDiagnosticCodes = new Set([
+  1108,
+  1375,
+])
 
 const phaseStates = new Map<ScriptAutocompletePhase, PhaseState>([
   ['pre-request', createPhaseState('pre-request')],
@@ -269,7 +273,9 @@ function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsRes
       diagnostics: dedupeDiagnostics([
         ...phaseState.service.getSyntacticDiagnostics(phaseState.userFileName),
         ...phaseState.service.getSemanticDiagnostics(phaseState.userFileName),
-      ]).map(diagnostic => toEditorDiagnostic(diagnostic, request.code, phaseState.service, phaseState.userFileName)),
+      ])
+        .filter(diagnostic => !shouldIgnoreDiagnostic(request.phase, diagnostic))
+        .map(diagnostic => toEditorDiagnostic(diagnostic, request.code, phaseState.service, phaseState.userFileName)),
     }
   } catch (error) {
     return {
@@ -278,6 +284,14 @@ function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsRes
       error: error instanceof Error ? error.message : String(error),
     }
   }
+}
+
+function shouldIgnoreDiagnostic(phase: ScriptAutocompletePhase, diagnostic: ts.Diagnostic) {
+  if (phase === 'response-visualizer') {
+    return false
+  }
+
+  return allowedTopLevelScriptDiagnosticCodes.has(diagnostic.code)
 }
 
 function updatePhaseSource(phaseState: PhaseState, code: string) {

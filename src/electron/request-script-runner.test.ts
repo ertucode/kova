@@ -342,4 +342,109 @@ describe('createRequestScriptRuntime', () => {
     expect(postRequestErrors).toEqual([])
     expect(hiddenToastIds).toEqual(['loading-toast'])
   })
+
+  it('returns the prompted text value to the script', async () => {
+    const promptedOptions: Array<Record<string, unknown>> = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async options => {
+          promptedOptions.push(options)
+          return 'Ada'
+        },
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script:
+          "const name = await prompt.text({ title: 'Your name', message: 'Needed for the request', defaultValue: 'Grace' })\nif (name) {\n  scope.set('name', name)\n}",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().name).toBe('Ada')
+    expect(promptedOptions).toEqual([
+      {
+        title: 'Your name',
+        message: 'Needed for the request',
+        defaultValue: 'Grace',
+      },
+    ])
+  })
+
+  it('does not count prompt wait time against the script timeout', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async () => {
+          await new Promise(resolve => setTimeout(resolve, 700))
+          return '42'
+        },
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "const answer = await prompt.text({ title: 'Answer' })\nif (answer) {\n  scope.set('answer', answer)\n}",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().answer).toBe('42')
+  })
+
+  it('returns null when the user cancels a prompt', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async () => null,
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "const answer = await prompt.text({ title: 'Answer' })\nscope.set('wasCancelled', String(answer === null))",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().wasCancelled).toBe('true')
+  })
 })

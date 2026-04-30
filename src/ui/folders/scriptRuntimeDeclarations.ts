@@ -168,6 +168,20 @@ interface ScriptToastApi {
   hide(id: string): void
 }
 
+interface ScriptPromptTextOptions {
+  title: string
+  message?: string
+  defaultValue?: string
+  placeholder?: string
+  confirmText?: string
+  cancelText?: string
+}
+
+interface ScriptPromptApi {
+  /** Ask the user for a text value and return it, or null if they cancel. */
+  text(options: ScriptPromptTextOptions): Promise<string | null>
+}
+
 declare const console: ScriptConsoleApi
 declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
@@ -178,6 +192,10 @@ declare const z: ZodApi
 
 const scriptToastDeclarations = String.raw`
 declare const toast: ScriptToastApi
+`
+
+const scriptPromptDeclarations = String.raw`
+declare const prompt: ScriptPromptApi
 `
 
 const postRequestDeclarations = String.raw`
@@ -250,12 +268,13 @@ declare function Table(props: TableProps): unknown
 export function getScriptRuntimeDeclarations(phase: ScriptAutocompletePhase) {
   if (phase === 'pre-request') {
     return `${sharedDeclarations}
-${scriptToastDeclarations}`
+${scriptToastDeclarations}
+${scriptPromptDeclarations}`
   }
 
   if (phase === 'response-visualizer') {
     return `${sharedDeclarations}\n${postRequestDeclarations}\n${responseVisualizerDeclarations}`
   }
 
-  return `${sharedDeclarations}\n${scriptToastDeclarations}\n${postRequestDeclarations}`
+  return `${sharedDeclarations}\n${scriptToastDeclarations}\n${scriptPromptDeclarations}\n${postRequestDeclarations}`
 }

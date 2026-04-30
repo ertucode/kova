@@ -2,6 +2,7 @@ import { getWindowElectron } from '@/getWindowElectron'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
 import { toast } from '@/lib/components/toast'
+import { dialogActions } from './dialogStore'
 
 export function subscribeToGenericEvents() {
   getWindowElectron().onGenericEvent(e => {
@@ -20,6 +21,10 @@ export function subscribeToGenericEvents() {
       toast.show(e.toast)
     } else if (e.type === 'script-toast-hide') {
       toast.hide(e.id)
+    } else if (e.type === 'script-prompt-request') {
+      void dialogActions.promptText(e.prompt.options).then(value =>
+        getWindowElectron().resolveScriptPrompt({ id: e.prompt.id, value })
+      )
     } else {
       const _exhaustiveCheck: never = e
       return _exhaustiveCheck

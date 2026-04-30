@@ -26,6 +26,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   openShell: (url: string) => ipcInvoke('openShell', url),
   openFileLocation: (filePath: string) => ipcInvoke('openFileLocation', filePath),
   runCommand: (opts: { name: string; filePath: string; parameters: any }) => ipcInvoke('runCommand', opts),
+  resolveScriptPrompt: input => ipcInvoke('resolveScriptPrompt', input),
   setAlwaysOnTop: (alwaysOnTop: boolean) => ipcInvoke('setAlwaysOnTop', alwaysOnTop),
   getAlwaysOnTop: () => ipcInvoke('getAlwaysOnTop', undefined),
   setCompactWindowSize: () => ipcInvoke('setCompactWindowSize', undefined),
