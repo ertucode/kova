@@ -18,6 +18,7 @@ import type {
   RequestRawType,
   ScriptResponseBody,
 } from '../common/Requests.js'
+import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
 
 const SCRIPT_TIMEOUT_MS = 500
@@ -122,6 +123,7 @@ export type ScriptRuntime = {
 export function createRequestScriptRuntime(input: {
   request: RuntimeRequestState
   environments: EnvironmentRecord[]
+  toast?: ScriptToastBridge
 }): ScriptRuntime {
   const requestScope = new Map<string, string>()
   const runtimeRequest: RuntimeRequestState = { ...input.request }
@@ -240,15 +242,16 @@ export function createRequestScriptRuntime(input: {
     },
     runPreRequestScripts: async sources => {
       const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
-      const scriptErrors = await runScriptPhase({
-        phase: 'pre-request',
-        sources,
-        runtimeRequest,
-        requestScope,
-        response: null,
-        environmentContext: createEnvironmentContext(),
-        consoleEntries,
-      })
+        const scriptErrors = await runScriptPhase({
+          phase: 'pre-request',
+          sources,
+          runtimeRequest,
+          requestScope,
+          response: null,
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+          toastBridge: input.toast,
+        })
       if (scriptErrors.length > 0) {
         ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
         return scriptErrors
@@ -276,6 +279,7 @@ export function createRequestScriptRuntime(input: {
           response,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
+          toastBridge: input.toast,
         })
         if (scriptErrors.length > 0) {
           ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
@@ -418,6 +422,7 @@ async function runScriptPhase(input: {
   response: { status: number; statusText: string; headers: string; body: ScriptResponseBody } | null
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
+  toastBridge?: ScriptToastBridge
 }) {
   for (const source of input.sources) {
     if (!source.script.trim()) {
@@ -434,6 +439,7 @@ async function runScriptPhase(input: {
       response: input.response ? createResponseApi(input.response) : undefined,
       env: createEnvironmentApi(input.environmentContext),
       scope: createScopeApi(input.requestScope),
+      toast: createScriptToastApi(input.toastBridge),
       crypto: createCryptoApi(),
       z,
     }

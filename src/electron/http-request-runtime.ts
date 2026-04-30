@@ -13,6 +13,7 @@ import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathPara
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import type { RequestMethod, RequestRawType, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
+import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { getFolderAncestorChain } from './db/folders.js'
@@ -43,7 +44,15 @@ export type PreparedHttpRequest = {
   postRequestScriptSources: Array<{ name: string; script: string }>
 }
 
-export async function prepareHttpRequest(input: SendRequestInput): Promise<GenericResult<PreparedHttpRequest>> {
+type ScriptToastBridge = {
+  show: (options: ScriptToastOptions) => void
+  hide: (id: string) => void
+}
+
+export async function prepareHttpRequest(
+  input: SendRequestInput,
+  options?: { toast?: ScriptToastBridge }
+): Promise<GenericResult<PreparedHttpRequest>> {
   const requestResult = await getRequest({ id: input.requestId })
   if (!requestResult.success) {
     return requestResult
@@ -75,6 +84,7 @@ export async function prepareHttpRequest(input: SendRequestInput): Promise<Gener
       rawType: input.rawType,
     },
     environments: activeEnvironments,
+    toast: options?.toast,
   })
 
   let resolvedFolderAuths: HttpAuth[]

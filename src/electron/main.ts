@@ -67,7 +67,9 @@ import {
   upsertCustomDatabaseConfig,
 } from './server-config.js'
 import { GenericError } from '../common/GenericError.js'
+import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import { Result } from '../common/Result.js'
+import { emitGenericEventTo } from './generic-events.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -87,6 +89,17 @@ app.on('open-file', (event, path) => {
 type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev'>
 
 const homeDir = os.homedir()
+
+function createScriptToastBridge(webContents: Electron.WebContents) {
+  return {
+    show: (toast: ScriptToastOptions) => {
+      emitGenericEventTo(webContents, { type: 'script-toast-show', toast })
+    },
+    hide: (id: string) => {
+      emitGenericEventTo(webContents, { type: 'script-toast-hide', id })
+    },
+  }
+}
 
 function getDefaultDatabasePath() {
   return path.join(app.getPath('userData'), 'kova.sqlite')
@@ -483,8 +496,8 @@ app.on('ready', async () => {
     return moveExplorerItem(input)
   })
 
-  ipcHandle('sendRequest', async input => {
-    return sendRequest(input)
+  ipcHandle('sendRequest', async (input, event) => {
+    return sendRequest(input, { toast: createScriptToastBridge(event.sender) })
   })
 
   ipcHandle('cancelHttpRequest', async input => {
@@ -524,8 +537,8 @@ app.on('ready', async () => {
     })
   })
 
-  ipcHandle('connectWebSocket', async input => {
-    return connectWebSocket(input)
+  ipcHandle('connectWebSocket', async (input, event) => {
+    return connectWebSocket(input, { toast: createScriptToastBridge(event.sender) })
   })
 
   ipcHandle('sendWebSocketMessage', async input => {

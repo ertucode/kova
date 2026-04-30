@@ -250,4 +250,96 @@ describe('createRequestScriptRuntime', () => {
 
     expect(result).toBe('{{$crypto.randomUUID()}}')
   })
+
+  it('shows script toasts and returns the generated id', async () => {
+    const shownToasts: Array<Record<string, unknown>> = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      toast: {
+        show: toast => shownToasts.push(toast),
+        hide: () => undefined,
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script:
+          "const toastId = toast.show({ severity: 'info', title: 'Sending', message: 'Preparing request', timeout: 2500, location: 'bottom-right' })\nscope.set('toastId', toastId)",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().toastId).toMatch(UUID_PATTERN)
+    expect(shownToasts).toEqual([
+      {
+        id: runtime.getRequestScopeValues().toastId,
+        severity: 'info',
+        title: 'Sending',
+        message: 'Preparing request',
+        timeout: 2500,
+        location: 'bottom-right',
+      },
+    ])
+  })
+
+  it('hides a previously shown script toast', async () => {
+    const hiddenToastIds: string[] = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      toast: {
+        show: () => undefined,
+        hide: id => hiddenToastIds.push(id),
+      },
+    })
+
+    const preRequestErrors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "scope.set('toastId', 'loading-toast')",
+      },
+    ])
+
+    expect(preRequestErrors).toEqual([])
+
+    const postRequestErrors = await runtime.runPostRequestScripts(
+      [
+        {
+          name: 'Request: Test',
+          script: "const toastId = scope.get('toastId')\nif (toastId) {\n  toast.hide(toastId)\n}",
+        },
+      ],
+      {
+        status: 200,
+        statusText: 'OK',
+        headers: '',
+        body: { type: 'text', data: '' },
+      }
+    )
+
+    expect(postRequestErrors).toEqual([])
+    expect(hiddenToastIds).toEqual(['loading-toast'])
+  })
 })

@@ -1,6 +1,7 @@
 import { getWindowElectron } from '@/getWindowElectron'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
+import { toast } from '@/lib/components/toast'
 
 export function subscribeToGenericEvents() {
   getWindowElectron().onGenericEvent(e => {
@@ -15,6 +16,10 @@ export function subscribeToGenericEvents() {
       requestExecutionStore.trigger.websocketSessionUpdated({ session: e.session })
     } else if (e.type === 'websocket-session-cleared') {
       requestExecutionStore.trigger.websocketSessionCleared({ requestId: e.requestId })
+    } else if (e.type === 'script-toast-show') {
+      toast.show(e.toast)
+    } else if (e.type === 'script-toast-hide') {
+      toast.hide(e.id)
     } else {
       const _exhaustiveCheck: never = e
       return _exhaustiveCheck

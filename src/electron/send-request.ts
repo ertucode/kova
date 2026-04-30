@@ -2,6 +2,7 @@ import { getAuthVariableSources } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { extractTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
+import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import { isSseContentType, parseSseBlock, stringifySseEvent } from '../common/Sse.js'
 import type {
   CancelHttpRequestInput,
@@ -21,17 +22,25 @@ import { prepareHttpRequest, type PreparedHttpRequest } from './http-request-run
 
 const activeHttpRequests = new Map<string, { executionId: string; abortController: AbortController }>()
 
+type ScriptToastBridge = {
+  show: (options: ScriptToastOptions) => void
+  hide: (id: string) => void
+}
+
 export async function cancelHttpRequest(input: CancelHttpRequestInput): Promise<GenericResult<void>> {
   activeHttpRequests.get(input.requestId)?.abortController.abort()
   return Result.Success(undefined)
 }
 
-export async function sendRequest(input: SendRequestInput): Promise<GenericResult<SendRequestResponse>> {
+export async function sendRequest(
+  input: SendRequestInput,
+  options?: { toast?: ScriptToastBridge }
+): Promise<GenericResult<SendRequestResponse>> {
   const executionId = crypto.randomUUID()
   const abortController = new AbortController()
 
   try {
-    const preparedRequest = await prepareHttpRequest(input)
+    const preparedRequest = await prepareHttpRequest(input, { toast: options?.toast })
     if (!preparedRequest.success) {
       return preparedRequest
     }

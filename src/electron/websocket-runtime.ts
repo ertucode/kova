@@ -11,6 +11,7 @@ import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { applySearchParamsToUrl } from '../common/PathParams.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
+import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import type {
   RequestConsoleEntry,
   WebSocketConnectInput,
@@ -44,7 +45,15 @@ type ActiveWebSocketSession = {
 
 const activeSessions = new Map<string, ActiveWebSocketSession>()
 
-export async function connectWebSocket(input: WebSocketConnectInput): Promise<GenericResult<WebSocketConnectResponse>> {
+type ScriptToastBridge = {
+  show: (options: ScriptToastOptions) => void
+  hide: (id: string) => void
+}
+
+export async function connectWebSocket(
+  input: WebSocketConnectInput,
+  options?: { toast?: ScriptToastBridge }
+): Promise<GenericResult<WebSocketConnectResponse>> {
   try {
     const requestResult = await getRequest({ id: input.requestId })
     if (!requestResult.success) {
@@ -86,6 +95,7 @@ export async function connectWebSocket(input: WebSocketConnectInput): Promise<Ge
         rawType: 'text',
       },
       environments: activeEnvironments,
+      toast: options?.toast,
     })
 
     let resolvedFolderAuths: HttpAuth[]

@@ -193,7 +193,7 @@ const blockedKeywordCompletions = new Set([
   'type',
 ])
 
-const preferredSandboxGlobals = new Set(['env', 'scope', 'request', 'response', 'console', 'crypto', 'z'])
+const preferredSandboxGlobals = new Set(['env', 'scope', 'request', 'response', 'console', 'crypto', 'toast', 'z'])
 const preferredBuiltinGlobals = new Set(['Date', 'Math', 'JSON', 'Promise', 'Object', 'Array', 'Map', 'Set', 'String', 'Number'])
 
 const phaseStates = new Map<ScriptAutocompletePhase, PhaseState>([

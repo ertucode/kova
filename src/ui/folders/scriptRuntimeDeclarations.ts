@@ -142,12 +142,42 @@ interface ScriptCryptoApi {
   randomUUID(): string
 }
 
+type ScriptToastSeverity = 'success' | 'error' | 'warning' | 'info'
+
+type ScriptToastLocation =
+  | 'top-left'
+  | 'top-right'
+  | 'top-center'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'bottom-center'
+
+interface ScriptToastOptions {
+  id?: string
+  title?: string
+  message?: string
+  severity: ScriptToastSeverity
+  timeout?: number
+  location?: ScriptToastLocation
+}
+
+interface ScriptToastApi {
+  /** Show a toast in the current app window and return its id. */
+  show(options: ScriptToastOptions): string
+  /** Hide a previously shown toast by id. */
+  hide(id: string): void
+}
+
 declare const console: ScriptConsoleApi
 declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
 declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
 declare const z: ZodApi
+`
+
+const scriptToastDeclarations = String.raw`
+declare const toast: ScriptToastApi
 `
 
 const postRequestDeclarations = String.raw`
@@ -219,12 +249,13 @@ declare function Table(props: TableProps): unknown
 
 export function getScriptRuntimeDeclarations(phase: ScriptAutocompletePhase) {
   if (phase === 'pre-request') {
-    return sharedDeclarations
+    return `${sharedDeclarations}
+${scriptToastDeclarations}`
   }
 
   if (phase === 'response-visualizer') {
     return `${sharedDeclarations}\n${postRequestDeclarations}\n${responseVisualizerDeclarations}`
   }
 
-  return `${sharedDeclarations}\n${postRequestDeclarations}`
+  return `${sharedDeclarations}\n${scriptToastDeclarations}\n${postRequestDeclarations}`
 }

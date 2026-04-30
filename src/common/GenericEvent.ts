@@ -1,4 +1,5 @@
 import type { HttpSseStreamState, WebSocketSessionRecord } from './Requests.js'
+import type { ScriptToastOptions } from './ScriptToast.js'
 
 export type GenericEvent = {
   type: 'reload-path'
@@ -19,4 +20,10 @@ export type GenericEvent = {
 } | {
   type: 'http-sse-stream-cleared'
   requestId: string
+} | {
+  type: 'script-toast-show'
+  toast: ScriptToastOptions
+} | {
+  type: 'script-toast-hide'
+  id: string
 }

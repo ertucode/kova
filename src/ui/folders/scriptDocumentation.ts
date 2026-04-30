@@ -87,6 +87,17 @@ const sharedSections: ScriptDocumentationSection[] = [
     ],
   },
   {
+    title: 'Toast Notifications',
+    description: 'Show or hide app toasts from pre-request and post-request scripts.',
+    entries: [
+      {
+        label: "toast.show({ severity, title?, message?, timeout?, location?, id? })",
+        detail: 'Shows a toast in the current window and returns its id.',
+      },
+      { label: 'toast.hide(id)', detail: 'Hides a previously shown toast by id.' },
+    ],
+  },
+  {
     title: 'Validation',
     description: 'Use Zod schemas to validate request and response data inside scripts.',
     entries: [
@@ -143,6 +154,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         title: 'Validate required config',
         code: "const ConfigSchema = z.object({\n  apiHost: z.string(),\n  token: z.string(),\n})\n\nconst parsed = ConfigSchema.safeParse({\n  apiHost: env.get('apiHost'),\n  token: env.get('token'),\n})\n\nif (!parsed.success) {\n  throw new Error(parsed.error.message)\n}",
       },
+      {
+        title: 'Show a setup warning',
+        code: "if (!env.get('token')) {\n  toast.show({\n    severity: 'warning',\n    title: 'Missing token',\n    message: 'Set the token environment variable before sending this request.',\n    timeout: 4000,\n  })\n}",
+      },
     ],
   },
   'post-request': {
@@ -171,6 +186,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Validate response shape',
         code: "const TokenResponse = z.object({\n  token: z.string(),\n})\n\nif (response.body.type === 'json') {\n  const parsed = TokenResponse.safeParse(response.body.data)\n  if (parsed.success) {\n    env.set('token', parsed.data.token)\n  }\n}",
+      },
+      {
+        title: 'Show and dismiss a progress toast',
+        code: "const toastId = scope.get('requestToastId')\n\nif (response.status >= 400) {\n  if (toastId) {\n    toast.hide(toastId)\n  }\n\n  toast.show({\n    severity: 'error',\n    title: 'Request failed',\n    message: response.status + ' ' + response.statusText,\n  })\n} else if (toastId) {\n  toast.hide(toastId)\n}",
       },
     ],
   },

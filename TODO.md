@@ -1,1 +1,1 @@
-- variable gibi tanımlama ama fonksiyon çağırsın. {{$crypto.randomUUID()}}
+- scriptlerden dialog çağır. prompt hatta?
