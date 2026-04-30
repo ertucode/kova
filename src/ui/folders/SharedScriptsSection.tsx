@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, type RefObject } from 'react'
+import { useSelector } from '@xstate/store/react'
 import { FileBracesIcon, Trash2Icon } from 'lucide-react'
 import type { SharedScriptRecord, SharedScriptScopeType, SharedScriptTarget } from '@common/SharedScripts'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -6,15 +7,10 @@ import { toast } from '@/lib/components/toast'
 import { CodeEditor } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
+import { getSharedScriptScopeKey, isSharedScriptEntryDirty, sharedScriptEditorStore } from './sharedScriptEditorStore'
 import { useScopedSharedScripts } from './useVisibleSharedScripts'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer']
-
-type SharedScriptEntry = {
-  base: SharedScriptRecord
-  current: SharedScriptRecord
-  saving: boolean
-}
 
 export function SharedScriptsSection({
   title,
@@ -32,45 +28,28 @@ export function SharedScriptsSection({
   onScriptsChanged?: () => void
 }) {
   const { scripts, loading, reload } = useScopedSharedScripts(scopeType, scopeId)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [entries, setEntries] = useState<Record<string, SharedScriptEntry>>({})
-  const [focusScriptId, setFocusScriptId] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const scopeKey = getSharedScriptScopeKey(scopeType, scopeId)
+  const selectedId = useSelector(sharedScriptEditorStore, state => state.context.selectedIdsByScope[scopeKey] ?? null)
+  const focusScriptId = useSelector(sharedScriptEditorStore, state => state.context.focusIdsByScope[scopeKey] ?? null)
+  const entries = useSelector(sharedScriptEditorStore, state => state.context.entriesByScope[scopeKey] ?? {})
 
   useEffect(() => {
-    setEntries(currentEntries => {
-      const nextEntries: Record<string, SharedScriptEntry> = {}
-
-      for (const script of scripts) {
-        const existing = currentEntries[script.id]
-        if (!existing) {
-          nextEntries[script.id] = { base: script, current: script, saving: false }
-          continue
-        }
-
-        nextEntries[script.id] = {
-          base: script,
-          current: isSharedScriptEntryDirty(existing) ? existing.current : script,
-          saving: existing.saving,
-        }
-      }
-
-      return nextEntries
-    })
-  }, [scripts])
+    sharedScriptEditorStore.trigger.scriptsLoaded({ scopeKey, items: scripts })
+  }, [scopeKey, scripts])
 
   useEffect(() => {
     if (scripts.length === 0) {
       if (selectedId !== null) {
-        setSelectedId(null)
+        sharedScriptEditorStore.trigger.selectedChanged({ scopeKey, id: null })
       }
       return
     }
 
     if (!selectedId || !scripts.some(script => script.id === selectedId)) {
-      setSelectedId(scripts[0]?.id ?? null)
+      sharedScriptEditorStore.trigger.selectedChanged({ scopeKey, id: scripts[0]?.id ?? null })
     }
-  }, [scripts, selectedId])
+  }, [scopeKey, scripts, selectedId])
 
   useEffect(() => {
     if (!selectedId || focusScriptId !== selectedId) {
@@ -79,8 +58,8 @@ export function SharedScriptsSection({
 
     nameInputRef.current?.focus()
     nameInputRef.current?.select()
-    setFocusScriptId(null)
-  }, [focusScriptId, selectedId])
+    sharedScriptEditorStore.trigger.focusHandled({ scopeKey })
+  }, [focusScriptId, scopeKey, selectedId])
 
   const items = useMemo(() => scripts.map(script => entries[script.id]?.current ?? script), [entries, scripts])
   const selectedEntry = selectedId ? (entries[selectedId] ?? null) : null
@@ -109,26 +88,13 @@ export function SharedScriptsSection({
       return
     }
 
-    setSelectedId(result.data.id)
-    setFocusScriptId(result.data.id)
     await reloadAll()
+    sharedScriptEditorStore.trigger.selectedChanged({ scopeKey, id: result.data.id })
+    sharedScriptEditorStore.trigger.focusRequested({ scopeKey, id: result.data.id })
   }
 
   function updateDraft(id: string, draftValue: SharedScriptRecord) {
-    setEntries(currentEntries => {
-      const entry = currentEntries[id]
-      if (!entry) {
-        return currentEntries
-      }
-
-      return {
-        ...currentEntries,
-        [id]: {
-          ...entry,
-          current: draftValue,
-        },
-      }
-    })
+    sharedScriptEditorStore.trigger.draftUpdated({ scopeKey, id, draft: draftValue })
   }
 
   async function saveScript(id: string, overrideDraft?: SharedScriptRecord) {
@@ -138,14 +104,7 @@ export function SharedScriptsSection({
       return
     }
 
-    setEntries(currentEntries => ({
-      ...currentEntries,
-      [id]: {
-        ...currentEntries[id],
-        current: draftValue,
-        saving: true,
-      },
-    }))
+    sharedScriptEditorStore.trigger.entrySavingStarted({ scopeKey, id, draft: draftValue })
 
     try {
       const result = await getWindowElectron().updateSharedScript({
@@ -164,20 +123,7 @@ export function SharedScriptsSection({
 
       await reloadAll()
     } finally {
-      setEntries(currentEntries => {
-        const currentEntry = currentEntries[id]
-        if (!currentEntry) {
-          return currentEntries
-        }
-
-        return {
-          ...currentEntries,
-          [id]: {
-            ...currentEntry,
-            saving: false,
-          },
-        }
-      })
+      sharedScriptEditorStore.trigger.entrySavingFinished({ scopeKey, id })
     }
   }
 
@@ -190,7 +136,7 @@ export function SharedScriptsSection({
       return
     }
 
-    setSelectedId(nextSelectedId)
+    sharedScriptEditorStore.trigger.itemDeleted({ scopeKey, id, nextSelectedId })
     await reloadAll()
   }
 
@@ -246,7 +192,7 @@ export function SharedScriptsSection({
                       ? 'border-primary/35 bg-primary/10 text-base-content'
                       : 'border-base-content/10 bg-base-100 text-base-content/80 hover:border-base-content/20 hover:bg-base-200/70',
                   ].join(' ')}
-                  onClick={() => setSelectedId(item.id)}
+                  onClick={() => sharedScriptEditorStore.trigger.selectedChanged({ scopeKey, id: item.id })}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -334,8 +280,8 @@ function SharedScriptDetail({
   }, [draft.targets])
 
   const autocompleteSharedScripts = useMemo(
-    () => visibleSharedScripts.map(item => (item.id === draft.id ? draft : item)),
-    [draft, visibleSharedScripts]
+    () => visibleSharedScripts.filter(item => item.id !== draft.id),
+    [draft.id, visibleSharedScripts]
   )
 
   const extensions = useMemo(
@@ -528,24 +474,6 @@ function buildNewScriptName(kind: SharedScriptRecord['kind'], scripts: SharedScr
   }
 
   return `${prefix} ${Date.now()}`
-}
-
-function isSharedScriptEntryDirty(entry: SharedScriptEntry | null | undefined) {
-  if (!entry) {
-    return false
-  }
-
-  return serializeSharedScript(entry.base) !== serializeSharedScript(entry.current)
-}
-
-function serializeSharedScript(script: SharedScriptRecord) {
-  return JSON.stringify({
-    name: script.name,
-    kind: script.kind,
-    targets: script.targets,
-    isActive: script.isActive,
-    code: script.code,
-  })
 }
 
 function formatScriptMeta(script: SharedScriptRecord) {
