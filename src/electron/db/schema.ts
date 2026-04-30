@@ -90,6 +90,39 @@ export const environments = sqliteTable(
   ]
 )
 
+export const sharedScripts = sqliteTable(
+  'shared_scripts',
+  {
+    id: text('id').primaryKey(),
+    scopeType: text('scope_type').notNull(),
+    scopeId: text('scope_id'),
+    name: text('name').notNull(),
+    kind: text('kind').notNull(),
+    targetsJson: text('targets_json').notNull().default('["pre-request"]'),
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    code: text('code').notNull().default(''),
+    position: integer('position').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    foreignKey({
+      columns: [table.scopeId],
+      foreignColumns: [folders.id],
+      name: 'shared_scripts_scope_id_fkey',
+    }),
+    index('shared_scripts_deleted_at_idx').on(table.deletedAt),
+    index('shared_scripts_scope_idx').on(table.scopeType, table.scopeId, table.position),
+    check('shared_scripts_scope_type_check', sql`${table.scopeType} in ('workspace', 'folder')`),
+    check('shared_scripts_kind_check', sql`${table.kind} in ('global', 'module')`),
+    check(
+      'shared_scripts_workspace_scope_id_check',
+      sql`(${table.scopeType} = 'workspace' and ${table.scopeId} is null) or (${table.scopeType} = 'folder' and ${table.scopeId} is not null)`
+    ),
+  ]
+)
+
 export const appSettings = sqliteTable('app_settings', {
   id: text('id').primaryKey(),
   warnBeforeRequestAfterSeconds: integer('warn_before_request_after_seconds').notNull().default(10),

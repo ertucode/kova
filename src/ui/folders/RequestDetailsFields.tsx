@@ -47,6 +47,8 @@ import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { RequestDetailsResponsePanel } from './RequestDetailsResponsePanel'
 import { buildImportedHttpUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
+import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 
 type RequestMetaTab =
   | 'overview'
@@ -74,9 +76,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
   const selectedRequestIdRef = useRef<string | null>(selectedRequestId)
+  const selectedRequestFolderId = useSelector(folderExplorerTreeStore, state => {
+    const request = state.context.items.find(
+      (item): item is Extract<(typeof state.context.items)[number], { itemType: 'request' }> =>
+        item.itemType === 'request' && item.id === selectedRequestId
+    )
+    return request?.parentFolderId ?? null
+  })
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
+  const { scripts: visibleSharedScripts } = useVisibleSharedScripts(selectedRequestFolderId)
   draftRef.current = draft
   selectedRequestIdRef.current = selectedRequestId
 
@@ -239,39 +249,42 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const preRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension('pre-request'),
+      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScripts }),
       scriptAutocompleteExtension({
         includeResponse: false,
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNames,
+        getSharedScripts: () => visibleSharedScripts,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames]
+    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
   )
 
   const postRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension('post-request'),
+      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScripts }),
       scriptAutocompleteExtension({
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNames,
+        getSharedScripts: () => visibleSharedScripts,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames]
+    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
   )
 
   const responseVisualizerExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension('response-visualizer'),
+      scriptDiagnosticsExtension({ phase: 'response-visualizer', getSharedScripts: () => visibleSharedScripts }),
       scriptAutocompleteExtension({
         phase: 'response-visualizer',
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNames,
+        getSharedScripts: () => visibleSharedScripts,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames]
+    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
   )
 
   const visualizerEnvironments = useMemo(
@@ -774,6 +787,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         draft={draft}
         onJumpToScriptError={handleJumpToScriptError}
         visualizerEnvironments={visualizerEnvironments}
+        sharedScripts={visibleSharedScripts.filter(script => script.targets.includes('response-visualizer'))}
       />
     </div>
   )

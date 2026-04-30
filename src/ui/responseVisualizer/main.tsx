@@ -4,6 +4,7 @@ import React, { type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import ts from 'typescript'
 import { z } from 'zod'
+import type { SharedScriptRecord } from '@common/SharedScripts'
 
 type VisualizerResponseApi = {
   status: number
@@ -41,6 +42,7 @@ type VisualizerPayload = {
     owners: Record<string, string>
   }
   scope: Record<string, string>
+  sharedScripts: Array<Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>>
 }
 
 type VisualizerErrorDetails = {
@@ -109,7 +111,11 @@ function compileVisualizer(source: string) {
 }
 
 function renderVisualizer(source: string, payload: VisualizerPayload) {
-  const transpiled = compileVisualizer(source)
+  const globalScripts = payload.sharedScripts.filter(
+    script => script.isActive && script.kind === 'global' && script.targets.includes('response-visualizer')
+  )
+  const combinedSource = [...globalScripts.map(script => script.code), source].filter(Boolean).join('\n\n')
+  const transpiled = compileVisualizer(combinedSource)
   const rendered = runVisualizer(transpiled, payload)
 
   root.render(
@@ -148,6 +154,25 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     useRef,
     useState,
   } = React
+  const requireScript = createSharedScriptModuleLoader(payload, {
+    React,
+    Fragment,
+    startTransition,
+    useDeferredValue,
+    useEffect,
+    useEffectEvent,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+    env,
+    scope,
+    request,
+    response,
+    Table,
+  })
 
   new Function(
     'module',
@@ -169,6 +194,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     'scope',
     'request',
     'response',
+    'requireScript',
     'crypto',
     'z',
     'Table',
@@ -193,6 +219,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     scope,
     request,
     response,
+    requireScript,
     crypto,
     z,
     Table
@@ -204,6 +231,130 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
   }
 
   return React.createElement(component as React.ComponentType)
+}
+
+function createSharedScriptModuleLoader(
+  payload: VisualizerPayload,
+  globals: {
+    React: typeof React
+    Fragment: typeof React.Fragment
+    startTransition: typeof React.startTransition
+    useDeferredValue: typeof React.useDeferredValue
+    useEffect: typeof React.useEffect
+    useEffectEvent: typeof React.useEffectEvent
+    useId: typeof React.useId
+    useLayoutEffect: typeof React.useLayoutEffect
+    useMemo: typeof React.useMemo
+    useReducer: typeof React.useReducer
+    useRef: typeof React.useRef
+    useState: typeof React.useState
+    env: ReturnType<typeof createEnvironmentApi>
+    scope: ReturnType<typeof createScopeApi>
+    request: {
+      method: string
+      url: string
+      body: string
+      bodyType: string
+      rawType: string
+      headers: ReturnType<typeof createHeaderApi>
+    }
+    response: VisualizerPayload['response']
+    Table: ReturnType<typeof createTableComponent>
+  }
+) {
+  const modulesByName = new Map(
+    payload.sharedScripts
+      .filter(script => script.isActive && script.kind === 'module' && script.targets.includes('response-visualizer') && script.name.trim())
+      .map(script => [script.name, script] as const)
+  )
+  const cache = new Map<string, Record<string, unknown>>()
+  const loading = new Set<string>()
+
+  const loadModule = (name: string): Record<string, unknown> => {
+    const script = modulesByName.get(name)
+    if (!script) {
+      throw new Error(`Shared script module ${name} was not found`)
+    }
+
+    const cached = cache.get(name)
+    if (cached) {
+      return cached
+    }
+
+    if (loading.has(name)) {
+      throw new Error(`Shared script cycle detected while loading ${name}`)
+    }
+
+    loading.add(name)
+    try {
+      const compiled = compileVisualizer(script.code)
+      const module = { exports: {} as Record<string, unknown> }
+      const exports = module.exports
+
+      new Function(
+        'module',
+        'exports',
+        'React',
+        'Fragment',
+        'startTransition',
+        'useDeferredValue',
+        'useEffect',
+        'useEffectEvent',
+        'useId',
+        'useLayoutEffect',
+        'useMemo',
+        'useReducer',
+        'useRef',
+        'useState',
+        'console',
+        'env',
+        'scope',
+        'request',
+        'response',
+        'requireScript',
+        'crypto',
+        'z',
+        'Table',
+        `${compiled}\n//# sourceURL=response-visualizer-shared.js`
+      )(
+        module,
+        exports,
+        globals.React,
+        globals.Fragment,
+        globals.startTransition,
+        globals.useDeferredValue,
+        globals.useEffect,
+        globals.useEffectEvent,
+        globals.useId,
+        globals.useLayoutEffect,
+        globals.useMemo,
+        globals.useReducer,
+        globals.useRef,
+        globals.useState,
+        console,
+        globals.env,
+        globals.scope,
+        globals.request,
+        globals.response,
+        loadModule,
+        crypto,
+        z,
+        globals.Table
+      )
+
+      const exportedKeys = Object.keys(module.exports).filter(key => key !== '__esModule')
+      if (exportedKeys.length === 0) {
+        throw new Error(`Shared script module ${name} must use explicit exports`)
+      }
+
+      cache.set(name, module.exports)
+      return module.exports
+    } finally {
+      loading.delete(name)
+    }
+  }
+
+  return loadModule
 }
 
 function renderError(error: VisualizerErrorDetails) {
@@ -569,5 +720,6 @@ function createEmptyPayload(): VisualizerPayload {
       owners: {},
     },
     scope: {},
+    sharedScripts: [],
   }
 }

@@ -26,6 +26,7 @@ import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
+import { listVisibleSharedScripts } from './db/shared-scripts.js'
 import {
   createWebSocketHistory,
   appendWebSocketHistoryMessage,
@@ -79,7 +80,10 @@ export async function connectWebSocket(
       getRequestParentFolderId(input.requestId),
     ])
 
-    const folders = await getFolderAncestorChain(parentFolderId)
+    const [folders, sharedScripts] = await Promise.all([
+      getFolderAncestorChain(parentFolderId),
+      listVisibleSharedScripts({ folderId: parentFolderId, onlyActive: true }),
+    ])
     const runtime = createRequestScriptRuntime({
       request: {
         method: 'GET',
@@ -96,6 +100,7 @@ export async function connectWebSocket(
         rawType: 'text',
       },
       environments: activeEnvironments,
+      sharedScripts,
       toast: options?.toast,
       prompt: options?.prompt,
     })

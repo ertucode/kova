@@ -50,6 +50,14 @@ import {
 } from './db/websocket-saved-messages.js'
 import { moveExplorerItem } from './db/tree-items.js'
 import { deleteOperation, deleteOperations, listOperations, undoOperation, undoOperations } from './db/operations.js'
+import {
+  createSharedScript,
+  deleteSharedScript,
+  listSharedScripts,
+  listVisibleSharedScripts,
+  moveSharedScript,
+  updateSharedScript,
+} from './db/shared-scripts.js'
 import { cancelHttpRequest, sendRequest } from './send-request.js'
 import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
@@ -483,6 +491,30 @@ app.on('ready', async () => {
 
   ipcHandle('moveEnvironment', async input => {
     return moveEnvironment(input)
+  })
+
+  ipcHandle('listSharedScripts', async input => {
+    return listSharedScripts(input)
+  })
+
+  ipcHandle('createSharedScript', async input => {
+    return createSharedScript(input)
+  })
+
+  ipcHandle('updateSharedScript', async input => {
+    return updateSharedScript(input)
+  })
+
+  ipcHandle('deleteSharedScript', async input => {
+    return deleteSharedScript(input)
+  })
+
+  ipcHandle('moveSharedScript', async input => {
+    return moveSharedScript(input)
+  })
+
+  ipcHandle('listVisibleSharedScripts', async input => {
+    return listVisibleSharedScripts({ folderId: input.folderId, onlyActive: true })
   })
 
   ipcHandle('moveExplorerItem', async input => {

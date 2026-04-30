@@ -112,6 +112,135 @@ describe('createRequestScriptRuntime', () => {
     })
   })
 
+  it('shares active global shared script declarations with request scripts', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [
+        {
+          id: 'shared-global-1',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'authGlobals',
+          kind: 'global',
+          targets: ['pre-request'],
+          isActive: true,
+          code: "function setAuthHeader() { request.headers.set('Authorization', 'Bearer shared-token') }",
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "setAuthHeader(); scope.set('authorization', request.headers.get('Authorization') ?? '')",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().authorization).toBe('Bearer shared-token')
+  })
+
+  it('loads shared modules through requireScript', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [
+        {
+          id: 'shared-module-1',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'authModule',
+          kind: 'module',
+          targets: ['pre-request'],
+          isActive: true,
+          code: "export function setAuthHeader() { request.headers.set('Authorization', 'Bearer module-token') }",
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "requireScript('authModule').setAuthHeader(); scope.set('authorization', request.headers.get('Authorization') ?? '')",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().authorization).toBe('Bearer module-token')
+  })
+
+  it('rejects shared modules without explicit exports', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [
+        {
+          id: 'shared-module-2',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'brokenModule',
+          kind: 'module',
+          targets: ['pre-request'],
+          isActive: true,
+          code: "function setAuthHeader() { request.headers.set('Authorization', 'Bearer module-token') }",
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "requireScript('brokenModule')",
+      },
+    ])
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.message).toContain('must use explicit exports')
+  })
+
   it('resolves template expressions in request field order with shared scope', async () => {
     const runtime = createRequestScriptRuntime({
       request: {

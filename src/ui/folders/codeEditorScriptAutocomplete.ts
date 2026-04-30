@@ -11,12 +11,14 @@ import { EditorView } from '@codemirror/view'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 
 type ScriptAutocompleteOptions = {
   includeResponse: boolean
   phase?: ScriptAutocompletePhase
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
+  getSharedScripts?: () => ScriptAutocompleteSharedScript[]
   fallbackToBrowserTab?: boolean
 }
 
@@ -30,7 +32,7 @@ export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions):
       override: [
         context => completeVariableName(context, options.getVariableNames),
         context => completeEnvironmentName(context, options.getEnvironmentNames),
-        context => completeScriptApi(context, phase),
+        context => completeScriptApi(context, phase, options.getSharedScripts),
       ],
     }),
     EditorView.updateListener.of(update => {
@@ -146,7 +148,8 @@ function completeEnvironmentName(
 
 async function completeScriptApi(
   context: CompletionContext,
-  phase: ScriptAutocompletePhase
+  phase: ScriptAutocompletePhase,
+  getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined
 ): Promise<CompletionResult | null> {
   const identifierMatch = context.matchBefore(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.?[A-Za-z_$\d]*$/)
   if (!identifierMatch && !context.explicit) {
@@ -161,6 +164,7 @@ async function completeScriptApi(
       phase,
       code: context.state.doc.toString(),
       position: context.pos,
+      sharedScripts: getSharedScripts?.(),
       signal: abortController.signal,
     })
 

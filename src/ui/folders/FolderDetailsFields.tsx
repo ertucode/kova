@@ -13,18 +13,28 @@ import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
+import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
+import { SharedScriptsSection } from './SharedScriptsSection'
+import { useVisibleSharedScripts } from './useVisibleSharedScripts'
+import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
+  const selectedFolderId = useSelector(folderExplorerEditorStore, state =>
+    state.context.selected?.itemType === 'folder' ? state.context.selected.id : null
+  )
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
   const activeEnvironmentNames = useMemo(
-    () => environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+    () =>
+      environments
+        .filter(environment => activeEnvironmentIds.includes(environment.id))
+        .map(environment => environment.name),
     [activeEnvironmentIds, environments]
   )
   const activeEnvironmentVariableNames = useMemo(() => {
@@ -55,7 +65,9 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           isActive: activeEnvironmentIds.includes(environment.id),
           priority: nextDraft?.priority ?? environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])),
+          valueByVariableName: new Map(
+            Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])
+          ),
         }
       }),
     [activeEnvironmentIds, environmentEntries, environments]
@@ -73,6 +85,8 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
+  const { scripts: visibleSharedScripts, reload: reloadVisibleSharedScripts } =
+    useVisibleSharedScripts(selectedFolderId)
 
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
@@ -109,52 +123,56 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
 
   const preRequestScriptExtensions = useMemo(
     () => [
+      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScripts }),
       scriptAutocompleteExtension({
         includeResponse: false,
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNames,
+        getSharedScripts: () => visibleSharedScripts,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames]
+    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
   )
 
   const postRequestScriptExtensions = useMemo(
     () => [
+      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScripts }),
       scriptAutocompleteExtension({
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNames,
+        getSharedScripts: () => visibleSharedScripts,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames]
+    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
   )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 overflow-y-auto">
-      <DetailsTextArea
-        label={null}
-        value={draft.description}
-        minHeightClassName="min-h-28"
-        placeholder="Describe what this folder is for"
-        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, description: value })}
-        onBlur={() => undefined}
-      />
+        <DetailsTextArea
+          label={null}
+          value={draft.description}
+          minHeightClassName="min-h-28"
+          placeholder="Describe what this folder is for"
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, description: value })}
+          onBlur={() => undefined}
+        />
 
-      <AuthorizationEditor
-        value={draft.auth}
-        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
-        allowInherit
-        valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-        valueEditorRefreshKey={variableHighlightRefreshKey}
-      />
+        <AuthorizationEditor
+          value={draft.auth}
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
+          allowInherit
+          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+          valueEditorRefreshKey={variableHighlightRefreshKey}
+        />
 
-      <HeadersEditor
-        value={draft.headers}
-        valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-        valueEditorRefreshKey={variableHighlightRefreshKey}
-        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
-      />
+        <HeadersEditor
+          value={draft.headers}
+          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+          valueEditorRefreshKey={variableHighlightRefreshKey}
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
+        />
       </div>
 
       <div className="grid min-h-0 flex-1 md:grid-cols-2">
@@ -184,6 +202,21 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           onBlur={() => undefined}
         />
       </div>
+
+      {selectedFolderId ? (
+        <>
+          <DetailsSectionHeader title="Folder Shared Scripts" />
+
+          <SharedScriptsSection
+            title=""
+            description=""
+            scopeType="folder"
+            scopeId={selectedFolderId}
+            visibleSharedScripts={visibleSharedScripts}
+            onScriptsChanged={() => void reloadVisibleSharedScripts()}
+          />
+        </>
+      ) : null}
     </div>
   )
 }
@@ -194,7 +227,9 @@ function ScriptDocumentationButton({ phase }: { phase: 'pre-request' | 'post-req
       type="button"
       className="grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content"
       onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase } })}
-      aria-label={phase === 'pre-request' ? 'Open pre-request script documentation' : 'Open post-request script documentation'}
+      aria-label={
+        phase === 'pre-request' ? 'Open pre-request script documentation' : 'Open post-request script documentation'
+      }
       title="Script documentation"
     >
       <InfoIcon className="size-3.5" />
@@ -213,7 +248,9 @@ function updateEnvironmentVariableDraft(environmentId: string, variableName: str
   const row = rows.find(currentRow => currentRow.key.trim() === variableName)
 
   const nextVariables = row
-    ? stringifyKeyValueRows(rows.map(currentRow => (currentRow.key.trim() === variableName ? { ...currentRow, value } : currentRow)))
+    ? stringifyKeyValueRows(
+        rows.map(currentRow => (currentRow.key.trim() === variableName ? { ...currentRow, value } : currentRow))
+      )
     : entry.current.variables
 
   environmentEditorStore.trigger.draftUpdated({

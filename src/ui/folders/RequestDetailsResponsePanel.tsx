@@ -6,6 +6,7 @@ import { findNodeAtOffset, parseTree, type Node as JsonNode } from 'jsonc-parser
 import { CopyIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, type AppSettingsResponseBodyDisplayMode } from '@common/AppSettings'
+import type { SharedScriptRecord } from '@common/SharedScripts'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
 import type { HttpSseStreamState, RequestScriptError, SendRequestResponse, SseEventRecord } from '@common/Requests'
 import { formatJson } from '@common/Json5'
@@ -32,6 +33,7 @@ export function RequestDetailsResponsePanel({
   draft,
   onJumpToScriptError,
   visualizerEnvironments,
+  sharedScripts,
 }: {
   isSending: boolean
   draft: RequestDetailsDraft
@@ -44,6 +46,7 @@ export function RequestDetailsResponsePanel({
     createdAt: number
     values: Record<string, string>
   }>
+  sharedScripts: SharedScriptRecord[]
 }) {
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
@@ -302,6 +305,7 @@ export function RequestDetailsResponsePanel({
                 responseBodyDisplayMode={responseBodyDisplayMode}
                 requestSelection={responseBodyRequestSelection}
                 requestDraft={responseVisualizerRequestDraft}
+                sharedScripts={sharedScripts}
                 onUpdateResponseTableAccessor={updateResponseTableAccessor}
                 onUpdateResponseBodyDisplayMode={AppSettingsCoordinator.saveResponseBodyDisplayMode}
                 environments={visualizerEnvironments}
@@ -403,6 +407,7 @@ type ResponseBodyContentState =
         createdAt: number
         values: Record<string, string>
       }>
+      sharedScripts: SharedScriptRecord[]
     }
   | {
       kind: 'table'
@@ -442,6 +447,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   onUpdateResponseTableAccessor,
   onUpdateResponseBodyDisplayMode,
   environments,
+  sharedScripts,
   response,
   responseError,
   onSaveAsExample,
@@ -471,6 +477,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     createdAt: number
     values: Record<string, string>
   }>
+  sharedScripts: SharedScriptRecord[]
   response: SendRequestResponse | null
   responseError: string | null
   onSaveAsExample?: () => void
@@ -591,6 +598,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
           contentType,
           requestDraft,
           environments,
+          sharedScripts,
         }
       }
 
@@ -630,6 +638,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     description,
     displayedRawBody,
     environments,
+    sharedScripts,
     hasResponseVisualizer,
     imageSource,
     isImageResponse,
@@ -849,6 +858,7 @@ function renderResponseBodyContent(
           contentType={state.contentType}
           requestDraft={state.requestDraft}
           environments={state.environments}
+          sharedScripts={state.sharedScripts}
         />
       </div>
     )

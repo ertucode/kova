@@ -187,6 +187,7 @@ declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
 declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
+declare function requireScript(name: string): unknown
 declare const z: ZodApi
 `
 

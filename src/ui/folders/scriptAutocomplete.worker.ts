@@ -66,6 +66,7 @@ import type {
   ScriptAutocompleteOption,
   ScriptAutocompleteRequest,
   ScriptAutocompleteResponse,
+  ScriptAutocompleteSharedScript,
   ScriptDiagnosticsRequest,
   ScriptDiagnosticsResponse,
   ScriptEditorDiagnostic,
@@ -164,10 +165,13 @@ const sharedFiles = new Map<string, string>([
 ])
 
 type PhaseState = {
+  phase: ScriptAutocompletePhase
   service: ts.LanguageService
   files: Map<string, string>
   versions: Map<string, number>
   userFileName: string
+  declarationFileName: string
+  dynamicFileNames: Set<string>
 }
 
 const blockedKeywordCompletions = new Set([
@@ -218,7 +222,7 @@ function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteRespons
       throw new Error(`Unknown script autocomplete phase: ${request.phase}`)
     }
 
-    updatePhaseSource(phaseState, request.code)
+    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
 
     const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, request.position, {
       includeCompletionsForModuleExports: false,
@@ -265,7 +269,7 @@ function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsRes
       throw new Error(`Unknown script diagnostics phase: ${request.phase}`)
     }
 
-    updatePhaseSource(phaseState, request.code)
+    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
 
     return {
       requestId: request.requestId,
@@ -274,6 +278,7 @@ function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsRes
         ...phaseState.service.getSyntacticDiagnostics(phaseState.userFileName),
         ...phaseState.service.getSemanticDiagnostics(phaseState.userFileName),
       ])
+        .filter(diagnostic => !diagnostic.file || diagnostic.file.fileName === phaseState.userFileName)
         .filter(diagnostic => !shouldIgnoreDiagnostic(request.phase, diagnostic))
         .map(diagnostic => toEditorDiagnostic(diagnostic, request.code, phaseState.service, phaseState.userFileName)),
     }
@@ -294,9 +299,28 @@ function shouldIgnoreDiagnostic(phase: ScriptAutocompletePhase, diagnostic: ts.D
   return allowedTopLevelScriptDiagnosticCodes.has(diagnostic.code)
 }
 
-function updatePhaseSource(phaseState: PhaseState, code: string) {
+function updatePhaseSource(phaseState: PhaseState, code: string, sharedScripts: ScriptAutocompleteSharedScript[]) {
   phaseState.files.set(phaseState.userFileName, code)
   phaseState.versions.set(phaseState.userFileName, (phaseState.versions.get(phaseState.userFileName) ?? 0) + 1)
+
+  for (const fileName of phaseState.dynamicFileNames) {
+    phaseState.files.delete(fileName)
+    phaseState.versions.delete(fileName)
+  }
+  phaseState.dynamicFileNames.clear()
+
+  const sharedScriptFiles = createSharedScriptFiles(phaseState.phase, sharedScripts)
+  for (const file of sharedScriptFiles.files) {
+    phaseState.dynamicFileNames.add(file.fileName)
+    phaseState.files.set(file.fileName, file.content)
+    phaseState.versions.set(file.fileName, (phaseState.versions.get(file.fileName) ?? 0) + 1)
+  }
+
+  phaseState.files.set(
+    phaseState.declarationFileName,
+    `${getScriptRuntimeDeclarations(phaseState.phase)}\n${buildRequireScriptDeclarations(sharedScriptFiles.modules)}\n/// <reference lib="esnext.iterator" />\n`
+  )
+  phaseState.versions.set(phaseState.declarationFileName, (phaseState.versions.get(phaseState.declarationFileName) ?? 0) + 1)
 }
 
 function dedupeDiagnostics(diagnostics: readonly ts.Diagnostic[]) {
@@ -377,7 +401,7 @@ function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
       noLib: false,
       types: [],
     }),
-    getScriptFileNames: () => [userFileName, declarationFileName, rootLibFile, reactJsxTypesFile],
+    getScriptFileNames: () => Array.from(files.keys()),
     getScriptVersion: fileName => String(versions.get(fileName) ?? 0),
     getScriptSnapshot: fileName => {
       const content = files.get(fileName)
@@ -405,11 +429,43 @@ function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
   }
 
   return {
+    phase,
     service: ts.createLanguageService(host, ts.createDocumentRegistry()),
     files,
     versions,
     userFileName,
+    declarationFileName,
+    dynamicFileNames: new Set<string>(),
   }
+}
+
+function createSharedScriptFiles(phase: ScriptAutocompletePhase, sharedScripts: ScriptAutocompleteSharedScript[]) {
+  const extension = phase === 'response-visualizer' ? 'tsx' : 'ts'
+  const files: Array<{ fileName: string; content: string }> = []
+  const modules = new Map<string, string>()
+
+  for (const script of sharedScripts) {
+    if (!script.isActive || !script.targets.includes(phase) || !script.code.trim()) {
+      continue
+    }
+
+    const fileName = `shared-script-${script.id}.${extension}`
+    files.push({ fileName, content: script.code })
+
+    if (script.kind === 'module' && script.name.trim()) {
+      modules.set(script.name, fileName)
+    }
+  }
+
+  return { files, modules }
+}
+
+function buildRequireScriptDeclarations(modules: Map<string, string>) {
+  const lines = Array.from(modules.entries()).map(
+    ([name, fileName]) => `declare function requireScript(name: ${JSON.stringify(name)}): typeof import('./${fileName.replace(/\.tsx?$/, '')}')`
+  )
+
+  return lines.join('\n')
 }
 
 function isAllowedEntry(entry: ts.CompletionEntry) {

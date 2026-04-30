@@ -2,6 +2,7 @@ import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
 import type {
   ScriptAutocompleteRequest,
   ScriptAutocompleteResponse,
+  ScriptAutocompleteSharedScript,
   ScriptAutocompleteSuccess,
   ScriptDiagnosticsRequest,
   ScriptDiagnosticsResponse,
@@ -25,7 +26,13 @@ class ScriptAutocompleteClient {
     this.worker.addEventListener('error', this.handleError)
   }
 
-  request(input: { phase: ScriptAutocompletePhase; code: string; position: number; signal?: AbortSignal }) {
+  request(input: {
+    phase: ScriptAutocompletePhase
+    code: string
+    position: number
+    sharedScripts?: ScriptAutocompleteSharedScript[]
+    signal?: AbortSignal
+  }) {
     const requestId = this.nextRequestId++
     const payload: ScriptAutocompleteRequest = {
       type: 'autocomplete',
@@ -33,6 +40,7 @@ class ScriptAutocompleteClient {
       phase: input.phase,
       code: input.code,
       position: input.position,
+      sharedScripts: input.sharedScripts,
     }
 
     return new Promise<ScriptAutocompleteSuccess | null>((resolve, reject) => {
@@ -56,13 +64,19 @@ class ScriptAutocompleteClient {
     })
   }
 
-  requestDiagnostics(input: { phase: ScriptAutocompletePhase; code: string; signal?: AbortSignal }) {
+  requestDiagnostics(input: {
+    phase: ScriptAutocompletePhase
+    code: string
+    sharedScripts?: ScriptAutocompleteSharedScript[]
+    signal?: AbortSignal
+  }) {
     const requestId = this.nextRequestId++
     const payload: ScriptDiagnosticsRequest = {
       type: 'diagnostics',
       requestId,
       phase: input.phase,
       code: input.code,
+      sharedScripts: input.sharedScripts,
     }
 
     return new Promise<ScriptDiagnosticsSuccess | null>((resolve, reject) => {
@@ -129,12 +143,23 @@ class ScriptAutocompleteClient {
 
 let client: ScriptAutocompleteClient | null = null
 
-export function requestScriptAutocomplete(input: { phase: ScriptAutocompletePhase; code: string; position: number; signal?: AbortSignal }) {
+export function requestScriptAutocomplete(input: {
+  phase: ScriptAutocompletePhase
+  code: string
+  position: number
+  sharedScripts?: ScriptAutocompleteSharedScript[]
+  signal?: AbortSignal
+}) {
   client ??= new ScriptAutocompleteClient()
   return client.request(input)
 }
 
-export function requestScriptDiagnostics(input: { phase: ScriptAutocompletePhase; code: string; signal?: AbortSignal }) {
+export function requestScriptDiagnostics(input: {
+  phase: ScriptAutocompletePhase
+  code: string
+  sharedScripts?: ScriptAutocompleteSharedScript[]
+  signal?: AbortSignal
+}) {
   client ??= new ScriptAutocompleteClient()
   return client.requestDiagnostics(input)
 }

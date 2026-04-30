@@ -18,6 +18,8 @@ import type {
   RequestRawType,
   ScriptResponseBody,
 } from '../common/Requests.js'
+import type { SharedScriptRecord } from '../common/SharedScripts.js'
+import type { ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
 import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
@@ -27,6 +29,7 @@ const SCRIPT_TIMEOUT_MS = 500
 type ScriptSource = {
   name: string
   script: string
+  globalBindings?: string[]
 }
 
 type RuntimeRequestState = {
@@ -124,6 +127,7 @@ export type ScriptRuntime = {
 export function createRequestScriptRuntime(input: {
   request: RuntimeRequestState
   environments: EnvironmentRecord[]
+  sharedScripts?: SharedScriptRecord[]
   toast?: ScriptToastBridge
   prompt?: ScriptPromptBridge
 }): ScriptRuntime {
@@ -247,6 +251,7 @@ export function createRequestScriptRuntime(input: {
         const scriptErrors = await runScriptPhase({
           phase: 'pre-request',
           sources,
+          sharedScripts: input.sharedScripts ?? [],
           runtimeRequest,
           requestScope,
           response: null,
@@ -277,6 +282,7 @@ export function createRequestScriptRuntime(input: {
         const scriptErrors = await runScriptPhase({
           phase: 'post-request',
           sources,
+          sharedScripts: input.sharedScripts ?? [],
           runtimeRequest,
           requestScope,
           response,
@@ -421,6 +427,7 @@ function toScriptErrorDetails(error: unknown, fallbackPhase: 'pre-request' | 'po
 async function runScriptPhase(input: {
   phase: 'pre-request' | 'post-request'
   sources: ScriptSource[]
+  sharedScripts: SharedScriptRecord[]
   runtimeRequest: RuntimeRequestState
   requestScope: Map<string, string>
   response: { status: number; statusText: string; headers: string; body: ScriptResponseBody } | null
@@ -429,33 +436,49 @@ async function runScriptPhase(input: {
   toastBridge?: ScriptToastBridge
   promptBridge?: ScriptPromptBridge
 }) {
-  for (const source of input.sources) {
+  const headerEditor = createHeaderEditor(input.runtimeRequest)
+  const currentSourceName = { value: 'Script' }
+  const currentPrompt = { value: createScriptPromptApi(input.promptBridge, createIdleScriptExecutionController()) }
+  const sandboxGlobals = {
+    request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
+      ...input.environmentContext.getValues(),
+      ...Object.fromEntries(input.requestScope.entries()),
+    })),
+    response: input.response ? createResponseApi(input.response) : undefined,
+    env: createEnvironmentApi(input.environmentContext),
+    scope: createScopeApi(input.requestScope),
+    toast: createScriptToastApi(input.toastBridge),
+    crypto: createCryptoApi(),
+    prompt: createPromptProxy(() => currentPrompt.value),
+    z,
+  }
+  const requireScript = createSharedModuleLoader({
+    phase: input.phase,
+    sharedScripts: input.sharedScripts,
+    consoleEntries: input.consoleEntries,
+    baseGlobals: sandboxGlobals,
+  })
+  const sharedContext = vm.createContext({
+    ...sandboxGlobals,
+    console: createSharedContextConsole(currentSourceName, input.consoleEntries),
+    requireScript,
+  })
+
+  for (const source of [...getActiveGlobalScriptSources(input.sharedScripts, input.phase), ...input.sources]) {
     if (!source.script.trim()) {
       continue
     }
 
-    const headerEditor = createHeaderEditor(input.runtimeRequest)
     const executionController = createScriptExecutionController()
-    const sandbox = {
-      console: createScriptConsole(source.name, input.consoleEntries),
-      request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
-        ...input.environmentContext.getValues(),
-        ...Object.fromEntries(input.requestScope.entries()),
-      })),
-      response: input.response ? createResponseApi(input.response) : undefined,
-      env: createEnvironmentApi(input.environmentContext),
-      scope: createScopeApi(input.requestScope),
-      prompt: createScriptPromptApi(input.promptBridge, executionController),
-      toast: createScriptToastApi(input.toastBridge),
-      crypto: createCryptoApi(),
-      z,
-    }
-
     let compiledScript: CompiledRequestScript | null = null
 
     try {
-      compiledScript = compileRequestScript(source.script)
-      await executeScript(compiledScript.code, sandbox, executionController)
+      currentSourceName.value = source.name
+      currentPrompt.value = createScriptPromptApi(input.promptBridge, executionController)
+      compiledScript = compileRequestScript(
+        source.globalBindings ? appendGlobalBindingAssignments(source.script, source.globalBindings) : source.script
+      )
+      await executeScriptInContext(compiledScript.code, sharedContext, executionController)
       input.runtimeRequest.headers = headerEditor.serialize()
     } catch (error) {
       return [buildScriptErrorDetails({
@@ -549,6 +572,13 @@ function createScriptExecutionController(timeoutMs = SCRIPT_TIMEOUT_MS): ScriptE
         timeoutHandle = null
       }
     },
+  }
+}
+
+function createIdleScriptExecutionController(): ScriptExecutionPauseController {
+  return {
+    pause() {},
+    resume() {},
   }
 }
 
@@ -755,6 +785,16 @@ function createScriptConsole(sourceName: string, consoleEntries: RequestConsoleE
     warn: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'warn', values),
     error: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'error', values),
     debug: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'debug', values),
+  }
+}
+
+function createSharedContextConsole(sourceNameRef: { value: string }, consoleEntries: RequestConsoleEntry[]) {
+  return {
+    log: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceNameRef.value, 'log', values),
+    info: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceNameRef.value, 'info', values),
+    warn: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceNameRef.value, 'warn', values),
+    error: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceNameRef.value, 'error', values),
+    debug: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceNameRef.value, 'debug', values),
   }
 }
 
@@ -965,6 +1005,14 @@ function createEnvironmentApi(environmentContext: EnvironmentContext) {
   }
 }
 
+function createPromptProxy(getPrompt: () => ReturnType<typeof createScriptPromptApi>) {
+  return {
+    text(options: ScriptPromptTextOptions) {
+      return getPrompt().text(options)
+    },
+  }
+}
+
 function createScopeApi(requestScope: Map<string, string>) {
   return {
     get(name: string) {
@@ -1067,6 +1115,15 @@ async function executeScript(
     },
   })
 
+  return executeScriptInContext(code, context, executionController)
+}
+
+async function executeScriptInContext(
+  code: string,
+  context: vm.Context,
+  executionController = createScriptExecutionController()
+) {
+  
   const script = new vm.Script(`(async () => {\n${code}\n})()`, { filename: 'request-script.js' })
   const result = script.runInContext(context, { timeout: SCRIPT_TIMEOUT_MS })
 
@@ -1074,6 +1131,157 @@ async function executeScript(
     return await Promise.race([Promise.resolve(result), executionController.timeoutPromise])
   } finally {
     executionController.cancel()
+  }
+}
+
+function executeModuleScript(code: string, context: vm.Context) {
+  const script = new vm.Script(code, { filename: 'request-shared-script.js' })
+  return script.runInContext(context, { timeout: SCRIPT_TIMEOUT_MS })
+}
+
+function getActiveGlobalScriptSources(sharedScripts: SharedScriptRecord[], phase: 'pre-request' | 'post-request'): ScriptSource[] {
+  return sharedScripts
+    .filter(script => script.isActive && script.kind === 'global' && script.targets.includes(phase))
+    .map(script => ({
+      name: getSharedScriptDisplayName(script),
+      script: script.code,
+      globalBindings: collectTopLevelBindingNames(script.code),
+    }))
+}
+
+function createSharedModuleLoader(input: {
+  phase: 'pre-request' | 'post-request'
+  sharedScripts: SharedScriptRecord[]
+  consoleEntries: RequestConsoleEntry[]
+  baseGlobals: {
+    request: RequestApi
+    response: ReturnType<typeof createResponseApi> | undefined
+    env: ReturnType<typeof createEnvironmentApi>
+    scope: ReturnType<typeof createScopeApi>
+    toast: ReturnType<typeof createScriptToastApi>
+    crypto: ReturnType<typeof createCryptoApi>
+    prompt: ReturnType<typeof createPromptProxy>
+    z: typeof z
+  }
+}) {
+  const visibleModules = input.sharedScripts.filter(
+    script => script.isActive && script.kind === 'module' && script.targets.includes(input.phase) && script.name.trim() !== ''
+  )
+  const modulesByName = new Map<string, SharedScriptRecord>()
+  for (const script of visibleModules) {
+    modulesByName.set(script.name, script)
+  }
+
+  const moduleCache = new Map<string, Record<string, unknown>>()
+  const loadingStack: string[] = []
+
+  const loadModule = (name: string): Record<string, unknown> => {
+    const script = modulesByName.get(name)
+    if (!script) {
+      throw new Error(`Shared script module ${name} was not found`)
+    }
+
+    if (moduleCache.has(name)) {
+      return moduleCache.get(name) ?? {}
+    }
+
+    if (loadingStack.includes(name)) {
+      throw new Error(`Shared script cycle detected: ${[...loadingStack, name].join(' -> ')}`)
+    }
+
+    loadingStack.push(name)
+    const module = { exports: {} as Record<string, unknown> }
+    const exports = module.exports
+
+    try {
+      const compiled = compileRequestScript(script.code)
+      const context = vm.createContext(
+        {
+          module,
+          exports,
+          requireScript: loadModule,
+          console: createScriptConsole(getSharedScriptDisplayName(script), input.consoleEntries),
+          ...input.baseGlobals,
+        },
+        {
+          codeGeneration: {
+            strings: false,
+            wasm: false,
+          },
+        }
+      )
+      executeModuleScript(compiled.code, context)
+
+      if (Object.keys(module.exports).filter(key => key !== '__esModule').length === 0) {
+        throw new Error(`Shared script module ${name} must use explicit exports`)
+      }
+
+      moduleCache.set(name, module.exports)
+      return module.exports
+    } finally {
+      loadingStack.pop()
+    }
+  }
+
+  return loadModule
+}
+
+function getSharedScriptDisplayName(script: SharedScriptRecord) {
+  if (script.name.trim()) {
+    return `Shared Script: ${script.name}`
+  }
+
+  const firstMeaningfulLine = script.code
+    .split('\n')
+    .map(line => line.trim())
+    .find(line => line.length > 0)
+
+  return firstMeaningfulLine ? `Shared Script: ${firstMeaningfulLine.slice(0, 40)}` : 'Shared Script'
+}
+
+function appendGlobalBindingAssignments(sourceCode: string, bindingNames: string[]) {
+  if (bindingNames.length === 0) {
+    return sourceCode
+  }
+
+  const assignments = bindingNames.map(name => `globalThis.${name} = ${name}`).join('\n')
+  return `${sourceCode}\n${assignments}`
+}
+
+function collectTopLevelBindingNames(sourceCode: string) {
+  const sourceFile = ts.createSourceFile('request-global-script.ts', sourceCode, ts.ScriptTarget.ES2020, true)
+  const names = new Set<string>()
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+      if (statement.name?.text) {
+        names.add(statement.name.text)
+      }
+      continue
+    }
+
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        collectBindingElementNames(declaration.name, names)
+      }
+    }
+  }
+
+  return Array.from(names)
+}
+
+function collectBindingElementNames(name: ts.BindingName, names: Set<string>) {
+  if (ts.isIdentifier(name)) {
+    names.add(name.text)
+    return
+  }
+
+  for (const element of name.elements) {
+    if (ts.isOmittedExpression(element)) {
+      continue
+    }
+
+    collectBindingElementNames(element.name, names)
   }
 }
 

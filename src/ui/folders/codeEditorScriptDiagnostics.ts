@@ -4,7 +4,7 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { toast } from '@/lib/components/toast'
 import { requestScriptDiagnostics } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
-import type { ScriptEditorDiagnostic } from './scriptAutocompleteTypes'
+import type { ScriptAutocompleteSharedScript, ScriptEditorDiagnostic } from './scriptAutocompleteTypes'
 
 const DIAGNOSTIC_DEBOUNCE_MS = 180
 const setInlineDiagnosticsEffect = StateEffect.define<readonly ScriptEditorDiagnostic[]>()
@@ -58,7 +58,12 @@ const inlineDiagnosticsTheme = EditorView.theme({
   },
 })
 
-export function scriptDiagnosticsExtension(phase: ScriptAutocompletePhase): Extension {
+export function scriptDiagnosticsExtension(options: {
+  phase: ScriptAutocompletePhase
+  getSharedScripts?: () => ScriptAutocompleteSharedScript[]
+}): Extension {
+  const { phase, getSharedScripts } = options
+
   return [
     inlineDiagnosticsField,
     inlineDiagnosticsTheme,
@@ -84,7 +89,7 @@ export function scriptDiagnosticsExtension(phase: ScriptAutocompletePhase): Exte
         pluginState.abortController = abortController
         const code = view.state.doc.toString()
 
-        void requestScriptDiagnostics({ phase, code, signal: abortController.signal })
+        void requestScriptDiagnostics({ phase, code, sharedScripts: getSharedScripts?.(), signal: abortController.signal })
           .then(result => {
             if (abortController.signal.aborted || !result || !view.dom.isConnected) {
               return

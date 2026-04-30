@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap } from '@common/EnvironmentVariables'
 import type { SendRequestResponse } from '@common/Requests'
+import type { SharedScriptRecord } from '@common/SharedScripts'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
 
 type VisualizerEnvironmentSnapshot = {
@@ -48,6 +49,7 @@ type VisualizerPayload = {
     owners: Record<string, string>
   }
   scope: Record<string, string>
+  sharedScripts: Array<Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>>
 }
 
 const READY_EVENT = 'kova-response-visualizer-ready'
@@ -59,12 +61,14 @@ export function ResponseVisualizerPreview({
   contentType,
   requestDraft,
   environments,
+  sharedScripts,
 }: {
   source: string
   response: SendRequestResponse | null
   contentType: string | null
   requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   environments: VisualizerEnvironmentSnapshot[]
+  sharedScripts: SharedScriptRecord[]
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [isIframeReady, setIsIframeReady] = useState(false)
@@ -115,8 +119,9 @@ export function ResponseVisualizerPreview({
         owners,
       },
       scope: response?.requestScope ?? {},
+      sharedScripts,
     }
-  }, [contentType, environments, requestDraft, response])
+  }, [contentType, environments, requestDraft, response, sharedScripts])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {

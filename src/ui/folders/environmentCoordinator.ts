@@ -3,7 +3,7 @@ import { getWindowElectron } from '@/getWindowElectron'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
 import { environmentEditorStore, isEnvironmentEntryDirty } from './environmentEditorStore'
-import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderExplorerEditorStore'
+import { folderExplorerEditorStore, saveFolderExplorerUiState, type SidebarTab } from './folderExplorerEditorStore'
 
 const saveTokens: Record<string, number> = {}
 
@@ -141,7 +141,7 @@ export namespace EnvironmentCoordinator {
     persistUiState()
   }
 
-  export function setSidebarTab(sidebarTab: 'requests' | 'environments' | 'history' | 'changes') {
+  export function setSidebarTab(sidebarTab: SidebarTab) {
     folderExplorerEditorStore.trigger.sidebarTabChanged({ sidebarTab })
     persistUiState()
   }

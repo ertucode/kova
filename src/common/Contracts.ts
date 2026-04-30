@@ -114,6 +114,15 @@ import {
   type UndoOperationInput,
   type UndoOperationsInput,
 } from './Operations.js'
+import {
+  type CreateSharedScriptInput,
+  type DeleteSharedScriptInput,
+  type ListSharedScriptsInput,
+  type ListVisibleSharedScriptsInput,
+  type MoveSharedScriptInput,
+  type SharedScriptRecord,
+  type UpdateSharedScriptInput,
+} from './SharedScripts.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -200,6 +209,12 @@ export type EventResponseMapping = {
   pickPostmanEnvironmentExportFile: Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
   analyzePostmanEnvironmentExport: Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
   exportPostmanEnvironment: Promise<GenericResult<ExportPostmanEnvironmentResponse>>
+  listSharedScripts: Promise<SharedScriptRecord[]>
+  createSharedScript: Promise<GenericResult<SharedScriptRecord>>
+  updateSharedScript: Promise<GenericResult<SharedScriptRecord>>
+  deleteSharedScript: Promise<GenericResult<void>>
+  moveSharedScript: Promise<GenericResult<void>>
+  listVisibleSharedScripts: Promise<SharedScriptRecord[]>
 }
 
 export type EventRequestMapping = {
@@ -283,6 +298,12 @@ export type EventRequestMapping = {
   pickPostmanEnvironmentExportFile: PickPostmanEnvironmentExportFileInput
   analyzePostmanEnvironmentExport: AnalyzePostmanEnvironmentExportInput
   exportPostmanEnvironment: ExportPostmanEnvironmentInput
+  listSharedScripts: ListSharedScriptsInput
+  createSharedScript: CreateSharedScriptInput
+  updateSharedScript: UpdateSharedScriptInput
+  deleteSharedScript: DeleteSharedScriptInput
+  moveSharedScript: MoveSharedScriptInput
+  listVisibleSharedScripts: ListVisibleSharedScriptsInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -378,4 +399,10 @@ export type WindowElectron = {
   pickPostmanEnvironmentExportFile: (input: PickPostmanEnvironmentExportFileInput) => Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
   analyzePostmanEnvironmentExport: (input: AnalyzePostmanEnvironmentExportInput) => Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
   exportPostmanEnvironment: (input: ExportPostmanEnvironmentInput) => Promise<GenericResult<ExportPostmanEnvironmentResponse>>
+  listSharedScripts: (input: ListSharedScriptsInput) => Promise<SharedScriptRecord[]>
+  createSharedScript: (input: CreateSharedScriptInput) => Promise<GenericResult<SharedScriptRecord>>
+  updateSharedScript: (input: UpdateSharedScriptInput) => Promise<GenericResult<SharedScriptRecord>>
+  deleteSharedScript: (input: DeleteSharedScriptInput) => Promise<GenericResult<void>>
+  moveSharedScript: (input: MoveSharedScriptInput) => Promise<GenericResult<void>>
+  listVisibleSharedScripts: (input: ListVisibleSharedScriptsInput) => Promise<SharedScriptRecord[]>
 }

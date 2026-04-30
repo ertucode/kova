@@ -1,10 +1,14 @@
 import type { Completion } from '@codemirror/autocomplete'
+import type { SharedScriptRecord } from '@common/SharedScripts'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+
+export type ScriptAutocompleteSharedScript = Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>
 
 type ScriptRequestBase = {
   requestId: number
   phase: ScriptAutocompletePhase
   code: string
+  sharedScripts?: ScriptAutocompleteSharedScript[]
 }
 
 export type ScriptAutocompleteRequest = ScriptRequestBase & {

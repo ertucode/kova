@@ -18,6 +18,7 @@ import { getEnvironmentsByIds } from './db/environments.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
+import { listVisibleSharedScripts } from './db/shared-scripts.js'
 import { createRequestScriptRuntime, type ScriptRuntime } from './request-script-runner.js'
 import type { ScriptPromptBridge } from './script-prompt.js'
 
@@ -68,7 +69,10 @@ export async function prepareHttpRequest(
     return GenericError.Message('Use the WebSocket connect flow for websocket requests')
   }
 
-  const folders = await getFolderAncestorChain(parentFolderId)
+  const [folders, sharedScripts] = await Promise.all([
+    getFolderAncestorChain(parentFolderId),
+    listVisibleSharedScripts({ folderId: parentFolderId, onlyActive: true }),
+  ])
   const runtime = createRequestScriptRuntime({
     request: {
       method: input.method,
@@ -85,6 +89,7 @@ export async function prepareHttpRequest(
       rawType: input.rawType,
     },
     environments: activeEnvironments,
+    sharedScripts,
     toast: options?.toast,
     prompt: options?.prompt,
   })

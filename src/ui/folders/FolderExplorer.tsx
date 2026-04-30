@@ -19,6 +19,7 @@ import { EnvironmentCoordinator } from './environmentCoordinator'
 import { EnvironmentsPanel } from './EnvironmentsPanel'
 import { ChangesPanel } from './ChangesPanel'
 import { HistoryPanel } from './RequestExecutionPanels'
+import { SharedScriptsPanel } from './SharedScriptsPanel'
 import { buildTree, filterTreeWithDrafts, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -304,6 +305,7 @@ export function FolderExplorer() {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-base-100">
         {sidebarTab === 'requests' ? <FolderExplorerTabs /> : null}
         {sidebarTab === 'requests' ? <DetailsPanel /> : null}
+        {sidebarTab === 'scripts' ? <SharedScriptsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
         {sidebarTab === 'history' ? <HistoryPanel /> : null}
         {sidebarTab === 'changes' ? <ChangesPanel /> : null}
@@ -448,6 +450,7 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
     { id: 'environments', label: 'Envs', icon: FlaskConicalIcon, disabled: false },
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },
     { id: 'changes', label: 'Changes', icon: Undo2Icon, disabled: false },
+    { id: 'scripts', label: 'Scripts', icon: FileJsonIcon, disabled: false },
   ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
 
   return (
