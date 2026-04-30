@@ -148,8 +148,8 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="shrink-0">
         <DetailsTextArea
           label={null}
           value={draft.description}
@@ -175,7 +175,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         />
       </div>
 
-      <div className="grid min-h-0 flex-1 md:grid-cols-2">
+      <div className="shrink-0 grid min-h-0 md:grid-cols-2">
         <DetailsTextArea
           label="Pre-request Script"
           value={draft.preRequestScript}
@@ -204,18 +204,20 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
       </div>
 
       {selectedFolderId ? (
-        <>
+        <div className="shrink-0">
           <DetailsSectionHeader title="Folder Shared Scripts" />
 
-          <SharedScriptsSection
-            title=""
-            description=""
-            scopeType="folder"
-            scopeId={selectedFolderId}
-            visibleSharedScripts={visibleSharedScripts}
-            onScriptsChanged={() => void reloadVisibleSharedScripts()}
-          />
-        </>
+          <div className="h-[500px] min-h-[500px]">
+            <SharedScriptsSection
+              title=""
+              description=""
+              scopeType="folder"
+              scopeId={selectedFolderId}
+              visibleSharedScripts={visibleSharedScripts}
+              onScriptsChanged={() => void reloadVisibleSharedScripts()}
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   )

@@ -164,6 +164,36 @@ const sharedFiles = new Map<string, string>([
   [reactJsxTypesFile, reactJsxTypes],
 ])
 
+const zodDeclarationFiles = buildZodDeclarationFiles(
+  {
+    ...(import.meta.glob('../../../node_modules/zod/index.d.cts', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>),
+    ...(import.meta.glob('../../../node_modules/zod/v4/index.d.cts', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>),
+    ...(import.meta.glob('../../../node_modules/zod/v4/classic/**/*.d.cts', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>),
+    ...(import.meta.glob('../../../node_modules/zod/v4/core/**/*.d.cts', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>),
+    ...(import.meta.glob('../../../node_modules/zod/v4/locales/**/*.d.cts', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>),
+  }
+)
+
 type PhaseState = {
   phase: ScriptAutocompletePhase
   service: ts.LanguageService
@@ -379,6 +409,9 @@ function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
   const userFileName = phase === 'response-visualizer' ? `${phase}.script.tsx` : `${phase}.script.ts`
   const declarationFileName = `${phase}.runtime.d.ts`
   const files = new Map(sharedFiles)
+  for (const [fileName, content] of zodDeclarationFiles) {
+    files.set(fileName, content)
+  }
   files.set(declarationFileName, `${getScriptRuntimeDeclarations(phase)}\n/// <reference lib=\"esnext.iterator\" />\n`)
   files.set(userFileName, '')
 
@@ -439,6 +472,24 @@ function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
   }
 }
 
+function buildZodDeclarationFiles(rawFiles: Record<string, string>) {
+  const files = new Map<string, string>()
+
+  for (const [filePath, content] of Object.entries(rawFiles)) {
+    const marker = 'node_modules/zod/'
+    const markerIndex = filePath.indexOf(marker)
+    if (markerIndex < 0) {
+      continue
+    }
+
+    const relativePath = filePath.slice(markerIndex + marker.length)
+    const virtualFileName = `vendor/zod/${relativePath.replace(/\.d\.cts$/, '.cjs')}`
+    files.set(virtualFileName, content)
+  }
+
+  return files
+}
+
 function createSharedScriptFiles(phase: ScriptAutocompletePhase, sharedScripts: ScriptAutocompleteSharedScript[]) {
   const extension = phase === 'response-visualizer' ? 'tsx' : 'ts'
   const files: Array<{ fileName: string; content: string }> = []
@@ -464,6 +515,8 @@ function buildRequireScriptDeclarations(modules: Map<string, string>) {
   const lines = Array.from(modules.entries()).map(
     ([name, fileName]) => `declare function requireScript(name: ${JSON.stringify(name)}): typeof import('./${fileName.replace(/\.tsx?$/, '')}')`
   )
+
+  lines.push('declare function requireScript(name: string): unknown')
 
   return lines.join('\n')
 }

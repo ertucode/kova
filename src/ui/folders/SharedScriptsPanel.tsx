@@ -424,7 +424,7 @@ function SharedScriptDetail({
   )
 
   return (
-    <div className="min-h-full">
+    <div className="min-h-full flex flex-col">
       <div className="border-b border-base-content/10 px-6 py-5">
         <div className="flex items-center gap-4">
           <div className="group relative shrink-0 rounded-2xl border border-base-content/10 bg-base-100 px-4 py-3 text-sm font-medium text-base-content/60">
@@ -535,14 +535,13 @@ function SharedScriptDetail({
         </div>
       </div>
 
-      <div className="h-[calc(100vh-23rem)] min-h-[360px]">
+      <div className="flex-1 min-h-[360px] flex flex-col">
         <CodeEditor
           value={draft.code}
           language={phase === 'response-visualizer' ? 'jsx' : 'javascript'}
           size="small"
           showLineNumbers
-          minHeightClassName="min-h-full h-full"
-          className="h-full border-x-0 border-b-0 border-t-0"
+          className="h-full border-x-0 border-b-0 border-t-0 flex-1"
           extensions={extensions}
           onChange={value => onChange({ ...draft, code: value })}
           onBlur={() => undefined}

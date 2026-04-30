@@ -14,43 +14,6 @@ type SafeParseFailure = {
   }
 }
 
-interface ZodSchema<T = unknown> {
-  parse(value: unknown): T
-  safeParse(value: unknown): SafeParseSuccess<T> | SafeParseFailure
-  optional(): ZodSchema<T | undefined>
-  nullable(): ZodSchema<T | null>
-  array(): ZodSchema<T[]>
-}
-
-interface ZodStringSchema extends ZodSchema<string> {
-  min(length: number): ZodStringSchema
-  max(length: number): ZodStringSchema
-}
-
-interface ZodNumberSchema extends ZodSchema<number> {
-  min(value: number): ZodNumberSchema
-  max(value: number): ZodNumberSchema
-  int(): ZodNumberSchema
-}
-
-interface ZodBooleanSchema extends ZodSchema<boolean> {}
-
-interface ZodObjectSchema<T extends Record<string, unknown>> extends ZodSchema<T> {
-  extend<U extends Record<string, unknown>>(shape: { [K in keyof U]: ZodSchema<U[K]> }): ZodObjectSchema<T & U>
-}
-
-interface ZodApi {
-  object<T extends Record<string, unknown>>(shape: { [K in keyof T]: ZodSchema<T[K]> }): ZodObjectSchema<T>
-  array<T>(schema: ZodSchema<T>): ZodSchema<T[]>
-  string(): ZodStringSchema
-  number(): ZodNumberSchema
-  boolean(): ZodBooleanSchema
-  unknown(): ZodSchema<unknown>
-  literal<T extends string | number | boolean | null>(value: T): ZodSchema<T>
-  enum<T extends readonly [string, ...string[]]>(values: T): ZodSchema<T[number]>
-  union<T extends readonly [ZodSchema<unknown>, ...ZodSchema<unknown>[]]>(schemas: T): ZodSchema<unknown>
-}
-
 type ScriptResponseBody =
   | {
       type: 'json'
@@ -187,8 +150,7 @@ declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
 declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
-declare function requireScript(name: string): unknown
-declare const z: ZodApi
+declare const z: typeof import('./vendor/zod/index.cjs').z
 `
 
 const scriptToastDeclarations = String.raw`
