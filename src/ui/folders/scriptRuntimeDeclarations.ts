@@ -169,7 +169,7 @@ interface ScriptToastApi {
 }
 
 interface ScriptPromptTextOptions {
-  title: string
+  title?: string
   message?: string
   defaultValue?: string
   placeholder?: string

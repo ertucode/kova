@@ -385,6 +385,45 @@ describe('createRequestScriptRuntime', () => {
     ])
   })
 
+  it('allows prompt.text without a title', async () => {
+    const promptedOptions: Array<Record<string, unknown>> = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async options => {
+          promptedOptions.push(options)
+          return 'Ada'
+        },
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "const name = await prompt.text({ message: 'Needed for the request' })\nif (name) {\n  scope.set('name', name)\n}",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().name).toBe('Ada')
+    expect(promptedOptions).toEqual([
+      {
+        message: 'Needed for the request',
+      },
+    ])
+  })
+
   it('does not count prompt wait time against the script timeout', async () => {
     const runtime = createRequestScriptRuntime({
       request: {

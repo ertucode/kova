@@ -1,1 +1,2 @@
-- scriptlerden dialog çağır. prompt hatta?
+- kullanıcı global ve named scriptler tanımlayabilsin. global scriptler her kod bloğunda kullanılabilir olsun. diğerleri require ile load edilebilir olsun.
+- named scriptler obje return etsin veya export etsin.

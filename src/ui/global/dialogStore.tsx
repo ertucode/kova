@@ -4,7 +4,7 @@ import { useSelector } from '@xstate/store/react'
 import { Dialog } from '@/lib/components/dialog'
 
 type PromptDialogOptions = {
-  title: string
+  title?: string
   message?: string
   defaultValue?: string
   placeholder?: string

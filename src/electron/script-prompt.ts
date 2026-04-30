@@ -35,7 +35,7 @@ function normalizeScriptPromptTextOptions(options: ScriptPromptTextOptions) {
     throw new Error('prompt.text requires an options object')
   }
 
-  const title = normalizeRequiredPromptText(options.title, 'title')
+  const title = normalizeOptionalPromptText(options.title, 'title')
   const message = normalizeOptionalPromptText(options.message, 'message')
   const defaultValue = normalizeOptionalPromptText(options.defaultValue, 'defaultValue')
   const placeholder = normalizeOptionalPromptText(options.placeholder, 'placeholder')
@@ -43,21 +43,13 @@ function normalizeScriptPromptTextOptions(options: ScriptPromptTextOptions) {
   const cancelText = normalizeOptionalPromptText(options.cancelText, 'cancelText')
 
   return {
-    title,
+    ...(title !== undefined ? { title } : {}),
     ...(message !== undefined ? { message } : {}),
     ...(defaultValue !== undefined ? { defaultValue } : {}),
     ...(placeholder !== undefined ? { placeholder } : {}),
     ...(confirmText !== undefined ? { confirmText } : {}),
     ...(cancelText !== undefined ? { cancelText } : {}),
   } satisfies ScriptPromptTextOptions
-}
-
-function normalizeRequiredPromptText(value: unknown, fieldName: string) {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`prompt.text ${fieldName} must be a non-empty string`)
-  }
-
-  return value
 }
 
 function normalizeOptionalPromptText(value: unknown, fieldName: string) {
