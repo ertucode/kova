@@ -1,4 +1,0 @@
-- kullanıcı global ve named scriptler tanımlayabilsin. global scriptler her kod bloğunda kullanılabilir olsun. diğerleri require ile load edilebilir olsun.
-- named scriptler obje return etsin veya export etsin. ayrıca şöyle de çalışsın. runScript('setToken'). export etmek zorunlu olmasın yani.
-- hatta bu global scriptlerin içeriğine göre autocomplete de doğru çalışmalı.
-- bu global scriptlerin de ismi olsun farklı farklı bloklarda tanımlanabilir olsun. activelik durumu setlenebilsin olsun bu scriptler

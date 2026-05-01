@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { CopyIcon, InfoIcon, LibraryBigIcon } from 'lucide-react'
+import { CopyIcon, InfoIcon, LibraryBigIcon, PencilIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import type { Extension } from '@codemirror/state'
 import { getAuthVariableSources } from '@common/Auth'
@@ -49,6 +49,7 @@ import { buildImportedHttpUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
+import { twMerge } from 'tailwind-merge'
 
 type RequestMetaTab =
   | 'overview'
@@ -315,7 +316,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       return
     }
 
-    const initialMetaTab = shouldDefaultToSearchParamsTab(draft) ? 'search-params' : compactRequestView ? 'overview' : 'body'
+    const initialMetaTab = shouldDefaultToSearchParamsTab(draft)
+      ? 'search-params'
+      : compactRequestView
+        ? 'overview'
+        : 'body'
     metaTabByRequestIdRef.current[selectedRequestId] = initialMetaTab
     setMetaTab(initialMetaTab)
   }, [compactRequestView, draft, selectedRequestId])
@@ -741,10 +746,30 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         <section className="min-h-0 flex-1">
           <div className="relative h-full">
             <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+              <Tooltip content="Fill in the script" placement="left">
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center cursor-pointer rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
+                  onClick={() => {
+                    FolderExplorerCoordinator.updateSelectedDraft({
+                      ...draft,
+                      responseVisualizer: `
+export default function View() {
+  
+}
+`,
+                    })
+                    setTimeout(() => responseVisualizerEditorRef.current?.focusLine(3, 4), 0)
+                  }}
+                  aria-label="Copy response visualizer"
+                >
+                  <PencilIcon className="size-4" />
+                </button>
+              </Tooltip>
               <Tooltip content="Copy" placement="left">
                 <button
                   type="button"
-                  className="inline-flex h-8 items-center justify-center rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
+                  className="inline-flex h-8 items-center justify-center cursor-pointer rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
                   onClick={() =>
                     void copyTextToClipboard(draft.responseVisualizer, 'Response visualizer copied to clipboard.')
                   }
@@ -757,12 +782,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
                 phase="response-visualizer"
                 mode="examples"
                 tooltip="Examples"
-                className="h-8 rounded-lg border border-base-content/10 bg-base-100/90 px-0 backdrop-blur"
+                className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 px-0 backdrop-blur"
               />
               <ScriptDocumentationButton
                 phase="response-visualizer"
                 tooltip="Documentation"
-                className="h-8 w-8 rounded-lg border border-base-content/10 bg-base-100/90 backdrop-blur"
+                className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 backdrop-blur"
               />
             </div>
             <CodeEditor
@@ -898,12 +923,10 @@ function ScriptDocumentationButton({
   const button = (
     <button
       type="button"
-      className={[
+      className={twMerge(
         'grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content h-full cursor-pointer',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
+        className
+      )}
       onClick={() => dialogActions.open({ component: ScriptDocumentationDialog, props: { phase, mode } })}
       aria-label={ariaLabel}
     >
@@ -1090,7 +1113,9 @@ function RequestOverviewTab({
 }) {
   return (
     <section className="grid min-h-0 flex-1 w-full border-base-content/10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">{body}</div>
+      <div className="min-h-0 border-b border-base-content/10 md:border-b-0 md:border-r md:border-base-content/10">
+        {body}
+      </div>
 
       <div className="flex min-h-0 flex-col overflow-y-auto">
         <AuthorizationEditor
