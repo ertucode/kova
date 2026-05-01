@@ -1,6 +1,7 @@
 import { setDiagnostics, type Diagnostic } from '@codemirror/lint'
 import { StateEffect, StateField, type Extension, RangeSetBuilder } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
+import type { SharedScriptTarget } from '@common/SharedScripts'
 import { toast } from '@/lib/components/toast'
 import { requestScriptDiagnostics } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
@@ -59,10 +60,12 @@ const inlineDiagnosticsTheme = EditorView.theme({
 })
 
 export function scriptDiagnosticsExtension(options: {
-  phase: ScriptAutocompletePhase
+  phase?: ScriptAutocompletePhase
+  targets?: SharedScriptTarget[]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
 }): Extension {
-  const { phase, getSharedScripts } = options
+  const { phase = 'pre-request', getSharedScripts, targets } = options
+  const runtimeContext = targets ? { targets } : { phase }
 
   return [
     inlineDiagnosticsField,
@@ -89,7 +92,7 @@ export function scriptDiagnosticsExtension(options: {
         pluginState.abortController = abortController
         const code = view.state.doc.toString()
 
-        void requestScriptDiagnostics({ phase, code, sharedScripts: getSharedScripts?.(), signal: abortController.signal })
+        void requestScriptDiagnostics({ runtimeContext, code, sharedScripts: getSharedScripts?.(), signal: abortController.signal })
           .then(result => {
             if (abortController.signal.aborted || !result || !view.dom.isConnected) {
               return

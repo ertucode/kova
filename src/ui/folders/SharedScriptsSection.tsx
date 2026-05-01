@@ -294,13 +294,8 @@ function SharedScriptDetail({
   onDelete: () => void
   onSave: () => void
 }) {
-  const phase = useMemo(() => {
-    if (draft.targets.includes('response-visualizer')) {
-      return 'response-visualizer' as const
-    }
-
-    return draft.targets.includes('pre-request') ? ('pre-request' as const) : ('post-request' as const)
-  }, [draft.targets])
+  const targets = useMemo(() => normalizeSharedScriptTargets(draft.targets), [draft.targets])
+  const isVisualizerOnly = targets.length === 1 && targets[0] === 'response-visualizer'
 
   const autocompleteSharedScripts = useMemo(
     () => visibleSharedScripts.filter(item => item.id !== draft.id),
@@ -309,14 +304,14 @@ function SharedScriptDetail({
 
   const extensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase, getSharedScripts: () => autocompleteSharedScripts }),
+      scriptDiagnosticsExtension({ targets, getSharedScripts: () => autocompleteSharedScripts }),
       scriptAutocompleteExtension({
-        includeResponse: phase === 'post-request',
-        phase,
+        includeResponse: false,
+        targets,
         getSharedScripts: () => autocompleteSharedScripts,
       }),
     ],
-    [autocompleteSharedScripts, phase]
+    [autocompleteSharedScripts, targets]
   )
 
   return (
@@ -387,37 +382,28 @@ function SharedScriptDetail({
 
             <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
               {SCRIPT_TARGET_OPTIONS.map(target => {
-                const disabled =
-                  target === 'response-visualizer' ? draft.targets.length > 1 && !draft.targets.includes(target) : false
-
                 return (
                   <label
                     key={target}
                     className={[
                       'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-                      draft.targets.includes(target)
-                        ? 'border-primary/30 bg-primary/10 text-base-content'
-                        : 'border-base-content/10 bg-base-100 text-base-content/70',
-                      disabled ? 'opacity-50' : '',
-                    ].join(' ')}
-                  >
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-xs rounded-sm"
-                      checked={draft.targets.includes(target)}
-                      disabled={disabled}
-                      onChange={event => {
-                        const checked = event.target.checked
-                        const nextTargets = checked
-                          ? target === 'response-visualizer'
-                            ? ['response-visualizer']
-                            : draft.targets.includes('response-visualizer')
-                              ? [target]
-                              : [...draft.targets, target]
-                          : draft.targets.filter(currentTarget => currentTarget !== target)
+                       draft.targets.includes(target)
+                          ? 'border-primary/30 bg-primary/10 text-base-content'
+                          : 'border-base-content/10 bg-base-100 text-base-content/70',
+                     ].join(' ')}
+                   >
+                     <input
+                       type="checkbox"
+                       className="checkbox checkbox-xs rounded-sm"
+                       checked={draft.targets.includes(target)}
+                       onChange={event => {
+                         const checked = event.target.checked
+                         const nextTargets = checked
+                           ? normalizeSharedScriptTargets([...draft.targets, target])
+                           : draft.targets.filter(currentTarget => currentTarget !== target)
 
-                        onChange({
-                          ...draft,
+                         onChange({
+                           ...draft,
                           targets: (nextTargets.length > 0 ? nextTargets : [target]) as SharedScriptTarget[],
                         })
                       }}
@@ -434,7 +420,7 @@ function SharedScriptDetail({
       <div className="h-[420px] min-h-[360px]">
         <CodeEditor
           value={draft.code}
-          language={phase === 'response-visualizer' ? 'jsx' : 'javascript'}
+          language={isVisualizerOnly ? 'jsx' : 'javascript'}
           size="small"
           showLineNumbers
           minHeightClassName="min-h-full h-full"
@@ -517,4 +503,8 @@ function formatTargetLabel(target: SharedScriptTarget) {
 
 function getUntitledLabel(kind: SharedScriptRecord['kind']) {
   return kind === 'global' ? 'Untitled global script' : 'Untitled module script'
+}
+
+function normalizeSharedScriptTargets(targets: SharedScriptTarget[]) {
+  return Array.from(new Set(targets))
 }

@@ -11,11 +11,13 @@ import { EditorView } from '@codemirror/view'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import type { SharedScriptTarget } from '@common/SharedScripts'
 import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 
 type ScriptAutocompleteOptions = {
   includeResponse: boolean
   phase?: ScriptAutocompletePhase
+  targets?: SharedScriptTarget[]
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
@@ -24,6 +26,7 @@ type ScriptAutocompleteOptions = {
 
 export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions): Extension {
   const phase: ScriptAutocompletePhase = options.phase ?? (options.includeResponse ? 'post-request' : 'pre-request')
+  const runtimeContext = options.targets ? { targets: options.targets } : { phase }
 
   return [
     codeEditorTabBehaviorExtension(options),
@@ -32,7 +35,7 @@ export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions):
       override: [
         context => completeVariableName(context, options.getVariableNames),
         context => completeEnvironmentName(context, options.getEnvironmentNames),
-        context => completeScriptApi(context, phase, options.getSharedScripts),
+        context => completeScriptApi(context, runtimeContext, options.getSharedScripts),
       ],
     }),
     EditorView.updateListener.of(update => {
@@ -148,7 +151,7 @@ function completeEnvironmentName(
 
 async function completeScriptApi(
   context: CompletionContext,
-  phase: ScriptAutocompletePhase,
+  runtimeContext: { phase: ScriptAutocompletePhase } | { targets: SharedScriptTarget[] },
   getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined
 ): Promise<CompletionResult | null> {
   const identifierMatch = context.matchBefore(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.?[A-Za-z_$\d]*$/)
@@ -161,7 +164,7 @@ async function completeScriptApi(
     context.addEventListener('abort', () => abortController.abort(), { onDocChange: true })
 
     const result = await requestScriptAutocomplete({
-      phase,
+      runtimeContext,
       code: context.state.doc.toString(),
       position: context.pos,
       sharedScripts: getSharedScripts?.(),

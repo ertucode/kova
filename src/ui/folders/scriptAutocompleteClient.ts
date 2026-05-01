@@ -1,4 +1,4 @@
-import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import type { ScriptAutocompletePhase, ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 import type {
   ScriptAutocompleteRequest,
   ScriptAutocompleteResponse,
@@ -27,7 +27,8 @@ class ScriptAutocompleteClient {
   }
 
   request(input: {
-    phase: ScriptAutocompletePhase
+    phase?: ScriptAutocompletePhase
+    runtimeContext?: ScriptRuntimeContext
     code: string
     position: number
     sharedScripts?: ScriptAutocompleteSharedScript[]
@@ -37,7 +38,7 @@ class ScriptAutocompleteClient {
     const payload: ScriptAutocompleteRequest = {
       type: 'autocomplete',
       requestId,
-      phase: input.phase,
+      runtimeContext: input.runtimeContext ?? { phase: input.phase ?? 'pre-request' },
       code: input.code,
       position: input.position,
       sharedScripts: input.sharedScripts,
@@ -65,7 +66,8 @@ class ScriptAutocompleteClient {
   }
 
   requestDiagnostics(input: {
-    phase: ScriptAutocompletePhase
+    phase?: ScriptAutocompletePhase
+    runtimeContext?: ScriptRuntimeContext
     code: string
     sharedScripts?: ScriptAutocompleteSharedScript[]
     signal?: AbortSignal
@@ -74,7 +76,7 @@ class ScriptAutocompleteClient {
     const payload: ScriptDiagnosticsRequest = {
       type: 'diagnostics',
       requestId,
-      phase: input.phase,
+      runtimeContext: input.runtimeContext ?? { phase: input.phase ?? 'pre-request' },
       code: input.code,
       sharedScripts: input.sharedScripts,
     }
@@ -144,7 +146,8 @@ class ScriptAutocompleteClient {
 let client: ScriptAutocompleteClient | null = null
 
 export function requestScriptAutocomplete(input: {
-  phase: ScriptAutocompletePhase
+  phase?: ScriptAutocompletePhase
+  runtimeContext?: ScriptRuntimeContext
   code: string
   position: number
   sharedScripts?: ScriptAutocompleteSharedScript[]
@@ -155,7 +158,8 @@ export function requestScriptAutocomplete(input: {
 }
 
 export function requestScriptDiagnostics(input: {
-  phase: ScriptAutocompletePhase
+  phase?: ScriptAutocompletePhase
+  runtimeContext?: ScriptRuntimeContext
   code: string
   sharedScripts?: ScriptAutocompleteSharedScript[]
   signal?: AbortSignal

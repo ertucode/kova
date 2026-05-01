@@ -85,9 +85,6 @@ export async function updateSharedScript(input: UpdateSharedScriptInput): Promis
   if (targets.length === 0) {
     return GenericError.Message('Select at least one shared script target')
   }
-  if (targets.includes('response-visualizer') && targets.length > 1) {
-    return GenericError.Message('Response visualizer shared scripts must target only the visualizer phase')
-  }
 
   try {
     const existing = db
@@ -293,10 +290,6 @@ function validateSharedScriptInput(input: CreateSharedScriptInput) {
 
   if (normalizeTargets(input.targets).length === 0) {
     return 'Select at least one shared script target'
-  }
-
-  if (input.targets.includes('response-visualizer') && normalizeTargets(input.targets).length > 1) {
-    return 'Response visualizer shared scripts must target only the visualizer phase'
   }
 
   return null

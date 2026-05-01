@@ -61,7 +61,13 @@ import es2023ArrayLib from 'typescript/lib/lib.es2023.array.d.ts?raw'
 import es2023CollectionLib from 'typescript/lib/lib.es2023.collection.d.ts?raw'
 import es2023IntlLib from 'typescript/lib/lib.es2023.intl.d.ts?raw'
 import esnextIteratorLib from 'typescript/lib/lib.esnext.iterator.d.ts?raw'
-import { getScriptRuntimeDeclarations, type ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import type { SharedScriptTarget } from '@common/SharedScripts'
+import {
+  getScriptRuntimeDeclarations,
+  getScriptRuntimeTargets,
+  isScriptRuntimeVisualizerOnly,
+  type ScriptRuntimeContext,
+} from './scriptRuntimeDeclarations'
 import type {
   ScriptAutocompleteOption,
   ScriptAutocompleteRequest,
@@ -195,7 +201,7 @@ const zodDeclarationFiles = buildZodDeclarationFiles(
 )
 
 type PhaseState = {
-  phase: ScriptAutocompletePhase
+  runtimeContext: ScriptRuntimeContext
   service: ts.LanguageService
   files: Map<string, string>
   versions: Map<string, number>
@@ -234,11 +240,7 @@ const allowedTopLevelScriptDiagnosticCodes = new Set([
   1375,
 ])
 
-const phaseStates = new Map<ScriptAutocompletePhase, PhaseState>([
-  ['pre-request', createPhaseState('pre-request')],
-  ['post-request', createPhaseState('post-request')],
-  ['response-visualizer', createPhaseState('response-visualizer')],
-])
+const phaseStates = new Map<string, PhaseState>()
 
 self.addEventListener('message', (event: MessageEvent<ScriptAutocompleteRequest | ScriptDiagnosticsRequest>) => {
   const response = event.data.type === 'autocomplete' ? complete(event.data) : getDiagnostics(event.data)
@@ -247,10 +249,7 @@ self.addEventListener('message', (event: MessageEvent<ScriptAutocompleteRequest 
 
 function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteResponse {
   try {
-    const phaseState = phaseStates.get(request.phase)
-    if (!phaseState) {
-      throw new Error(`Unknown script autocomplete phase: ${request.phase}`)
-    }
+    const phaseState = getOrCreatePhaseState(request.runtimeContext)
 
     updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
 
@@ -294,10 +293,7 @@ function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteRespons
 
 function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsResponse {
   try {
-    const phaseState = phaseStates.get(request.phase)
-    if (!phaseState) {
-      throw new Error(`Unknown script diagnostics phase: ${request.phase}`)
-    }
+    const phaseState = getOrCreatePhaseState(request.runtimeContext)
 
     updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
 
@@ -309,7 +305,7 @@ function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsRes
         ...phaseState.service.getSemanticDiagnostics(phaseState.userFileName),
       ])
         .filter(diagnostic => !diagnostic.file || diagnostic.file.fileName === phaseState.userFileName)
-        .filter(diagnostic => !shouldIgnoreDiagnostic(request.phase, diagnostic))
+        .filter(diagnostic => !shouldIgnoreDiagnostic(phaseState.runtimeContext, diagnostic))
         .map(diagnostic => toEditorDiagnostic(diagnostic, request.code, phaseState.service, phaseState.userFileName)),
     }
   } catch (error) {
@@ -321,8 +317,8 @@ function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsRes
   }
 }
 
-function shouldIgnoreDiagnostic(phase: ScriptAutocompletePhase, diagnostic: ts.Diagnostic) {
-  if (phase === 'response-visualizer') {
+function shouldIgnoreDiagnostic(runtimeContext: ScriptRuntimeContext, diagnostic: ts.Diagnostic) {
+  if (isScriptRuntimeVisualizerOnly(runtimeContext)) {
     return false
   }
 
@@ -339,7 +335,7 @@ function updatePhaseSource(phaseState: PhaseState, code: string, sharedScripts: 
   }
   phaseState.dynamicFileNames.clear()
 
-  const sharedScriptFiles = createSharedScriptFiles(phaseState.phase, sharedScripts)
+  const sharedScriptFiles = createSharedScriptFiles(phaseState.runtimeContext, sharedScripts)
   for (const file of sharedScriptFiles.files) {
     phaseState.dynamicFileNames.add(file.fileName)
     phaseState.files.set(file.fileName, file.content)
@@ -348,7 +344,7 @@ function updatePhaseSource(phaseState: PhaseState, code: string, sharedScripts: 
 
   phaseState.files.set(
     phaseState.declarationFileName,
-    `${getScriptRuntimeDeclarations(phaseState.phase)}\n${buildRequireScriptDeclarations(sharedScriptFiles.modules)}\n/// <reference lib="esnext.iterator" />\n`
+    `${getScriptRuntimeDeclarations(phaseState.runtimeContext)}\n${buildRequireScriptDeclarations(sharedScriptFiles.modules)}\n/// <reference lib="esnext.iterator" />\n`
   )
   phaseState.versions.set(phaseState.declarationFileName, (phaseState.versions.get(phaseState.declarationFileName) ?? 0) + 1)
 }
@@ -405,14 +401,15 @@ function toEditorDiagnostic(
   }
 }
 
-function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
-  const userFileName = phase === 'response-visualizer' ? `${phase}.script.tsx` : `${phase}.script.ts`
-  const declarationFileName = `${phase}.runtime.d.ts`
+function createPhaseState(runtimeContext: ScriptRuntimeContext): PhaseState {
+  const key = getRuntimeContextKey(runtimeContext)
+  const userFileName = isScriptRuntimeVisualizerOnly(runtimeContext) ? `${key}.script.tsx` : `${key}.script.ts`
+  const declarationFileName = `${key}.runtime.d.ts`
   const files = new Map(sharedFiles)
   for (const [fileName, content] of zodDeclarationFiles) {
     files.set(fileName, content)
   }
-  files.set(declarationFileName, `${getScriptRuntimeDeclarations(phase)}\n/// <reference lib=\"esnext.iterator\" />\n`)
+  files.set(declarationFileName, `${getScriptRuntimeDeclarations(runtimeContext)}\n/// <reference lib=\"esnext.iterator\" />\n`)
   files.set(userFileName, '')
 
   const versions = new Map<string, number>()
@@ -462,7 +459,7 @@ function createPhaseState(phase: ScriptAutocompletePhase): PhaseState {
   }
 
   return {
-    phase,
+    runtimeContext,
     service: ts.createLanguageService(host, ts.createDocumentRegistry()),
     files,
     versions,
@@ -490,13 +487,14 @@ function buildZodDeclarationFiles(rawFiles: Record<string, string>) {
   return files
 }
 
-function createSharedScriptFiles(phase: ScriptAutocompletePhase, sharedScripts: ScriptAutocompleteSharedScript[]) {
-  const extension = phase === 'response-visualizer' ? 'tsx' : 'ts'
+function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScripts: ScriptAutocompleteSharedScript[]) {
+  const extension = isScriptRuntimeVisualizerOnly(runtimeContext) ? 'tsx' : 'ts'
   const files: Array<{ fileName: string; content: string }> = []
   const modules = new Map<string, string>()
+  const requiredTargets = getScriptRuntimeTargets(runtimeContext)
 
   for (const script of sharedScripts) {
-    if (!script.isActive || !script.targets.includes(phase) || !script.code.trim()) {
+    if (!script.isActive || !script.code.trim() || !requiredTargets.every(target => script.targets.includes(target))) {
       continue
     }
 
@@ -509,6 +507,30 @@ function createSharedScriptFiles(phase: ScriptAutocompletePhase, sharedScripts: 
   }
 
   return { files, modules }
+}
+
+function getOrCreatePhaseState(runtimeContext: ScriptRuntimeContext) {
+  const key = getRuntimeContextKey(runtimeContext)
+  const existing = phaseStates.get(key)
+  if (existing) {
+    return existing
+  }
+
+  const created = createPhaseState(runtimeContext)
+  phaseStates.set(key, created)
+  return created
+}
+
+function getRuntimeContextKey(runtimeContext: ScriptRuntimeContext) {
+  if ('phase' in runtimeContext) {
+    return runtimeContext.phase
+  }
+
+  return `targets-${normalizeTargets(runtimeContext.targets).join('__')}`
+}
+
+function normalizeTargets(targets: SharedScriptTarget[]) {
+  return Array.from(new Set(targets)).sort((left, right) => left.localeCompare(right))
 }
 
 function buildRequireScriptDeclarations(modules: Map<string, string>) {

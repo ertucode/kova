@@ -1,4 +1,9 @@
+import type { SharedScriptTarget } from '@common/SharedScripts'
+
 export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer'
+export type ScriptRuntimeContext =
+  | { phase: ScriptAutocompletePhase }
+  | { targets: SharedScriptTarget[] }
 
 const sharedDeclarations = String.raw`
 type SafeParseSuccess<T> = {
@@ -228,16 +233,42 @@ declare const startTransition: ReactApi['startTransition']
 declare function Table(props: TableProps): unknown
 `
 
-export function getScriptRuntimeDeclarations(phase: ScriptAutocompletePhase) {
-  if (phase === 'pre-request') {
-    return `${sharedDeclarations}
-${scriptToastDeclarations}
-${scriptPromptDeclarations}`
+export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
+  const targets = getContextTargets(context)
+  let declarations = sharedDeclarations
+
+  if (targets.every(target => target === 'pre-request' || target === 'post-request')) {
+    declarations = `${declarations}\n${scriptToastDeclarations}\n${scriptPromptDeclarations}`
   }
 
-  if (phase === 'response-visualizer') {
-    return `${sharedDeclarations}\n${postRequestDeclarations}\n${responseVisualizerDeclarations}`
+  if (targets.every(target => target === 'post-request' || target === 'response-visualizer')) {
+    declarations = `${declarations}\n${postRequestDeclarations}`
   }
 
-  return `${sharedDeclarations}\n${scriptToastDeclarations}\n${scriptPromptDeclarations}\n${postRequestDeclarations}`
+  if (targets.length === 1 && targets[0] === 'response-visualizer') {
+    declarations = `${declarations}\n${responseVisualizerDeclarations}`
+  }
+
+  return declarations
+}
+
+export function getScriptRuntimeTargets(context: ScriptRuntimeContext): SharedScriptTarget[] {
+  return getContextTargets(context)
+}
+
+export function isScriptRuntimeVisualizerOnly(context: ScriptRuntimeContext) {
+  const targets = getContextTargets(context)
+  return targets.length === 1 && targets[0] === 'response-visualizer'
+}
+
+function getContextTargets(context: ScriptRuntimeContext): SharedScriptTarget[] {
+  if ('phase' in context) {
+    return [context.phase]
+  }
+
+  return normalizeTargets(context.targets)
+}
+
+function normalizeTargets(targets: SharedScriptTarget[]) {
+  return Array.from(new Set(targets))
 }
