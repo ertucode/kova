@@ -198,6 +198,81 @@ describe('createRequestScriptRuntime', () => {
     expect(runtime.getRequestScopeValues().authorization).toBe('Bearer module-token')
   })
 
+  it('loads shared modules inside template expressions with pre-request semantics', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [
+        {
+          id: 'shared-module-template-1',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'traceModule',
+          kind: 'module',
+          targets: ['pre-request'],
+          isActive: true,
+          code: "export function nextTraceId() { const traceId = crypto.randomUUID(); scope.set('traceId', traceId); return traceId }",
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
+    })
+
+    const result = await runtime.resolveTemplateExpressions('{{$requireScript("traceModule").nextTraceId()}}', 'Request Body')
+
+    expect(result).toMatch(UUID_PATTERN)
+    expect(runtime.getRequestScopeValues().traceId).toBe(result)
+  })
+
+  it('only exposes pre-request shared modules to template expressions', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [
+        {
+          id: 'shared-module-template-2',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'postOnlyModule',
+          kind: 'module',
+          targets: ['post-request'],
+          isActive: true,
+          code: 'export const answer = 42',
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
+    })
+
+    await expect(
+      runtime.resolveTemplateExpressions('{{$requireScript("postOnlyModule").answer}}', 'Request Body')
+    ).rejects.toThrow('Shared script module postOnlyModule was not found')
+  })
+
   it('rejects shared modules without explicit exports', async () => {
     const runtime = createRequestScriptRuntime({
       request: {

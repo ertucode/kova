@@ -160,6 +160,7 @@ export function createRequestScriptRuntime(input: {
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
+          sharedScripts: input.sharedScripts ?? [],
         })
       ),
     resolveHttpAuthTemplateExpressions: (auth, sourceName) =>
@@ -173,6 +174,7 @@ export function createRequestScriptRuntime(input: {
             response: null,
             environmentContext: createEnvironmentContext(),
             consoleEntries,
+            sharedScripts: input.sharedScripts ?? [],
           })
         )
       ),
@@ -186,6 +188,7 @@ export function createRequestScriptRuntime(input: {
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
+          sharedScripts: input.sharedScripts ?? [],
         })
       )
       runtimeRequest.pathParams = await resolveTemplateExpressionTokens(runtimeRequest.pathParams, expressionSource =>
@@ -197,6 +200,7 @@ export function createRequestScriptRuntime(input: {
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
+          sharedScripts: input.sharedScripts ?? [],
         })
       )
       runtimeRequest.searchParams = await resolveTemplateExpressionTokens(runtimeRequest.searchParams, expressionSource =>
@@ -208,6 +212,7 @@ export function createRequestScriptRuntime(input: {
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
+          sharedScripts: input.sharedScripts ?? [],
         })
       )
       runtimeRequest.auth = await resolveHttpAuthExpressions(runtimeRequest.auth, (value, fieldName) =>
@@ -220,6 +225,7 @@ export function createRequestScriptRuntime(input: {
             response: null,
             environmentContext: createEnvironmentContext(),
             consoleEntries,
+            sharedScripts: input.sharedScripts ?? [],
           })
         )
       )
@@ -232,6 +238,7 @@ export function createRequestScriptRuntime(input: {
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
+          sharedScripts: input.sharedScripts ?? [],
         })
       )
       runtimeRequest.body = await resolveTemplateExpressionTokens(runtimeRequest.body, expressionSource =>
@@ -243,6 +250,7 @@ export function createRequestScriptRuntime(input: {
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
+          sharedScripts: input.sharedScripts ?? [],
         })
       )
     },
@@ -1035,6 +1043,7 @@ async function evaluateTemplateExpression(input: {
   response: { status: number; statusText: string; headers: string; body: ScriptResponseBody } | null
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
+  sharedScripts: SharedScriptRecord[]
 }) {
   const headerEditor = createHeaderEditor(input.runtimeRequest)
   const sandbox = {
@@ -1049,12 +1058,18 @@ async function evaluateTemplateExpression(input: {
     crypto: createCryptoApi(),
     z,
   }
+  const requireScript = createSharedModuleLoader({
+    phase: 'pre-request',
+    sharedScripts: input.sharedScripts,
+    consoleEntries: input.consoleEntries,
+    baseGlobals: sandbox,
+  })
 
   let compiledScript: CompiledRequestScript | null = null
 
   try {
     compiledScript = compileTemplateExpressionScript(input.expressionSource)
-    const result = await resolveTemplateExpressionResult(await executeScript(compiledScript.code, sandbox))
+    const result = await resolveTemplateExpressionResult(await executeScript(compiledScript.code, { ...sandbox, requireScript }))
     input.runtimeRequest.headers = headerEditor.serialize()
     return stringifyTemplateExpressionResult(result)
   } catch (error) {
@@ -1158,10 +1173,10 @@ function createSharedModuleLoader(input: {
     response: ReturnType<typeof createResponseApi> | undefined
     env: ReturnType<typeof createEnvironmentApi>
     scope: ReturnType<typeof createScopeApi>
-    toast: ReturnType<typeof createScriptToastApi>
     crypto: ReturnType<typeof createCryptoApi>
-    prompt: ReturnType<typeof createPromptProxy>
     z: typeof z
+    toast?: ReturnType<typeof createScriptToastApi>
+    prompt?: ReturnType<typeof createPromptProxy>
   }
 }) {
   const visibleModules = input.sharedScripts.filter(

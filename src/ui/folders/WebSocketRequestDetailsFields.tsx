@@ -16,6 +16,7 @@ import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { KeyValueEditor } from './KeyValueEditor'
 import { HeadersEditor } from './HeadersEditor'
 import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderExplorerEditorStore'
+import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
@@ -24,6 +25,7 @@ import { variableAutocompleteExtension, type VariableAutocompleteItem } from './
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
+import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { buildImportedWebSocketUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 
@@ -43,6 +45,13 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
+  const selectedRequestFolderId = useSelector(folderExplorerTreeStore, state => {
+    const request = state.context.items.find(
+      (item): item is Extract<(typeof state.context.items)[number], { itemType: 'request' }> =>
+        item.itemType === 'request' && item.id === selectedRequestId
+    )
+    return request?.parentFolderId ?? null
+  })
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const responsePaneHeight = useSelector(folderExplorerEditorStore, state => state.context.responsePaneHeight)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
@@ -50,6 +59,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   const session = useSelector(requestExecutionStore, state =>
     selectedRequestId ? (state.context.websocketSessionByRequestId[selectedRequestId] ?? null) : null
   )
+  const { scripts: visibleSharedScripts } = useVisibleSharedScripts(selectedRequestFolderId)
 
   const activeEnvironmentVariableNames = useMemo(() => {
     const activeEnvironments = environments
@@ -116,6 +126,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         getEnvironmentNames: () =>
           environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScripts,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         extraSources: [
@@ -123,11 +134,12 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
             getEnvironmentNames: () =>
               environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+            getSharedScripts: () => visibleSharedScripts,
           }),
         ],
       }),
     ],
-    [activeEnvironmentIds, environments]
+    [activeEnvironmentIds, environments, visibleSharedScripts]
   )
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
@@ -144,6 +156,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         getEnvironmentNames: () =>
           environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScripts,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
@@ -153,11 +166,12 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
             getEnvironmentNames: () =>
               environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+            getSharedScripts: () => visibleSharedScripts,
           }),
         ],
       }),
     ],
-    [activeEnvironmentIds, environments]
+    [activeEnvironmentIds, environments, visibleSharedScripts]
   )
 
   const urlEditorExtensions = useMemo(() => [searchParamHighlightExtension(), ...variableEditorExtensions], [variableEditorExtensions])

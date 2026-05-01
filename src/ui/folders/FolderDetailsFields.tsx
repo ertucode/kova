@@ -106,6 +106,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
       templateScriptExtension({
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNames,
+        getSharedScripts: () => visibleSharedScripts,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
@@ -114,11 +115,12 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           createTemplateCompletionSource({
             getEnvironmentNames: () => activeEnvironmentNames,
             getVariableNames: () => activeEnvironmentVariableNames,
+            getSharedScripts: () => visibleSharedScripts,
           }),
         ],
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames]
+    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
   )
 
   const preRequestScriptExtensions = useMemo(

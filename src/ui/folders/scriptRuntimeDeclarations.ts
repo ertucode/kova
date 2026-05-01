@@ -3,6 +3,7 @@ import type { SharedScriptTarget } from '@common/SharedScripts'
 export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer'
 export type ScriptRuntimeContext =
   | { phase: ScriptAutocompletePhase }
+  | { templatePhase: 'pre-request' }
   | { targets: SharedScriptTarget[] }
 
 const sharedDeclarations = String.raw`
@@ -264,6 +265,10 @@ export function isScriptRuntimeVisualizerOnly(context: ScriptRuntimeContext) {
 function getContextTargets(context: ScriptRuntimeContext): SharedScriptTarget[] {
   if ('phase' in context) {
     return [context.phase]
+  }
+
+  if ('templatePhase' in context) {
+    return [context.templatePhase]
   }
 
   return normalizeTargets(context.targets)

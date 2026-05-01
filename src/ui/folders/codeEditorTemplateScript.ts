@@ -8,6 +8,7 @@ import {
 } from '@codemirror/autocomplete'
 import { RangeSetBuilder, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 import ts from 'typescript'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
@@ -17,6 +18,7 @@ type TemplateScriptOptions = {
   phase?: ScriptAutocompletePhase
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
+  getSharedScripts?: () => ScriptAutocompleteSharedScript[]
   fallbackToBrowserTab?: boolean
 }
 
@@ -82,7 +84,7 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
 }
 
 export function createTemplateCompletionSource(
-  options: Pick<TemplateScriptOptions, 'getEnvironmentNames' | 'getVariableNames'>,
+  options: Pick<TemplateScriptOptions, 'getEnvironmentNames' | 'getVariableNames' | 'getSharedScripts'>,
   phase: ScriptAutocompletePhase = 'pre-request'
 ): CompletionSource {
   return async context => {
@@ -96,7 +98,7 @@ export function createTemplateCompletionSource(
       return environmentResult
     }
 
-    return completeTemplateScriptApi(context, phase)
+    return completeTemplateScriptApi(context, phase, options.getSharedScripts)
   }
 }
 
@@ -343,7 +345,8 @@ function completeTemplateEnvironmentName(
 
 async function completeTemplateScriptApi(
   context: CompletionContext,
-  phase: ScriptAutocompletePhase
+  phase: ScriptAutocompletePhase,
+  getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined
 ): Promise<CompletionResult | null> {
   const expression = findTemplateScriptExpressionAtPosition(context.state.doc.toString(), context.pos)
   if (!expression) {
@@ -362,9 +365,10 @@ async function completeTemplateScriptApi(
     context.addEventListener('abort', () => abortController.abort(), { onDocChange: true })
 
     const result = await requestScriptAutocomplete({
-      phase,
+      runtimeContext: phase === 'pre-request' ? { templatePhase: 'pre-request' } : { phase },
       code: expression.code,
       position: relativePosition,
+      sharedScripts: getSharedScripts?.(),
       signal: abortController.signal,
     })
 

@@ -526,6 +526,10 @@ function getRuntimeContextKey(runtimeContext: ScriptRuntimeContext) {
     return runtimeContext.phase
   }
 
+  if ('templatePhase' in runtimeContext) {
+    return `template-${runtimeContext.templatePhase}`
+  }
+
   return `targets-${normalizeTargets(runtimeContext.targets).join('__')}`
 }
 

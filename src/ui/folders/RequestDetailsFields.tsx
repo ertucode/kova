@@ -170,17 +170,19 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       templateScriptExtension({
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScripts,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         extraSources: [
           createTemplateCompletionSource({
             getEnvironmentNames: () => activeEnvironmentNames,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+            getSharedScripts: () => visibleSharedScripts,
           }),
         ],
       }),
     ],
-    [activeEnvironmentNames]
+    [activeEnvironmentNames, visibleSharedScripts]
   )
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
@@ -197,6 +199,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       templateScriptExtension({
         getEnvironmentNames: () => activeEnvironmentNames,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScripts,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
@@ -205,11 +208,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
           createTemplateCompletionSource({
             getEnvironmentNames: () => activeEnvironmentNames,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+            getSharedScripts: () => visibleSharedScripts,
           }),
         ],
       }),
     ],
-    [activeEnvironmentNames]
+    [activeEnvironmentNames, visibleSharedScripts]
   )
 
   const urlEditorExtensions = useMemo(
