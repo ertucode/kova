@@ -1,3 +1,5 @@
+import type { OperationRecord } from './Operations.js'
+
 export const SHARED_SCRIPT_SCOPE_TYPES = ['workspace', 'folder'] as const
 export type SharedScriptScopeType = (typeof SHARED_SCRIPT_SCOPE_TYPES)[number]
 
@@ -52,6 +54,10 @@ export type UpdateSharedScriptInput = {
 
 export type DeleteSharedScriptInput = {
   id: string
+}
+
+export type DeleteSharedScriptResponse = {
+  operation: OperationRecord
 }
 
 export type MoveSharedScriptInput = {

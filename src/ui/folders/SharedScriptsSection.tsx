@@ -4,11 +4,12 @@ import { FileBracesIcon, Trash2Icon } from 'lucide-react'
 import type { SharedScriptRecord, SharedScriptScopeType, SharedScriptTarget } from '@common/SharedScripts'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
+import { ChangesCoordinator } from './changesCoordinator'
 import { CodeEditor } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { getSharedScriptScopeKey, isSharedScriptEntryDirty, sharedScriptEditorStore } from './sharedScriptEditorStore'
-import { useScopedSharedScripts } from './useVisibleSharedScripts'
+import { notifySharedScriptsChanged, useScopedSharedScripts } from './useVisibleSharedScripts'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer']
 
@@ -138,6 +139,28 @@ export function SharedScriptsSection({
 
     sharedScriptEditorStore.trigger.itemDeleted({ scopeKey, id, nextSelectedId })
     await reloadAll()
+    notifySharedScriptsChanged()
+    void ChangesCoordinator.loadOperations()
+    toast.show({
+      severity: 'info',
+      title: result.data.operation.title,
+      timeout: 5000,
+      actionLabel: 'Undo',
+      onAction: () => {
+        void (async () => {
+          const undoResult = await getWindowElectron().undoOperation({ id: result.data.operation.id })
+          if (!undoResult.success) {
+            toast.show(undoResult)
+            return
+          }
+
+          await reloadAll()
+          notifySharedScriptsChanged()
+          void ChangesCoordinator.loadOperations()
+          toast.show({ severity: 'success', title: 'Change undone', message: undoResult.data.title })
+        })()
+      },
+    })
   }
 
   return (

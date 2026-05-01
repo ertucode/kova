@@ -117,6 +117,7 @@ import {
 import {
   type CreateSharedScriptInput,
   type DeleteSharedScriptInput,
+  type DeleteSharedScriptResponse,
   type ListSharedScriptsInput,
   type ListVisibleSharedScriptsInput,
   type MoveSharedScriptInput,
@@ -212,7 +213,7 @@ export type EventResponseMapping = {
   listSharedScripts: Promise<SharedScriptRecord[]>
   createSharedScript: Promise<GenericResult<SharedScriptRecord>>
   updateSharedScript: Promise<GenericResult<SharedScriptRecord>>
-  deleteSharedScript: Promise<GenericResult<void>>
+  deleteSharedScript: Promise<GenericResult<DeleteSharedScriptResponse>>
   moveSharedScript: Promise<GenericResult<void>>
   listVisibleSharedScripts: Promise<SharedScriptRecord[]>
 }
@@ -402,7 +403,7 @@ export type WindowElectron = {
   listSharedScripts: (input: ListSharedScriptsInput) => Promise<SharedScriptRecord[]>
   createSharedScript: (input: CreateSharedScriptInput) => Promise<GenericResult<SharedScriptRecord>>
   updateSharedScript: (input: UpdateSharedScriptInput) => Promise<GenericResult<SharedScriptRecord>>
-  deleteSharedScript: (input: DeleteSharedScriptInput) => Promise<GenericResult<void>>
+  deleteSharedScript: (input: DeleteSharedScriptInput) => Promise<GenericResult<DeleteSharedScriptResponse>>
   moveSharedScript: (input: MoveSharedScriptInput) => Promise<GenericResult<void>>
   listVisibleSharedScripts: (input: ListVisibleSharedScriptsInput) => Promise<SharedScriptRecord[]>
 }

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
+  DeleteSharedScriptOperationMetadata,
   DeleteExplorerItemsOperationMetadata,
   DeleteOperationInput,
   DeleteOperationsInput,
@@ -27,6 +28,7 @@ import {
   websocketHistoryMessages,
   websocketSavedMessages,
   folders,
+  sharedScripts,
 } from './schema.js'
 
 type Db = ReturnType<typeof getDb>
@@ -97,7 +99,9 @@ export async function undoOperation(input: UndoOperationInput): Promise<GenericR
       }
 
       if (operation.operationType === 'delete-folder' || operation.operationType === 'delete-request') {
-        restoreExplorerDeleteOperation(tx, operation.metadata)
+        restoreExplorerDeleteOperation(tx, operation.metadata as DeleteExplorerItemsOperationMetadata)
+      } else if (operation.operationType === 'delete-shared-script') {
+        restoreSharedScriptDeleteOperation(tx, operation.metadata as DeleteSharedScriptOperationMetadata)
       } else {
         throw new Error('Unsupported operation type')
       }
@@ -150,7 +154,9 @@ export async function deleteOperation(input: DeleteOperationInput): Promise<Gene
       const operation = toOperationRecord(row)
       if (operation.status === 'active') {
         if (operation.operationType === 'delete-folder' || operation.operationType === 'delete-request') {
-          purgeExplorerDeleteOperation(tx, operation.metadata)
+          purgeExplorerDeleteOperation(tx, operation.metadata as DeleteExplorerItemsOperationMetadata)
+        } else if (operation.operationType === 'delete-shared-script') {
+          purgeSharedScriptDeleteOperation(tx, operation.metadata as DeleteSharedScriptOperationMetadata)
         } else {
           throw new Error('Unsupported operation type')
         }
@@ -268,6 +274,17 @@ function purgeExplorerDeleteOperation(db: Db, metadata: DeleteExplorerItemsOpera
   }
 }
 
+function restoreSharedScriptDeleteOperation(db: Db, metadata: DeleteSharedScriptOperationMetadata) {
+  db.update(sharedScripts)
+    .set({ deletedAt: null })
+    .where(and(eq(sharedScripts.id, metadata.sharedScriptId), eq(sharedScripts.deletedAt, metadata.deletedAt)))
+    .run()
+}
+
+function purgeSharedScriptDeleteOperation(db: Db, metadata: DeleteSharedScriptOperationMetadata) {
+  db.delete(sharedScripts).where(eq(sharedScripts.id, metadata.sharedScriptId)).run()
+}
+
 function toOperationRecord(row: OperationRow): OperationRecord {
   return {
     id: row.id,
@@ -275,7 +292,7 @@ function toOperationRecord(row: OperationRow): OperationRecord {
     status: row.status as OperationStatus,
     title: row.title,
     summary: row.summary,
-    metadata: parseOperationMetadata(row.metadataJson),
+    metadata: parseOperationMetadata(row.operationType as OperationType, row.metadataJson),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
@@ -283,8 +300,25 @@ function toOperationRecord(row: OperationRow): OperationRecord {
   }
 }
 
-function parseOperationMetadata(metadataJson: string): OperationMetadata {
-  const parsed = JSON.parse(metadataJson) as Partial<DeleteExplorerItemsOperationMetadata>
+function parseOperationMetadata(operationType: OperationType, metadataJson: string): OperationMetadata {
+  const parsed = JSON.parse(metadataJson) as Partial<DeleteExplorerItemsOperationMetadata & DeleteSharedScriptOperationMetadata>
+
+  if (operationType === 'delete-shared-script') {
+    if (
+      typeof parsed.sharedScriptId !== 'string' ||
+      typeof parsed.sharedScriptName !== 'string' ||
+      typeof parsed.deletedAt !== 'number'
+    ) {
+      throw new Error('Invalid operation metadata')
+    }
+
+    return {
+      sharedScriptId: parsed.sharedScriptId,
+      sharedScriptName: parsed.sharedScriptName,
+      deletedAt: parsed.deletedAt,
+    }
+  }
+
   if (
     (parsed.rootItemType !== 'folder' && parsed.rootItemType !== 'request') ||
     typeof parsed.rootItemId !== 'string' ||

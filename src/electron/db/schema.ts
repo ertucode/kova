@@ -197,7 +197,6 @@ export const operations = sqliteTable(
     index('operations_operation_type_idx').on(table.operationType),
     index('operations_status_idx').on(table.status),
     check('operations_status_check', sql`${table.status} in ('active', 'undone', 'failed')`),
-    check('operations_type_check', sql`${table.operationType} in ('delete-folder', 'delete-request')`),
   ]
 )
 

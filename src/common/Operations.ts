@@ -1,6 +1,8 @@
 export type ExplorerDeleteOperationType = 'delete-folder' | 'delete-request'
 
-export type OperationType = ExplorerDeleteOperationType
+export type SharedScriptDeleteOperationType = 'delete-shared-script'
+
+export type OperationType = ExplorerDeleteOperationType | SharedScriptDeleteOperationType
 
 export type OperationStatus = 'active' | 'undone' | 'failed'
 
@@ -13,7 +15,13 @@ export type DeleteExplorerItemsOperationMetadata = {
   requestIds: string[]
 }
 
-export type OperationMetadata = DeleteExplorerItemsOperationMetadata
+export type DeleteSharedScriptOperationMetadata = {
+  sharedScriptId: string
+  sharedScriptName: string
+  deletedAt: number
+}
+
+export type OperationMetadata = DeleteExplorerItemsOperationMetadata | DeleteSharedScriptOperationMetadata
 
 export type OperationRecord = {
   id: string

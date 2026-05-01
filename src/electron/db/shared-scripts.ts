@@ -7,6 +7,7 @@ import {
   SHARED_SCRIPT_TARGETS,
   type CreateSharedScriptInput,
   type DeleteSharedScriptInput,
+  type DeleteSharedScriptResponse,
   type ListSharedScriptsInput,
   type MoveSharedScriptInput,
   type SharedScriptKind,
@@ -17,6 +18,7 @@ import {
 } from '../../common/SharedScripts.js'
 import { getDb } from './index.js'
 import { getFolderAncestorChain } from './folders.js'
+import { insertOperation } from './operations.js'
 import { sharedScripts } from './schema.js'
 
 type SharedScriptRow = typeof sharedScripts.$inferSelect
@@ -137,22 +139,55 @@ export async function updateSharedScript(input: UpdateSharedScriptInput): Promis
   }
 }
 
-export async function deleteSharedScript(input: DeleteSharedScriptInput): Promise<GenericResult<void>> {
+export async function deleteSharedScript(
+  input: DeleteSharedScriptInput
+): Promise<GenericResult<DeleteSharedScriptResponse>> {
   const db = getDb()
 
   try {
-    const result = db
-      .update(sharedScripts)
-      .set({ deletedAt: Date.now(), updatedAt: Date.now() })
-      .where(and(eq(sharedScripts.id, input.id), isNull(sharedScripts.deletedAt)))
-      .run()
+    const deleted = db.transaction(tx => {
+      const script = tx
+        .select({ id: sharedScripts.id, name: sharedScripts.name })
+        .from(sharedScripts)
+        .where(and(eq(sharedScripts.id, input.id), isNull(sharedScripts.deletedAt)))
+        .get()
 
-    if (result.changes === 0) {
-      return GenericError.Message('Shared script not found')
+      if (!script) {
+        throw new Error('Shared script not found')
+      }
+
+      const now = Date.now()
+      const operation = insertOperation(tx, {
+        operationType: 'delete-shared-script',
+        title: script.name ? `Deleted shared script ${script.name}` : 'Deleted shared script',
+        summary: 'Shared script deleted.',
+        createdAt: now,
+        metadata: {
+          sharedScriptId: script.id,
+          sharedScriptName: script.name,
+          deletedAt: now,
+        },
+      })
+
+      const result = tx
+        .update(sharedScripts)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(and(eq(sharedScripts.id, input.id), isNull(sharedScripts.deletedAt)))
+        .run()
+
+      if (result.changes === 0) {
+        throw new Error('Shared script not found')
+      }
+
+      return { operation }
+    })
+
+    return Result.Success(deleted)
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Shared script not found') {
+      return GenericError.Message(error.message)
     }
 
-    return Result.Success(undefined)
-  } catch (error) {
     return GenericError.Unknown(error)
   }
 }

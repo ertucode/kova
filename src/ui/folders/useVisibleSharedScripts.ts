@@ -3,6 +3,12 @@ import type { SharedScriptRecord, SharedScriptScopeType } from '@common/SharedSc
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
 
+export const SHARED_SCRIPTS_CHANGED_EVENT = 'kova:shared-scripts-changed'
+
+export function notifySharedScriptsChanged() {
+  window.dispatchEvent(new Event(SHARED_SCRIPTS_CHANGED_EVENT))
+}
+
 export function useVisibleSharedScripts(folderId: string | null) {
   const [scripts, setScripts] = useState<SharedScriptRecord[]>([])
 
@@ -46,6 +52,15 @@ export function useVisibleSharedScripts(folderId: string | null) {
     }
   }, [folderId])
 
+  useEffect(() => {
+    const handleChanged = () => {
+      void load()
+    }
+
+    window.addEventListener(SHARED_SCRIPTS_CHANGED_EVENT, handleChanged)
+    return () => window.removeEventListener(SHARED_SCRIPTS_CHANGED_EVENT, handleChanged)
+  }, [folderId])
+
   return { scripts, reload: load }
 }
 
@@ -72,6 +87,15 @@ export function useScopedSharedScripts(scopeType: SharedScriptScopeType, scopeId
 
   useEffect(() => {
     void load()
+  }, [scopeId, scopeType])
+
+  useEffect(() => {
+    const handleChanged = () => {
+      void load()
+    }
+
+    window.addEventListener(SHARED_SCRIPTS_CHANGED_EVENT, handleChanged)
+    return () => window.removeEventListener(SHARED_SCRIPTS_CHANGED_EVENT, handleChanged)
   }, [scopeId, scopeType])
 
   return { scripts, setScripts, loading, reload: load }

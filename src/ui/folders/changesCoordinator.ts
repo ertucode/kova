@@ -3,6 +3,7 @@ import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
 import type { OperationRecord } from '@common/Operations'
 import { changesStore, type ChangesStatusFilter } from './changesStore'
+import { notifySharedScriptsChanged } from './useVisibleSharedScripts'
 
 export namespace ChangesCoordinator {
   export async function loadOperations() {
@@ -49,6 +50,7 @@ export namespace ChangesCoordinator {
     }
 
     await refreshExplorerState()
+    notifySharedScriptsChanged()
     await loadOperations()
     toast.show({ severity: 'success', title: 'Change undone', message: result.data.title })
     return true
@@ -113,6 +115,7 @@ export namespace ChangesCoordinator {
 
     clearSelection()
     await refreshExplorerState()
+    notifySharedScriptsChanged()
     await loadOperations()
     toast.show({ severity: 'success', title: 'Selected changes undone' })
   }
