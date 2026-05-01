@@ -58,6 +58,16 @@ import {
   moveSharedScript,
   updateSharedScript,
 } from './db/shared-scripts.js'
+import {
+  createTag,
+  deleteTag,
+  listTagAssignments,
+  listTags,
+  moveTag,
+  replaceItemTags,
+  replaceTagItems,
+  updateTag,
+} from './db/tags.js'
 import { cancelHttpRequest, sendRequest } from './send-request.js'
 import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
@@ -515,6 +525,38 @@ app.on('ready', async () => {
 
   ipcHandle('listVisibleSharedScripts', async input => {
     return listVisibleSharedScripts({ folderId: input.folderId, onlyActive: true })
+  })
+
+  ipcHandle('listTags', async () => {
+    return listTags()
+  })
+
+  ipcHandle('listTagAssignments', async () => {
+    return listTagAssignments()
+  })
+
+  ipcHandle('createTag', async input => {
+    return createTag(input)
+  })
+
+  ipcHandle('updateTag', async input => {
+    return updateTag(input)
+  })
+
+  ipcHandle('deleteTag', async input => {
+    return deleteTag(input)
+  })
+
+  ipcHandle('moveTag', async input => {
+    return moveTag(input)
+  })
+
+  ipcHandle('replaceItemTags', async input => {
+    return replaceItemTags(input)
+  })
+
+  ipcHandle('replaceTagItems', async input => {
+    return replaceTagItems(input)
   })
 
   ipcHandle('moveExplorerItem', async input => {

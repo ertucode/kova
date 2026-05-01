@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import { useSelector } from '@xstate/store/react'
 import {
   Clock3Icon,
@@ -8,6 +16,7 @@ import {
   FolderIcon,
   MoreHorizontalIcon,
   SearchIcon,
+  TagIcon,
   Undo2Icon,
 } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
@@ -20,6 +29,8 @@ import { EnvironmentsPanel } from './EnvironmentsPanel'
 import { ChangesPanel } from './ChangesPanel'
 import { HistoryPanel } from './RequestExecutionPanels'
 import { SharedScriptsPanel } from './SharedScriptsPanel'
+import { TagsPanel } from './TagsPanel'
+import { TagsCoordinator } from './tagsCoordinator'
 import { buildTree, filterTreeWithDrafts, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -27,6 +38,7 @@ import { dialogActions } from '@/global/dialogStore'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
+import { tagsStore } from './tagsStore'
 
 type DropPlacement = ExplorerDropTarget['placement']
 
@@ -39,20 +51,40 @@ export function FolderExplorer() {
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const selectionScrollTarget = useSelector(folderExplorerEditorStore, state => state.context.selectionScrollTarget)
   const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
+  const tagItems = useSelector(tagsStore, state => state.context.items)
+  const tagAssignments = useSelector(tagsStore, state => state.context.assignments)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     void FolderExplorerCoordinator.initialize()
     void EnvironmentCoordinator.loadEnvironments()
+    void TagsCoordinator.loadTags()
   }, [])
 
   const { roots, itemMap } = useMemo(() => buildTree(items), [items])
   const normalizedSearch = searchQuery.trim().toLowerCase()
+  const tagNamesBySelection = useMemo(() => {
+    const tagNameById = new Map(tagItems.map(item => [item.id, item.name]))
+    return Object.fromEntries(
+      items.map(item => {
+        const names =
+          item.itemType === 'folder' || item.itemType === 'request'
+            ? tagAssignments
+                .filter(assignment => assignment.itemType === item.itemType && assignment.itemId === item.id)
+                .map(assignment => tagNameById.get(assignment.tagId))
+                .filter((name): name is string => Boolean(name))
+            : []
+
+        return [toSelectionKey(item), names] as const
+      })
+    )
+  }, [items, tagAssignments, tagItems])
   const visibleRoots = useMemo(
-    () => filterTreeWithDrafts(roots, normalizedSearch, entries),
-    [entries, roots, normalizedSearch]
+    () => filterTreeWithDrafts(roots, normalizedSearch, entries, tagNamesBySelection),
+    [entries, roots, normalizedSearch, tagNamesBySelection]
   )
   const visibleNodes = useMemo(
     () => flattenVisibleNodes(visibleRoots, normalizedSearch.length > 0, expandedIds),
@@ -75,6 +107,73 @@ export function FolderExplorer() {
 
     return () => window.cancelAnimationFrame(frameId)
   }, [selectionScrollTarget, sidebarTab])
+
+  const handleTagShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return
+    }
+
+    if (event.code === 'Digit0') {
+      event.preventDefault()
+      if (sidebarTab !== 'requests') {
+        EnvironmentCoordinator.setSidebarTab('requests')
+      }
+      FolderExplorerCoordinator.updateTreeSearchQuery('')
+      window.requestAnimationFrame(() => searchInputRef.current?.focus())
+      return
+    }
+
+    if (!/^Digit[1-9]$/u.test(event.code)) {
+      return
+    }
+
+    const tagIndex = Number(event.code.slice('Digit'.length)) - 1
+    const tag = tagItems[tagIndex]
+    if (!tag) {
+      return
+    }
+
+    event.preventDefault()
+    if (sidebarTab !== 'requests') {
+      EnvironmentCoordinator.setSidebarTab('requests')
+    }
+
+    const nextQuery = `@${tag.name}`
+    if (searchQuery.trim() === nextQuery) {
+      const taggedSelections = items
+        .filter(
+          (item): item is Extract<(typeof items)[number], { itemType: 'folder' | 'request' }> =>
+            item.itemType === 'folder' || item.itemType === 'request'
+        )
+        .filter(item =>
+          tagAssignments.some(
+            assignment => assignment.tagId === tag.id && assignment.itemType === item.itemType && assignment.itemId === item.id
+          )
+        )
+        .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt)
+        .map(item => ({ itemType: item.itemType, id: item.id } as const))
+
+      void (async () => {
+        await FolderExplorerCoordinator.closeAllTabs()
+        for (const selection of taggedSelections) {
+          await FolderExplorerCoordinator.selectItem(selection, { mode: 'pin' })
+        }
+        if (taggedSelections[0]) {
+          await FolderExplorerCoordinator.selectItem(taggedSelections[0], { mode: 'pin' })
+        }
+      })()
+      return
+    }
+
+    FolderExplorerCoordinator.updateTreeSearchQuery(nextQuery)
+    window.requestAnimationFrame(() => searchInputRef.current?.focus())
+  })
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => handleTagShortcut(event)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleTagShortcut])
 
   const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
@@ -236,6 +335,7 @@ export function FolderExplorer() {
               <label className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
                 <SearchIcon className="size-4 shrink-0" />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   id="folder-explorer-search-input"
                   className="w-full bg-transparent outline-none placeholder:text-base-content/35"
@@ -307,6 +407,7 @@ export function FolderExplorer() {
         {sidebarTab === 'requests' ? <DetailsPanel /> : null}
         {sidebarTab === 'scripts' ? <SharedScriptsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
+        {sidebarTab === 'tags' ? <TagsPanel /> : null}
         {sidebarTab === 'history' ? <HistoryPanel /> : null}
         {sidebarTab === 'changes' ? <ChangesPanel /> : null}
       </main>
@@ -448,6 +549,7 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
   const tabs = [
     { id: 'requests', label: 'Requests', icon: FileCode2Icon, disabled: false },
     { id: 'environments', label: 'Envs', icon: FlaskConicalIcon, disabled: false },
+    { id: 'tags', label: 'Tags', icon: TagIcon, disabled: false },
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },
     { id: 'changes', label: 'Changes', icon: Undo2Icon, disabled: false },
     { id: 'scripts', label: 'Scripts', icon: FileJsonIcon, disabled: false },

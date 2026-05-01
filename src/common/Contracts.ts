@@ -124,6 +124,16 @@ import {
   type SharedScriptRecord,
   type UpdateSharedScriptInput,
 } from './SharedScripts.js'
+import {
+  type CreateTagInput,
+  type DeleteTagInput,
+  type MoveTagInput,
+  type ReplaceItemTagsInput,
+  type ReplaceTagItemsInput,
+  type TagAssignmentRecord,
+  type TagRecord,
+  type UpdateTagInput,
+} from './Tags.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -216,6 +226,14 @@ export type EventResponseMapping = {
   deleteSharedScript: Promise<GenericResult<DeleteSharedScriptResponse>>
   moveSharedScript: Promise<GenericResult<void>>
   listVisibleSharedScripts: Promise<SharedScriptRecord[]>
+  listTags: Promise<TagRecord[]>
+  listTagAssignments: Promise<TagAssignmentRecord[]>
+  createTag: Promise<GenericResult<TagRecord>>
+  updateTag: Promise<GenericResult<TagRecord>>
+  deleteTag: Promise<GenericResult<void>>
+  moveTag: Promise<GenericResult<void>>
+  replaceItemTags: Promise<GenericResult<void>>
+  replaceTagItems: Promise<GenericResult<void>>
 }
 
 export type EventRequestMapping = {
@@ -305,6 +323,14 @@ export type EventRequestMapping = {
   deleteSharedScript: DeleteSharedScriptInput
   moveSharedScript: MoveSharedScriptInput
   listVisibleSharedScripts: ListVisibleSharedScriptsInput
+  listTags: void
+  listTagAssignments: void
+  createTag: CreateTagInput
+  updateTag: UpdateTagInput
+  deleteTag: DeleteTagInput
+  moveTag: MoveTagInput
+  replaceItemTags: ReplaceItemTagsInput
+  replaceTagItems: ReplaceTagItemsInput
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -406,4 +432,12 @@ export type WindowElectron = {
   deleteSharedScript: (input: DeleteSharedScriptInput) => Promise<GenericResult<DeleteSharedScriptResponse>>
   moveSharedScript: (input: MoveSharedScriptInput) => Promise<GenericResult<void>>
   listVisibleSharedScripts: (input: ListVisibleSharedScriptsInput) => Promise<SharedScriptRecord[]>
+  listTags: () => Promise<TagRecord[]>
+  listTagAssignments: () => Promise<TagAssignmentRecord[]>
+  createTag: (input: CreateTagInput) => Promise<GenericResult<TagRecord>>
+  updateTag: (input: UpdateTagInput) => Promise<GenericResult<TagRecord>>
+  deleteTag: (input: DeleteTagInput) => Promise<GenericResult<void>>
+  moveTag: (input: MoveTagInput) => Promise<GenericResult<void>>
+  replaceItemTags: (input: ReplaceItemTagsInput) => Promise<GenericResult<void>>
+  replaceTagItems: (input: ReplaceTagItemsInput) => Promise<GenericResult<void>>
 }

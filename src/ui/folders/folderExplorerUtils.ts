@@ -60,13 +60,42 @@ export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
 }
 
 type SearchDraftEntries = Record<string, { base: DetailsDraft | null; current: DetailsDraft | null } | undefined>
+type SearchTagNames = Record<string, string[] | undefined>
 
-export function filterTreeWithDrafts(nodes: TreeNode[], query: string, entries?: SearchDraftEntries): TreeNode[] {
+export function filterTreeWithDrafts(
+  nodes: TreeNode[],
+  query: string,
+  entries?: SearchDraftEntries,
+  tagNamesBySelection?: SearchTagNames
+): TreeNode[] {
   if (!query) return nodes
 
+  const textTerms: string[] = []
+  const tagTerms: string[] = []
+
+  query
+    .split(/\s+/u)
+    .map(value => value.trim())
+    .filter(Boolean)
+    .forEach(term => {
+      if (term.startsWith('@')) {
+        const normalizedTagTerm = term.slice(1)
+        if (normalizedTagTerm) {
+          tagTerms.push(normalizedTagTerm)
+        }
+        return
+      }
+
+      textTerms.push(term)
+    })
+
   return nodes.flatMap(node => {
-    const filteredChildren = filterTreeWithDrafts(node.children, query, entries)
-    const isMatch = getSearchParts(node, entries).some(part => part.toLowerCase().includes(query))
+    const filteredChildren = filterTreeWithDrafts(node.children, query, entries, tagNamesBySelection)
+    const searchParts = getSearchParts(node, entries).map(part => part.toLowerCase())
+    const tagNames = (tagNamesBySelection?.[toSelectionKey(node)] ?? []).map(tagName => tagName.toLowerCase())
+    const matchesText = textTerms.every(term => searchParts.some(part => part.includes(term)))
+    const matchesTags = tagTerms.every(term => tagNames.some(tagName => tagName.includes(term)))
+    const isMatch = matchesText && matchesTags
 
     if (!isMatch && filteredChildren.length === 0) {
       return []

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import {
   ChevronDownIcon,
@@ -9,6 +9,7 @@ import {
   FolderIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  TagIcon,
   Trash2Icon,
   XIcon,
 } from 'lucide-react'
@@ -23,6 +24,9 @@ import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorS
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
+import { tagsStore } from './tagsStore'
+import { TagDots } from './TagDots'
+import { AssignTagsDialog } from './AssignTagsDialog'
 
 export function ExplorerRow({
   node,
@@ -75,6 +79,21 @@ export function ExplorerRow({
     const entry = state.context.entries[`request:${node.id}`]
     return entry?.current?.itemType === 'request' ? entry.current.requestType : null
   })
+  const tagItems = useSelector(tagsStore, state => state.context.items)
+  const tagAssignments = useSelector(tagsStore, state => state.context.assignments)
+  const assignedTags = useMemo(() => {
+    if (node.itemType !== 'folder' && node.itemType !== 'request') {
+      return []
+    }
+
+    const tagIds = new Set(
+      tagAssignments
+        .filter(assignment => assignment.itemType === node.itemType && assignment.itemId === node.id)
+        .map(assignment => assignment.tagId)
+    )
+
+    return tagItems.filter(item => tagIds.has(item.id))
+  }, [node.id, node.itemType, tagAssignments, tagItems])
 
   const hasChildren = (node.itemType === 'folder' || node.itemType === 'request') && node.children.length > 0
   const isExpanded = forceExpanded || expandedIds.includes(node.id)
@@ -154,8 +173,9 @@ export function ExplorerRow({
               <ExampleGlyph exampleType={node.exampleType} />
             )}
           </div>
-          <div className="min-w-0 flex-1 truncate px-1 text-[13px] leading-[1.2] text-base-content">{node.name}</div>
-          {isItemDirty ? (
+           <div className="min-w-0 flex-1 truncate px-1 text-[13px] leading-[1.2] text-base-content">{node.name}</div>
+           <TagDots tags={assignedTags} />
+           {isItemDirty ? (
             <div
               className="size-2 shrink-0 rounded-full bg-warning"
               aria-label="Request has unsaved changes"
@@ -183,6 +203,11 @@ export function ExplorerRow({
               : undefined
           }
           onFlattenFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.flattenFolder(node) : undefined}
+          onAssignTags={
+            node.itemType === 'folder' || node.itemType === 'request'
+              ? () => dialogActions.open({ component: AssignTagsDialog, props: { itemType: node.itemType, itemId: node.id, itemName: node.name } })
+              : undefined
+          }
           onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
         />
       </div>
@@ -223,7 +248,7 @@ export function ExplorerRow({
   )
 }
 
-function RequestMethodTag({ method, requestType }: { method: string; requestType: 'http' | 'websocket' }) {
+export function RequestMethodTag({ method, requestType }: { method: string; requestType: 'http' | 'websocket' }) {
   if (requestType === 'websocket') {
     return <div className="w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em] text-accent">WS</div>
   }
@@ -351,6 +376,7 @@ function ExplorerMenu({
   onAddHttpRequest,
   onAddWebSocketRequest,
   onFlattenFolder,
+  onAssignTags,
   onDelete,
 }: {
   itemId: string
@@ -361,6 +387,7 @@ function ExplorerMenu({
   onAddHttpRequest?: () => void
   onAddWebSocketRequest?: () => void
   onFlattenFolder?: () => void
+  onAssignTags?: () => void
   onDelete: () => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -538,6 +565,14 @@ function ExplorerMenu({
               <button type="button" onClick={() => runAction(onFlattenFolder)}>
                 <ChevronDownIcon className="size-4" />
                 Flatten Folder
+              </button>
+            </li>
+          ) : null}
+          {onAssignTags ? (
+            <li>
+              <button type="button" onClick={() => runAction(onAssignTags)}>
+                <TagIcon className="size-4" />
+                Assign Tags
               </button>
             </li>
           ) : null}

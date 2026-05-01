@@ -21,6 +21,7 @@ import {
   requestExamples,
   requestHistory,
   requests,
+  tagAssignments,
   treeItems,
   websocketExampleMessages,
   websocketExamples,
@@ -257,6 +258,9 @@ function purgeExplorerDeleteOperation(db: Db, metadata: DeleteExplorerItemsOpera
     db.delete(folderExplorerTabs)
       .where(and(eq(folderExplorerTabs.itemType, 'request'), inArray(folderExplorerTabs.itemId, metadata.requestIds)))
       .run()
+    db.delete(tagAssignments)
+      .where(and(eq(tagAssignments.itemType, 'request'), inArray(tagAssignments.itemId, metadata.requestIds)))
+      .run()
     db.delete(treeItems)
       .where(and(eq(treeItems.itemType, 'request'), inArray(treeItems.itemId, metadata.requestIds)))
       .run()
@@ -266,6 +270,9 @@ function purgeExplorerDeleteOperation(db: Db, metadata: DeleteExplorerItemsOpera
   if (metadata.folderIds.length > 0) {
     db.delete(folderExplorerTabs)
       .where(and(eq(folderExplorerTabs.itemType, 'folder'), inArray(folderExplorerTabs.itemId, metadata.folderIds)))
+      .run()
+    db.delete(tagAssignments)
+      .where(and(eq(tagAssignments.itemType, 'folder'), inArray(tagAssignments.itemId, metadata.folderIds)))
       .run()
     db.delete(treeItems)
       .where(and(eq(treeItems.itemType, 'folder'), inArray(treeItems.itemId, metadata.folderIds)))

@@ -123,6 +123,44 @@ export const sharedScripts = sqliteTable(
   ]
 )
 
+export const tags = sqliteTable(
+  'tags',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    color: text('color'),
+    position: integer('position').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    index('tags_deleted_at_idx').on(table.deletedAt),
+    index('tags_position_idx').on(table.position),
+  ]
+)
+
+export const tagAssignments = sqliteTable(
+  'tag_assignments',
+  {
+    id: text('id').primaryKey(),
+    tagId: text('tag_id').notNull(),
+    itemType: text('item_type').notNull(),
+    itemId: text('item_id').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.tagId],
+      foreignColumns: [tags.id],
+      name: 'tag_assignments_tag_id_fkey',
+    }),
+    index('tag_assignments_tag_id_idx').on(table.tagId),
+    index('tag_assignments_item_ref_idx').on(table.itemType, table.itemId),
+    uniqueIndex('tag_assignments_tag_item_idx').on(table.tagId, table.itemType, table.itemId),
+    check('tag_assignments_item_type_check', sql`${table.itemType} in ('folder', 'request')`),
+  ]
+)
+
 export const appSettings = sqliteTable('app_settings', {
   id: text('id').primaryKey(),
   warnBeforeRequestAfterSeconds: integer('warn_before_request_after_seconds').notNull().default(10),
