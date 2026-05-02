@@ -23,7 +23,7 @@ export function createScriptPromptApi(
       executionController.pause()
       try {
         const value = await promptBridge.text(promptOptions)
-        if (promptOptions.required && value !== null && value.trim().length === 0) {
+        if (promptOptions.required && (value === null || value.trim().length === 0)) {
           throw new Error('prompt.text value is required')
         }
 

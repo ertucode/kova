@@ -797,6 +797,36 @@ describe('createRequestScriptRuntime', () => {
     expect(errors[0]?.message).toContain('prompt.text value is required')
   })
 
+  it('throws when a required prompt is cancelled', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async () => null,
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "await prompt.text({ title: 'Answer', required: true })",
+      },
+    ])
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.message).toContain('prompt.text value is required')
+  })
+
   it('allows post-request scripts to trigger another request by path', async () => {
     const requestedPaths: string[][] = []
     const runtime = createRequestScriptRuntime({

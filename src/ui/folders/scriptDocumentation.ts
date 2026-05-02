@@ -103,7 +103,7 @@ const sharedSections: ScriptDocumentationSection[] = [
     entries: [
       {
         label: 'await prompt.text({ title, message?, defaultValue?, placeholder?, confirmText?, cancelText?, required? })',
-        detail: 'Shows a prompt dialog and resolves to the entered text or null when cancelled. When required is true, blank submissions throw an error.',
+        detail: 'Shows a prompt dialog and resolves to the entered text or null when cancelled. When required is true, cancelling or submitting a blank value throws an error.',
       },
     ],
   },
