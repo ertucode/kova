@@ -12,6 +12,7 @@ import { applySearchParamsToUrl } from '../common/PathParams.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
+import type { ScriptClipboardBridge } from './script-clipboard.js'
 import type { ScriptMakeRequestBridge } from './script-make-request.js'
 import type { ScriptPromptBridge } from './script-prompt.js'
 import type {
@@ -55,7 +56,12 @@ type ScriptToastBridge = {
 
 export async function connectWebSocket(
   input: WebSocketConnectInput,
-  options?: { toast?: ScriptToastBridge; prompt?: ScriptPromptBridge; makeRequest?: ScriptMakeRequestBridge }
+  options?: {
+    toast?: ScriptToastBridge
+    prompt?: ScriptPromptBridge
+    clipboard?: ScriptClipboardBridge
+    makeRequest?: ScriptMakeRequestBridge
+  }
 ): Promise<GenericResult<WebSocketConnectResponse>> {
   try {
     const requestResult = await getRequest({ id: input.requestId })
@@ -104,6 +110,7 @@ export async function connectWebSocket(
       sharedScripts,
       toast: options?.toast,
       prompt: options?.prompt,
+      clipboard: options?.clipboard,
       makeRequest: options?.makeRequest,
     })
 

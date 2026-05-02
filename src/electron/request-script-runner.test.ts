@@ -589,6 +589,104 @@ describe('createRequestScriptRuntime', () => {
     ])
   })
 
+  it('writes to the system clipboard from pre-request scripts', async () => {
+    const clipboardWrites: string[] = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      clipboard: {
+        writeText: value => clipboardWrites.push(value),
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: 'clipboard.write(request.resolveUrl())',
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(clipboardWrites).toEqual(['https://example.com'])
+  })
+
+  it('writes to the system clipboard from post-request scripts', async () => {
+    const clipboardWrites: string[] = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      clipboard: {
+        writeText: value => clipboardWrites.push(value),
+      },
+    })
+
+    const errors = await runtime.runPostRequestScripts(
+      [
+        {
+          name: 'Request: Test',
+          script:
+            "if (response.body.type === 'json' && response.body.data && typeof response.body.data === 'object') {\n  const token = Reflect.get(response.body.data, 'token')\n  if (typeof token === 'string') {\n    clipboard.write(token)\n  }\n}",
+        },
+      ],
+      {
+        status: 200,
+        statusText: 'OK',
+        headers: 'content-type: application/json',
+        body: { type: 'json', data: { token: 'secret-token' } },
+      }
+    )
+
+    expect(errors).toEqual([])
+    expect(clipboardWrites).toEqual(['secret-token'])
+  })
+
+  it('rejects non-string clipboard writes', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: 'clipboard.write(123)',
+      },
+    ])
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.message).toContain('clipboard.write requires a string')
+  })
+
   it('allows prompt.text without a title', async () => {
     const promptedOptions: Array<Record<string, unknown>> = []
     const runtime = createRequestScriptRuntime({

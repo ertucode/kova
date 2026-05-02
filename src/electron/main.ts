@@ -573,6 +573,9 @@ app.on('ready', async () => {
     return sendRequest(input, {
       toast: createScriptToastBridge(event.sender),
       prompt: scriptPromptRegistry.createBridge(event.sender),
+      clipboard: {
+        writeText: value => clipboard.writeText(value),
+      },
       makeRequest: {
         makeRequest: async path => {
           const request = await findHttpRequestByPath(path)
@@ -628,6 +631,9 @@ app.on('ready', async () => {
     return connectWebSocket(input, {
       toast: createScriptToastBridge(event.sender),
       prompt: scriptPromptRegistry.createBridge(event.sender),
+      clipboard: {
+        writeText: value => clipboard.writeText(value),
+      },
       makeRequest: {
         makeRequest: async path => {
           const request = await findHttpRequestByPath(path)

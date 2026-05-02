@@ -152,11 +152,17 @@ interface ScriptPromptApi {
   text(options: ScriptPromptTextOptions): Promise<string | null>
 }
 
+interface ScriptClipboardApi {
+  /** Write a string to the system clipboard. */
+  write(value: string): void
+}
+
 declare const console: ScriptConsoleApi
 declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
 declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
+declare const clipboard: ScriptClipboardApi
 declare const z: typeof import('./vendor/zod/index.cjs').z
 `
 

@@ -98,7 +98,6 @@ export function RequestDetailsResponsePanel({
   )
   const displayedSseEvents = sseStream?.events.length ? sseStream.events : responseSseEvents
   const shouldShowSsePanel = isSseContentType(sseStreamContentType) || isSseContentType(responseContentType)
-  const visibleResponseError = scriptErrors.length > 0 ? null : responseError
   const formattedResponseBody = useMemo(() => {
     if (!response) {
       return ''
@@ -268,7 +267,7 @@ export function RequestDetailsResponsePanel({
             </div>
           </>
         ) : null}
-        <ResponseScriptErrors errors={scriptErrors} onJumpToError={onJumpToScriptError} />
+        <ResponseScriptErrors responseError={responseError} errors={scriptErrors} onJumpToError={onJumpToScriptError} />
         <div
           className={`flex min-h-0 flex-1 overflow-hidden transition duration-200 ${
             isSending ? 'pointer-events-none blur-[1.5px] saturate-50 opacity-60' : ''
@@ -278,7 +277,6 @@ export function RequestDetailsResponsePanel({
             <SseResponsePanel
               stream={sseStream}
               response={response}
-              responseError={visibleResponseError}
               requestId={selectedRequestId}
               requestName={draft.name}
               requestHistoryCount={requestHistoryCount}
@@ -304,15 +302,14 @@ export function RequestDetailsResponsePanel({
                 preferredResponseBodyView={draft.preferredResponseBodyView}
                 responseBodyDisplayMode={responseBodyDisplayMode}
                 requestSelection={responseBodyRequestSelection}
-                requestDraft={responseVisualizerRequestDraft}
-                sharedScripts={sharedScripts}
-                onUpdateResponseTableAccessor={updateResponseTableAccessor}
-                onUpdateResponseBodyDisplayMode={AppSettingsCoordinator.saveResponseBodyDisplayMode}
-                environments={visualizerEnvironments}
-                response={response}
-                responseError={visibleResponseError}
-                onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
-              />
+                 requestDraft={responseVisualizerRequestDraft}
+                 sharedScripts={sharedScripts}
+                 onUpdateResponseTableAccessor={updateResponseTableAccessor}
+                 onUpdateResponseBodyDisplayMode={AppSettingsCoordinator.saveResponseBodyDisplayMode}
+                 environments={visualizerEnvironments}
+                 response={response}
+                 onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
+               />
             </>
           )}
         </div>
@@ -322,19 +319,26 @@ export function RequestDetailsResponsePanel({
 }
 
 const ResponseScriptErrors = memo(function ResponseScriptErrors({
+  responseError,
   errors,
   onJumpToError,
 }: {
+  responseError: string | null
   errors: RequestScriptError[]
   onJumpToError: (error: RequestScriptError) => void
 }) {
-  if (errors.length === 0) {
+  if (!responseError && errors.length === 0) {
     return null
   }
 
   return (
     <div className="group relative block">
       <div className="border-b border-error/18 bg-error/6 text-sm text-base-content/82 shadow-[inset_0_1px_0_color-mix(in_oklab,var(--color-error)_10%,transparent)]">
+        {responseError ? (
+          <div className="block w-full border-b border-error/10 px-3 py-2 text-left last:border-b-0">
+            <span className="font-medium text-error">Request Error</span> <span>{responseError}</span>
+          </div>
+        ) : null}
         {errors.map(error => (
           <button
             key={`${error.phase}-${error.sourceName}-${error.line ?? 'unknown'}-${error.compactMessage}`}
@@ -349,9 +353,19 @@ const ResponseScriptErrors = memo(function ResponseScriptErrors({
       <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-[min(42rem,calc(100vw-2rem))] group-hover:block group-focus-within:block">
         <div className="overflow-hidden rounded-xl border border-base-content/12 bg-base-100/98 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur">
           <div className="border-b border-base-content/10 bg-base-200/65 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">
-            Script Error Details
+            Error Details
           </div>
           <div className="max-h-[24rem] overflow-auto p-3">
+            {responseError ? (
+              <div className="border-b border-base-content/10 px-1 py-2 last:border-b-0">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium text-error">Request Error</span>
+                </div>
+                <div className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-base-content/72">
+                  {responseError}
+                </div>
+              </div>
+            ) : null}
             {errors.map(error => (
               <div
                 key={`detail-${error.phase}-${error.sourceName}-${error.line ?? 'unknown'}-${error.compactMessage}`}
@@ -449,7 +463,6 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   environments,
   sharedScripts,
   response,
-  responseError,
   onSaveAsExample,
 }: {
   value: string
@@ -479,7 +492,6 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   }>
   sharedScripts: SharedScriptRecord[]
   response: SendRequestResponse | null
-  responseError: string | null
   onSaveAsExample?: () => void
 }) {
   const language = detectResponseLanguage(contentType, rawBody)
@@ -772,7 +784,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
           </button>
           {contentType ? <span className="truncate text-xs text-base-content/45">{contentType}</span> : null}
           {response ? <span className="shrink-0 text-xs text-base-content/45">{responseBodySize}</span> : null}
-          <ResponseStatusSummary response={response} responseError={responseError} />
+          <ResponseStatusSummary response={response} />
         </div>
       </div>
 
@@ -1042,7 +1054,6 @@ function ResponseTable({ rows }: { rows: Array<Record<string, unknown>> }) {
 function SseResponsePanel({
   stream,
   response,
-  responseError,
   requestId,
   requestName,
   requestHistoryCount,
@@ -1051,7 +1062,6 @@ function SseResponsePanel({
 }: {
   stream: HttpSseStreamState | null
   response: SendRequestResponse | null
-  responseError: string | null
   requestId: string | null
   requestName: string
   requestHistoryCount: number | null
@@ -1122,8 +1132,7 @@ function SseResponsePanel({
             </span>
           ) : null}
           {stream ? <span>{stream.state}</span> : null}
-          {responseError ? <span className="text-error">{responseError}</span> : null}
-          <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+           <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
             <button
               type="button"
               className={[
@@ -1180,18 +1189,10 @@ function SseResponsePanel({
 
 function ResponseStatusSummary({
   response,
-  responseError,
 }: {
   response: SendRequestResponse | null
-  responseError: string | null
 }) {
   const statusTone = getStatusTone(response?.status)
-
-  if (responseError) {
-    return (
-      <div className="max-w-[420px] whitespace-pre-wrap break-words text-right text-sm text-error">{responseError}</div>
-    )
-  }
 
   if (!response) {
     return null

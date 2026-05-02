@@ -108,6 +108,11 @@ const sharedSections: ScriptDocumentationSection[] = [
     ],
   },
   {
+    title: 'Clipboard',
+    description: 'Write values to the system clipboard from pre-request and post-request scripts.',
+    entries: [{ label: 'clipboard.write(value)', detail: 'Writes a string value to the system clipboard.' }],
+  },
+  {
     title: 'Validation',
     description: 'Use Zod schemas to validate request and response data inside scripts.',
     entries: [
@@ -183,6 +188,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         title: 'Ask before using an ad-hoc value',
         code: "if (!env.get('userId')) {\n  const userId = await prompt.text({\n    title: 'User id required',\n    message: 'Enter the user id to send with this request.',\n    placeholder: '42',\n    confirmText: 'Use value',\n    required: true,\n  })\n\n  if (userId) {\n    scope.set('userId', userId)\n  }\n}",
       },
+      {
+        title: 'Copy the resolved URL',
+        code: 'clipboard.write(request.resolveUrl())',
+      },
     ],
   },
   'post-request': {
@@ -223,6 +232,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Trigger a follow-up request',
         code: "if (response.status === 401) {\n  await makeRequest(['Auth', 'Refresh Token'])\n}",
+      },
+      {
+        title: 'Copy a token from the response',
+        code: "if (response.body.type === 'json') {\n  const token = typeof response.body.data === 'object' && response.body.data !== null ? Reflect.get(response.body.data, 'token') : null\n  if (typeof token === 'string') {\n    clipboard.write(token)\n  }\n}",
       },
     ],
   },

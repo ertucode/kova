@@ -20,6 +20,7 @@ import type {
 } from '../common/Requests.js'
 import type { SharedScriptRecord } from '../common/SharedScripts.js'
 import type { ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
+import { createScriptClipboardApi, type ScriptClipboardBridge } from './script-clipboard.js'
 import { createScriptMakeRequestApi, type ScriptMakeRequestBridge } from './script-make-request.js'
 import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
@@ -131,6 +132,7 @@ export function createRequestScriptRuntime(input: {
   sharedScripts?: SharedScriptRecord[]
   toast?: ScriptToastBridge
   prompt?: ScriptPromptBridge
+  clipboard?: ScriptClipboardBridge
   makeRequest?: ScriptMakeRequestBridge
 }): ScriptRuntime {
   const requestScope = new Map<string, string>()
@@ -164,6 +166,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
           promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
         })
       ),
     resolveHttpAuthTemplateExpressions: (auth, sourceName) =>
@@ -179,6 +182,7 @@ export function createRequestScriptRuntime(input: {
             consoleEntries,
             sharedScripts: input.sharedScripts ?? [],
             promptBridge: input.prompt,
+            clipboardBridge: input.clipboard,
           })
         )
       ),
@@ -194,6 +198,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
           promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
         })
       )
       runtimeRequest.pathParams = await resolveTemplateExpressionTokens(runtimeRequest.pathParams, expressionSource =>
@@ -207,6 +212,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
           promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
         })
       )
       runtimeRequest.searchParams = await resolveTemplateExpressionTokens(runtimeRequest.searchParams, expressionSource =>
@@ -234,6 +240,7 @@ export function createRequestScriptRuntime(input: {
             consoleEntries,
             sharedScripts: input.sharedScripts ?? [],
             promptBridge: input.prompt,
+            clipboardBridge: input.clipboard,
           })
         )
       )
@@ -248,6 +255,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
           promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
         })
       )
       runtimeRequest.body = await resolveTemplateExpressionTokens(runtimeRequest.body, expressionSource =>
@@ -261,6 +269,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
           promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
         })
       )
     },
@@ -277,6 +286,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           toastBridge: input.toast,
           promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
           makeRequestBridge: input.makeRequest,
         })
       if (scriptErrors.length > 0) {
@@ -309,6 +319,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           toastBridge: input.toast,
           promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
           makeRequestBridge: input.makeRequest,
         })
         if (scriptErrors.length > 0) {
@@ -455,6 +466,7 @@ async function runScriptPhase(input: {
   consoleEntries: RequestConsoleEntry[]
   toastBridge?: ScriptToastBridge
   promptBridge?: ScriptPromptBridge
+  clipboardBridge?: ScriptClipboardBridge
   makeRequestBridge?: ScriptMakeRequestBridge
 }) {
   const headerEditor = createHeaderEditor(input.runtimeRequest)
@@ -472,6 +484,7 @@ async function runScriptPhase(input: {
     env: createEnvironmentApi(input.environmentContext),
     scope: createScopeApi(input.requestScope),
     toast: createScriptToastApi(input.toastBridge),
+    clipboard: createScriptClipboardApi(input.clipboardBridge),
     crypto: createCryptoApi(),
     prompt: createPromptProxy(() => currentPrompt.value),
     ...(input.phase === 'post-request' ? { makeRequest: createMakeRequestProxy(() => currentMakeRequest.value) } : {}),
@@ -1067,6 +1080,7 @@ async function evaluateTemplateExpression(input: {
   consoleEntries: RequestConsoleEntry[]
   sharedScripts: SharedScriptRecord[]
   promptBridge?: ScriptPromptBridge
+  clipboardBridge?: ScriptClipboardBridge
 }) {
   const headerEditor = createHeaderEditor(input.runtimeRequest)
   const executionController = createScriptExecutionController()
@@ -1079,6 +1093,7 @@ async function evaluateTemplateExpression(input: {
     response: input.response ? createResponseApi(input.response) : undefined,
     env: createEnvironmentApi(input.environmentContext),
     scope: createScopeApi(input.requestScope),
+    clipboard: createScriptClipboardApi(input.clipboardBridge),
     crypto: createCryptoApi(),
     prompt: createPromptProxy(() => createScriptPromptApi(input.promptBridge, executionController)),
     z,

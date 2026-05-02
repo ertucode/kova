@@ -14,6 +14,7 @@ import { findMissingTemplateVariables, resolveTemplateVariables } from '../commo
 import type { RequestMethod, RequestRawType, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
+import type { ScriptClipboardBridge } from './script-clipboard.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { getFolderAncestorChain } from './db/folders.js'
@@ -54,7 +55,12 @@ type ScriptToastBridge = {
 
 export async function prepareHttpRequest(
   input: SendRequestInput,
-  options?: { toast?: ScriptToastBridge; prompt?: ScriptPromptBridge; makeRequest?: ScriptMakeRequestBridge }
+  options?: {
+    toast?: ScriptToastBridge
+    prompt?: ScriptPromptBridge
+    clipboard?: ScriptClipboardBridge
+    makeRequest?: ScriptMakeRequestBridge
+  }
 ): Promise<GenericResult<PreparedHttpRequest>> {
   const requestResult = await getRequest({ id: input.requestId })
   if (!requestResult.success) {
@@ -93,6 +99,7 @@ export async function prepareHttpRequest(
     sharedScripts,
     toast: options?.toast,
     prompt: options?.prompt,
+    clipboard: options?.clipboard,
     makeRequest: options?.makeRequest,
   })
 
