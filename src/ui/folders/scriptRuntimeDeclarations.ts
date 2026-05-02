@@ -144,6 +144,7 @@ interface ScriptPromptTextOptions {
   placeholder?: string
   confirmText?: string
   cancelText?: string
+  required?: boolean
 }
 
 interface ScriptPromptApi {

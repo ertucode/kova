@@ -5,6 +5,7 @@ export type ScriptPromptTextOptions = {
   placeholder?: string
   confirmText?: string
   cancelText?: string
+  required?: boolean
 }
 
 export type ScriptPromptRequest = {

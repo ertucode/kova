@@ -10,6 +10,7 @@ type PromptDialogOptions = {
   placeholder?: string
   confirmText?: string
   cancelText?: string
+  required?: boolean
 }
 
 type DialogState<T extends ComponentType<any>> = {
@@ -93,6 +94,7 @@ function ScriptPromptDialog({
   placeholder,
   confirmText,
   cancelText,
+  required,
 }: PromptDialogOptions) {
   const [value, setValue] = useState(defaultValue ?? '')
 
@@ -125,6 +127,7 @@ function ScriptPromptDialog({
           className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
           value={value}
           placeholder={placeholder}
+          required={required}
           onChange={event => setValue(event.target.value)}
         />
       </form>

@@ -728,6 +728,75 @@ describe('createRequestScriptRuntime', () => {
     expect(runtime.getRequestScopeValues().wasCancelled).toBe('true')
   })
 
+  it('passes required to the prompt bridge', async () => {
+    const promptedOptions: Array<Record<string, unknown>> = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async options => {
+          promptedOptions.push(options)
+          return 'Ada'
+        },
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "await prompt.text({ title: 'Your name', required: true })",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(promptedOptions).toEqual([
+      {
+        title: 'Your name',
+        required: true,
+      },
+    ])
+  })
+
+  it('throws when a required prompt is submitted blank', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async () => '',
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "await prompt.text({ title: 'Answer', required: true })",
+      },
+    ])
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.message).toContain('prompt.text value is required')
+  })
+
   it('allows post-request scripts to trigger another request by path', async () => {
     const requestedPaths: string[][] = []
     const runtime = createRequestScriptRuntime({

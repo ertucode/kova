@@ -102,8 +102,8 @@ const sharedSections: ScriptDocumentationSection[] = [
     description: 'Ask the current user for a text value during script execution.',
     entries: [
       {
-        label: 'await prompt.text({ title, message?, defaultValue?, placeholder?, confirmText?, cancelText? })',
-        detail: 'Shows a prompt dialog and resolves to the entered text or null when cancelled.',
+        label: 'await prompt.text({ title, message?, defaultValue?, placeholder?, confirmText?, cancelText?, required? })',
+        detail: 'Shows a prompt dialog and resolves to the entered text or null when cancelled. When required is true, blank submissions throw an error.',
       },
     ],
   },
@@ -181,7 +181,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       },
       {
         title: 'Ask before using an ad-hoc value',
-        code: "if (!env.get('userId')) {\n  const userId = await prompt.text({\n    title: 'User id required',\n    message: 'Enter the user id to send with this request.',\n    placeholder: '42',\n    confirmText: 'Use value',\n  })\n\n  if (userId) {\n    scope.set('userId', userId)\n  }\n}",
+        code: "if (!env.get('userId')) {\n  const userId = await prompt.text({\n    title: 'User id required',\n    message: 'Enter the user id to send with this request.',\n    placeholder: '42',\n    confirmText: 'Use value',\n    required: true,\n  })\n\n  if (userId) {\n    scope.set('userId', userId)\n  }\n}",
       },
     ],
   },
