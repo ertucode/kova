@@ -1,3 +1,4 @@
+import type { ScriptMakeRequestRequest, ScriptMakeRequestResponse } from '../common/ScriptMakeRequest.js'
 import type { ScriptPromptResponse, ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import { emitGenericEventTo } from './generic-events.js'
@@ -48,6 +49,50 @@ export function createScriptPromptRegistry() {
 
       pendingScriptPrompts.delete(input.id)
       pendingPrompt.resolve(input.value)
+    },
+  }
+}
+
+export function createScriptMakeRequestRegistry() {
+  const pendingScriptRequests = new Map<
+    string,
+    { webContentsId: number; request: ScriptMakeRequestRequest; resolve: () => void; reject: (error: Error) => void }
+  >()
+
+  return {
+    createBridge(webContents: Electron.WebContents) {
+      return {
+        makeRequest: (targetRequestId: string, path: string[]) => {
+          const invocationId = crypto.randomUUID()
+          const request: ScriptMakeRequestRequest = { id: invocationId, requestId: targetRequestId, path }
+
+          return new Promise<void>((resolve, reject) => {
+            pendingScriptRequests.set(invocationId, { webContentsId: webContents.id, request, resolve, reject })
+            emitGenericEventTo(webContents, {
+              type: 'script-make-request',
+              request,
+            })
+          })
+        },
+      }
+    },
+    resolveResponse(input: ScriptMakeRequestResponse, sender: Electron.WebContents) {
+      const pendingRequest = pendingScriptRequests.get(input.id)
+      if (!pendingRequest) {
+        return
+      }
+
+      if (pendingRequest.webContentsId !== sender.id) {
+        throw new Error('Script makeRequest response came from a different window')
+      }
+
+      pendingScriptRequests.delete(input.id)
+      if (input.error) {
+        pendingRequest.reject(new Error(input.error))
+        return
+      }
+
+      pendingRequest.resolve()
     },
   }
 }

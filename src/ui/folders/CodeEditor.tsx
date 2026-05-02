@@ -34,6 +34,11 @@ export type CodeEditorPasteParams = {
   selectedText: string
 }
 
+export type CodeEditorSelection = {
+  anchor: number
+  head: number
+}
+
 const selectionMatchesExtension = highlightSelectionMatches({ highlightWordAroundCursor: true })
 const baseSetupExtensions = codeMirrorBasicSetup({
   lineNumbers: false,
@@ -401,7 +406,9 @@ export const CodeEditor = memo(function CodeEditor({
   showLineNumbers,
   onPasteText,
   onChange,
+  onSelectionChange,
   onBlur,
+  initialSelection,
   linePaddingOverride,
   vimMode,
   refreshKey,
@@ -423,7 +430,9 @@ export const CodeEditor = memo(function CodeEditor({
   showLineNumbers?: boolean
   onPasteText?: (params: CodeEditorPasteParams) => boolean
   onChange: (value: string, params: { caretPos: number; previousValue: string; previousCaretPos: number }) => void
+  onSelectionChange?: (selection: CodeEditorSelection) => void
   onBlur?: () => void
+  initialSelection?: CodeEditorSelection | null
   linePaddingOverride?: string
   vimMode?: boolean
   refreshKey?: string
@@ -434,6 +443,7 @@ export const CodeEditor = memo(function CodeEditor({
   const onChangeRef = useRef(onChange)
   const onBlurRef = useRef(onBlur)
   const onPasteTextRef = useRef(onPasteText)
+  const onSelectionChangeRef = useRef(onSelectionChange)
   const lastRefreshKeyRef = useRef(refreshKey)
 
   useEffect(() => {
@@ -447,6 +457,10 @@ export const CodeEditor = memo(function CodeEditor({
   useEffect(() => {
     onPasteTextRef.current = onPasteText
   }, [onPasteText])
+
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange
+  }, [onSelectionChange])
 
   useImperativeHandle(
     ref,
@@ -521,8 +535,25 @@ export const CodeEditor = memo(function CodeEditor({
       if (cm && !readOnly) {
         Vim.handleKey(cm, 'i', 'user')
       }
+
+      if (initialSelection) {
+        const anchor = Math.max(0, Math.min(initialSelection.anchor, view.state.doc.length))
+        const head = Math.max(0, Math.min(initialSelection.head, view.state.doc.length))
+
+        window.requestAnimationFrame(() => {
+          if (!view.dom.isConnected) {
+            return
+          }
+
+          view.focus()
+          view.dispatch({
+            selection: { anchor, head },
+            scrollIntoView: true,
+          })
+        })
+      }
     },
-    [readOnly, resolvedVimMode]
+    [initialSelection, readOnly, resolvedVimMode]
   )
 
   const languageExtension = useMemo(() => {
@@ -603,6 +634,22 @@ export const CodeEditor = memo(function CodeEditor({
     })
   }, [onPasteText])
 
+  const selectionListenerExtension = useMemo(
+    () =>
+      EditorView.updateListener.of(update => {
+        if (!update.selectionSet) {
+          return
+        }
+
+        const selection = update.state.selection.main
+        onSelectionChangeRef.current?.({
+          anchor: selection.anchor,
+          head: selection.head,
+        })
+      }),
+    []
+  )
+
   const resolvedExtensions = useMemo(() => {
     const nextExtensions: Extension[] = [
       selectionMatchesExtension,
@@ -611,6 +658,7 @@ export const CodeEditor = memo(function CodeEditor({
       editorTheme,
       syntaxHighlighting(editorHighlightStyle),
       selectionMatchTheme,
+      selectionListenerExtension,
     ]
 
     if (resolvedVimMode) {
@@ -679,6 +727,7 @@ export const CodeEditor = memo(function CodeEditor({
     singleLine,
     size,
     resolvedVimMode,
+    selectionListenerExtension,
   ])
 
   return (

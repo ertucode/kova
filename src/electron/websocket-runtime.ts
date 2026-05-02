@@ -12,6 +12,7 @@ import { applySearchParamsToUrl } from '../common/PathParams.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
+import type { ScriptMakeRequestBridge } from './script-make-request.js'
 import type { ScriptPromptBridge } from './script-prompt.js'
 import type {
   RequestConsoleEntry,
@@ -54,7 +55,7 @@ type ScriptToastBridge = {
 
 export async function connectWebSocket(
   input: WebSocketConnectInput,
-  options?: { toast?: ScriptToastBridge; prompt?: ScriptPromptBridge }
+  options?: { toast?: ScriptToastBridge; prompt?: ScriptPromptBridge; makeRequest?: ScriptMakeRequestBridge }
 ): Promise<GenericResult<WebSocketConnectResponse>> {
   try {
     const requestResult = await getRequest({ id: input.requestId })
@@ -103,6 +104,7 @@ export async function connectWebSocket(
       sharedScripts,
       toast: options?.toast,
       prompt: options?.prompt,
+      makeRequest: options?.makeRequest,
     })
 
     let resolvedFolderAuths: HttpAuth[]

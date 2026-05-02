@@ -66,7 +66,8 @@ export function useVisibleSharedScripts(folderId: string | null) {
 
 export function useScopedSharedScripts(scopeType: SharedScriptScopeType, scopeId: string | null) {
   const [scripts, setScripts] = useState<SharedScriptRecord[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [hasLoaded, setHasLoaded] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -81,6 +82,7 @@ export function useScopedSharedScripts(scopeType: SharedScriptScopeType, scopeId
         message: error instanceof Error ? error.message : String(error),
       })
     } finally {
+      setHasLoaded(true)
       setLoading(false)
     }
   }
@@ -98,5 +100,5 @@ export function useScopedSharedScripts(scopeType: SharedScriptScopeType, scopeId
     return () => window.removeEventListener(SHARED_SCRIPTS_CHANGED_EVENT, handleChanged)
   }, [scopeId, scopeType])
 
-  return { scripts, setScripts, loading, reload: load }
+  return { scripts, setScripts, loading, hasLoaded, reload: load }
 }

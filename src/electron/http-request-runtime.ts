@@ -20,6 +20,7 @@ import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
 import { listVisibleSharedScripts } from './db/shared-scripts.js'
 import { createRequestScriptRuntime, type ScriptRuntime } from './request-script-runner.js'
+import type { ScriptMakeRequestBridge } from './script-make-request.js'
 import type { ScriptPromptBridge } from './script-prompt.js'
 
 const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
@@ -53,7 +54,7 @@ type ScriptToastBridge = {
 
 export async function prepareHttpRequest(
   input: SendRequestInput,
-  options?: { toast?: ScriptToastBridge; prompt?: ScriptPromptBridge }
+  options?: { toast?: ScriptToastBridge; prompt?: ScriptPromptBridge; makeRequest?: ScriptMakeRequestBridge }
 ): Promise<GenericResult<PreparedHttpRequest>> {
   const requestResult = await getRequest({ id: input.requestId })
   if (!requestResult.success) {
@@ -92,6 +93,7 @@ export async function prepareHttpRequest(
     sharedScripts,
     toast: options?.toast,
     prompt: options?.prompt,
+    makeRequest: options?.makeRequest,
   })
 
   let resolvedFolderAuths: HttpAuth[]

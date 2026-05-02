@@ -114,3 +114,30 @@ export async function getRequestParentFolderId(requestId: string) {
 
   return row?.parentFolderId ?? null
 }
+
+export async function findHttpRequestByPath(path: string[]) {
+  const normalizedPath = path.map(segment => segment.trim()).filter(Boolean)
+  if (normalizedPath.length === 0) {
+    return null
+  }
+
+  const items = await listExplorerItems()
+  const folders = items.filter((item): item is Extract<ExplorerItem, { itemType: 'folder' }> => item.itemType === 'folder')
+  const requests = items.filter(
+    (item): item is Extract<ExplorerItem, { itemType: 'request' }> => item.itemType === 'request' && item.requestType === 'http'
+  )
+
+  let parentFolderId: string | null = null
+  for (const folderName of normalizedPath.slice(0, -1)) {
+    const matchingFolders = folders.filter(folder => folder.parentFolderId === parentFolderId && folder.name === folderName)
+    if (matchingFolders.length !== 1) {
+      return null
+    }
+
+    parentFolderId = matchingFolders[0]?.id ?? null
+  }
+
+  const requestName = normalizedPath[normalizedPath.length - 1]
+  const matchingRequests = requests.filter(request => request.parentFolderId === parentFolderId && request.name === requestName)
+  return matchingRequests.length === 1 ? matchingRequests[0] : null
+}

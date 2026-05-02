@@ -117,7 +117,7 @@ function ScriptPromptDialog({
         </>
       }
     >
-      <form id="script-prompt-dialog-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <form id="script-prompt-dialog-form" onSubmit={handleSubmit} className="flex flex-col gap-3 px-1">
         {message ? <p className="text-sm leading-6 text-base-content/72">{message}</p> : null}
         <input
           autoFocus

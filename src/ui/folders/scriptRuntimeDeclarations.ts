@@ -182,6 +182,10 @@ interface ScriptResponseApi {
 declare const response: ScriptResponseApi
 `
 
+const postRequestOnlyDeclarations = String.raw`
+declare function makeRequest(path: string[]): Promise<void>
+`
+
 const responseVisualizerDeclarations = String.raw`
 type SetStateAction<T> = T | ((previousState: T) => T)
 type Dispatch<T> = (value: T) => void
@@ -244,6 +248,10 @@ export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
 
   if (targets.every(target => target === 'post-request' || target === 'response-visualizer')) {
     declarations = `${declarations}\n${postRequestDeclarations}`
+  }
+
+  if (targets.every(target => target === 'post-request')) {
+    declarations = `${declarations}\n${postRequestOnlyDeclarations}`
   }
 
   if (targets.length === 1 && targets[0] === 'response-visualizer') {

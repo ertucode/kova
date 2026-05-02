@@ -1,3 +1,4 @@
+import { RequestSendCoordinator } from '@/folders/requestSendCoordinator'
 import { getWindowElectron } from '@/getWindowElectron'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
@@ -25,6 +26,18 @@ export function subscribeToGenericEvents() {
       void dialogActions.promptText(e.prompt.options).then(value =>
         getWindowElectron().resolveScriptPrompt({ id: e.prompt.id, value })
       )
+    } else if (e.type === 'script-make-request') {
+      void (async () => {
+        try {
+          await RequestSendCoordinator.sendRequestById(e.request.requestId)
+          await getWindowElectron().resolveScriptMakeRequest({ id: e.request.id, error: null })
+        } catch (error) {
+          await getWindowElectron().resolveScriptMakeRequest({
+            id: e.request.id,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      })()
     } else {
       const _exhaustiveCheck: never = e
       return _exhaustiveCheck

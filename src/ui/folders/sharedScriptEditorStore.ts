@@ -5,6 +5,12 @@ export type SharedScriptEntry = {
   base: SharedScriptRecord
   current: SharedScriptRecord
   saving: boolean
+  selection: SharedScriptEditorSelection | null
+}
+
+export type SharedScriptEditorSelection = {
+  anchor: number
+  head: number
 }
 
 type SharedScriptEditorContext = {
@@ -27,7 +33,7 @@ export const sharedScriptEditorStore = createStore({
       for (const script of event.items) {
         const existing = currentEntries[script.id]
         if (!existing) {
-          nextEntries[script.id] = { base: script, current: script, saving: false }
+          nextEntries[script.id] = { base: script, current: script, saving: false, selection: null }
           continue
         }
 
@@ -35,6 +41,7 @@ export const sharedScriptEditorStore = createStore({
           base: script,
           current: isSharedScriptEntryDirty(existing) ? existing.current : script,
           saving: existing.saving,
+          selection: existing.selection,
         }
       }
 
@@ -83,6 +90,37 @@ export const sharedScriptEditorStore = createStore({
             [event.id]: {
               ...entry,
               current: event.draft,
+            },
+          },
+        },
+      }
+    },
+    selectionUpdated: (
+      context,
+      event: { scopeKey: string; id: string; selection: SharedScriptEditorSelection | null }
+    ) => {
+      const scopeEntries = context.entriesByScope[event.scopeKey] ?? {}
+      const entry = scopeEntries[event.id]
+      if (!entry) {
+        return context
+      }
+
+      if (
+        entry.selection?.anchor === event.selection?.anchor
+        && entry.selection?.head === event.selection?.head
+      ) {
+        return context
+      }
+
+      return {
+        ...context,
+        entriesByScope: {
+          ...context.entriesByScope,
+          [event.scopeKey]: {
+            ...scopeEntries,
+            [event.id]: {
+              ...entry,
+              selection: event.selection,
             },
           },
         },

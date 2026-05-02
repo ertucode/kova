@@ -132,6 +132,17 @@ const responseSection: ScriptDocumentationSection = {
   ],
 }
 
+const requestChainingSection: ScriptDocumentationSection = {
+  title: 'Request Chaining',
+  description: 'Available only in post-request scripts.',
+  entries: [
+    {
+      label: "await makeRequest(['Folder', 'Request Name'])",
+      detail: 'Switches the UI to the target HTTP request and sends it. The path starts at the workspace root and ends with the request name.',
+    },
+  ],
+}
+
 export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, ScriptDocumentation> = {
   'pre-request': {
     title: 'Pre-request Script Docs',
@@ -183,7 +194,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'Environment changes made here are rolled back if the script throws.',
       'Zod is available globally as z.',
     ],
-    sections: [...sharedSections, responseSection],
+    sections: [...sharedSections, responseSection, requestChainingSection],
     examples: [
       {
         title: 'Persist a token from JSON',
@@ -208,6 +219,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Ask whether to persist a value',
         code: "if (response.body.type === 'json') {\n  const token = typeof response.body.data === 'object' && response.body.data !== null ? Reflect.get(response.body.data, 'token') : null\n\n  if (typeof token === 'string') {\n    const environmentName = await prompt.text({\n      title: 'Save token',\n      message: 'Enter an environment name to store the token, or cancel to skip.',\n      placeholder: 'Default',\n      confirmText: 'Save',\n      cancelText: 'Skip',\n    })\n\n    if (environmentName) {\n      env.set('token', token, environmentName)\n    }\n  }\n}",
+      },
+      {
+        title: 'Trigger a follow-up request',
+        code: "if (response.status === 401) {\n  await makeRequest(['Auth', 'Refresh Token'])\n}",
       },
     ],
   },

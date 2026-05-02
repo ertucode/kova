@@ -628,6 +628,43 @@ describe('createRequestScriptRuntime', () => {
     ])
   })
 
+  it('exposes prompt.text inside template expressions', async () => {
+    const promptedOptions: Array<Record<string, unknown>> = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'raw',
+        rawType: 'text',
+      },
+      environments: [],
+      prompt: {
+        text: async options => {
+          promptedOptions.push(options)
+          return 'Ada'
+        },
+      },
+    })
+
+    const result = await runtime.resolveTemplateExpressions(
+      '{{$await prompt.text({ title: "Your name", defaultValue: "Grace" })}}',
+      'Request Body'
+    )
+
+    expect(result).toBe('Ada')
+    expect(promptedOptions).toEqual([
+      {
+        title: 'Your name',
+        defaultValue: 'Grace',
+      },
+    ])
+  })
+
   it('does not count prompt wait time against the script timeout', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
@@ -689,5 +726,46 @@ describe('createRequestScriptRuntime', () => {
 
     expect(errors).toEqual([])
     expect(runtime.getRequestScopeValues().wasCancelled).toBe('true')
+  })
+
+  it('allows post-request scripts to trigger another request by path', async () => {
+    const requestedPaths: string[][] = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      makeRequest: {
+        makeRequest: async path => {
+          requestedPaths.push(path)
+        },
+      },
+    })
+
+    const errors = await runtime.runPostRequestScripts(
+      [
+        {
+          name: 'Request: Test',
+          script: "await makeRequest(['Auth', 'Refresh Token'])",
+        },
+      ],
+      {
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: '',
+        body: { type: 'text', data: '' },
+      }
+    )
+
+    expect(errors).toEqual([])
+    expect(requestedPaths).toEqual([['Auth', 'Refresh Token']])
   })
 })

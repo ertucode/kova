@@ -8,7 +8,7 @@ import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { TaskManager } from './TaskManager.js'
 import { closeDatabase, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
 import { getAppSettings, updateAppSettings } from './db/app-settings.js'
-import { listExplorerItems } from './db/explorer.js'
+import { findHttpRequestByPath, listExplorerItems } from './db/explorer.js'
 import { listFolderExplorerTabs, saveFolderExplorerTabs } from './db/folder-explorer-tabs.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
 import {
@@ -86,7 +86,7 @@ import {
 } from './server-config.js'
 import { GenericError } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
-import { createScriptPromptRegistry, createScriptToastBridge } from './script-ui-bridges.js'
+import { createScriptMakeRequestRegistry, createScriptPromptRegistry, createScriptToastBridge } from './script-ui-bridges.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -107,6 +107,7 @@ type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' 
 
 const homeDir = os.homedir()
 const scriptPromptRegistry = createScriptPromptRegistry()
+const scriptMakeRequestRegistry = createScriptMakeRequestRegistry()
 
 function getDefaultDatabasePath() {
   return path.join(app.getPath('userData'), 'kova.sqlite')
@@ -295,6 +296,10 @@ app.on('ready', async () => {
 
   ipcHandle('resolveScriptPrompt', async (input, event) => {
     scriptPromptRegistry.resolveResponse(input, event.sender)
+  })
+
+  ipcHandle('resolveScriptMakeRequest', async (input, event) => {
+    scriptMakeRequestRegistry.resolveResponse(input, event.sender)
   })
 
   ipcHandle('setAlwaysOnTop', async (alwaysOnTop: boolean, event) => {
@@ -564,9 +569,20 @@ app.on('ready', async () => {
   })
 
   ipcHandle('sendRequest', async (input, event) => {
+    const makeRequestBridge = scriptMakeRequestRegistry.createBridge(event.sender)
     return sendRequest(input, {
       toast: createScriptToastBridge(event.sender),
       prompt: scriptPromptRegistry.createBridge(event.sender),
+      makeRequest: {
+        makeRequest: async path => {
+          const request = await findHttpRequestByPath(path)
+          if (!request) {
+            throw new Error(`Request path was not found: ${path.join(' / ')}`)
+          }
+
+          return makeRequestBridge.makeRequest(request.id, path)
+        },
+      },
     })
   })
 
@@ -608,9 +624,20 @@ app.on('ready', async () => {
   })
 
   ipcHandle('connectWebSocket', async (input, event) => {
+    const makeRequestBridge = scriptMakeRequestRegistry.createBridge(event.sender)
     return connectWebSocket(input, {
       toast: createScriptToastBridge(event.sender),
       prompt: scriptPromptRegistry.createBridge(event.sender),
+      makeRequest: {
+        makeRequest: async path => {
+          const request = await findHttpRequestByPath(path)
+          if (!request) {
+            throw new Error(`Request path was not found: ${path.join(' / ')}`)
+          }
+
+          return makeRequestBridge.makeRequest(request.id, path)
+        },
+      },
     })
   })
 

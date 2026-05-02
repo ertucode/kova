@@ -8,10 +8,16 @@ import { ChangesCoordinator } from './changesCoordinator'
 import { CodeEditor } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
-import { getSharedScriptScopeKey, isSharedScriptEntryDirty, sharedScriptEditorStore } from './sharedScriptEditorStore'
+import {
+  getSharedScriptScopeKey,
+  isSharedScriptEntryDirty,
+  sharedScriptEditorStore,
+  type SharedScriptEditorSelection,
+} from './sharedScriptEditorStore'
 import { notifySharedScriptsChanged, useScopedSharedScripts } from './useVisibleSharedScripts'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer']
+const EMPTY_ENTRIES: Record<string, never> = {}
 
 export function SharedScriptsSection({
   title,
@@ -28,18 +34,26 @@ export function SharedScriptsSection({
   visibleSharedScripts: SharedScriptRecord[]
   onScriptsChanged?: () => void
 }) {
-  const { scripts, loading, reload } = useScopedSharedScripts(scopeType, scopeId)
+  const { scripts, loading, hasLoaded, reload } = useScopedSharedScripts(scopeType, scopeId)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const scopeKey = getSharedScriptScopeKey(scopeType, scopeId)
   const selectedId = useSelector(sharedScriptEditorStore, state => state.context.selectedIdsByScope[scopeKey] ?? null)
   const focusScriptId = useSelector(sharedScriptEditorStore, state => state.context.focusIdsByScope[scopeKey] ?? null)
-  const entries = useSelector(sharedScriptEditorStore, state => state.context.entriesByScope[scopeKey] ?? {})
+  const entries = useSelector(sharedScriptEditorStore, state => state.context.entriesByScope[scopeKey] ?? EMPTY_ENTRIES)
 
   useEffect(() => {
+    if (!hasLoaded) {
+      return
+    }
+
     sharedScriptEditorStore.trigger.scriptsLoaded({ scopeKey, items: scripts })
-  }, [scopeKey, scripts])
+  }, [hasLoaded, scopeKey, scripts])
 
   useEffect(() => {
+    if (!hasLoaded) {
+      return
+    }
+
     if (scripts.length === 0) {
       if (selectedId !== null) {
         sharedScriptEditorStore.trigger.selectedChanged({ scopeKey, id: null })
@@ -50,7 +64,7 @@ export function SharedScriptsSection({
     if (!selectedId || !scripts.some(script => script.id === selectedId)) {
       sharedScriptEditorStore.trigger.selectedChanged({ scopeKey, id: scripts[0]?.id ?? null })
     }
-  }, [scopeKey, scripts, selectedId])
+  }, [hasLoaded, scopeKey, scripts, selectedId])
 
   useEffect(() => {
     if (!selectedId || focusScriptId !== selectedId) {
@@ -96,6 +110,10 @@ export function SharedScriptsSection({
 
   function updateDraft(id: string, draftValue: SharedScriptRecord) {
     sharedScriptEditorStore.trigger.draftUpdated({ scopeKey, id, draft: draftValue })
+  }
+
+  function updateSelection(id: string, selection: SharedScriptEditorSelection) {
+    sharedScriptEditorStore.trigger.selectionUpdated({ scopeKey, id, selection })
   }
 
   async function saveScript(id: string, overrideDraft?: SharedScriptRecord) {
@@ -260,8 +278,10 @@ export function SharedScriptsSection({
             visibleSharedScripts={visibleSharedScripts}
             isDirty={isDirty}
             isSaving={isSaving}
+            selection={selectedEntry?.selection ?? null}
             nameInputRef={nameInputRef}
             onChange={nextDraft => updateDraft(selectedId, nextDraft)}
+            onSelectionChange={selection => updateSelection(selectedId, selection)}
             onDelete={() => void deleteScript(selectedId)}
             onSave={() => void saveScript(selectedId)}
           />
@@ -280,8 +300,10 @@ function SharedScriptDetail({
   visibleSharedScripts,
   isDirty,
   isSaving,
+  selection,
   nameInputRef,
   onChange,
+  onSelectionChange,
   onDelete,
   onSave,
 }: {
@@ -289,8 +311,10 @@ function SharedScriptDetail({
   visibleSharedScripts: SharedScriptRecord[]
   isDirty: boolean
   isSaving: boolean
+  selection: SharedScriptEditorSelection | null
   nameInputRef: RefObject<HTMLInputElement | null>
   onChange: (draft: SharedScriptRecord) => void
+  onSelectionChange: (selection: SharedScriptEditorSelection) => void
   onDelete: () => void
   onSave: () => void
 }) {
@@ -427,6 +451,8 @@ function SharedScriptDetail({
           className="h-full border-x-0 border-b-0 border-t-0"
           extensions={extensions}
           onChange={value => onChange({ ...draft, code: value })}
+          onSelectionChange={onSelectionChange}
+          initialSelection={selection}
           onBlur={() => undefined}
         />
       </div>

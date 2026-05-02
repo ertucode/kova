@@ -20,6 +20,7 @@ import type {
 } from '../common/Requests.js'
 import type { SharedScriptRecord } from '../common/SharedScripts.js'
 import type { ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
+import { createScriptMakeRequestApi, type ScriptMakeRequestBridge } from './script-make-request.js'
 import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
@@ -130,6 +131,7 @@ export function createRequestScriptRuntime(input: {
   sharedScripts?: SharedScriptRecord[]
   toast?: ScriptToastBridge
   prompt?: ScriptPromptBridge
+  makeRequest?: ScriptMakeRequestBridge
 }): ScriptRuntime {
   const requestScope = new Map<string, string>()
   const runtimeRequest: RuntimeRequestState = { ...input.request }
@@ -161,6 +163,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          promptBridge: input.prompt,
         })
       ),
     resolveHttpAuthTemplateExpressions: (auth, sourceName) =>
@@ -175,6 +178,7 @@ export function createRequestScriptRuntime(input: {
             environmentContext: createEnvironmentContext(),
             consoleEntries,
             sharedScripts: input.sharedScripts ?? [],
+            promptBridge: input.prompt,
           })
         )
       ),
@@ -189,6 +193,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          promptBridge: input.prompt,
         })
       )
       runtimeRequest.pathParams = await resolveTemplateExpressionTokens(runtimeRequest.pathParams, expressionSource =>
@@ -201,6 +206,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          promptBridge: input.prompt,
         })
       )
       runtimeRequest.searchParams = await resolveTemplateExpressionTokens(runtimeRequest.searchParams, expressionSource =>
@@ -213,6 +219,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          promptBridge: input.prompt,
         })
       )
       runtimeRequest.auth = await resolveHttpAuthExpressions(runtimeRequest.auth, (value, fieldName) =>
@@ -226,6 +233,7 @@ export function createRequestScriptRuntime(input: {
             environmentContext: createEnvironmentContext(),
             consoleEntries,
             sharedScripts: input.sharedScripts ?? [],
+            promptBridge: input.prompt,
           })
         )
       )
@@ -239,6 +247,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          promptBridge: input.prompt,
         })
       )
       runtimeRequest.body = await resolveTemplateExpressionTokens(runtimeRequest.body, expressionSource =>
@@ -251,6 +260,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          promptBridge: input.prompt,
         })
       )
     },
@@ -267,6 +277,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           toastBridge: input.toast,
           promptBridge: input.prompt,
+          makeRequestBridge: input.makeRequest,
         })
       if (scriptErrors.length > 0) {
         ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
@@ -298,6 +309,7 @@ export function createRequestScriptRuntime(input: {
           consoleEntries,
           toastBridge: input.toast,
           promptBridge: input.prompt,
+          makeRequestBridge: input.makeRequest,
         })
         if (scriptErrors.length > 0) {
           ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
@@ -443,10 +455,14 @@ async function runScriptPhase(input: {
   consoleEntries: RequestConsoleEntry[]
   toastBridge?: ScriptToastBridge
   promptBridge?: ScriptPromptBridge
+  makeRequestBridge?: ScriptMakeRequestBridge
 }) {
   const headerEditor = createHeaderEditor(input.runtimeRequest)
   const currentSourceName = { value: 'Script' }
   const currentPrompt = { value: createScriptPromptApi(input.promptBridge, createIdleScriptExecutionController()) }
+  const currentMakeRequest = {
+    value: createScriptMakeRequestApi(input.makeRequestBridge, createIdleScriptExecutionController()),
+  }
   const sandboxGlobals = {
     request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
       ...input.environmentContext.getValues(),
@@ -458,6 +474,7 @@ async function runScriptPhase(input: {
     toast: createScriptToastApi(input.toastBridge),
     crypto: createCryptoApi(),
     prompt: createPromptProxy(() => currentPrompt.value),
+    ...(input.phase === 'post-request' ? { makeRequest: createMakeRequestProxy(() => currentMakeRequest.value) } : {}),
     z,
   }
   const requireScript = createSharedModuleLoader({
@@ -483,6 +500,7 @@ async function runScriptPhase(input: {
     try {
       currentSourceName.value = source.name
       currentPrompt.value = createScriptPromptApi(input.promptBridge, executionController)
+      currentMakeRequest.value = createScriptMakeRequestApi(input.makeRequestBridge, executionController)
       compiledScript = compileRequestScript(
         source.globalBindings ? appendGlobalBindingAssignments(source.script, source.globalBindings) : source.script
       )
@@ -1021,6 +1039,10 @@ function createPromptProxy(getPrompt: () => ReturnType<typeof createScriptPrompt
   }
 }
 
+function createMakeRequestProxy(getMakeRequest: () => ReturnType<typeof createScriptMakeRequestApi>) {
+  return async (path: string[]) => getMakeRequest()(path)
+}
+
 function createScopeApi(requestScope: Map<string, string>) {
   return {
     get(name: string) {
@@ -1044,8 +1066,10 @@ async function evaluateTemplateExpression(input: {
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
   sharedScripts: SharedScriptRecord[]
+  promptBridge?: ScriptPromptBridge
 }) {
   const headerEditor = createHeaderEditor(input.runtimeRequest)
+  const executionController = createScriptExecutionController()
   const sandbox = {
     console: createScriptConsole(input.sourceName, input.consoleEntries),
     request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
@@ -1056,6 +1080,7 @@ async function evaluateTemplateExpression(input: {
     env: createEnvironmentApi(input.environmentContext),
     scope: createScopeApi(input.requestScope),
     crypto: createCryptoApi(),
+    prompt: createPromptProxy(() => createScriptPromptApi(input.promptBridge, executionController)),
     z,
   }
   const requireScript = createSharedModuleLoader({
@@ -1069,7 +1094,9 @@ async function evaluateTemplateExpression(input: {
 
   try {
     compiledScript = compileTemplateExpressionScript(input.expressionSource)
-    const result = await resolveTemplateExpressionResult(await executeScript(compiledScript.code, { ...sandbox, requireScript }))
+    const result = await resolveTemplateExpressionResult(
+      await executeScript(compiledScript.code, { ...sandbox, requireScript }, executionController)
+    )
     input.runtimeRequest.headers = headerEditor.serialize()
     return stringifyTemplateExpressionResult(result)
   } catch (error) {
@@ -1177,6 +1204,7 @@ function createSharedModuleLoader(input: {
     z: typeof z
     toast?: ReturnType<typeof createScriptToastApi>
     prompt?: ReturnType<typeof createPromptProxy>
+    makeRequest?: ReturnType<typeof createMakeRequestProxy>
   }
 }) {
   const visibleModules = input.sharedScripts.filter(
