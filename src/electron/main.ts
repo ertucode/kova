@@ -1,7 +1,8 @@
 import { app, BrowserWindow, Menu, screen, shell, clipboard, dialog } from 'electron'
 import path from 'path'
-import os from 'os'
+import os, { homedir } from 'os'
 import { constants as fsConstants } from 'fs'
+import fsSync from 'fs'
 import { copyFile, mkdir, rename, unlink } from 'fs/promises'
 import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
@@ -19,7 +20,12 @@ import {
   moveEnvironment,
   updateEnvironment,
 } from './db/environments.js'
-import { deleteRequestHistoryEntry, getRequestHistoryCount, listRequestHistory, trimRequestHistory } from './db/request-history.js'
+import {
+  deleteRequestHistoryEntry,
+  getRequestHistoryCount,
+  listRequestHistory,
+  trimRequestHistory,
+} from './db/request-history.js'
 import {
   createRequest,
   deleteRequest,
@@ -86,7 +92,11 @@ import {
 } from './server-config.js'
 import { GenericError } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
-import { createScriptMakeRequestRegistry, createScriptPromptRegistry, createScriptToastBridge } from './script-ui-bridges.js'
+import {
+  createScriptMakeRequestRegistry,
+  createScriptPromptRegistry,
+  createScriptToastBridge,
+} from './script-ui-bridges.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -198,6 +208,18 @@ async function createWindow(args?: WindowArgsWithoutStatic) {
 }
 
 app.on('ready', async () => {
+  if (isDev()) {
+    fsSync.watchFile(homedir() + '/focus-electron', { interval: 50 }, (curr, prev) => {
+      if (curr.mtime !== prev.mtime) {
+        console.log('Focusing Electron')
+        const windows = BrowserWindow.getAllWindows()
+        if (windows[0]) {
+          windows[0].show()
+          windows[0].focus()
+        }
+      }
+    })
+  }
   const menuTemplate: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'File',
@@ -697,7 +719,9 @@ app.on('ready', async () => {
       filters: [{ name: 'SQLite Databases', extensions: ['sqlite', 'db', 'sqlite3'] }],
       defaultPath: input?.suggestedPath,
     }
-    const result = window ? await dialog.showSaveDialog(window, dialogOptions) : await dialog.showSaveDialog(dialogOptions)
+    const result = window
+      ? await dialog.showSaveDialog(window, dialogOptions)
+      : await dialog.showSaveDialog(dialogOptions)
 
     if (result.canceled || !result.filePath) {
       return GenericError.Message('File selection was cancelled')
@@ -709,7 +733,9 @@ app.on('ready', async () => {
   ipcHandle('upsertDatabaseConfig', async input => {
     try {
       const databaseConfig = await getResolvedDatabaseConfig(getDefaultDatabasePath())
-      const existingDatabase = input.previousName ? databaseConfig.items.find(item => item.name === input.previousName) : null
+      const existingDatabase = input.previousName
+        ? databaseConfig.items.find(item => item.name === input.previousName)
+        : null
       const shouldReload = !!existingDatabase && databaseConfig.activeName === input.previousName
 
       if (!input.previousName && input.basedOnName) {
@@ -747,7 +773,9 @@ app.on('ready', async () => {
       return Result.Success(await syncConfiguredDatabase())
     } catch (error) {
       if (isNodeErrorWithCode(error) && error.code === 'EEXIST') {
-        return GenericError.Message('The target database file already exists. Choose another path or remove the existing file first.')
+        return GenericError.Message(
+          'The target database file already exists. Choose another path or remove the existing file first.'
+        )
       }
 
       return GenericError.Unknown(error)
