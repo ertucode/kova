@@ -105,7 +105,7 @@ type PostmanBody =
     }
   | {
       mode: 'formdata'
-      formdata: Array<PostmanKeyValue & { type: 'text' }>
+      formdata: Array<PostmanKeyValue & { type: 'text' | 'file' }>
     }
 
 type PostmanKeyValue = {
@@ -584,7 +584,7 @@ function mapBody(body: string, bodyType: RequestBodyType, rawType: RequestRawTyp
   if (bodyType === 'form-data') {
     return {
       mode: 'formdata',
-      formdata: parseKeyValueRows(body).map(row => ({ ...mapKeyValueRow(row), type: 'text' as const })),
+      formdata: parseKeyValueRows(body).map(row => ({ ...mapKeyValueRow(row), type: row.type === 'file' ? 'file' : 'text' as const })),
     }
   }
 

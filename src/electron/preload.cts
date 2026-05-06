@@ -25,6 +25,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   abortTask: (taskId: string) => ipcInvoke('abortTask', taskId),
   openShell: (url: string) => ipcInvoke('openShell', url),
   openFileLocation: (filePath: string) => ipcInvoke('openFileLocation', filePath),
+  pickFilePath: input => ipcInvoke('pickFilePath', input ?? {}),
   runCommand: (opts: { name: string; filePath: string; parameters: any }) => ipcInvoke('runCommand', opts),
   resolveScriptPrompt: input => ipcInvoke('resolveScriptPrompt', input),
   resolveScriptMakeRequest: input => ipcInvoke('resolveScriptMakeRequest', input),

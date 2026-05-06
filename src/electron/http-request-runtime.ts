@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { basename } from 'node:path'
 import {
   getAuthHeaders,
   getAuthQueryParams,
@@ -29,8 +31,12 @@ const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE
 export type ResolvedRequestBody =
   | { kind: 'none' }
   | { kind: 'raw'; value: string }
-  | { kind: 'form-data'; entries: Array<{ key: string; value: string }> }
+  | { kind: 'form-data'; entries: ResolvedFormDataEntry[] }
   | { kind: 'x-www-form-urlencoded'; entries: Array<{ key: string; value: string }>; serialized: string }
+
+type ResolvedFormDataEntry =
+  | { key: string; type: 'text'; value: string }
+  | { key: string; type: 'file'; value: string; fileName: string; bytes: Buffer }
 
 export type PreparedHttpRequest = {
   requestId: string
@@ -182,7 +188,7 @@ export async function prepareHttpRequest(
   applyAuthHeaders(headers, resolvedAuth)
   applyResolvedHeaders(headers, parseKeyValueRows(runtime.request.headers), variables)
 
-  const resolvedBodyResult = buildResolvedRequestBody(runtime.request, variables)
+  const resolvedBodyResult = await buildResolvedRequestBody(runtime.request, variables)
   if (!resolvedBodyResult.success) {
     return resolvedBodyResult
   }
@@ -232,7 +238,9 @@ export function buildCurlCommand(input: Pick<PreparedHttpRequest, 'method' | 'ur
       break
     case 'form-data':
       for (const entry of input.resolvedBody.entries) {
-        parts.push(`--form ${shellQuote(`${entry.key}=${entry.value}`)}`)
+        parts.push(
+          `--form ${shellQuote(entry.type === 'file' ? `${entry.key}=@${entry.value}` : `${entry.key}=${entry.value}`)}`
+        )
       }
       break
   }
@@ -242,7 +250,7 @@ export function buildCurlCommand(input: Pick<PreparedHttpRequest, 'method' | 'ur
   return parts.join(' \\\n  ')
 }
 
-export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'url' | 'headers' | 'resolvedBody'>) {
+export async function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'url' | 'headers' | 'resolvedBody'>) {
   const optionLines = [
     `method: ${serializeJsString(input.method)}`,
     `headers: ${formatJsObject(Array.from(input.headers.entries()))}`,
@@ -268,9 +276,7 @@ export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'u
     case 'form-data':
       setup = [
         'const formData = new FormData()',
-        ...input.resolvedBody.entries.map(
-          entry => `formData.append(${serializeJsString(entry.key)}, ${serializeJsString(entry.value)})`
-        ),
+        ...buildFormDataSnippetLines(input.resolvedBody.entries),
         '',
       ].join('\n')
       optionLines.push('body: formData')
@@ -290,10 +296,10 @@ export function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'u
     .join('\n')
 }
 
-export function buildResolvedRequestBody(
+export async function buildResolvedRequestBody(
   input: Pick<SendRequestInput, 'bodyType' | 'body' | 'rawType'>,
   variables: Record<string, string>
-): GenericResult<ResolvedRequestBody> {
+): Promise<GenericResult<ResolvedRequestBody>> {
   switch (input.bodyType) {
     case 'none':
       return Result.Success({ kind: 'none' })
@@ -315,7 +321,12 @@ export function buildResolvedRequestBody(
       }
     }
     case 'form-data': {
-      const entries = resolveKeyValueEntries(input.body, variables)
+      const entriesResult = await resolveFormDataEntries(input.body, variables)
+      if (!entriesResult.success) {
+        return entriesResult
+      }
+
+      const entries = entriesResult.data
       return Result.Success({ kind: 'form-data', entries })
     }
     case 'x-www-form-urlencoded': {
@@ -346,11 +357,18 @@ function buildRuntimeRequestBody(input: ResolvedRequestBody) {
     case 'form-data': {
       const formData = new FormData()
       for (const entry of input.entries) {
+        if (entry.type === 'file') {
+          const fileBytes = new Uint8Array(entry.bytes.byteLength)
+          fileBytes.set(entry.bytes)
+          formData.append(entry.key, new Blob([fileBytes.buffer]), entry.fileName)
+          continue
+        }
+
         formData.append(entry.key, entry.value)
       }
       return {
         body: formData,
-        preview: input.entries.map(entry => `${entry.key}: ${entry.value}`).join('\n'),
+        preview: input.entries.map(entry => `${entry.key}: ${entry.type === 'file' ? `@${entry.value}` : entry.value}`).join('\n'),
       }
     }
     case 'x-www-form-urlencoded':
@@ -370,6 +388,49 @@ function resolveKeyValueEntries(value: string, variables: Record<string, string>
     }))
     .filter(row => row.enabled && row.key)
     .map(row => ({ key: row.key, value: row.value }))
+}
+
+async function resolveFormDataEntries(value: string, variables: Record<string, string>): Promise<GenericResult<ResolvedFormDataEntry[]>> {
+  const entries: ResolvedFormDataEntry[] = []
+
+  for (const row of parseKeyValueRows(value)) {
+    if (!row.enabled) {
+      continue
+    }
+
+    const key = resolveTemplateVariables(row.key, variables).trim()
+    if (!key) {
+      continue
+    }
+
+    const resolvedValue = resolveTemplateVariables(row.value, variables)
+    if (row.type === 'file') {
+      const filePath = resolvedValue.trim()
+      if (!filePath) {
+        return GenericError.Message(`Form-data file path is required for field: ${key}`)
+      }
+
+      try {
+        const bytes = await readFile(filePath)
+        entries.push({
+          key,
+          type: 'file',
+          value: filePath,
+          fileName: basename(filePath),
+          bytes,
+        })
+      } catch (error) {
+        const message = error instanceof Error && error.message.trim() ? error.message.trim() : 'Unknown file read error'
+        return GenericError.Message(`Could not read form-data file for field ${key}: ${message}`)
+      }
+
+      continue
+    }
+
+    entries.push({ key, type: 'text', value: resolvedValue })
+  }
+
+  return Result.Success(entries)
 }
 
 function collectMissingVariables(
@@ -531,6 +592,36 @@ function applyDefaultBodyHeaders(headers: Headers, rawType: RequestRawType, reso
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`
+}
+
+function buildFormDataSnippetLines(entries: ResolvedFormDataEntry[]) {
+  const lines: string[] = []
+  let needsBase64Helper = false
+
+  for (const [index, entry] of entries.entries()) {
+    if (entry.type === 'file') {
+      needsBase64Helper = true
+      const bytesVariableName = `formDataFileBytes${index}`
+      const fileVariableName = `formDataFile${index}`
+      lines.push(
+        `const ${bytesVariableName} = decodeBase64(${serializeJsString(Buffer.from(entry.bytes).toString('base64'))})`,
+        `const ${fileVariableName} = new File([${bytesVariableName}], ${serializeJsString(entry.fileName)})`,
+        `formData.append(${serializeJsString(entry.key)}, ${fileVariableName})`
+      )
+      continue
+    }
+
+    lines.push(`formData.append(${serializeJsString(entry.key)}, ${serializeJsString(entry.value)})`)
+  }
+
+  if (needsBase64Helper) {
+    lines.unshift(
+      'const decodeBase64 = value => Uint8Array.from(atob(value), character => character.charCodeAt(0))',
+      ''
+    )
+  }
+
+  return lines
 }
 
 function serializeJsString(value: string) {

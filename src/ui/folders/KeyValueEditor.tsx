@@ -13,7 +13,7 @@ import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import { AlertTriangleIcon, CheckIcon, GripVerticalIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
 import type { Extension } from '@codemirror/state'
-import type { KeyValueRow } from '@common/KeyValueRows'
+import type { KeyValueRow, KeyValueRowType } from '@common/KeyValueRows'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { CodeEditor } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
@@ -30,6 +30,8 @@ type KeyValueEditorProps = {
   warnOnDuplicate?: boolean
   contentClassName?: string
   valueEditorRefreshKey?: string
+  rowTypes?: Array<{ value: KeyValueRowType; label: string }>
+  onPickRowValue?: (row: KeyValueRow) => Promise<string | null>
 }
 
 type KeyValueField = 'enabled' | 'key' | 'value' | 'description'
@@ -51,6 +53,8 @@ export function KeyValueEditor({
   warnOnDuplicate = true,
   contentClassName,
   valueEditorRefreshKey,
+  rowTypes,
+  onPickRowValue,
 }: KeyValueEditorProps) {
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
   const [isBulkEditMode, setIsBulkEditMode] = useState(false)
@@ -66,6 +70,7 @@ export function KeyValueEditor({
   const duplicateRowIds = getDuplicateRowIds(rows)
   const bulkEditError = isBulkEditMode ? validateBulkEditValue(bulkEditValue) : null
   const populatedRowCount = getRowCountWithoutTrailingCreateRow(rows)
+  const columnCount = rowTypes ? 6 : 5
 
   rowsRef.current = rows
 
@@ -347,7 +352,7 @@ export function KeyValueEditor({
 
     return (
       <tr key={`gap-${insertIndex}`} className="group/gap h-0">
-        <td colSpan={5} className="relative p-0 align-middle overflow-visible">
+        <td colSpan={columnCount} className="relative p-0 align-middle overflow-visible">
           <button
             type="button"
             className={[
@@ -459,7 +464,7 @@ export function KeyValueEditor({
           <div className="flex flex-col">
             <div className="flex items-center justify-between gap-3 border-b border-base-content/10 bg-base-100/70 px-3 py-2">
               <div className="text-[0.78rem] font-medium text-base-content/65">
-                Bulk edit one row per line: `key:value // description`
+                Bulk edit one row per line: `key:type:value // description`
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -508,7 +513,8 @@ export function KeyValueEditor({
               <tr className="border-b border-base-content/10 bg-base-100/70 text-left text-base-content/55">
                 <th className="w-14 px-2 py-2 font-medium">On</th>
                 <th className="w-[24%] px-2 py-2 font-medium">Key</th>
-                <th className="w-[34%] px-2 py-2 font-medium">Value</th>
+                {rowTypes ? <th className="w-[12%] px-2 py-2 font-medium">Type</th> : null}
+                <th className={`${rowTypes ? 'w-[24%]' : 'w-[34%]'} px-2 py-2 font-medium`}>Value</th>
                 <th className="px-2 py-2 font-medium">Description</th>
                 <th className="w-8 px-0 py-2 font-medium text-center">
                   <button
@@ -545,6 +551,8 @@ export function KeyValueEditor({
                       descriptionPlaceholder={descriptionPlaceholder}
                       valueEditorAsCode={valueEditorAsCode}
                       valueEditorRefreshKey={valueEditorRefreshKey}
+                      rowTypes={rowTypes}
+                      onPickRowValue={onPickRowValue}
                       resolvedValueEditorExtensions={resolvedValueEditorExtensions}
                       setFocusedRowId={setFocusedRowId}
                       updateRow={updateRow}
@@ -578,6 +586,8 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
   descriptionPlaceholder,
   valueEditorAsCode,
   valueEditorRefreshKey,
+  rowTypes,
+  onPickRowValue,
   resolvedValueEditorExtensions,
   setFocusedRowId,
   updateRow,
@@ -599,6 +609,8 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
   descriptionPlaceholder: string
   valueEditorAsCode: boolean
   valueEditorRefreshKey?: string
+  rowTypes?: Array<{ value: KeyValueRowType; label: string }>
+  onPickRowValue?: (row: KeyValueRow) => Promise<string | null>
   resolvedValueEditorExtensions: Extension[]
   setFocusedRowId: (rowId: string | null) => void
   updateRow: (id: string, patch: Partial<KeyValueRow>) => void
@@ -608,6 +620,8 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
   setDropInsertIndex: (index: number | null) => void
   removeRow: (id: string, focusField?: KeyValueField) => void
 }) {
+  const showFilePicker = Boolean(rowTypes) && row.type === 'file' && Boolean(onPickRowValue)
+
   return (
     <tr
       className={['border-b border-base-content/10 last:border-b-0', isDragged ? 'opacity-45' : ''].join(' ')}
@@ -629,8 +643,12 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
       }}
     >
       <td className="relative p-0 align-middle text-center">
-        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
-        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        {showDropBefore ? (
+          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
+        ) : null}
+        {showDropAfter ? (
+          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
+        ) : null}
         {!isCreateRow ? (
           <div className="flex items-center justify-center gap-0.5 px-1">
             <input
@@ -664,8 +682,12 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
         ) : null}
       </td>
       <td className="relative p-0 px-2 align-middle">
-        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
-        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        {showDropBefore ? (
+          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
+        ) : null}
+        {showDropAfter ? (
+          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
+        ) : null}
         <div className="flex items-center gap-1">
           <input
             className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
@@ -689,40 +711,92 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
           )}
         </div>
       </td>
-      <td className="relative p-0 px-2 align-middle">
-        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
-        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
-        {valueEditorAsCode ? (
-          <div data-key-value-field="value" data-key-value-row-id={row.id} onFocusCapture={() => setFocusedRowId(row.id)}>
-            <CodeEditor
-              value={row.value}
-              language="plain"
-              singleLine
-              compact
-              size="small"
-              hideFocusOutline
-              className="h-9 border-0 bg-transparent"
-              extensions={resolvedValueEditorExtensions}
-              placeholder={valuePlaceholder}
-              refreshKey={valueEditorRefreshKey}
-              onChange={nextValue => updateRow(row.id, { value: nextValue })}
-            />
-          </div>
-        ) : (
-          <input
-            className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
-            data-key-value-field="value"
-            data-key-value-focus-target="true"
-            value={row.value}
-            placeholder={valuePlaceholder}
+      {rowTypes ? (
+        <td className="relative p-0 px-2 align-middle">
+          {showDropBefore ? (
+            <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
+          ) : null}
+          {showDropAfter ? (
+            <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
+          ) : null}
+          <select
+            className="select h-9 w-full rounded-none border-none bg-base-100/70 px-0 text-[0.78rem] outline-none"
+            value={row.type ?? 'text'}
             onFocus={() => setFocusedRowId(row.id)}
-            onChange={event => updateRow(row.id, { value: event.target.value })}
-          />
-        )}
+            onChange={event => updateRow(row.id, { type: event.target.value as KeyValueRowType })}
+          >
+            {rowTypes.map(option => (
+              <option key={option.value || 'text'} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </td>
+      ) : null}
+      <td className="relative p-0 px-2 align-middle">
+        {showDropBefore ? (
+          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
+        ) : null}
+        {showDropAfter ? (
+          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
+        ) : null}
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            {valueEditorAsCode ? (
+              <div
+                data-key-value-field="value"
+                data-key-value-row-id={row.id}
+                onFocusCapture={() => setFocusedRowId(row.id)}
+              >
+                <CodeEditor
+                  value={row.value}
+                  language="plain"
+                  singleLine
+                  compact
+                  size="small"
+                  hideFocusOutline
+                  className="h-9 border-0 bg-transparent"
+                  extensions={resolvedValueEditorExtensions}
+                  placeholder={valuePlaceholder}
+                  refreshKey={valueEditorRefreshKey}
+                  onChange={nextValue => updateRow(row.id, { value: nextValue })}
+                />
+              </div>
+            ) : (
+              <input
+                className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
+                data-key-value-field="value"
+                data-key-value-focus-target="true"
+                value={row.value}
+                placeholder={valuePlaceholder}
+                onFocus={() => setFocusedRowId(row.id)}
+                onChange={event => updateRow(row.id, { value: event.target.value })}
+              />
+            )}
+          </div>
+          {showFilePicker ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs shrink-0 rounded-none"
+              onClick={async () => {
+                const nextValue = await onPickRowValue?.(row)
+                if (nextValue) {
+                  updateRow(row.id, { value: nextValue })
+                }
+              }}
+            >
+              Browse
+            </button>
+          ) : null}
+        </div>
       </td>
       <td className="relative p-0 px-2 align-middle">
-        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
-        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        {showDropBefore ? (
+          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
+        ) : null}
+        {showDropAfter ? (
+          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
+        ) : null}
         <input
           className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
           data-key-value-field="description"
@@ -734,8 +808,12 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
         />
       </td>
       <td className="relative p-0 align-middle text-center">
-        {showDropBefore ? <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" /> : null}
-        {showDropAfter ? <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" /> : null}
+        {showDropBefore ? (
+          <span className="pointer-events-none absolute inset-x-0 top-[-2px] h-[1px] bg-primary" />
+        ) : null}
+        {showDropAfter ? (
+          <span className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[1px] bg-primary" />
+        ) : null}
         {!isCreateRow ? (
           <button
             type="button"
@@ -796,7 +874,9 @@ function getNextTrailingCreateRow(currentRows: KeyValueRow[], nextRows: KeyValue
   }
 
   const nextRowsWithoutTrailingCreateRow = stripTrailingCreateRow(nextRows)
-  const trailingCreateRowWasEdited = nextRowsWithoutTrailingCreateRow.some(row => row.id === currentTrailingCreateRow.id)
+  const trailingCreateRowWasEdited = nextRowsWithoutTrailingCreateRow.some(
+    row => row.id === currentTrailingCreateRow.id
+  )
 
   return trailingCreateRowWasEdited ? createEmptyKeyValueRow() : currentTrailingCreateRow
 }
@@ -845,7 +925,7 @@ function validateBulkEditValue(value: string) {
     const content = trimmed.startsWith('//') ? trimmed.slice(2).trim() : trimmed
     const entry = content.includes(' // ') ? content.slice(0, content.indexOf(' // ')) : content
     if (!entry.includes(':')) {
-      return `Line ${index + 1} is invalid. Use key:value or //key:value format.`
+      return `Line ${index + 1} is invalid. Use key:type:value or //key:type:value format.`
     }
   }
 

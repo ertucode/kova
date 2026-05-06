@@ -2,9 +2,12 @@ export type KeyValueRow = {
   id: string
   enabled: boolean
   key: string
+  type?: KeyValueRowType
   value: string
   description: string
 }
+
+export type KeyValueRowType = '' | 'text' | 'file'
 
 export function parseKeyValueRows(value: string): KeyValueRow[] {
   return value
@@ -23,7 +26,8 @@ export function stringifyKeyValueRows(rows: KeyValueRow[]) {
     .map(row => {
       const prefix = row.enabled ? '' : '//'
       const description = row.description.trim() ? ` // ${row.description.trim()}` : ''
-      return `${prefix}${row.key.trim()}:${row.value.trim()}${description}`
+      const type = row.type === undefined ? null : normalizeKeyValueRowType(row.type)
+      return `${prefix}${row.key.trim()}:${type ? `${type}:` : ''}${row.value.trim()}${description}`
     })
     .join('\n')
 }
@@ -61,13 +65,39 @@ function parseKeyValueRow(line: string, index: number): KeyValueRow | null {
     }
   }
 
+  const key = entry.slice(0, separatorIndex).trim()
+  const remainder = entry.slice(separatorIndex + 1)
+  const secondSeparatorIndex = remainder.indexOf(':')
+
+  if (secondSeparatorIndex >= 0) {
+    const typeCandidate = remainder.slice(0, secondSeparatorIndex).trim()
+    if (isKeyValueRowType(typeCandidate)) {
+      return {
+        id: `key-value-${index}`,
+        enabled,
+        key,
+        type: normalizeKeyValueRowType(typeCandidate),
+        value: remainder.slice(secondSeparatorIndex + 1).trim(),
+        description,
+      }
+    }
+  }
+
   return {
     id: `key-value-${index}`,
     enabled,
-    key: entry.slice(0, separatorIndex).trim(),
-    value: entry.slice(separatorIndex + 1).trim(),
+    key,
+    value: remainder.trim(),
     description,
   }
+}
+
+function normalizeKeyValueRowType(type: KeyValueRow['type']): Exclude<KeyValueRowType, ''> {
+  return type === 'file' ? 'file' : 'text'
+}
+
+function isKeyValueRowType(type: string): type is KeyValueRowType {
+  return type === '' || type === 'text' || type === 'file'
 }
 
 function hasKeyValueContent(row: KeyValueRow) {

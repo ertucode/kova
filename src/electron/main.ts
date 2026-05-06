@@ -314,6 +314,23 @@ app.on('ready', async () => {
     return Result.Success(undefined)
   })
 
+  ipcHandle('pickFilePath', async (input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.OpenDialogOptions = {
+      properties: ['openFile'],
+      defaultPath: input.defaultPath,
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    return Result.Success({ filePath: result.filePaths[0] })
+  })
+
   ipcHandle('runCommand', runCommand)
 
   ipcHandle('resolveScriptPrompt', async (input, event) => {
@@ -644,7 +661,7 @@ app.on('ready', async () => {
 
     return Result.Success({
       curl: buildCurlCommand(preparedRequest.data),
-      fetch: buildFetchSnippet(preparedRequest.data),
+      fetch: await buildFetchSnippet(preparedRequest.data),
     })
   })
 

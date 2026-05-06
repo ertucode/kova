@@ -13,7 +13,7 @@ import {
   syncUrlWithPathParams,
   syncUrlWithSearchParams,
 } from '@common/PathParams'
-import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
+import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows, type KeyValueRow } from '@common/KeyValueRows'
 import { formatJson5PreferringJsonWithTemplates } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
@@ -483,6 +483,11 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     }
   }
 
+  const pickFormDataFilePath = useCallback(async (row: KeyValueRow) => {
+    const result = await getWindowElectron().pickFilePath({ defaultPath: row.value.trim() || undefined })
+    return result.success ? result.data.filePath : null
+  }, [])
+
   const handleJumpToScriptError = useCallback(
     (error: RequestScriptError) => {
       if (error.phase === 'pre-request') {
@@ -505,6 +510,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     <RequestBodyTab
       draft={draft}
       formatJsonBody={formatJsonBody}
+      pickFormDataFilePath={pickFormDataFilePath}
       showHeader={compactRequestView}
       variableEditorExtensions={variableEditorExtensions}
       variableHighlightRefreshKey={variableHighlightRefreshKey}
@@ -997,12 +1003,14 @@ function RequestOverviewTab({
 function RequestBodyTab({
   draft,
   formatJsonBody,
+  pickFormDataFilePath,
   showHeader,
   variableEditorExtensions,
   variableHighlightRefreshKey,
 }: {
   draft: RequestDetailsDraft
   formatJsonBody: () => Promise<void>
+  pickFormDataFilePath: (row: KeyValueRow) => Promise<string | null>
   showHeader: boolean
   variableEditorExtensions: Extension[]
   variableHighlightRefreshKey: string
@@ -1039,9 +1047,16 @@ function RequestBodyTab({
           <KeyValueEditor
             label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
             value={draft.body}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
+            onChange={value =>
+              FolderExplorerCoordinator.updateSelectedDraft({
+                ...draft,
+                body: draft.bodyType === 'form-data' ? normalizeFormDataBody(value) : value,
+              })
+            }
             keyPlaceholder="key"
-            valuePlaceholder="value"
+            valuePlaceholder={draft.bodyType === 'form-data' ? 'value or local file path' : 'value'}
+            rowTypes={draft.bodyType === 'form-data' ? FORM_DATA_ROW_TYPES : undefined}
+            onPickRowValue={draft.bodyType === 'form-data' ? pickFormDataFilePath : undefined}
           />
         ) : null}
 
@@ -1107,6 +1122,15 @@ function RequestBodyTabActions({
       ) : null}
     </>
   )
+}
+
+const FORM_DATA_ROW_TYPES = [
+  { value: 'text', label: 'Text' },
+  { value: 'file', label: 'File' },
+] satisfies Array<{ value: 'text' | 'file'; label: string }>
+
+function normalizeFormDataBody(value: string) {
+  return stringifyKeyValueRows(parseKeyValueRows(value).map(row => ({ ...row, type: row.type === 'file' ? 'file' : 'text' })))
 }
 
 const SearchParamsTab = memo(function SearchParamsTab({

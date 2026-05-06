@@ -208,4 +208,55 @@ describe('postman export', () => {
     expect(document.item[0]?.name).toBe('Create User')
     expect(document.item[0]?.request?.method).toBe('POST')
   })
+
+  it('exports file form-data rows with file type preserved', () => {
+    const document = buildCollectionExportDocument({
+      scope: 'request',
+      folderId: null,
+      requestId: 'request-1',
+      suggestedCollectionName: 'Upload Avatar',
+      folders: [],
+      requests: [
+        {
+          id: 'request-1',
+          name: 'Upload Avatar',
+          requestType: 'http',
+          method: 'POST',
+          url: 'https://api.example.com/users/avatar',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          responseVisualizer: '',
+          responseTableAccessor: '',
+          preferredResponseBodyView: 'raw',
+          headers: '',
+          body: 'name:text:Ada\navatar:file:/tmp/avatar.png',
+          bodyType: 'form-data',
+          rawType: 'json',
+          websocketSubprotocols: '',
+          websocketOnOpenMessage: '',
+          websocketAutoSendEnabled: false,
+          websocketAutoSendMessage: '',
+          websocketAutoSendIntervalSeconds: 0,
+          saveToHistory: true,
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 0,
+        },
+      ],
+      examplesByRequestId: new Map(),
+      orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Upload Avatar', requestType: 'http', method: 'POST', url: 'https://api.example.com/users/avatar', position: 0, createdAt: 1, deletedAt: null }],
+    }, 'Upload Avatar')
+
+    expect(document.item[0]?.request?.body).toEqual({
+      mode: 'formdata',
+      formdata: [
+        { key: 'name', value: 'Ada', type: 'text' },
+        { key: 'avatar', value: '/tmp/avatar.png', type: 'file' },
+      ],
+    })
+  })
 })

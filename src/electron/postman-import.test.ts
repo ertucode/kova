@@ -74,7 +74,7 @@ describe('postman import', () => {
     expect(request.searchParams).toBe('page:2 // Pagination')
     expect(request.headers).toBe('x-test:1')
     expect(request.bodyType).toBe('form-data')
-    expect(request.body).toBe('name:Ada')
+    expect(request.body).toBe('name:text:Ada\navatar:file:/tmp/file.png')
   })
 
   it('derives search params from raw url when query entries are missing', () => {

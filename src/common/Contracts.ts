@@ -143,6 +143,7 @@ export type EventResponseMapping = {
   abortTask: Promise<void>
   openShell: Promise<void>
   openFileLocation: Promise<GenericResult<void>>
+  pickFilePath: Promise<GenericResult<{ filePath: string }>>
   runCommand: Promise<GenericResult<void>>
   resolveScriptPrompt: Promise<void>
   resolveScriptMakeRequest: Promise<void>
@@ -242,6 +243,7 @@ export type EventRequestMapping = {
   abortTask: string
   openShell: string
   openFileLocation: string
+  pickFilePath: { defaultPath?: string }
   runCommand: { name: string; filePath: string; parameters: any }
   resolveScriptPrompt: ScriptPromptResponse
   resolveScriptMakeRequest: ScriptMakeRequestResponse
@@ -350,6 +352,7 @@ export type WindowElectron = {
   abortTask: (taskId: string) => Promise<void>
   openShell: (url: string) => Promise<void>
   openFileLocation: (filePath: string) => Promise<GenericResult<void>>
+  pickFilePath: (input?: { defaultPath?: string }) => Promise<GenericResult<{ filePath: string }>>
   getWindowArgs: () => string
   runCommand: (opts: { name: string; filePath: string; parameters: any }) => Promise<GenericResult<void>>
   resolveScriptPrompt: (input: ScriptPromptResponse) => Promise<void>

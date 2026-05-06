@@ -491,12 +491,6 @@ function inspectAuth(warnings: WarningAccumulator, pathLabel: string, auth: Post
 function inspectRequestBody(warnings: WarningAccumulator, pathLabel: string, body: PostmanBody | undefined) {
   const mode = body?.mode?.toLowerCase()
   if (!mode || mode === 'raw' || mode === 'urlencoded' || mode === 'formdata') {
-    if (mode === 'formdata') {
-      const fileRows = body?.formdata?.filter(row => row.type === 'file') ?? []
-      if (fileRows.length > 0) {
-        addWarning(warnings, 'file-form-data-ignored', fileRows.length, [pathLabel])
-      }
-    }
     return
   }
 
@@ -678,7 +672,12 @@ function mapBody(body: PostmanBody | undefined) {
 
   if (mode === 'formdata') {
     return {
-      body: stringifyKeyValueRows(mapKeyValueRows((body?.formdata ?? []).filter(row => row.type !== 'file'), 'body-form-data')),
+      body: stringifyKeyValueRows(
+        mapKeyValueRows(body?.formdata ?? [], 'body-form-data').map(row => ({
+          ...row,
+          type: row.type === 'file' ? 'file' : 'text',
+        }))
+      ),
       bodyType: 'form-data' as const,
       rawType: 'json' as const,
     }
@@ -696,6 +695,7 @@ function mapKeyValueRows(rows: PostmanParam[], prefix: string): KeyValueRow[] {
     id: `${prefix}-${index}`,
     enabled: !row.disabled,
     key: row.key ?? '',
+    type: row.type === 'file' ? 'file' : undefined,
     value: row.value ?? '',
     description: row.description ?? '',
   }))
