@@ -41,6 +41,7 @@ import { PostmanExportDialog } from './PostmanExportDialog'
 import { tagsStore } from './tagsStore'
 
 type DropPlacement = ExplorerDropTarget['placement']
+const TREE_SEARCH_DEBOUNCE_MS = 5
 
 export function FolderExplorer() {
   const items = useSelector(folderExplorerTreeStore, state => state.context.items)
@@ -55,8 +56,30 @@ export function FolderExplorer() {
   const tagAssignments = useSelector(tagsStore, state => state.context.assignments)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
+  const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const pendingSearchQueryRef = useRef(searchQuery)
+
+  useEffect(() => {
+    if (searchQuery !== pendingSearchQueryRef.current) {
+      setLocalSearchQuery(searchQuery)
+      pendingSearchQueryRef.current = searchQuery
+    }
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (localSearchQuery === searchQuery) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      pendingSearchQueryRef.current = localSearchQuery
+      FolderExplorerCoordinator.updateTreeSearchQuery(localSearchQuery)
+    }, TREE_SEARCH_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [localSearchQuery, searchQuery])
 
   useEffect(() => {
     void FolderExplorerCoordinator.initialize()
@@ -340,8 +363,8 @@ export function FolderExplorer() {
                   id="folder-explorer-search-input"
                   className="w-full bg-transparent outline-none placeholder:text-base-content/35"
                   placeholder="Search folders and requests"
-                  value={searchQuery}
-                  onChange={event => FolderExplorerCoordinator.updateTreeSearchQuery(event.target.value)}
+                  value={localSearchQuery}
+                  onChange={event => setLocalSearchQuery(event.target.value)}
                   onKeyDown={handleSearchKeyDown}
                 />
               </label>
