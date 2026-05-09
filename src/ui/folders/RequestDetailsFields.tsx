@@ -39,10 +39,12 @@ import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
+import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { RequestDetailsResponsePanel } from './RequestDetailsResponsePanel'
+import { jsonDiagnosticsExtension } from './codeEditorJsonDiagnostics'
 import { buildImportedHttpUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -514,6 +516,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     <RequestBodyTab
       draft={draft}
       formatJsonBody={formatJsonBody}
+      getSharedScripts={() => visibleSharedScriptsRef.current}
       pickFormDataFilePath={pickFormDataFilePath}
       showHeader={compactRequestView}
       variableEditorExtensions={variableEditorExtensions}
@@ -1007,6 +1010,7 @@ function RequestOverviewTab({
 function RequestBodyTab({
   draft,
   formatJsonBody,
+  getSharedScripts,
   pickFormDataFilePath,
   showHeader,
   variableEditorExtensions,
@@ -1014,11 +1018,20 @@ function RequestBodyTab({
 }: {
   draft: RequestDetailsDraft
   formatJsonBody: () => Promise<void>
+  getSharedScripts: () => ScriptAutocompleteSharedScript[]
   pickFormDataFilePath: (row: KeyValueRow) => Promise<string | null>
   showHeader: boolean
   variableEditorExtensions: Extension[]
   variableHighlightRefreshKey: string
 }) {
+  const jsonBodyExtensions = useMemo(() => {
+    if (draft.bodyType !== 'raw' || draft.rawType !== 'json') {
+      return variableEditorExtensions
+    }
+
+    return [...variableEditorExtensions, jsonDiagnosticsExtension({ getSharedScripts })]
+  }, [draft.bodyType, draft.rawType, getSharedScripts, variableEditorExtensions])
+
   return (
     <section className="h-full min-h-0 flex-1">
       <div className="flex h-full min-h-0 flex-col">
@@ -1038,10 +1051,11 @@ function RequestBodyTab({
             value={draft.body}
             language={getRawEditorLanguage(draft.rawType)}
             size="small"
+            showLineNumbers={draft.rawType === 'json'}
             minHeightClassName="min-h-0 h-full"
             className="border-x-0 border-b-0"
             placeholder={'{\n  "hello": "world"\n}'}
-            extensions={variableEditorExtensions}
+            extensions={jsonBodyExtensions}
             refreshKey={variableHighlightRefreshKey}
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
           />

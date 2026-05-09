@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { formatJson, formatJson5, formatJson5PreferringJsonWithTemplates, normalizeJson5ToJson } from './Json5.js'
+import {
+  formatJson,
+  formatJson5,
+  formatJson5PreferringJsonWithTemplates,
+  getJson5Diagnostic,
+  normalizeJson5ToJson,
+} from './Json5.js'
 
 describe('Json5', () => {
   it('formats JSON5 input as JSON5', async () => {
@@ -61,5 +67,27 @@ describe('Json5', () => {
 	"userId": {{$2}} /* block comment */,
 }
 `)
+  })
+
+  it('does not report diagnostics for multiline bare template values', () => {
+    expect(
+      getJson5Diagnostic(`{
+	"query": {{$
+		const id = crypto.randomUUID()
+		id
+	}},
+}`)
+    ).toBeNull()
+  })
+
+  it('does not report diagnostics for multiline quoted template values', () => {
+    expect(
+      getJson5Diagnostic(`{
+	"query": "{{$
+		const id = crypto.randomUUID()
+		id
+	}}"
+}`)
+    ).toBeNull()
   })
 })

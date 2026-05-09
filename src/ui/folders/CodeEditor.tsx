@@ -693,7 +693,7 @@ export const CodeEditor = memo(function CodeEditor({
       nextExtensions.push(foldGutterExtension)
     }
 
-    if (language === 'javascript' || language === 'jsx') {
+    if (language === 'javascript' || language === 'jsx' || language === 'json' || language === 'json5') {
       nextExtensions.push(lintGutterExtension)
     }
 

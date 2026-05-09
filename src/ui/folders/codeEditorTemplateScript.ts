@@ -117,7 +117,18 @@ export function createTemplateCompletionSource(
 }
 
 export function findTemplateScriptExpressionAtPosition(source: string, position: number): TemplateExpressionMatch | null {
+  for (const expression of findTemplateScriptExpressions(source)) {
+    if (position >= expression.contentFrom && position <= expression.contentTo) {
+      return expression
+    }
+  }
+
+  return null
+}
+
+export function findTemplateScriptExpressions(source: string): TemplateExpressionMatch[] {
   TEMPLATE_EXPRESSION_REGEX.lastIndex = 0
+  const expressions: TemplateExpressionMatch[] = []
 
   let match: RegExpExecArray | null
   while ((match = TEMPLATE_EXPRESSION_REGEX.exec(source)) !== null) {
@@ -127,22 +138,16 @@ export function findTemplateScriptExpressionAtPosition(source: string, position:
 
     const from = match.index
     const to = from + match[0].length
-    const contentFrom = from + 3
-    const contentTo = to - 2
-    if (position < contentFrom || position > contentTo) {
-      continue
-    }
-
-    return {
+    expressions.push({
       from,
       to,
-      contentFrom,
-      contentTo,
+      contentFrom: from + 3,
+      contentTo: to - 2,
       code: match[1] ?? '',
-    }
+    })
   }
 
-  return null
+  return expressions
 }
 
 function buildTemplateScriptDecorations(view: EditorView) {
