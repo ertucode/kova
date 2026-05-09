@@ -105,12 +105,20 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
+  const activeEnvironmentNamesRef = useRef(
+    environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name)
+  )
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
+  const visibleSharedScriptsRef = useRef(visibleSharedScripts)
 
+  activeEnvironmentNamesRef.current = environments
+    .filter(environment => activeEnvironmentIds.includes(environment.id))
+    .map(environment => environment.name)
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
+  visibleSharedScriptsRef.current = visibleSharedScripts
 
   const variableEditorExtensions = useMemo(
     () => [
@@ -123,23 +131,21 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       templateScriptExtension({
-        getEnvironmentNames: () =>
-          environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-        getSharedScripts: () => visibleSharedScripts,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         extraSources: [
           createTemplateCompletionSource({
-            getEnvironmentNames: () =>
-              environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+            getEnvironmentNames: () => activeEnvironmentNamesRef.current,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-            getSharedScripts: () => visibleSharedScripts,
+            getSharedScripts: () => visibleSharedScriptsRef.current,
           }),
         ],
       }),
     ],
-    [activeEnvironmentIds, environments, visibleSharedScripts]
+    []
   )
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
@@ -153,25 +159,23 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       templateScriptExtension({
-        getEnvironmentNames: () =>
-          environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-        getSharedScripts: () => visibleSharedScripts,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         fallbackToBrowserTab: true,
         extraSources: [
           createTemplateCompletionSource({
-            getEnvironmentNames: () =>
-              environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name),
+            getEnvironmentNames: () => activeEnvironmentNamesRef.current,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-            getSharedScripts: () => visibleSharedScripts,
+            getSharedScripts: () => visibleSharedScriptsRef.current,
           }),
         ],
       }),
     ],
-    [activeEnvironmentIds, environments, visibleSharedScripts]
+    []
   )
 
   const urlEditorExtensions = useMemo(() => [searchParamHighlightExtension(), ...variableEditorExtensions], [variableEditorExtensions])

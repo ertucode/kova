@@ -83,14 +83,18 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
+  const activeEnvironmentNamesRef = useRef(activeEnvironmentNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
   const { scripts: visibleSharedScripts, reload: reloadVisibleSharedScripts } =
     useVisibleSharedScripts(selectedFolderId)
+  const visibleSharedScriptsRef = useRef(visibleSharedScripts)
 
+  activeEnvironmentNamesRef.current = activeEnvironmentNames
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
+  visibleSharedScriptsRef.current = visibleSharedScripts
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
     () => [
@@ -104,49 +108,49 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       templateScriptExtension({
-        getEnvironmentNames: () => activeEnvironmentNames,
-        getVariableNames: () => activeEnvironmentVariableNames,
-        getSharedScripts: () => visibleSharedScripts,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         fallbackToBrowserTab: true,
         extraSources: [
           createTemplateCompletionSource({
-            getEnvironmentNames: () => activeEnvironmentNames,
-            getVariableNames: () => activeEnvironmentVariableNames,
-            getSharedScripts: () => visibleSharedScripts,
+            getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+            getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+            getSharedScripts: () => visibleSharedScriptsRef.current,
           }),
         ],
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
+    []
   )
 
   const preRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScripts }),
+      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
       scriptAutocompleteExtension({
         includeResponse: false,
-        getEnvironmentNames: () => activeEnvironmentNames,
-        getVariableNames: () => activeEnvironmentVariableNames,
-        getSharedScripts: () => visibleSharedScripts,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
+    []
   )
 
   const postRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScripts }),
+      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
       scriptAutocompleteExtension({
         includeResponse: true,
-        getEnvironmentNames: () => activeEnvironmentNames,
-        getVariableNames: () => activeEnvironmentVariableNames,
-        getSharedScripts: () => visibleSharedScripts,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
+    []
   )
 
   return (

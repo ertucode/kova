@@ -325,17 +325,20 @@ function SharedScriptDetail({
     () => visibleSharedScripts.filter(item => item.id !== draft.id),
     [draft.id, visibleSharedScripts]
   )
+  const autocompleteSharedScriptsRef = useRef(autocompleteSharedScripts)
+
+  autocompleteSharedScriptsRef.current = autocompleteSharedScripts
 
   const extensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ targets, getSharedScripts: () => autocompleteSharedScripts }),
+      scriptDiagnosticsExtension({ targets, getSharedScripts: () => autocompleteSharedScriptsRef.current }),
       scriptAutocompleteExtension({
         includeResponse: false,
         targets,
-        getSharedScripts: () => autocompleteSharedScripts,
+        getSharedScripts: () => autocompleteSharedScriptsRef.current,
       }),
     ],
-    [autocompleteSharedScripts, targets]
+    [targets]
   )
 
   return (

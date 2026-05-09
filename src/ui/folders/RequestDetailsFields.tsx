@@ -143,14 +143,18 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
+  const activeEnvironmentNamesRef = useRef(activeEnvironmentNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
+  const visibleSharedScriptsRef = useRef(visibleSharedScripts)
   const definedPathParamNamesRef = useRef<string[]>([])
   const pathParamRowsRef = useRef(parseKeyValueRows(draft.pathParams))
 
+  activeEnvironmentNamesRef.current = activeEnvironmentNames
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
+  visibleSharedScriptsRef.current = visibleSharedScripts
   pathParamRowsRef.current = parseKeyValueRows(draft.pathParams)
   definedPathParamNamesRef.current = pathParamRowsRef.current.map(row => row.key.trim()).filter(Boolean)
 
@@ -166,21 +170,21 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       templateScriptExtension({
-        getEnvironmentNames: () => activeEnvironmentNames,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-        getSharedScripts: () => visibleSharedScripts,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         extraSources: [
           createTemplateCompletionSource({
-            getEnvironmentNames: () => activeEnvironmentNames,
+            getEnvironmentNames: () => activeEnvironmentNamesRef.current,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-            getSharedScripts: () => visibleSharedScripts,
+            getSharedScripts: () => visibleSharedScriptsRef.current,
           }),
         ],
       }),
     ],
-    [activeEnvironmentNames, visibleSharedScripts]
+    []
   )
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
@@ -195,23 +199,23 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       templateScriptExtension({
-        getEnvironmentNames: () => activeEnvironmentNames,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-        getSharedScripts: () => visibleSharedScripts,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         fallbackToBrowserTab: true,
         extraSources: [
           createTemplateCompletionSource({
-            getEnvironmentNames: () => activeEnvironmentNames,
+            getEnvironmentNames: () => activeEnvironmentNamesRef.current,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
-            getSharedScripts: () => visibleSharedScripts,
+            getSharedScripts: () => visibleSharedScriptsRef.current,
           }),
         ],
       }),
     ],
-    [activeEnvironmentNames, visibleSharedScripts]
+    []
   )
 
   const urlEditorExtensions = useMemo(
@@ -252,42 +256,42 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const preRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScripts }),
+      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
       scriptAutocompleteExtension({
         includeResponse: false,
-        getEnvironmentNames: () => activeEnvironmentNames,
-        getVariableNames: () => activeEnvironmentVariableNames,
-        getSharedScripts: () => visibleSharedScripts,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
+    []
   )
 
   const postRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScripts }),
+      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
       scriptAutocompleteExtension({
         includeResponse: true,
-        getEnvironmentNames: () => activeEnvironmentNames,
-        getVariableNames: () => activeEnvironmentVariableNames,
-        getSharedScripts: () => visibleSharedScripts,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
+    []
   )
 
   const responseVisualizerExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'response-visualizer', getSharedScripts: () => visibleSharedScripts }),
+      scriptDiagnosticsExtension({ phase: 'response-visualizer', getSharedScripts: () => visibleSharedScriptsRef.current }),
       scriptAutocompleteExtension({
         phase: 'response-visualizer',
         includeResponse: true,
-        getEnvironmentNames: () => activeEnvironmentNames,
-        getVariableNames: () => activeEnvironmentVariableNames,
-        getSharedScripts: () => visibleSharedScripts,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getSharedScripts: () => visibleSharedScriptsRef.current,
       }),
     ],
-    [activeEnvironmentNames, activeEnvironmentVariableNames, visibleSharedScripts]
+    []
   )
 
   const visualizerEnvironments = useMemo(
