@@ -1,66 +1,4 @@
 import ts from 'typescript'
-import decoratorsLib from 'typescript/lib/lib.decorators.d.ts?raw'
-import decoratorsLegacyLib from 'typescript/lib/lib.decorators.legacy.d.ts?raw'
-import es5Lib from 'typescript/lib/lib.es5.d.ts?raw'
-import es2015Lib from 'typescript/lib/lib.es2015.d.ts?raw'
-import es2015CollectionLib from 'typescript/lib/lib.es2015.collection.d.ts?raw'
-import es2015CoreLib from 'typescript/lib/lib.es2015.core.d.ts?raw'
-import es2015GeneratorLib from 'typescript/lib/lib.es2015.generator.d.ts?raw'
-import es2015IterableLib from 'typescript/lib/lib.es2015.iterable.d.ts?raw'
-import es2015PromiseLib from 'typescript/lib/lib.es2015.promise.d.ts?raw'
-import es2015ProxyLib from 'typescript/lib/lib.es2015.proxy.d.ts?raw'
-import es2015ReflectLib from 'typescript/lib/lib.es2015.reflect.d.ts?raw'
-import es2015SymbolLib from 'typescript/lib/lib.es2015.symbol.d.ts?raw'
-import es2015SymbolWellKnownLib from 'typescript/lib/lib.es2015.symbol.wellknown.d.ts?raw'
-import es2016Lib from 'typescript/lib/lib.es2016.d.ts?raw'
-import es2016ArrayIncludeLib from 'typescript/lib/lib.es2016.array.include.d.ts?raw'
-import es2016IntlLib from 'typescript/lib/lib.es2016.intl.d.ts?raw'
-import es2017Lib from 'typescript/lib/lib.es2017.d.ts?raw'
-import es2017ArrayBufferLib from 'typescript/lib/lib.es2017.arraybuffer.d.ts?raw'
-import es2017DateLib from 'typescript/lib/lib.es2017.date.d.ts?raw'
-import es2017IntlLib from 'typescript/lib/lib.es2017.intl.d.ts?raw'
-import es2017ObjectLib from 'typescript/lib/lib.es2017.object.d.ts?raw'
-import es2017SharedMemoryLib from 'typescript/lib/lib.es2017.sharedmemory.d.ts?raw'
-import es2017StringLib from 'typescript/lib/lib.es2017.string.d.ts?raw'
-import es2017TypedArraysLib from 'typescript/lib/lib.es2017.typedarrays.d.ts?raw'
-import es2018Lib from 'typescript/lib/lib.es2018.d.ts?raw'
-import es2018AsyncGeneratorLib from 'typescript/lib/lib.es2018.asyncgenerator.d.ts?raw'
-import es2018AsyncIterableLib from 'typescript/lib/lib.es2018.asynciterable.d.ts?raw'
-import es2018IntlLib from 'typescript/lib/lib.es2018.intl.d.ts?raw'
-import es2018PromiseLib from 'typescript/lib/lib.es2018.promise.d.ts?raw'
-import es2018RegexpLib from 'typescript/lib/lib.es2018.regexp.d.ts?raw'
-import es2019Lib from 'typescript/lib/lib.es2019.d.ts?raw'
-import es2019ArrayLib from 'typescript/lib/lib.es2019.array.d.ts?raw'
-import es2019IntlLib from 'typescript/lib/lib.es2019.intl.d.ts?raw'
-import es2019ObjectLib from 'typescript/lib/lib.es2019.object.d.ts?raw'
-import es2019StringLib from 'typescript/lib/lib.es2019.string.d.ts?raw'
-import es2019SymbolLib from 'typescript/lib/lib.es2019.symbol.d.ts?raw'
-import es2020Lib from 'typescript/lib/lib.es2020.d.ts?raw'
-import es2020BigIntLib from 'typescript/lib/lib.es2020.bigint.d.ts?raw'
-import es2020DateLib from 'typescript/lib/lib.es2020.date.d.ts?raw'
-import es2020IntlLib from 'typescript/lib/lib.es2020.intl.d.ts?raw'
-import es2020NumberLib from 'typescript/lib/lib.es2020.number.d.ts?raw'
-import es2020PromiseLib from 'typescript/lib/lib.es2020.promise.d.ts?raw'
-import es2020SharedMemoryLib from 'typescript/lib/lib.es2020.sharedmemory.d.ts?raw'
-import es2020StringLib from 'typescript/lib/lib.es2020.string.d.ts?raw'
-import es2020SymbolWellKnownLib from 'typescript/lib/lib.es2020.symbol.wellknown.d.ts?raw'
-import es2021Lib from 'typescript/lib/lib.es2021.d.ts?raw'
-import es2021IntlLib from 'typescript/lib/lib.es2021.intl.d.ts?raw'
-import es2021PromiseLib from 'typescript/lib/lib.es2021.promise.d.ts?raw'
-import es2021StringLib from 'typescript/lib/lib.es2021.string.d.ts?raw'
-import es2021WeakRefLib from 'typescript/lib/lib.es2021.weakref.d.ts?raw'
-import es2022Lib from 'typescript/lib/lib.es2022.d.ts?raw'
-import es2022ArrayLib from 'typescript/lib/lib.es2022.array.d.ts?raw'
-import es2022ErrorLib from 'typescript/lib/lib.es2022.error.d.ts?raw'
-import es2022IntlLib from 'typescript/lib/lib.es2022.intl.d.ts?raw'
-import es2022ObjectLib from 'typescript/lib/lib.es2022.object.d.ts?raw'
-import es2022RegexpLib from 'typescript/lib/lib.es2022.regexp.d.ts?raw'
-import es2022StringLib from 'typescript/lib/lib.es2022.string.d.ts?raw'
-import es2023Lib from 'typescript/lib/lib.es2023.d.ts?raw'
-import es2023ArrayLib from 'typescript/lib/lib.es2023.array.d.ts?raw'
-import es2023CollectionLib from 'typescript/lib/lib.es2023.collection.d.ts?raw'
-import es2023IntlLib from 'typescript/lib/lib.es2023.intl.d.ts?raw'
-import esnextIteratorLib from 'typescript/lib/lib.esnext.iterator.d.ts?raw'
 import type { SharedScriptTarget } from '@common/SharedScripts'
 import {
   getScriptRuntimeDeclarations,
@@ -78,128 +16,6 @@ import type {
   ScriptEditorDiagnostic,
 } from './scriptAutocompleteTypes'
 
-const rootLibFile = 'lib.es2023.d.ts'
-const reactJsxTypesFile = 'react-jsx-runtime.d.ts'
-const reactJsxTypes = String.raw`
-declare namespace JSX {
-  interface Element {}
-  interface ElementClass {}
-  interface IntrinsicAttributes {
-    key?: unknown
-  }
-  interface ElementAttributesProperty {
-    props: {}
-  }
-  interface ElementChildrenAttribute {
-    children: {}
-  }
-  interface IntrinsicElements {
-    [elementName: string]: Record<string, unknown>
-  }
-}
-
-declare module 'react/jsx-runtime' {
-  export const Fragment: unique symbol
-  export function jsx(type: unknown, props: unknown, key?: unknown): JSX.Element
-  export function jsxs(type: unknown, props: unknown, key?: unknown): JSX.Element
-}
-`
-const sharedFiles = new Map<string, string>([
-  ['lib.decorators.d.ts', decoratorsLib],
-  ['lib.decorators.legacy.d.ts', decoratorsLegacyLib],
-  ['lib.es5.d.ts', es5Lib],
-  ['lib.es2015.d.ts', es2015Lib],
-  ['lib.es2015.collection.d.ts', es2015CollectionLib],
-  ['lib.es2015.core.d.ts', es2015CoreLib],
-  ['lib.es2015.generator.d.ts', es2015GeneratorLib],
-  ['lib.es2015.iterable.d.ts', es2015IterableLib],
-  ['lib.es2015.promise.d.ts', es2015PromiseLib],
-  ['lib.es2015.proxy.d.ts', es2015ProxyLib],
-  ['lib.es2015.reflect.d.ts', es2015ReflectLib],
-  ['lib.es2015.symbol.d.ts', es2015SymbolLib],
-  ['lib.es2015.symbol.wellknown.d.ts', es2015SymbolWellKnownLib],
-  ['lib.es2016.d.ts', es2016Lib],
-  ['lib.es2016.array.include.d.ts', es2016ArrayIncludeLib],
-  ['lib.es2016.intl.d.ts', es2016IntlLib],
-  ['lib.es2017.d.ts', es2017Lib],
-  ['lib.es2017.arraybuffer.d.ts', es2017ArrayBufferLib],
-  ['lib.es2017.date.d.ts', es2017DateLib],
-  ['lib.es2017.intl.d.ts', es2017IntlLib],
-  ['lib.es2017.object.d.ts', es2017ObjectLib],
-  ['lib.es2017.sharedmemory.d.ts', es2017SharedMemoryLib],
-  ['lib.es2017.string.d.ts', es2017StringLib],
-  ['lib.es2017.typedarrays.d.ts', es2017TypedArraysLib],
-  ['lib.es2018.d.ts', es2018Lib],
-  ['lib.es2018.asyncgenerator.d.ts', es2018AsyncGeneratorLib],
-  ['lib.es2018.asynciterable.d.ts', es2018AsyncIterableLib],
-  ['lib.es2018.intl.d.ts', es2018IntlLib],
-  ['lib.es2018.promise.d.ts', es2018PromiseLib],
-  ['lib.es2018.regexp.d.ts', es2018RegexpLib],
-  ['lib.es2019.d.ts', es2019Lib],
-  ['lib.es2019.array.d.ts', es2019ArrayLib],
-  ['lib.es2019.intl.d.ts', es2019IntlLib],
-  ['lib.es2019.object.d.ts', es2019ObjectLib],
-  ['lib.es2019.string.d.ts', es2019StringLib],
-  ['lib.es2019.symbol.d.ts', es2019SymbolLib],
-  ['lib.es2020.d.ts', es2020Lib],
-  ['lib.es2020.bigint.d.ts', es2020BigIntLib],
-  ['lib.es2020.date.d.ts', es2020DateLib],
-  ['lib.es2020.intl.d.ts', es2020IntlLib],
-  ['lib.es2020.number.d.ts', es2020NumberLib],
-  ['lib.es2020.promise.d.ts', es2020PromiseLib],
-  ['lib.es2020.sharedmemory.d.ts', es2020SharedMemoryLib],
-  ['lib.es2020.string.d.ts', es2020StringLib],
-  ['lib.es2020.symbol.wellknown.d.ts', es2020SymbolWellKnownLib],
-  ['lib.es2021.d.ts', es2021Lib],
-  ['lib.es2021.intl.d.ts', es2021IntlLib],
-  ['lib.es2021.promise.d.ts', es2021PromiseLib],
-  ['lib.es2021.string.d.ts', es2021StringLib],
-  ['lib.es2021.weakref.d.ts', es2021WeakRefLib],
-  ['lib.es2022.d.ts', es2022Lib],
-  ['lib.es2022.array.d.ts', es2022ArrayLib],
-  ['lib.es2022.error.d.ts', es2022ErrorLib],
-  ['lib.es2022.intl.d.ts', es2022IntlLib],
-  ['lib.es2022.object.d.ts', es2022ObjectLib],
-  ['lib.es2022.regexp.d.ts', es2022RegexpLib],
-  ['lib.es2022.string.d.ts', es2022StringLib],
-  ['lib.es2023.d.ts', es2023Lib],
-  ['lib.es2023.array.d.ts', es2023ArrayLib],
-  ['lib.es2023.collection.d.ts', es2023CollectionLib],
-  ['lib.es2023.intl.d.ts', es2023IntlLib],
-  ['lib.esnext.iterator.d.ts', esnextIteratorLib],
-  [reactJsxTypesFile, reactJsxTypes],
-])
-
-const zodDeclarationFiles = buildZodDeclarationFiles(
-  {
-    ...(import.meta.glob('../../../node_modules/zod/index.d.cts', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>),
-    ...(import.meta.glob('../../../node_modules/zod/v4/index.d.cts', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>),
-    ...(import.meta.glob('../../../node_modules/zod/v4/classic/**/*.d.cts', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>),
-    ...(import.meta.glob('../../../node_modules/zod/v4/core/**/*.d.cts', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>),
-    ...(import.meta.glob('../../../node_modules/zod/v4/locales/**/*.d.cts', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>),
-  }
-)
-
 type PhaseState = {
   runtimeContext: ScriptRuntimeContext
   service: ts.LanguageService
@@ -208,6 +24,16 @@ type PhaseState = {
   userFileName: string
   declarationFileName: string
   dynamicFileNames: Set<string>
+}
+
+type DeclarationPayload = {
+  rootLibFile: string
+  files: Record<string, string>
+}
+
+type DeclarationFiles = {
+  rootLibFile: string
+  files: Map<string, string>
 }
 
 const blockedKeywordCompletions = new Set([
@@ -241,15 +67,21 @@ const allowedTopLevelScriptDiagnosticCodes = new Set([
 ])
 
 const phaseStates = new Map<string, PhaseState>()
+const phaseStatePromises = new Map<string, Promise<PhaseState>>()
+let declarationFilesPromise: Promise<DeclarationFiles> | null = null
 
-self.addEventListener('message', (event: MessageEvent<ScriptAutocompleteRequest | ScriptDiagnosticsRequest>) => {
-  const response = event.data.type === 'autocomplete' ? complete(event.data) : getDiagnostics(event.data)
-  self.postMessage(response)
+self.addEventListener('message', event => {
+  void handleMessage(event.data)
 })
 
-function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteResponse {
+async function handleMessage(request: ScriptAutocompleteRequest | ScriptDiagnosticsRequest) {
+  const response = request.type === 'autocomplete' ? await complete(request) : await getDiagnostics(request)
+  self.postMessage(response)
+}
+
+async function complete(request: ScriptAutocompleteRequest): Promise<ScriptAutocompleteResponse> {
   try {
-    const phaseState = getOrCreatePhaseState(request.runtimeContext)
+    const phaseState = await getOrCreatePhaseState(request.runtimeContext)
 
     updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
 
@@ -291,9 +123,9 @@ function complete(request: ScriptAutocompleteRequest): ScriptAutocompleteRespons
   }
 }
 
-function getDiagnostics(request: ScriptDiagnosticsRequest): ScriptDiagnosticsResponse {
+async function getDiagnostics(request: ScriptDiagnosticsRequest): Promise<ScriptDiagnosticsResponse> {
   try {
-    const phaseState = getOrCreatePhaseState(request.runtimeContext)
+    const phaseState = await getOrCreatePhaseState(request.runtimeContext)
 
     updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
 
@@ -401,14 +233,11 @@ function toEditorDiagnostic(
   }
 }
 
-function createPhaseState(runtimeContext: ScriptRuntimeContext): PhaseState {
+function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles: DeclarationFiles): PhaseState {
   const key = getRuntimeContextKey(runtimeContext)
   const userFileName = isScriptRuntimeVisualizerOnly(runtimeContext) ? `${key}.script.tsx` : `${key}.script.ts`
   const declarationFileName = `${key}.runtime.d.ts`
-  const files = new Map(sharedFiles)
-  for (const [fileName, content] of zodDeclarationFiles) {
-    files.set(fileName, content)
-  }
+  const files = new Map(declarationFiles.files)
   files.set(declarationFileName, `${getScriptRuntimeDeclarations(runtimeContext)}\n/// <reference lib=\"esnext.iterator\" />\n`)
   files.set(userFileName, '')
 
@@ -421,7 +250,7 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext): PhaseState {
     getCompilationSettings: () => ({
       target: ts.ScriptTarget.ES2023,
       module: ts.ModuleKind.ESNext,
-      lib: [rootLibFile],
+      lib: [declarationFiles.rootLibFile],
       strict: true,
       noImplicitAny: false,
       allowJs: true,
@@ -449,7 +278,7 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext): PhaseState {
       return ts.ScriptKind.TS
     },
     getCurrentDirectory: () => '',
-    getDefaultLibFileName: () => rootLibFile,
+    getDefaultLibFileName: () => declarationFiles.rootLibFile,
     fileExists: fileName => files.has(fileName),
     readFile: fileName => files.get(fileName),
     readDirectory: () => [],
@@ -467,24 +296,6 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext): PhaseState {
     declarationFileName,
     dynamicFileNames: new Set<string>(),
   }
-}
-
-function buildZodDeclarationFiles(rawFiles: Record<string, string>) {
-  const files = new Map<string, string>()
-
-  for (const [filePath, content] of Object.entries(rawFiles)) {
-    const marker = 'node_modules/zod/'
-    const markerIndex = filePath.indexOf(marker)
-    if (markerIndex < 0) {
-      continue
-    }
-
-    const relativePath = filePath.slice(markerIndex + marker.length)
-    const virtualFileName = `vendor/zod/${relativePath.replace(/\.d\.cts$/, '.cjs')}`
-    files.set(virtualFileName, content)
-  }
-
-  return files
 }
 
 function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScripts: ScriptAutocompleteSharedScript[]) {
@@ -509,16 +320,50 @@ function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScr
   return { files, modules }
 }
 
-function getOrCreatePhaseState(runtimeContext: ScriptRuntimeContext) {
+async function getOrCreatePhaseState(runtimeContext: ScriptRuntimeContext) {
   const key = getRuntimeContextKey(runtimeContext)
   const existing = phaseStates.get(key)
   if (existing) {
     return existing
   }
 
-  const created = createPhaseState(runtimeContext)
-  phaseStates.set(key, created)
+  const pending = phaseStatePromises.get(key)
+  if (pending) {
+    return pending
+  }
+
+  const created = (async () => {
+    try {
+      const declarationFiles = await loadDeclarationFiles()
+      const phaseState = createPhaseState(runtimeContext, declarationFiles)
+      phaseStates.set(key, phaseState)
+      return phaseState
+    } finally {
+      phaseStatePromises.delete(key)
+    }
+  })()
+  phaseStatePromises.set(key, created)
   return created
+}
+
+function loadDeclarationFiles() {
+  if (!declarationFilesPromise) {
+    declarationFilesPromise = loadDeclarationPayload().then(payload => ({
+      rootLibFile: payload.rootLibFile,
+      files: new Map(Object.entries(payload.files)),
+    }))
+  }
+
+  return declarationFilesPromise
+}
+
+async function loadDeclarationPayload(): Promise<DeclarationPayload> {
+  const response = await fetch(new URL('./declarations.json', self.location.href))
+  if (!response.ok) {
+    throw new Error(`Failed to load script autocomplete declarations: ${response.status} ${response.statusText}`)
+  }
+
+  return (await response.json()) as DeclarationPayload
 }
 
 function getRuntimeContextKey(runtimeContext: ScriptRuntimeContext) {

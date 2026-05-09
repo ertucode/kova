@@ -1217,22 +1217,98 @@ async function copyTextToClipboard(value: string, successMessage: string) {
   }
 }
 
-function JsonPathHoverTooltip({ path }: { path: string }) {
+function JsonPathHoverTooltip({
+  path,
+  keyName,
+  value,
+  valuePreview,
+  hovered,
+}: {
+  path: string
+  keyName?: string
+  value?: string
+  valuePreview?: string
+  hovered: 'key' | 'value'
+}) {
+  const topSection = hovered === 'value'
+    ? value
+      ? (
+          <CopyableTooltipRow
+            label="Value"
+            value={value}
+            displayValue={valuePreview ?? value}
+            successMessage="JSON value copied to clipboard."
+          />
+        )
+      : null
+    : keyName
+      ? <CopyableTooltipRow label="Key" value={keyName} successMessage="JSON key copied to clipboard." />
+      : null
+  const secondaryValue = hovered === 'key' && value !== undefined
+    ? (
+        <CopyableTooltipRow
+          label="Value"
+          value={value}
+          displayValue={valuePreview ?? value}
+          successMessage="JSON value copied to clipboard."
+          compact
+        />
+      )
+    : null
+
   return (
     <div className="max-w-[28rem] p-3">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/50">JSON Path</div>
+      {topSection}
+      <div className="mt-3 space-y-2 rounded-lg border border-base-content/10 bg-base-100/60 p-2.5">
+        {secondaryValue}
+        <div className="flex items-center gap-2 text-[11px] text-base-content/60">
+          <span className="shrink-0 font-semibold uppercase tracking-[0.08em]">Path</span>
+          <code className="min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap text-xs text-base-content/80">
+            {path}
+          </code>
+          <button
+            type="button"
+            className="shrink-0 rounded-md border border-base-content/10 bg-base-100/80 p-1.5 text-base-content/70 transition hover:border-base-content/20 hover:text-base-content"
+            onClick={() => void copyTextToClipboard(path, 'JSON path copied to clipboard.')}
+            title="Copy JSON path"
+            aria-label="Copy JSON path"
+          >
+            <CopyIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CopyableTooltipRow({
+  label,
+  value,
+  displayValue,
+  successMessage,
+  compact = false,
+}: {
+  label: string
+  value: string
+  displayValue?: string
+  successMessage: string
+  compact?: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/50">{label}</div>
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-base-content/10 bg-base-100/70 px-2.5 py-2 text-xs text-base-content">
-          {path}
+        <code className={`min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-base-content/10 bg-base-100/70 text-xs text-base-content ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
+        {displayValue ?? value}
         </code>
         <button
           type="button"
-          className="shrink-0 rounded-md border border-base-content/10 bg-base-100/80 p-2 text-base-content/70 transition hover:border-base-content/20 hover:text-base-content"
-          onClick={() => void copyTextToClipboard(path, 'JSON path copied to clipboard.')}
-          title="Copy JSON path"
-          aria-label="Copy JSON path"
+          className={`shrink-0 rounded-md border border-base-content/10 bg-base-100/80 text-base-content/70 transition hover:border-base-content/20 hover:text-base-content ${compact ? 'p-1.5' : 'p-2'}`}
+          onClick={() => void copyTextToClipboard(value, successMessage)}
+          title={`Copy ${label}`}
+          aria-label={`Copy ${label}`}
         >
-          <CopyIcon className="h-4 w-4" />
+          <CopyIcon className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
         </button>
       </div>
     </div>
@@ -1259,7 +1335,15 @@ function createJsonResponsePathExtension(): Extension {
             const dom = document.createElement('div')
             const root = createRoot(dom)
 
-            root.render(<JsonPathHoverTooltip path={match.path} />)
+            root.render(
+              <JsonPathHoverTooltip
+                path={match.path}
+                keyName={match.keyName}
+                value={match.value}
+                valuePreview={match.valuePreview}
+                hovered={match.hovered}
+              />
+            )
 
             return {
               dom,
@@ -1279,7 +1363,15 @@ function getJsonPropertyPathAtPosition(
   source: string,
   pos: number,
   side: number
-): { from: number; to: number; path: string } | null {
+): {
+  from: number
+  to: number
+  path: string
+  keyName?: string
+  value?: string
+  valuePreview?: string
+  hovered: 'key' | 'value'
+} | null {
   const root = parseTree(source)
   if (!root) {
     return null
@@ -1302,18 +1394,82 @@ function getJsonPropertyPathMatch(
   source: string,
   node: JsonNode,
   offset: number
-): { from: number; to: number; path: string } | null {
+): {
+  from: number
+  to: number
+  path: string
+  keyName?: string
+  value?: string
+  valuePreview?: string
+  hovered: 'key' | 'value'
+} | null {
   let current: JsonNode | undefined = node
 
   while (current) {
     if (current.type === 'property') {
       const keyNode = current.children?.[0]
+      const valueNode = current.children?.[1]
       if (keyNode?.type === 'string' && offset >= keyNode.offset && offset <= keyNode.offset + keyNode.length) {
         return {
           from: keyNode.offset,
           to: keyNode.offset + keyNode.length,
           path: formatJsonPath(buildJsonPathSegments(source, current)),
+          keyName: readJsonStringNodeValue(source, keyNode) ?? undefined,
+          value: valueNode ? readJsonNodeClipboardValue(source, valueNode) : undefined,
+          valuePreview: valueNode ? getJsonNodePreview(source, valueNode) : undefined,
+          hovered: 'key',
         }
+      }
+
+      if (valueNode && isDirectlyHoverableJsonValueNode(valueNode) && offset >= valueNode.offset && offset <= valueNode.offset + valueNode.length) {
+        return {
+          from: valueNode.offset,
+          to: valueNode.offset + valueNode.length,
+          path: formatJsonPath(buildJsonPathSegments(source, current)),
+          keyName: keyNode?.type === 'string' ? (readJsonStringNodeValue(source, keyNode) ?? undefined) : undefined,
+          value: readCopyableJsonNodeValue(source, valueNode),
+          valuePreview: getJsonNodePreview(source, valueNode),
+          hovered: 'value',
+        }
+      }
+
+      if (valueNode && isContainerBoundaryHover(valueNode, offset)) {
+        return {
+          from: offset,
+          to: offset + 1,
+          path: formatJsonPath(buildJsonPathSegments(source, current)),
+          keyName: keyNode?.type === 'string' ? (readJsonStringNodeValue(source, keyNode) ?? undefined) : undefined,
+          value: readJsonNodeClipboardValue(source, valueNode),
+          valuePreview: getJsonNodePreview(source, valueNode),
+          hovered: 'value',
+        }
+      }
+    }
+
+    if (
+      isDirectlyHoverableJsonValueNode(current) &&
+      current.parent?.type === 'array' &&
+      offset >= current.offset &&
+      offset <= current.offset + current.length
+    ) {
+      return {
+        from: current.offset,
+        to: current.offset + current.length,
+        path: formatJsonPath(buildJsonPathSegmentsForValueNode(source, current)),
+        value: readCopyableJsonNodeValue(source, current),
+        valuePreview: getJsonNodePreview(source, current),
+        hovered: 'value',
+      }
+    }
+
+    if (isContainerBoundaryHover(current, offset) && current.parent?.type === 'array') {
+      return {
+        from: offset,
+        to: offset + 1,
+        path: formatJsonPath(buildJsonPathSegmentsForValueNode(source, current)),
+        value: readJsonNodeClipboardValue(source, current),
+        valuePreview: getJsonNodePreview(source, current),
+        hovered: 'value',
       }
     }
 
@@ -1348,6 +1504,78 @@ function buildJsonPathSegments(source: string, propertyNode: JsonNode): Array<st
   }
 
   return segments
+}
+
+function buildJsonPathSegmentsForValueNode(source: string, valueNode: JsonNode): Array<string | number> {
+  const parent = valueNode.parent
+  if (parent?.type === 'property') {
+    return buildJsonPathSegments(source, parent)
+  }
+
+  const segments: Array<string | number> = []
+  let current: JsonNode | undefined = valueNode
+
+  while (current) {
+    const parentNode: JsonNode | undefined = current.parent
+    if (parentNode?.type === 'array') {
+      const index = parentNode.children?.indexOf(current) ?? -1
+      if (index >= 0) {
+        segments.unshift(index)
+      }
+    }
+
+    if (parentNode?.type === 'property') {
+      const keyNode = parentNode.children?.[0]
+      const key = keyNode ? readJsonStringNodeValue(source, keyNode) : null
+      if (key !== null) {
+        segments.unshift(key)
+      }
+    }
+
+    current = parentNode
+  }
+
+  return segments
+}
+
+function isCopyableJsonValueNode(node: JsonNode) {
+  return node.type === 'string' || node.type === 'number'
+}
+
+function isDirectlyHoverableJsonValueNode(node: JsonNode) {
+  return isCopyableJsonValueNode(node)
+}
+
+function isContainerBoundaryHover(node: JsonNode, offset: number) {
+  if (node.type !== 'object' && node.type !== 'array') {
+    return false
+  }
+
+  return offset === node.offset || offset === node.offset + node.length - 1
+}
+
+function readCopyableJsonNodeValue(source: string, node: JsonNode) {
+  if (node.type === 'number') {
+    return source.slice(node.offset, node.offset + node.length)
+  }
+
+  return readJsonStringNodeValue(source, node) ?? source.slice(node.offset, node.offset + node.length)
+}
+
+function readJsonNodeClipboardValue(source: string, node: JsonNode) {
+  if (node.type === 'string' || node.type === 'number') {
+    return readCopyableJsonNodeValue(source, node)
+  }
+
+  return source.slice(node.offset, node.offset + node.length)
+}
+
+function getJsonNodePreview(source: string, node: JsonNode) {
+  return truncateJsonPreview(readJsonNodeClipboardValue(source, node))
+}
+
+function truncateJsonPreview(value: string) {
+  return value.length > 20 ? `${value.slice(0, 20)}...` : value
 }
 
 function readJsonStringNodeValue(source: string, node: JsonNode) {

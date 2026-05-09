@@ -158,7 +158,7 @@ export function ResponseVisualizerPreview({
       ref={iframeRef}
       title="Response visualizer preview"
       sandbox="allow-scripts"
-      src="./response-visualizer.html"
+      src="./generated/response-visualizer/response-visualizer.html"
       className="h-full w-full rounded-xl border border-base-content/10 bg-base-100"
     />
   )

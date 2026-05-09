@@ -10,7 +10,9 @@ import type {
 } from './scriptAutocompleteTypes'
 
 class ScriptAutocompleteClient {
-  private readonly worker = new Worker(new URL('./scriptAutocomplete.worker.ts', import.meta.url), { type: 'module' })
+  private readonly worker = new Worker(new URL('generated/script-autocomplete/scriptAutocomplete.worker.js', document.baseURI), {
+    type: 'module',
+  })
   private nextRequestId = 1
   private readonly pendingAutocomplete = new Map<
     number,

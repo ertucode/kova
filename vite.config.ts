@@ -1,17 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { createFrontendPlugins, frontendResolve } from './vite.shared'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react({
-      babel: {
-        plugins: ['babel-plugin-react-compiler'],
-      },
-    }),
-    tailwindcss(),
+    ...createFrontendPlugins(),
   ],
   base: './',
   build: {
@@ -22,7 +16,6 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         parallel: path.resolve(__dirname, 'parallel.html'),
-        responseVisualizer: path.resolve(__dirname, 'response-visualizer.html'),
       },
       output: {
         // Preserve original names for better debugging
@@ -35,12 +28,7 @@ export default defineConfig({
     port: 5123,
     strictPort: true,
   },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src/ui'),
-      '@common': path.resolve(__dirname, './src/common'),
-    },
-  },
+  resolve: frontendResolve,
   test: {
     globals: true,
     environment: 'happy-dom',

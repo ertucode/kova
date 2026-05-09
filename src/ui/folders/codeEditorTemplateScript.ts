@@ -6,10 +6,11 @@ import {
   type CompletionResult,
   type CompletionSource,
 } from '@codemirror/autocomplete'
+import { highlightTree, tagHighlighter, tags } from '@lezer/highlight'
+import { parser as javaScriptParser } from '@lezer/javascript'
 import { RangeSetBuilder, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
-import ts from 'typescript'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
@@ -31,6 +32,19 @@ type TemplateExpressionMatch = {
 }
 
 const TEMPLATE_EXPRESSION_REGEX = /\\?\{\{\$([\s\S]*?)\}\}/g
+const templateScriptParser = javaScriptParser.configure({ dialect: 'ts jsx' })
+const preferredTemplateGlobals = new Set(['env', 'scope', 'request', 'crypto', 'z'])
+const templateScriptHighlighter = tagHighlighter([
+  { tag: [tags.keyword, tags.modifier], class: 'cm-template-script-keyword' },
+  { tag: [tags.string, tags.special(tags.string)], class: 'cm-template-script-string' },
+  { tag: [tags.number, tags.integer, tags.float], class: 'cm-template-script-number' },
+  { tag: [tags.bool, tags.null], class: 'cm-template-script-atom' },
+  { tag: [tags.comment], class: 'cm-template-script-comment' },
+  { tag: [tags.operator], class: 'cm-template-script-operator' },
+  { tag: [tags.punctuation, tags.separator], class: 'cm-template-script-punctuation' },
+  { tag: [tags.paren, tags.squareBracket, tags.brace], class: 'cm-template-script-brace' },
+  { tag: [tags.variableName, tags.propertyName, tags.labelName], class: 'cm-template-script-identifier' },
+])
 
 export function templateScriptExtension(options: TemplateScriptOptions): Extension {
   return [
@@ -168,80 +182,24 @@ function buildTemplateScriptDecorations(view: EditorView) {
 }
 
 function scanTemplateScriptTokens(source: string) {
-  const scanner = ts.createScanner(ts.ScriptTarget.ES2023, false, ts.LanguageVariant.Standard, source)
   const tokens: Array<{ from: number; to: number; className: string }> = []
+  const tree = templateScriptParser.parse(source)
 
-  while (true) {
-    const kind = scanner.scan()
-    if (kind === ts.SyntaxKind.EndOfFileToken) {
-      break
-    }
-
-    const className = getTemplateTokenClassName(kind, scanner.getTokenText())
-    if (!className) {
-      continue
-    }
-
+  highlightTree(tree, templateScriptHighlighter, (from, to, className) => {
     tokens.push({
-      from: scanner.getTokenPos(),
-      to: scanner.getTextPos(),
-      className,
+      from,
+      to,
+      className: getTemplateTokenClassName(className, source.slice(from, to)),
     })
-  }
+  })
 
   return tokens
 }
 
-function getTemplateTokenClassName(kind: ts.SyntaxKind, tokenText: string) {
-  if (kind === ts.SyntaxKind.SingleLineCommentTrivia || kind === ts.SyntaxKind.MultiLineCommentTrivia) {
-    return 'cm-template-script-comment'
-  }
-
-  if (
-    kind === ts.SyntaxKind.StringLiteral ||
-    kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral ||
-    kind === ts.SyntaxKind.TemplateHead ||
-    kind === ts.SyntaxKind.TemplateMiddle ||
-    kind === ts.SyntaxKind.TemplateTail
-  ) {
-    return 'cm-template-script-string'
-  }
-
-  if (kind === ts.SyntaxKind.NumericLiteral || kind === ts.SyntaxKind.BigIntLiteral) {
-    return 'cm-template-script-number'
-  }
-
-  if (kind === ts.SyntaxKind.TrueKeyword || kind === ts.SyntaxKind.FalseKeyword) {
-    return 'cm-template-script-atom'
-  }
-
-  if (kind === ts.SyntaxKind.NullKeyword) {
-    return 'cm-template-script-atom'
-  }
-
-  if (kind >= ts.SyntaxKind.FirstKeyword && kind <= ts.SyntaxKind.LastKeyword) {
-    return 'cm-template-script-keyword'
-  }
-
-  if (kind === ts.SyntaxKind.Identifier) {
-    return tokenText === 'env' || tokenText === 'scope' || tokenText === 'request' || tokenText === 'crypto' || tokenText === 'z'
-      ? 'cm-template-script-global'
-      : 'cm-template-script-identifier'
-  }
-
-  if (/^[()[\]{}]$/.test(tokenText)) {
-    return 'cm-template-script-brace'
-  }
-
-  if (/^[,.;:?]$/.test(tokenText)) {
-    return 'cm-template-script-punctuation'
-  }
-
-  if (/^(?:=>|===|==|=|!==|!=|<=|>=|<|>|\+\+|--|\+|-|\*\*|\*|\/|%|&&|\|\||!|\?|\?\?|\.|\.\.\.)$/.test(tokenText)) {
-    return 'cm-template-script-operator'
-  }
-
-  return null
+function getTemplateTokenClassName(className: string, tokenText: string) {
+  return className === 'cm-template-script-identifier' && preferredTemplateGlobals.has(tokenText)
+    ? 'cm-template-script-global'
+    : className
 }
 
 function completeTemplateVariableName(
