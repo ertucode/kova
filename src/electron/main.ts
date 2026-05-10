@@ -7,6 +7,7 @@ import { copyFile, mkdir, rename, unlink } from 'fs/promises'
 import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { TaskManager } from './TaskManager.js'
+import { clearCookies, createCookie, deleteCookie, listCookies, updateCookie } from './db/cookies.js'
 import { closeDatabase, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
 import { getAppSettings, updateAppSettings } from './db/app-settings.js'
 import { findHttpRequestByPath, listExplorerItems } from './db/explorer.js'
@@ -397,6 +398,26 @@ app.on('ready', async () => {
 
     const windowId = window.id
     return originalWindowBounds.has(windowId)
+  })
+
+  ipcHandle('listCookies', async () => {
+    return listCookies()
+  })
+
+  ipcHandle('createCookie', async input => {
+    return createCookie(input)
+  })
+
+  ipcHandle('updateCookie', async input => {
+    return updateCookie(input)
+  })
+
+  ipcHandle('deleteCookie', async input => {
+    return deleteCookie(input)
+  })
+
+  ipcHandle('clearCookies', async input => {
+    return clearCookies(input ?? {})
   })
 
   ipcHandle('listExplorerItems', async () => {

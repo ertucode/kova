@@ -17,6 +17,7 @@ import type { RequestMethod, RequestRawType, SendRequestInput } from '../common/
 import { Result } from '../common/Result.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import type { ScriptClipboardBridge } from './script-clipboard.js'
+import { getCookieHeaderForUrl } from './db/cookies.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { getFolderAncestorChain } from './db/folders.js'
@@ -187,6 +188,13 @@ export async function prepareHttpRequest(
   const headers = new Headers()
   applyAuthHeaders(headers, resolvedAuth)
   applyResolvedHeaders(headers, parseKeyValueRows(runtime.request.headers), variables)
+
+  if (!headers.has('cookie')) {
+    const cookieHeader = await getCookieHeaderForUrl(url)
+    if (cookieHeader) {
+      headers.set('cookie', cookieHeader)
+    }
+  }
 
   const resolvedBodyResult = await buildResolvedRequestBody(runtime.request, variables)
   if (!resolvedBodyResult.success) {

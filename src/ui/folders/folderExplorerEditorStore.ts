@@ -20,7 +20,7 @@ const RESPONSE_BODY_VIEWS = ['raw', 'table', 'visualizer'] as const
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 const DEFAULT_RESPONSE_PANE_HEIGHT = 320
 
-export type SidebarTab = 'requests' | 'scripts' | 'environments' | 'history' | 'changes' | 'tags'
+export type SidebarTab = 'requests' | 'scripts' | 'environments' | 'history' | 'changes' | 'tags' | 'cookies'
 
 const selectionSchema = z.object({
   itemType: z.union([z.literal('folder'), z.literal('request'), z.literal('example')]),
@@ -38,6 +38,7 @@ const persistedUiStateSchema = z.object({
     z.literal('history'),
     z.literal('changes'),
     z.literal('tags'),
+    z.literal('cookies'),
     z.literal('console'),
   ]),
   responsePaneHeight: z.number(),

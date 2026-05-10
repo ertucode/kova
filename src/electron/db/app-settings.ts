@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import {
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
+  DEFAULT_COOKIES_ENABLED,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_VIM_MODE,
@@ -29,12 +30,13 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
   const defaults: AppSettingsRow = {
     id: DEFAULT_APP_SETTINGS_ID,
     warnBeforeRequestAfterSeconds: DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
-    responseBodyDisplayMode: DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
-    compactRequestView: DEFAULT_COMPACT_REQUEST_VIEW,
-    vimMode: DEFAULT_VIM_MODE,
-    createdAt: now,
-    updatedAt: now,
-  }
+      responseBodyDisplayMode: DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+      compactRequestView: DEFAULT_COMPACT_REQUEST_VIEW,
+      vimMode: DEFAULT_VIM_MODE,
+      cookiesEnabled: DEFAULT_COOKIES_ENABLED,
+      createdAt: now,
+      updatedAt: now,
+    }
 
   db.insert(appSettings).values(defaults).run()
   return toAppSettingsRecord(defaults)
@@ -57,6 +59,10 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
     return GenericError.Message('Invalid vim mode setting')
   }
 
+  if (typeof input.cookiesEnabled !== 'boolean') {
+    return GenericError.Message('Invalid cookies setting')
+  }
+
   try {
     const db = getDb()
     const current = await getAppSettings()
@@ -67,6 +73,7 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
       responseBodyDisplayMode: input.responseBodyDisplayMode,
       compactRequestView: input.compactRequestView,
       vimMode: input.vimMode,
+      cookiesEnabled: input.cookiesEnabled,
       createdAt: current.createdAt,
       updatedAt,
     }
@@ -91,6 +98,7 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     responseBodyDisplayMode,
     compactRequestView: value.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
     vimMode: value.vimMode ?? DEFAULT_VIM_MODE,
+    cookiesEnabled: value.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }

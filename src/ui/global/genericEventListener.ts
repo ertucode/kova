@@ -1,5 +1,6 @@
 import { RequestSendCoordinator } from '@/folders/requestSendCoordinator'
 import { getWindowElectron } from '@/getWindowElectron'
+import { CookiesCoordinator } from '@/folders/cookiesCoordinator'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
 import { toast } from '@/lib/components/toast'
@@ -8,6 +9,8 @@ import { dialogActions } from './dialogStore'
 export function subscribeToGenericEvents() {
   getWindowElectron().onGenericEvent(e => {
     if (e.type === 'reload-path') {
+    } else if (e.type === 'cookies-updated') {
+      void CookiesCoordinator.loadCookies()
     } else if (e.type === 'environments-updated') {
       void EnvironmentCoordinator.loadEnvironments()
     } else if (e.type === 'http-sse-stream-updated') {

@@ -19,6 +19,7 @@ import type {
   SseEventRecord,
 } from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
+import { getSetCookieHeaderValuesFromEntries, storeResponseCookies } from './db/cookies.js'
 import { persistRequestHistory } from './db/request-history.js'
 import { emitGenericEvent } from './generic-events.js'
 import { prepareHttpRequest, type PreparedHttpRequest } from './http-request-runtime.js'
@@ -80,8 +81,24 @@ export async function sendRequest(
       body: requestBody.body,
       signal: abortController.signal,
     })
+    const responseHeaderEntries = Array.from(response.headers.entries())
+    const setCookieHeaderEntries = responseHeaderEntries.filter(([key]) => key.toLowerCase() === 'set-cookie')
+    const extractedSetCookieValues = getSetCookieHeaderValuesFromEntries(responseHeaderEntries)
 
-    const responseHeaders = Array.from(response.headers.entries())
+    console.info('[cookies] response received', {
+      requestUrl: url,
+      responseUrl: response.url,
+      status: response.status,
+      setCookieHeaderEntries,
+      extractedSetCookieValues,
+    })
+
+    await storeResponseCookies({
+      requestUrl: response.url || url,
+      setCookieValues: extractedSetCookieValues,
+    })
+
+    const responseHeaders = responseHeaderEntries
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n')
 

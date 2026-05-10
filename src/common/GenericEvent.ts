@@ -8,6 +8,8 @@ export type GenericEvent = {
   path: string
   fileToSelect?: $Maybe<string>
 } | {
+  type: 'cookies-updated'
+} | {
   type: 'environments-updated'
   environmentIds: string[]
 } | {

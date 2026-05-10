@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { useSelector } from '@xstate/store/react'
 import {
+  CookieIcon,
   Clock3Icon,
   FileCode2Icon,
   FileJsonIcon,
@@ -27,6 +28,7 @@ import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { EnvironmentsPanel } from './EnvironmentsPanel'
 import { ChangesPanel } from './ChangesPanel'
+import { CookiesPanel } from './CookiesPanel'
 import { HistoryPanel } from './RequestExecutionPanels'
 import { SharedScriptsPanel } from './SharedScriptsPanel'
 import { TagsPanel } from './TagsPanel'
@@ -431,6 +433,7 @@ export function FolderExplorer() {
         {sidebarTab === 'scripts' ? <SharedScriptsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
         {sidebarTab === 'tags' ? <TagsPanel /> : null}
+        {sidebarTab === 'cookies' ? <CookiesPanel /> : null}
         {sidebarTab === 'history' ? <HistoryPanel /> : null}
         {sidebarTab === 'changes' ? <ChangesPanel /> : null}
       </main>
@@ -576,6 +579,7 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },
     { id: 'changes', label: 'Changes', icon: Undo2Icon, disabled: false },
     { id: 'scripts', label: 'Scripts', icon: FileJsonIcon, disabled: false },
+    { id: 'cookies', label: 'Cookies', icon: CookieIcon, disabled: false },
   ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
 
   return (

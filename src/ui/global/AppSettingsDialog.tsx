@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import type { GenericResult } from '@common/GenericError'
 import { errorResponseToMessage } from '@common/GenericError'
 import { useSelector } from '@xstate/store/react'
-import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, DEFAULT_COMPACT_REQUEST_VIEW, DEFAULT_VIM_MODE } from '@common/AppSettings'
+import {
+  APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
+  DEFAULT_COMPACT_REQUEST_VIEW,
+  DEFAULT_COOKIES_ENABLED,
+  DEFAULT_VIM_MODE,
+} from '@common/AppSettings'
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
 import { getWindowElectron } from '@/getWindowElectron'
 import { Dialog } from '@/lib/components/dialog'
@@ -18,6 +23,7 @@ export function AppSettingsDialog() {
   const [responseBodyDisplayMode, setResponseBodyDisplayMode] = useState<(typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]>('raw')
   const [compactRequestView, setCompactRequestView] = useState(DEFAULT_COMPACT_REQUEST_VIEW)
   const [vimMode, setVimMode] = useState(DEFAULT_VIM_MODE)
+  const [cookiesEnabled, setCookiesEnabled] = useState(DEFAULT_COOKIES_ENABLED)
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
   const [databaseDrafts, setDatabaseDrafts] = useState<Record<string, { name: string; path: string }>>({})
   const [databaseLoading, setDatabaseLoading] = useState(false)
@@ -33,6 +39,7 @@ export function AppSettingsDialog() {
       setResponseBodyDisplayMode(settings.responseBodyDisplayMode)
       setCompactRequestView(settings.compactRequestView)
       setVimMode(settings.vimMode)
+      setCookiesEnabled(settings.cookiesEnabled)
     }
   }, [settings])
 
@@ -52,6 +59,7 @@ export function AppSettingsDialog() {
       responseBodyDisplayMode,
       compactRequestView,
       vimMode,
+      cookiesEnabled,
     })
 
     if (success) {

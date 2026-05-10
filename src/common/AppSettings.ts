@@ -3,6 +3,7 @@ export const APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES = ['raw', 'formatted'] as 
 export const DEFAULT_RESPONSE_BODY_DISPLAY_MODE = 'raw'
 export const DEFAULT_COMPACT_REQUEST_VIEW = true
 export const DEFAULT_VIM_MODE = false
+export const DEFAULT_COOKIES_ENABLED = true
 
 export type AppSettingsResponseBodyDisplayMode = (typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]
 
@@ -12,6 +13,7 @@ export type AppSettingsRecord = {
   responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
   compactRequestView: boolean
   vimMode: boolean
+  cookiesEnabled: boolean
   createdAt: number
   updatedAt: number
 }
@@ -21,4 +23,5 @@ export type UpdateAppSettingsInput = {
   responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
   compactRequestView: boolean
   vimMode: boolean
+  cookiesEnabled: boolean
 }

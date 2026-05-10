@@ -1,4 +1,11 @@
 import { type GenericResult } from './GenericError.js'
+import {
+  type ClearCookiesInput,
+  type CookieRecord,
+  type CreateCookieInput,
+  type DeleteCookieInput,
+  type UpdateCookieInput,
+} from './Cookies.js'
 import { type FolderExplorerTabRecord, type SaveFolderExplorerTabsInput } from './FolderExplorerTabs.js'
 import {
   type CreateFolderInput,
@@ -154,6 +161,11 @@ export type EventResponseMapping = {
   restoreWindowSize: Promise<void>
   getIsCompactWindowSize: Promise<boolean>
   setAsyncStorageValue: void
+  listCookies: Promise<CookieRecord[]>
+  createCookie: Promise<GenericResult<CookieRecord>>
+  updateCookie: Promise<GenericResult<CookieRecord>>
+  deleteCookie: Promise<GenericResult<void>>
+  clearCookies: Promise<GenericResult<void>>
   listExplorerItems: Promise<ExplorerItem[]>
   listFolderExplorerTabs: Promise<FolderExplorerTabRecord[]>
   saveFolderExplorerTabs: Promise<GenericResult<void>>
@@ -253,6 +265,11 @@ export type EventRequestMapping = {
   restoreWindowSize: void
   getIsCompactWindowSize: void
   setAsyncStorageValue: { key: AsyncStorageKey; value: $Maybe<string> }
+  listCookies: void
+  createCookie: CreateCookieInput
+  updateCookie: UpdateCookieInput
+  deleteCookie: DeleteCookieInput
+  clearCookies: ClearCookiesInput | void
   listExplorerItems: void
   listFolderExplorerTabs: void
   saveFolderExplorerTabs: SaveFolderExplorerTabsInput
@@ -362,6 +379,11 @@ export type WindowElectron = {
   setCompactWindowSize: () => Promise<void>
   restoreWindowSize: () => Promise<void>
   getIsCompactWindowSize: () => Promise<boolean>
+  listCookies: () => Promise<CookieRecord[]>
+  createCookie: (input: CreateCookieInput) => Promise<GenericResult<CookieRecord>>
+  updateCookie: (input: UpdateCookieInput) => Promise<GenericResult<CookieRecord>>
+  deleteCookie: (input: DeleteCookieInput) => Promise<GenericResult<void>>
+  clearCookies: (input?: ClearCookiesInput) => Promise<GenericResult<void>>
   listExplorerItems: () => Promise<ExplorerItem[]>
   listFolderExplorerTabs: () => Promise<FolderExplorerTabRecord[]>
   saveFolderExplorerTabs: (input: SaveFolderExplorerTabsInput) => Promise<GenericResult<void>>

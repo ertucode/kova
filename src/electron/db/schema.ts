@@ -167,9 +167,37 @@ export const appSettings = sqliteTable('app_settings', {
   responseBodyDisplayMode: text('response_body_display_mode').notNull().default('raw'),
   compactRequestView: integer('compact_request_view', { mode: 'boolean' }).notNull().default(true),
   vimMode: integer('vim_mode', { mode: 'boolean' }).notNull().default(false),
+  cookiesEnabled: integer('cookies_enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })
+
+export const cookies = sqliteTable(
+  'cookies',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    value: text('value').notNull().default(''),
+    domain: text('domain').notNull(),
+    path: text('path').notNull().default('/'),
+    hostOnly: integer('host_only', { mode: 'boolean' }).notNull().default(true),
+    secure: integer('secure', { mode: 'boolean' }).notNull().default(false),
+    httpOnly: integer('http_only', { mode: 'boolean' }).notNull().default(false),
+    sameSite: text('same_site'),
+    expiresAt: integer('expires_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  table => [
+    uniqueIndex('cookies_identity_idx').on(table.name, table.domain, table.path, table.hostOnly),
+    index('cookies_domain_idx').on(table.domain),
+    index('cookies_expires_at_idx').on(table.expiresAt),
+    check('cookies_name_not_empty', sql`length(trim(${table.name})) > 0`),
+    check('cookies_domain_not_empty', sql`length(trim(${table.domain})) > 0`),
+    check('cookies_path_not_empty', sql`length(trim(${table.path})) > 0`),
+    check('cookies_same_site_check', sql`${table.sameSite} is null or ${table.sameSite} in ('strict', 'lax', 'none')`),
+  ]
+)
 
 export const treeItems = sqliteTable(
   'tree_items',

@@ -1,5 +1,6 @@
 import { createStore } from '@xstate/store'
 import {
+  DEFAULT_COOKIES_ENABLED,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_VIM_MODE,
@@ -75,6 +76,7 @@ export namespace AppSettingsCoordinator {
     responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
     compactRequestView: boolean
     vimMode: boolean
+    cookiesEnabled: boolean
   }) {
     appSettingsStore.trigger.savingStarted()
 
@@ -94,10 +96,11 @@ export namespace AppSettingsCoordinator {
     const current = appSettingsStore.getSnapshot().context.settings
     const result = await getWindowElectron().updateAppSettings({
       warnBeforeRequestAfterSeconds: current?.warnBeforeRequestAfterSeconds ?? DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
-      responseBodyDisplayMode: mode,
-      compactRequestView: current?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
-      vimMode: current?.vimMode ?? DEFAULT_VIM_MODE,
-    })
+        responseBodyDisplayMode: mode,
+        compactRequestView: current?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
+        vimMode: current?.vimMode ?? DEFAULT_VIM_MODE,
+        cookiesEnabled: current?.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED,
+      })
 
     if (!result.success) {
       toast.show(result)
@@ -126,4 +129,8 @@ export function getCompactRequestView() {
 
 export function getVimMode() {
   return appSettingsStore.getSnapshot().context.settings?.vimMode ?? DEFAULT_VIM_MODE
+}
+
+export function getCookiesEnabled() {
+  return appSettingsStore.getSnapshot().context.settings?.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED
 }

@@ -211,6 +211,20 @@
       "when": 1777670079263,
       "tag": "0029_ambiguous_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1778421497409,
+      "tag": "0030_clammy_proemial_gods",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1778422892473,
+      "tag": "0031_cool_longshot",
+      "breakpoints": true
     }
   ]
 }
