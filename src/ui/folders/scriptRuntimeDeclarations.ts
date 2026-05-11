@@ -165,6 +165,7 @@ declare const crypto: ScriptCryptoApi
 declare const clipboard: ScriptClipboardApi
 declare const z: typeof import('./vendor/zod/index.cjs').z
 declare function formatXml(xml: string): string
+declare function formatJson(json: string, indentation?: number): string
 `
 
 const scriptToastDeclarations = String.raw`

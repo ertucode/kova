@@ -19,6 +19,7 @@ const inputHash = await computeInputHash(rootDir, [
   'scripts/build-response-visualizer.mjs',
   'src/common/Auth.ts',
   'src/common/formatXml.ts',
+  'src/common/Json5.ts',
   'src/common/KeyValueRows.ts',
   'src/common/PathParams.ts',
   'src/common/RequestVariables.ts',

@@ -74,9 +74,9 @@ export async function formatJson5(value: string) {
   return format(value)
 }
 
-export function formatJson(value: string) {
+export function formatJson(value: string, indentation?: number) {
   const parsed = JSON5.parse(value)
-  return JSON.stringify(parsed, null, 2)
+  return JSON.stringify(parsed, null, indentation ?? 2)
 }
 
 export function normalizeJson5ToJson(value: string) {

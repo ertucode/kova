@@ -26,7 +26,8 @@ export type ScriptDocumentation = {
 
 const builtInGlobalsSection: ScriptDocumentationSection = {
   title: 'Built-in Globals',
-  description: 'The script VM includes standard JavaScript globals, so common language APIs are available without extra setup.',
+  description:
+    'The script VM includes standard JavaScript globals, so common language APIs are available without extra setup.',
   entries: [
     { label: 'Date.now()', detail: 'Returns the current timestamp in milliseconds.' },
     { label: 'new Date()', detail: 'Creates a standard JavaScript Date object.' },
@@ -44,7 +45,10 @@ const sharedSections: ScriptDocumentationSection[] = [
     entries: [
       { label: 'env.get(name, environmentName?)', detail: 'Returns the effective value for a variable or null.' },
       { label: 'env.has(name, environmentName?)', detail: 'Checks whether a variable exists.' },
-      { label: 'env.set(name, value, environmentName?)', detail: 'Updates an existing variable or creates it in the active environment.' },
+      {
+        label: 'env.set(name, value, environmentName?)',
+        detail: 'Updates an existing variable or creates it in the active environment.',
+      },
     ],
   },
   {
@@ -53,7 +57,10 @@ const sharedSections: ScriptDocumentationSection[] = [
     entries: [
       { label: 'scope.get(name)', detail: 'Returns a request-scoped value or null.' },
       { label: 'scope.has(name)', detail: 'Checks whether a request-scoped value exists.' },
-      { label: 'scope.set(name, value)', detail: 'Stores a request-scoped value for later scripts in the same execution.' },
+      {
+        label: 'scope.set(name, value)',
+        detail: 'Stores a request-scoped value for later scripts in the same execution.',
+      },
     ],
   },
   {
@@ -62,8 +69,16 @@ const sharedSections: ScriptDocumentationSection[] = [
     entries: [
       { label: 'request.method', detail: 'HTTP method.' },
       { label: 'request.url', detail: 'Draft request URL exactly as typed or mutated in the script.' },
-      { label: 'request.resolveUrl()', detail: 'Returns the resolved URL after variables, path params, search params, and auth query params are applied.' },
-      { label: 'request.pathParams', detail: 'Path params as mutable JSON rows: [{ key, value, enabled, description }]. You can edit rows in place or assign a new array.' },
+      {
+        label: 'request.resolveUrl()',
+        detail:
+          'Returns the resolved URL after variables, path params, search params, and auth query params are applied.',
+      },
+      {
+        label: 'request.pathParams',
+        detail:
+          'Path params as mutable JSON rows: [{ key, value, enabled, description }]. You can edit rows in place or assign a new array.',
+      },
       { label: 'request.body', detail: 'Request body string.' },
       { label: 'request.bodyType', detail: 'Current body mode.' },
       { label: 'request.rawType', detail: 'Current raw body format.' },
@@ -91,7 +106,7 @@ const sharedSections: ScriptDocumentationSection[] = [
     description: 'Show or hide app toasts from pre-request and post-request scripts.',
     entries: [
       {
-        label: "toast.show({ severity, title?, message?, timeout?, location?, id? })",
+        label: 'toast.show({ severity, title?, message?, timeout?, location?, id? })',
         detail: 'Shows a toast in the current window and returns its id.',
       },
       { label: 'toast.hide(id)', detail: 'Hides a previously shown toast by id.' },
@@ -102,8 +117,10 @@ const sharedSections: ScriptDocumentationSection[] = [
     description: 'Ask the current user for a text value during script execution.',
     entries: [
       {
-        label: 'await prompt.text({ title, message?, defaultValue?, placeholder?, confirmText?, cancelText?, required? })',
-        detail: 'Shows a prompt dialog and resolves to the entered text or null when cancelled. When required is true, cancelling or submitting a blank value throws an error.',
+        label:
+          'await prompt.text({ title, message?, defaultValue?, placeholder?, confirmText?, cancelText?, required? })',
+        detail:
+          'Shows a prompt dialog and resolves to the entered text or null when cancelled. When required is true, cancelling or submitting a blank value throws an error.',
       },
     ],
   },
@@ -143,7 +160,8 @@ const requestChainingSection: ScriptDocumentationSection = {
   entries: [
     {
       label: "await makeRequest(['Folder', 'Request Name'])",
-      detail: 'Switches the UI to the target HTTP request and sends it. The path starts at the workspace root and ends with the request name.',
+      detail:
+        'Switches the UI to the target HTTP request and sends it. The path starts at the workspace root and ends with the request name.',
     },
   ],
 }
@@ -151,7 +169,8 @@ const requestChainingSection: ScriptDocumentationSection = {
 export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, ScriptDocumentation> = {
   'pre-request': {
     title: 'Pre-request Script Docs',
-    description: 'Pre-request scripts run before the request is sent, so they are ideal for preparing headers, URLs, variables, and body content.',
+    description:
+      'Pre-request scripts run before the request is sent, so they are ideal for preparing headers, URLs, variables, and body content.',
     notes: [
       'Scripts run in an async sandbox, so you can use await.',
       'Each script has a 500ms execution timeout.',
@@ -174,7 +193,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       },
       {
         title: 'Fill a path param from the environment',
-          code: "const userId = env.get('userId')\nif (userId) {\n  const userRow = request.pathParams.find(row => row.key === 'userId')\n  if (userRow) {\n    userRow.value = userId\n  }\n  console.info(request.resolveUrl())\n}",
+        code: "const userId = env.get('userId')\nif (userId) {\n  const userRow = request.pathParams.find(row => row.key === 'userId')\n  if (userRow) {\n    userRow.value = userId\n  }\n  console.info(request.resolveUrl())\n}",
       },
       {
         title: 'Validate required config',
@@ -196,7 +215,8 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
   },
   'post-request': {
     title: 'Post-request Script Docs',
-    description: 'Post-request scripts run after the response is received, so they are useful for inspecting results, saving values, and logging request outcomes.',
+    description:
+      'Post-request scripts run after the response is received, so they are useful for inspecting results, saving values, and logging request outcomes.',
     notes: [
       'Scripts run in an async sandbox, so you can use await.',
       'Each script has a 500ms execution timeout.',
@@ -241,7 +261,8 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
   },
   'response-visualizer': {
     title: 'Response Visualizer Docs',
-    description: 'Response visualizers run in a sandboxed iframe as TSX modules and render custom JSX in the response pane.',
+    description:
+      'Response visualizers run in a sandboxed iframe as TSX modules and render custom JSX in the response pane.',
     notes: [
       'Write normal module code and export default a component function.',
       'Use the same globals as post-request scripts: env, scope, request, response, console, crypto, and z.',
@@ -265,6 +286,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
           { label: 'request.pathParams', detail: 'Read or mutate request path params as JSON rows.' },
           { label: 'z.object(shape)', detail: 'Validate complex response payloads.' },
           { label: 'formatXml(xml)', detail: 'Pretty-print XML strings before rendering or viewing them.' },
+          {
+            label: 'formatJson(json, indentation?)',
+            detail: 'Pretty-print JSON strings before rendering or viewing them.',
+          },
           { label: '<Table list={rows} />', detail: 'Render an inferred table from an array of objects.' },
           { label: '<CodeEditor ... />', detail: 'Render the shared editor component inside the visualizer.' },
         ],
@@ -282,10 +307,14 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       },
       {
         title: 'CodeEditor Props',
-        description: 'The visualizer runtime exposes the same CodeEditor component used elsewhere in the app, except custom extensions are not supported here.',
+        description:
+          'The visualizer runtime exposes the same CodeEditor component used elsewhere in the app, except custom extensions are not supported here.',
         entries: [
           { label: 'value', detail: 'Editor content string.' },
-          { label: "language: 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'", detail: 'Syntax highlighting mode.' },
+          {
+            label: "language: 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'",
+            detail: 'Syntax highlighting mode.',
+          },
           { label: 'onChange(value, params)', detail: 'Receive content updates and caret metadata.' },
           { label: 'readOnly', detail: 'Disable editing for inspector-style viewers.' },
           { label: 'showLineNumbers', detail: 'Show the line number gutter.' },
@@ -331,7 +360,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       },
       {
         title: 'Format XML response body',
-        code: "export default function XmlViewer() {\n  if (response?.body.type !== 'text') {\n    return <div>No XML body</div>\n  }\n\n  try {\n    return (\n      <CodeEditor\n        value={formatXml(response.body.data)}\n        language=\"xml\"\n        readOnly\n        showLineNumbers\n        minHeightClassName=\"min-h-[320px]\"\n      />\n    )\n  } catch {\n    return <pre>{response.body.data}</pre>\n  }\n}",
+        code: 'export default function XmlViewer() {\n  if (response?.body.type !== \'text\') {\n    return <div>No XML body</div>\n  }\n\n  try {\n    return (\n      <CodeEditor\n        value={formatXml(response.body.data)}\n        language="xml"\n        readOnly\n        showLineNumbers\n        minHeightClassName="min-h-[320px]"\n      />\n    )\n  } catch {\n    return <pre>{response.body.data}</pre>\n  }\n}',
       },
       {
         title: 'Editable scratchpad with CodeEditor',

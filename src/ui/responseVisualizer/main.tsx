@@ -7,6 +7,7 @@ import { z } from 'zod'
 import type { HttpAuth } from '@common/Auth'
 import { getAuthQueryParams, resolveAuth } from '@common/Auth'
 import { formatXml } from '@common/formatXml'
+import { formatJson } from '@common/Json5'
 import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '@common/PathParams'
 import { resolveTemplateVariables } from '@common/RequestVariables'
@@ -132,11 +133,7 @@ function renderVisualizer(source: string, payload: VisualizerPayload) {
   const transpiled = compileVisualizer(combinedSource)
   const rendered = runVisualizer(transpiled, payload)
 
-  root.render(
-    <VisualizerErrorBoundary source={source}>
-      {rendered}
-    </VisualizerErrorBoundary>
-  )
+  root.render(<VisualizerErrorBoundary source={source}>{rendered}</VisualizerErrorBoundary>)
 }
 
 function runVisualizer(code: string, payload: VisualizerPayload) {
@@ -206,6 +203,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     'crypto',
     'z',
     'formatXml',
+    'formatJson',
     'Table',
     'CodeEditor',
     `${code}\n//# sourceURL=response-visualizer.js`
@@ -233,6 +231,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     crypto,
     z,
     formatXml,
+    formatJson,
     Table,
     VisualizerCodeEditor
   )
@@ -277,7 +276,13 @@ function createSharedScriptModuleLoader(
 ) {
   const modulesByName = new Map(
     payload.sharedScripts
-      .filter(script => script.isActive && script.kind === 'module' && script.targets.includes('response-visualizer') && script.name.trim())
+      .filter(
+        script =>
+          script.isActive &&
+          script.kind === 'module' &&
+          script.targets.includes('response-visualizer') &&
+          script.name.trim()
+      )
       .map(script => [script.name, script] as const)
   )
   const cache = new Map<string, Record<string, unknown>>()
@@ -328,6 +333,7 @@ function createSharedScriptModuleLoader(
         'crypto',
         'z',
         'formatXml',
+        'formatJson',
         'Table',
         'CodeEditor',
         `${compiled}\n//# sourceURL=response-visualizer-shared.js`
@@ -355,6 +361,7 @@ function createSharedScriptModuleLoader(
         crypto,
         z,
         formatXml,
+        formatJson,
         globals.Table,
         globals.CodeEditor
       )
@@ -375,21 +382,18 @@ function createSharedScriptModuleLoader(
 }
 
 function renderError(error: VisualizerErrorDetails) {
-  root.render(
-    <pre className="error">
-      {`${error.compactMessage}\n\n${error.detailedMessage}`.trim()}
-    </pre>
-  )
+  root.render(<pre className="error">{`${error.compactMessage}\n\n${error.detailedMessage}`.trim()}</pre>)
 }
 
 function formatVisualizerDiagnostic(diagnostic: ts.Diagnostic, source: string): VisualizerErrorDetails {
   const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
-  const location = diagnostic.file && typeof diagnostic.start === 'number'
-    ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
-    : null
+  const location =
+    diagnostic.file && typeof diagnostic.start === 'number'
+      ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
+      : null
   const line = location ? location.line + 1 : null
   const column = location ? location.character + 1 : null
-  const sourceLine = line ? source.split('\n')[line - 1]?.trimEnd() ?? null : null
+  const sourceLine = line ? (source.split('\n')[line - 1]?.trimEnd() ?? null) : null
   const compactMessage = line ? `Response Visualizer:${line} ${message}` : `Response Visualizer ${message}`
   const detailedLines = ['Phase: Response Visualizer']
 
@@ -413,14 +417,18 @@ function formatVisualizerError(error: unknown, source: string): VisualizerErrorD
   }
 
   const message = error instanceof Error ? error.message : String(error)
-  const stack = error instanceof Error ? error.stack ?? '' : ''
+  const stack = error instanceof Error ? (error.stack ?? '') : ''
   const location = extractVisualizerRuntimeLocation(stack, source)
-  const compactMessage = location?.line ? `Response Visualizer:${location.line} ${message}` : `Response Visualizer ${message}`
+  const compactMessage = location?.line
+    ? `Response Visualizer:${location.line} ${message}`
+    : `Response Visualizer ${message}`
   const detailedLines = ['Phase: Response Visualizer']
 
   if (location?.line !== undefined && location.line !== null) {
     detailedLines.push(
-      location.column !== null ? `Location: line ${location.line}, column ${location.column}` : `Location: line ${location.line}`
+      location.column !== null
+        ? `Location: line ${location.line}, column ${location.column}`
+        : `Location: line ${location.line}`
     )
   }
   if (location?.sourceLine) {
@@ -576,7 +584,9 @@ function createEnvironmentApi(snapshot: VisualizerPayload['env']) {
           null
 
       if (!targetEnvironment) {
-        throw new Error(environmentName ? 'Environment not found for env.set' : 'No active environment is available for env.set')
+        throw new Error(
+          environmentName ? 'Environment not found for env.set' : 'No active environment is available for env.set'
+        )
       }
 
       targetEnvironment.values[name] = value
