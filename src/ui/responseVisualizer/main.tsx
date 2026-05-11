@@ -4,7 +4,14 @@ import React, { type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import ts from 'typescript'
 import { z } from 'zod'
+import type { HttpAuth } from '@common/Auth'
+import { getAuthQueryParams, resolveAuth } from '@common/Auth'
+import { formatXml } from '@common/formatXml'
+import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
+import { applyPathParamsToUrl, applySearchParamsToUrl } from '@common/PathParams'
+import { resolveTemplateVariables } from '@common/RequestVariables'
 import type { SharedScriptRecord } from '@common/SharedScripts'
+import { CodeEditor } from '../folders/CodeEditor'
 
 type VisualizerResponseApi = {
   status: number
@@ -26,6 +33,9 @@ type VisualizerPayload = {
   request: {
     method: string
     url: string
+    pathParams: string
+    searchParams: string
+    auth: HttpAuth
     body: string
     bodyType: string
     rawType: string
@@ -49,6 +59,10 @@ type VisualizerErrorDetails = {
   compactMessage: string
   detailedMessage: string
 }
+
+type VisualizerCodeEditorComponent = React.ComponentType<React.ComponentProps<typeof CodeEditor>>
+
+const noopCodeEditorOnChange = () => undefined
 
 const READY_EVENT = 'kova-response-visualizer-ready'
 const RENDER_EVENT = 'kova-response-visualizer-render'
@@ -128,19 +142,12 @@ function renderVisualizer(source: string, payload: VisualizerPayload) {
 function runVisualizer(code: string, payload: VisualizerPayload) {
   const module = { exports: {} as Record<string, unknown> }
   const exports = module.exports
-  const requestHeaders = createHeaderApi(payload.request.headers)
-  const request = {
-    method: payload.request.method,
-    url: payload.request.url,
-    body: payload.request.body,
-    bodyType: payload.request.bodyType,
-    rawType: payload.request.rawType,
-    headers: requestHeaders,
-  }
+  const request = createRequestApi(payload)
   const env = createEnvironmentApi(payload.env)
   const scope = createScopeApi(payload.scope)
   const response = payload.response
   const Table = createTableComponent()
+  const VisualizerCodeEditor = createVisualizerCodeEditor()
   const {
     Fragment,
     startTransition,
@@ -172,6 +179,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     request,
     response,
     Table,
+    CodeEditor: VisualizerCodeEditor,
   })
 
   new Function(
@@ -197,7 +205,9 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     'requireScript',
     'crypto',
     'z',
+    'formatXml',
     'Table',
+    'CodeEditor',
     `${code}\n//# sourceURL=response-visualizer.js`
   )(
     module,
@@ -222,7 +232,9 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     requireScript,
     crypto,
     z,
-    Table
+    formatXml,
+    Table,
+    VisualizerCodeEditor
   )
 
   const component = module.exports.default || exports.default
@@ -260,6 +272,7 @@ function createSharedScriptModuleLoader(
     }
     response: VisualizerPayload['response']
     Table: ReturnType<typeof createTableComponent>
+    CodeEditor: VisualizerCodeEditorComponent
   }
 ) {
   const modulesByName = new Map(
@@ -314,7 +327,9 @@ function createSharedScriptModuleLoader(
         'requireScript',
         'crypto',
         'z',
+        'formatXml',
         'Table',
+        'CodeEditor',
         `${compiled}\n//# sourceURL=response-visualizer-shared.js`
       )(
         module,
@@ -339,7 +354,9 @@ function createSharedScriptModuleLoader(
         loadModule,
         crypto,
         z,
-        globals.Table
+        formatXml,
+        globals.Table,
+        globals.CodeEditor
       )
 
       const exportedKeys = Object.keys(module.exports).filter(key => key !== '__esModule')
@@ -572,6 +589,147 @@ function createEnvironmentApi(snapshot: VisualizerPayload['env']) {
   }
 }
 
+function createRequestApi(payload: VisualizerPayload) {
+  const state = {
+    method: payload.request.method,
+    url: payload.request.url,
+    pathParams: payload.request.pathParams,
+    searchParams: payload.request.searchParams,
+    auth: payload.request.auth,
+    body: payload.request.body,
+    bodyType: payload.request.bodyType,
+    rawType: payload.request.rawType,
+  }
+
+  const headers = createHeaderApi(payload.request.headers)
+
+  return {
+    get method() {
+      return state.method
+    },
+    set method(value: string) {
+      state.method = value
+    },
+    get url() {
+      return state.url
+    },
+    set url(value: string) {
+      state.url = value
+    },
+    get body() {
+      return state.body
+    },
+    set body(value: string) {
+      state.body = value
+    },
+    get bodyType() {
+      return state.bodyType
+    },
+    get rawType() {
+      return state.rawType
+    },
+    get pathParams() {
+      return createLivePathParamsApi(state)
+    },
+    set pathParams(value: Array<{ key: string; value: string; enabled: boolean; description: string }>) {
+      state.pathParams = stringifyKeyValueRows(
+        value.map((row, index) => ({
+          id: `visualizer-path-param-${index}`,
+          key: row.key,
+          value: row.value,
+          enabled: row.enabled,
+          description: row.description,
+        }))
+      )
+    },
+    resolveUrl() {
+      return resolveRequestUrl(state, payload.env.activeValues)
+    },
+    headers,
+  }
+}
+
+function createLivePathParamsApi(state: { pathParams: string }) {
+  return parseKeyValueRows(state.pathParams).map((_, index) => ({
+    get key() {
+      return parseKeyValueRows(state.pathParams)[index]?.key ?? ''
+    },
+    set key(value: string) {
+      updatePathParam(state, index, { key: value })
+    },
+    get value() {
+      return parseKeyValueRows(state.pathParams)[index]?.value ?? ''
+    },
+    set value(value: string) {
+      updatePathParam(state, index, { value })
+    },
+    get enabled() {
+      return parseKeyValueRows(state.pathParams)[index]?.enabled ?? true
+    },
+    set enabled(value: boolean) {
+      updatePathParam(state, index, { enabled: value })
+    },
+    get description() {
+      return parseKeyValueRows(state.pathParams)[index]?.description ?? ''
+    },
+    set description(value: string) {
+      updatePathParam(state, index, { description: value })
+    },
+  }))
+}
+
+function updatePathParam(
+  state: { pathParams: string },
+  index: number,
+  partial: Partial<{ key: string; value: string; enabled: boolean; description: string }>
+) {
+  const rows = parseKeyValueRows(state.pathParams)
+  const currentRow = rows[index]
+  if (!currentRow) {
+    return
+  }
+
+  rows[index] = {
+    ...currentRow,
+    key: partial.key ?? currentRow.key,
+    value: partial.value ?? currentRow.value,
+    enabled: partial.enabled ?? currentRow.enabled,
+    description: partial.description ?? currentRow.description,
+  }
+
+  state.pathParams = stringifyKeyValueRows(rows)
+}
+
+function resolveRequestUrl(
+  request: { url: string; pathParams: string; searchParams: string; auth: HttpAuth },
+  variables: Record<string, string>
+) {
+  const urlWithTemplatesResolved = resolveTemplateVariables(request.url, variables).trim()
+  const resolvedPathParams = resolveTemplateVariables(request.pathParams, variables)
+  const { url: urlWithPathParams } = applyPathParamsToUrl(urlWithTemplatesResolved, resolvedPathParams)
+  const urlWithSearchParams = applySearchParamsToUrl(urlWithPathParams, request.searchParams, variables)
+
+  return applyAuthToUrl(urlWithSearchParams, resolveAuth(request.auth, variables))
+}
+
+function applyAuthToUrl(url: string, auth: HttpAuth) {
+  const entries = getAuthQueryParams(auth)
+  if (entries.length === 0 || !url) {
+    return url
+  }
+
+  try {
+    const nextUrl = new URL(url)
+    for (const entry of entries) {
+      nextUrl.searchParams.set(entry.key, entry.value)
+    }
+
+    return nextUrl.toString()
+  } catch {
+    return url
+  }
+}
+
 function createScopeApi(snapshot: Record<string, string>) {
   const values = new Map(Object.entries(snapshot))
 
@@ -682,6 +840,12 @@ function createTableComponent() {
   }
 }
 
+function createVisualizerCodeEditor(): VisualizerCodeEditorComponent {
+  return function VisualizerCodeEditor({ onChange, ...props }: React.ComponentProps<typeof CodeEditor>) {
+    return <CodeEditor {...props} onChange={onChange ?? noopCodeEditorOnChange} />
+  }
+}
+
 function isRecordLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -708,6 +872,9 @@ function createEmptyPayload(): VisualizerPayload {
     request: {
       method: '',
       url: '',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
       body: '',
       bodyType: 'none',
       rawType: 'text',

@@ -24,6 +24,7 @@ import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderEx
 import { requestExecutionStore } from './requestExecutionStore'
 import { AppSettingsCoordinator, appSettingsStore } from '@/global/appSettingsStore'
 import { Tooltip } from '../components/Tooltip'
+import { formatXml } from '@common/formatXml'
 
 const readOnlyCodeEditorOnChange = () => undefined
 const jsonResponsePathExtension = createJsonResponsePathExtension()
@@ -78,17 +79,20 @@ export function RequestDetailsResponsePanel({
     [selectedRequestId]
   )
   const responseVisualizerRequestDraft = useMemo<
-    Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+    Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   >(
     () => ({
       method: draft.method,
       url: draft.url,
+      pathParams: draft.pathParams,
+      searchParams: draft.searchParams,
+      auth: draft.auth,
       headers: draft.headers,
       body: draft.body,
       bodyType: draft.bodyType,
       rawType: draft.rawType,
     }),
-    [draft.body, draft.bodyType, draft.headers, draft.method, draft.rawType, draft.url]
+    [draft.auth, draft.body, draft.bodyType, draft.headers, draft.method, draft.pathParams, draft.rawType, draft.searchParams, draft.url]
   )
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
   const sseStreamContentType = useMemo(() => getResponseContentType(sseStream?.headers ?? ''), [sseStream?.headers])
@@ -302,14 +306,14 @@ export function RequestDetailsResponsePanel({
                 preferredResponseBodyView={draft.preferredResponseBodyView}
                 responseBodyDisplayMode={responseBodyDisplayMode}
                 requestSelection={responseBodyRequestSelection}
-                 requestDraft={responseVisualizerRequestDraft}
-                 sharedScripts={sharedScripts}
-                 onUpdateResponseTableAccessor={updateResponseTableAccessor}
-                 onUpdateResponseBodyDisplayMode={AppSettingsCoordinator.saveResponseBodyDisplayMode}
-                 environments={visualizerEnvironments}
-                 response={response}
-                 onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
-               />
+                requestDraft={responseVisualizerRequestDraft}
+                sharedScripts={sharedScripts}
+                onUpdateResponseTableAccessor={updateResponseTableAccessor}
+                onUpdateResponseBodyDisplayMode={AppSettingsCoordinator.saveResponseBodyDisplayMode}
+                environments={visualizerEnvironments}
+                response={response}
+                onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
+              />
             </>
           )}
         </div>
@@ -412,7 +416,7 @@ type ResponseBodyContentState =
       source: string
       response: SendRequestResponse
       contentType: string | null
-      requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+      requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
       environments: Array<{
         id: string
         name: string
@@ -479,7 +483,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   preferredResponseBodyView: 'raw' | 'table' | 'visualizer'
   responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
   requestSelection: { itemType: 'request'; id: string } | null
-  requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   onUpdateResponseTableAccessor: (value: string) => void
   onUpdateResponseBodyDisplayMode: (mode: AppSettingsResponseBodyDisplayMode) => Promise<boolean>
   environments: Array<{
@@ -1132,7 +1136,7 @@ function SseResponsePanel({
             </span>
           ) : null}
           {stream ? <span>{stream.state}</span> : null}
-           <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+          <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
             <button
               type="button"
               className={[
@@ -1187,11 +1191,7 @@ function SseResponsePanel({
   )
 }
 
-function ResponseStatusSummary({
-  response,
-}: {
-  response: SendRequestResponse | null
-}) {
+function ResponseStatusSummary({ response }: { response: SendRequestResponse | null }) {
   const statusTone = getStatusTone(response?.status)
 
   if (!response) {
@@ -1230,31 +1230,29 @@ function JsonPathHoverTooltip({
   valuePreview?: string
   hovered: 'key' | 'value'
 }) {
-  const topSection = hovered === 'value'
-    ? value
-      ? (
-          <CopyableTooltipRow
-            label="Value"
-            value={value}
-            displayValue={valuePreview ?? value}
-            successMessage="JSON value copied to clipboard."
-          />
-        )
-      : null
-    : keyName
-      ? <CopyableTooltipRow label="Key" value={keyName} successMessage="JSON key copied to clipboard." />
-      : null
-  const secondaryValue = hovered === 'key' && value !== undefined
-    ? (
+  const topSection =
+    hovered === 'value' ? (
+      value ? (
         <CopyableTooltipRow
           label="Value"
           value={value}
           displayValue={valuePreview ?? value}
           successMessage="JSON value copied to clipboard."
-          compact
         />
-      )
-    : null
+      ) : null
+    ) : keyName ? (
+      <CopyableTooltipRow label="Key" value={keyName} successMessage="JSON key copied to clipboard." />
+    ) : null
+  const secondaryValue =
+    hovered === 'key' && value !== undefined ? (
+      <CopyableTooltipRow
+        label="Value"
+        value={value}
+        displayValue={valuePreview ?? value}
+        successMessage="JSON value copied to clipboard."
+        compact
+      />
+    ) : null
 
   return (
     <div className="max-w-[28rem] p-3">
@@ -1298,8 +1296,10 @@ function CopyableTooltipRow({
     <div className="space-y-2">
       <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/50">{label}</div>
       <div className="flex items-center gap-2">
-        <code className={`min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-base-content/10 bg-base-100/70 text-xs text-base-content ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
-        {displayValue ?? value}
+        <code
+          className={`min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-base-content/10 bg-base-100/70 text-xs text-base-content ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}
+        >
+          {displayValue ?? value}
         </code>
         <button
           type="button"
@@ -1421,7 +1421,12 @@ function getJsonPropertyPathMatch(
         }
       }
 
-      if (valueNode && isDirectlyHoverableJsonValueNode(valueNode) && offset >= valueNode.offset && offset <= valueNode.offset + valueNode.length) {
+      if (
+        valueNode &&
+        isDirectlyHoverableJsonValueNode(valueNode) &&
+        offset >= valueNode.offset &&
+        offset <= valueNode.offset + valueNode.length
+      ) {
         return {
           from: valueNode.offset,
           to: valueNode.offset + valueNode.length,
@@ -1644,88 +1649,6 @@ function formatBytes(value: number) {
     return `${(value / 1024).toFixed(1)} KB`
   }
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatXml(xml: string): string {
-  const parser = new DOMParser()
-  const documentNode = parser.parseFromString(xml, 'application/xml')
-  const parseError = documentNode.querySelector('parsererror')
-  if (parseError || !documentNode.documentElement) {
-    throw new Error('Invalid XML')
-  }
-
-  const lines: string[] = []
-
-  for (const node of Array.from(documentNode.childNodes)) {
-    serializeXmlNode(node, 0, lines)
-  }
-
-  return lines.join('\n').trim()
-}
-
-function serializeXmlNode(node: Node, indentLevel: number, lines: string[]) {
-  const indent = '  '.repeat(indentLevel)
-
-  if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {
-    lines.push(`${indent}<?${node.nodeName} ${node.nodeValue ?? ''}?>`.trimEnd())
-    return
-  }
-
-  if (node.nodeType === Node.COMMENT_NODE) {
-    lines.push(`${indent}<!--${node.nodeValue ?? ''}-->`)
-    return
-  }
-
-  if (node.nodeType === Node.CDATA_SECTION_NODE) {
-    lines.push(`${indent}<![CDATA[${node.nodeValue ?? ''}]]>`)
-    return
-  }
-
-  if (node.nodeType === Node.TEXT_NODE) {
-    const text = node.textContent?.trim()
-    if (text) {
-      lines.push(`${indent}${text}`)
-    }
-    return
-  }
-
-  if (node.nodeType !== Node.ELEMENT_NODE) {
-    return
-  }
-
-  const element = node as Element
-  const tagName = element.tagName
-  const attributes = Array.from(element.attributes)
-    .map(attribute => `${attribute.name}=${JSON.stringify(attribute.value)}`)
-    .join(' ')
-  const openingTag = attributes ? `<${tagName} ${attributes}>` : `<${tagName}>`
-  const childNodes = Array.from(element.childNodes).filter(child => {
-    return child.nodeType !== Node.TEXT_NODE || Boolean(child.textContent?.trim())
-  })
-
-  if (childNodes.length === 0) {
-    lines.push(attributes ? `${indent}<${tagName} ${attributes} />` : `${indent}<${tagName} />`)
-    return
-  }
-
-  const hasSingleTextChild =
-    childNodes.length === 1 &&
-    (childNodes[0]?.nodeType === Node.TEXT_NODE || childNodes[0]?.nodeType === Node.CDATA_SECTION_NODE)
-
-  if (hasSingleTextChild) {
-    const content =
-      childNodes[0]?.nodeType === Node.CDATA_SECTION_NODE
-        ? `<![CDATA[${childNodes[0].nodeValue ?? ''}]]>`
-        : (childNodes[0]?.textContent?.trim() ?? '')
-    lines.push(`${indent}${openingTag}${content}</${tagName}>`)
-    return
-  }
-
-  lines.push(`${indent}${openingTag}`)
-  for (const child of childNodes) {
-    serializeXmlNode(child, indentLevel + 1, lines)
-  }
-  lines.push(`${indent}</${tagName}>`)
 }
 
 function formatHtml(html: string): string {

@@ -164,6 +164,7 @@ declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
 declare const clipboard: ScriptClipboardApi
 declare const z: typeof import('./vendor/zod/index.cjs').z
+declare function formatXml(xml: string): string
 `
 
 const scriptToastDeclarations = String.raw`
@@ -197,6 +198,12 @@ const responseVisualizerDeclarations = String.raw`
 type SetStateAction<T> = T | ((previousState: T) => T)
 type Dispatch<T> = (value: T) => void
 type DependencyList = readonly unknown[]
+type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'
+type ReactElementLike = {
+  readonly type: unknown
+  readonly props: unknown
+  readonly key: string | number | null
+}
 
 interface RefObject<T> {
   current: T
@@ -230,6 +237,54 @@ interface TableProps {
   emptyMessage?: string
 }
 
+type CodeEditorPasteParams = {
+  text: string
+  value: string
+  selectionFrom: number
+  selectionTo: number
+  selectedText: string
+}
+
+type CodeEditorSelection = {
+  anchor: number
+  head: number
+}
+
+type CodeEditorChangeParams = {
+  caretPos: number
+  previousValue: string
+  previousCaretPos: number
+}
+
+interface CodeEditorHandle {
+  focusLine(line: number, column?: number | null): void
+}
+
+interface CodeEditorProps {
+  ref?: RefObject<CodeEditorHandle | null>
+  testId?: string
+  value: string
+  language: CodeEditorLanguage
+  placeholder?: string
+  minHeightClassName?: string
+  className?: string
+  singleLine?: boolean
+  compact?: boolean
+  size?: 'normal' | 'small'
+  hideFocusOutline?: boolean
+  readOnly?: boolean
+  showFoldGutter?: boolean
+  showLineNumbers?: boolean
+  onPasteText?: (params: CodeEditorPasteParams) => boolean
+  onChange?: (value: string, params: CodeEditorChangeParams) => void
+  onSelectionChange?: (selection: CodeEditorSelection) => void
+  onBlur?: () => void
+  initialSelection?: CodeEditorSelection | null
+  linePaddingOverride?: string
+  vimMode?: boolean
+  refreshKey?: string
+}
+
 declare const React: ReactApi
 declare const Fragment: ReactApi['Fragment']
 declare const useState: ReactApi['useState']
@@ -242,7 +297,8 @@ declare const useId: ReactApi['useId']
 declare const useReducer: ReactApi['useReducer']
 declare const useDeferredValue: ReactApi['useDeferredValue']
 declare const startTransition: ReactApi['startTransition']
-declare function Table(props: TableProps): unknown
+declare function Table(props: TableProps): ReactElementLike | null
+declare function CodeEditor(props: CodeEditorProps): ReactElementLike | null
 `
 
 export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {

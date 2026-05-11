@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap } from '@common/EnvironmentVariables'
+import type { HttpAuth } from '@common/Auth'
 import type { SendRequestResponse } from '@common/Requests'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
@@ -33,6 +34,9 @@ type VisualizerPayload = {
   request: {
     method: string
     url: string
+    pathParams: string
+    searchParams: string
+    auth: HttpAuth
     body: string
     bodyType: string
     rawType: string
@@ -66,7 +70,7 @@ export function ResponseVisualizerPreview({
   source: string
   response: SendRequestResponse | null
   contentType: string | null
-  requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   environments: VisualizerEnvironmentSnapshot[]
   sharedScripts: SharedScriptRecord[]
 }) {
@@ -103,6 +107,9 @@ export function ResponseVisualizerPreview({
       request: {
         method: requestSnapshot?.method ?? requestDraft.method,
         url: requestSnapshot?.url ?? requestDraft.url,
+        pathParams: requestDraft.pathParams,
+        searchParams: requestDraft.searchParams,
+        auth: requestDraft.auth,
         body: requestSnapshot?.body ?? requestDraft.body,
         bodyType: requestSnapshot?.bodyType ?? requestDraft.bodyType,
         rawType: requestSnapshot?.rawType ?? requestDraft.rawType,
