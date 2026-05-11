@@ -54,21 +54,6 @@ const selectionMatchTheme = EditorView.theme({
     backgroundColor: 'transparent !important',
   },
 })
-const smallSizeTheme = EditorView.theme({
-  '&': {
-    fontSize: '0.78rem !important',
-  },
-  '.cm-scroller': {
-    fontSize: '0.78rem !important',
-  },
-  '.cm-content': {
-    fontSize: '0.78rem !important',
-    lineHeight: '1.35rem !important',
-  },
-  '.cm-line': {
-    fontSize: '0.78rem !important',
-  },
-})
 const hideFocusOutlineTheme = EditorView.theme({
   '&.cm-focused': {
     outline: 'none !important',
@@ -287,6 +272,29 @@ const editorTheme = EditorView.theme({
   },
 })
 
+function createScaledEditorTheme(size: 'normal' | 'small', scale: number) {
+  const baseFontSizeRem = size === 'small' ? 0.78 : 0.875
+  const baseLineHeightRem = size === 'small' ? 1.35 : 1.5
+  const scaledFontSizeRem = baseFontSizeRem * scale
+  const scaledLineHeightRem = baseLineHeightRem * scale
+
+  return EditorView.theme({
+    '&': {
+      fontSize: `${scaledFontSizeRem}rem !important`,
+    },
+    '.cm-scroller': {
+      fontSize: `${scaledFontSizeRem}rem !important`,
+    },
+    '.cm-content': {
+      fontSize: `${scaledFontSizeRem}rem !important`,
+      lineHeight: `${scaledLineHeightRem}rem !important`,
+    },
+    '.cm-line': {
+      fontSize: `${scaledFontSizeRem}rem !important`,
+    },
+  })
+}
+
 function createFoldMarker(isOpen: boolean) {
   const wrapper = document.createElement('span')
   wrapper.setAttribute('aria-hidden', 'true')
@@ -389,6 +397,9 @@ function centerPositionInView(view: EditorView, position: number) {
 }
 
 export const CodeEditor = memo(function CodeEditor({
+  // The props here should also be reflected in response visualizer runtime
+  // scriptRuntimeDeclarations.ts
+  // scriptDocumentation.ts
   ref,
   testId,
   value,
@@ -400,6 +411,7 @@ export const CodeEditor = memo(function CodeEditor({
   singleLine,
   compact,
   size = 'normal',
+  scale = 1,
   hideFocusOutline,
   readOnly,
   showFoldGutter,
@@ -424,6 +436,7 @@ export const CodeEditor = memo(function CodeEditor({
   singleLine?: boolean
   compact?: boolean
   size?: 'normal' | 'small'
+  scale?: number
   hideFocusOutline?: boolean
   readOnly?: boolean
   showFoldGutter?: boolean
@@ -577,6 +590,8 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [language])
 
+  const scaledEditorTheme = useMemo(() => createScaledEditorTheme(size, scale), [scale, size])
+
   const compactTheme = useMemo(() => {
     if (!compact) {
       return null
@@ -656,6 +671,7 @@ export const CodeEditor = memo(function CodeEditor({
       ...baseSetupExtensions,
       tabSizeExtension,
       editorTheme,
+      scaledEditorTheme,
       syntaxHighlighting(editorHighlightStyle),
       selectionMatchTheme,
       selectionListenerExtension,
@@ -663,10 +679,6 @@ export const CodeEditor = memo(function CodeEditor({
 
     if (resolvedVimMode) {
       nextExtensions.unshift(vimExtension)
-    }
-
-    if (size === 'small') {
-      nextExtensions.push(smallSizeTheme)
     }
 
     if (compactTheme) {
@@ -722,10 +734,10 @@ export const CodeEditor = memo(function CodeEditor({
     pasteHandlerExtension,
     placeholderValueExtension,
     readOnly,
+    scaledEditorTheme,
     showFoldGutter,
     showLineNumbers,
     singleLine,
-    size,
     resolvedVimMode,
     selectionListenerExtension,
   ])

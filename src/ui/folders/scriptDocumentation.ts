@@ -294,6 +294,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
           { label: 'singleLine', detail: 'Restrict the editor to a single line.' },
           { label: 'compact', detail: 'Use compact vertical spacing.' },
           { label: "size: 'normal' | 'small'", detail: 'Switch between regular and compact font sizing.' },
+          { label: 'scale', detail: 'Multiply the editor font size and line height by this value.' },
           { label: 'hideFocusOutline', detail: 'Suppress the focus outline.' },
           { label: 'minHeightClassName', detail: 'Apply a Tailwind min-height class to the outer wrapper.' },
           { label: 'className', detail: 'Apply custom classes to the outer wrapper.' },

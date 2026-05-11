@@ -271,6 +271,7 @@ interface CodeEditorProps {
   singleLine?: boolean
   compact?: boolean
   size?: 'normal' | 'small'
+  scale?: number
   hideFocusOutline?: boolean
   readOnly?: boolean
   showFoldGutter?: boolean
