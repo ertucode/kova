@@ -1259,21 +1259,7 @@ function JsonPathHoverTooltip({
       {topSection}
       <div className="mt-3 space-y-2 rounded-lg border border-base-content/10 bg-base-100/60 p-2.5">
         {secondaryValue}
-        <div className="flex items-center gap-2 text-[11px] text-base-content/60">
-          <span className="shrink-0 font-semibold uppercase tracking-[0.08em]">Path</span>
-          <code className="min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap text-xs text-base-content/80">
-            {path}
-          </code>
-          <button
-            type="button"
-            className="shrink-0 rounded-md border border-base-content/10 bg-base-100/80 p-1.5 text-base-content/70 transition hover:border-base-content/20 hover:text-base-content"
-            onClick={() => void copyTextToClipboard(path, 'JSON path copied to clipboard.')}
-            title="Copy JSON path"
-            aria-label="Copy JSON path"
-          >
-            <CopyIcon className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <CopyableTooltipRow label="Path" value={path} successMessage="JSON path copied to clipboard." compact />
       </div>
     </div>
   )
@@ -1293,24 +1279,22 @@ function CopyableTooltipRow({
   compact?: boolean
 }) {
   return (
-    <div className="space-y-2">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/50">{label}</div>
-      <div className="flex items-center gap-2">
-        <code
-          className={`min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-base-content/10 bg-base-100/70 text-xs text-base-content ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}
-        >
-          {displayValue ?? value}
-        </code>
-        <button
-          type="button"
-          className={`shrink-0 rounded-md border border-base-content/10 bg-base-100/80 text-base-content/70 transition hover:border-base-content/20 hover:text-base-content ${compact ? 'p-1.5' : 'p-2'}`}
-          onClick={() => void copyTextToClipboard(value, successMessage)}
-          title={`Copy ${label}`}
-          aria-label={`Copy ${label}`}
-        >
-          <CopyIcon className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-        </button>
-      </div>
+    <div className="flex items-center gap-2">
+      <div className="w-12 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/50">{label}</div>
+      <code
+        className={`min-w-0 flex-1 select-text overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-base-content/10 bg-base-100/70 text-xs text-base-content ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}
+      >
+        {displayValue ?? value}
+      </code>
+      <button
+        type="button"
+        className={`shrink-0 rounded-md border border-base-content/10 bg-base-100/80 text-base-content/70 transition hover:border-base-content/20 hover:text-base-content ${compact ? 'p-1.5' : 'p-2'}`}
+        onClick={() => void copyTextToClipboard(value, successMessage)}
+        title={`Copy ${label}`}
+        aria-label={`Copy ${label}`}
+      >
+        <CopyIcon className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+      </button>
     </div>
   )
 }
