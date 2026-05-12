@@ -216,7 +216,7 @@ export function EnvironmentsPanel() {
       <section className="min-h-0 min-w-0 flex-1 overflow-auto bg-base-100">
         {draft && selectedId ? (
           <div className="min-h-full">
-            <div className="border-b border-base-content/10 px-6 py-5">
+            <div className="border-b border-base-content/10 px-6 pt-5 pb-0">
               <div className="flex items-center gap-4">
                 <div className="group relative shrink-0 rounded-2xl border border-base-content/10 bg-base-100 p-3 text-base-content/60">
                   <FlaskConicalIcon className="size-5 transition group-hover:opacity-0" />
@@ -247,7 +247,7 @@ export function EnvironmentsPanel() {
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-col divide-y divide-base-content/10 border-y border-base-content/10">
+              <div className="mt-6 flex flex-col divide-y divide-base-content/10 border-t border-base-content/10">
                 <label className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0 ">
                     <div className="text-sm font-medium text-base-content">Warn before request</div>

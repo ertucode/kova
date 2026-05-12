@@ -102,7 +102,7 @@ export function TagsPanel() {
           <div className="text-sm font-semibold text-base-content">Tags</div>
           <button
             type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-base-200/55 text-base-content transition hover:bg-base-200"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 text-base-content transition hover:border-base-content/20 hover:bg-base-200"
             onClick={() => void TagsCoordinator.createTag()}
             aria-label="Add tag"
             title="Add tag"
@@ -162,11 +162,13 @@ export function TagsPanel() {
                       void TagsCoordinator.moveTag(draggedTagId, nextPosition)
                     }}
                     className={[
-                      'flex cursor-grab items-center gap-3 rounded-2xl px-3 py-3 transition active:cursor-grabbing',
-                      isSelected ? 'bg-primary/10 text-base-content' : 'bg-base-200/40 text-base-content/82 hover:bg-base-200/65',
-                      draggedTagId === item.id ? 'opacity-50' : '',
-                    ].join(' ')}
-                  >
+                       'flex cursor-grab items-center gap-3 rounded-2xl border px-3 py-3 transition active:cursor-grabbing',
+                       isSelected
+                         ? 'border-primary/35 bg-primary/10 text-base-content'
+                         : 'border-base-content/10 bg-base-100 text-base-content/82 hover:border-base-content/20 hover:bg-base-200/70',
+                       draggedTagId === item.id ? 'opacity-50' : '',
+                     ].join(' ')}
+                   >
                     <button
                       type="button"
                       className="flex min-w-0 flex-1 items-center gap-3 text-left"
@@ -190,12 +192,13 @@ export function TagsPanel() {
 
       <section className="min-h-0 min-w-0 flex-1 overflow-auto bg-base-100">
         {selectedTag ? (
-          <div className="min-h-full px-6 py-6">
-            <div className="flex items-center gap-4">
-              <div className="group relative flex size-12 shrink-0 items-center justify-center rounded-2xl bg-base-200/55 text-base-content/60">
-                <TagIcon className="size-5 transition group-hover:opacity-0" />
-                <button
-                  type="button"
+            <div className="min-h-full">
+              <div className="border-b border-base-content/10 px-6 pt-5 pb-0">
+                <div className="flex items-center gap-4">
+                  <div className="group relative flex size-12 shrink-0 items-center justify-center rounded-2xl border border-base-content/10 bg-base-100 text-base-content/60">
+                  <TagIcon className="size-5 transition group-hover:opacity-0" />
+                  <button
+                    type="button"
                   className="absolute inset-0 flex items-center justify-center rounded-2xl text-base-content/65 opacity-0 transition group-hover:opacity-100 hover:bg-error/12 hover:text-error"
                   onClick={() => TagsCoordinator.requestDeleteTag(selectedTag.id, selectedTag.name)}
                   aria-label="Delete tag"
@@ -203,111 +206,119 @@ export function TagsPanel() {
                 >
                   <Trash2Icon className="size-4" />
                 </button>
-              </div>
+                  </div>
 
-              <input
-                ref={nameInputRef}
-                className="min-w-0 flex-1 bg-transparent text-3xl font-semibold tracking-tight text-base-content outline-none"
-                value={draftName}
-                placeholder="Tag name"
-                onChange={event => setDraftName(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void saveTag()
-                  }
-                }}
-              />
-              <SaveIndicator isDirty={isDirty} isSaving={isSaving} />
-            </div>
-
-            <div className="mt-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-base-content">Color</div>
-                <div className="mt-1 text-sm text-base-content/55">Use a custom accent to make the tag easier to spot.</div>
-              </div>
-
-              <div className="flex w-full items-center gap-3 md:w-auto md:min-w-[280px] md:justify-end">
-                <input
-                  type="color"
-                  className="h-10 w-16 cursor-pointer appearance-none rounded-xl border-0 bg-transparent p-0"
-                  value={draftColorValue}
-                  onChange={event => setDraftColor(normalizeTagColor(event.target.value))}
-                  aria-label="Tag color"
-                />
-                <div className="min-w-0 flex-1 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5 text-sm text-base-content/70 md:max-w-[180px]">
-                  {draftColor ?? 'No custom color'}
-                </div>
-                {draftColor ? (
-                  <button
-                    type="button"
-                    className="rounded-xl border border-base-content/10 px-3 py-2 text-sm text-base-content/65 transition hover:border-base-content/20 hover:bg-base-200 hover:text-base-content"
-                    onClick={() => setDraftColor(null)}
-                    title="Clear custom color"
-                    aria-label="Clear custom color"
-                  >
-                    Clear
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="text-sm font-medium text-base-content">Assigned Items</div>
-                <button
-                  type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-xl bg-base-200/55 text-base-content/72 transition hover:bg-base-200 hover:text-base-content"
-                  onClick={() =>
-                    dialogActions.open({ component: AssignTagItemsDialog, props: { tagId: selectedTag.id, tagName: selectedTag.name } })
-                  }
-                  aria-label="Assign items"
-                  title="Assign items"
-                >
-                  <PlusIcon className="size-4" />
-                </button>
-              </div>
-              {assignedItems.length === 0 ? <p className="text-sm text-base-content/45">No items assigned.</p> : null}
-              {assignedItems.map(item => (
-                <div key={`${item.itemType}:${item.id}`} className="flex items-center gap-3 rounded-2xl bg-base-200/40 px-3 py-2.5">
-                  <button
-                    type="button"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-xl text-base-content/40 transition hover:bg-error/10 hover:text-error"
-                    onClick={() =>
-                      void TagsCoordinator.replaceTagItems(
-                        selectedTag.id,
-                        assignedItems
-                          .filter(currentItem => !(currentItem.itemType === item.itemType && currentItem.id === item.id))
-                          .map(currentItem => ({ itemType: currentItem.itemType, itemId: currentItem.id }))
-                      )
-                    }
-                    aria-label={`Remove ${item.name}`}
-                    title={`Remove ${item.name}`}
-                  >
-                    <Trash2Icon className="size-4" />
-                  </button>
-                  {item.itemType === 'folder' ? (
-                    <FolderIcon className="size-4 shrink-0 text-base-content/55" />
-                  ) : (
-                    <RequestMethodTag method={item.method} requestType={item.requestType} />
-                  )}
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 cursor-pointer text-left"
-                    onClick={() => {
-                      TagsCoordinator.setSidebarTab('requests')
-                      void FolderExplorerCoordinator.selectItem({ itemType: item.itemType, id: item.id }, { mode: 'pin' })
+                  <input
+                    ref={nameInputRef}
+                    className="min-w-0 flex-1 bg-transparent text-3xl font-semibold tracking-tight text-base-content outline-none"
+                    value={draftName}
+                    placeholder="Tag name"
+                    onChange={event => setDraftName(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void saveTag()
+                      }
                     }}
-                  >
-                    <div className="truncate text-sm font-medium text-base-content">{item.name}</div>
-                    <div className="truncate text-xs text-base-content/45">
-                      {buildItemPath(explorerItemMap, item.itemType, item.id, item.name)}
-                    </div>
-                  </button>
+                  />
+                  <SaveIndicator isDirty={isDirty} isSaving={isSaving} />
                 </div>
-              ))}
+
+                <div className="mt-6 border-t border-base-content/10 py-4">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-base-content">Color</div>
+                      <div className="mt-1 text-sm text-base-content/55">Use a custom accent to make the tag easier to spot.</div>
+                    </div>
+
+                    <div className="flex w-full items-center gap-3 md:w-auto md:min-w-[280px] md:justify-end">
+                      <input
+                        type="color"
+                        className="h-10 w-16 cursor-pointer appearance-none rounded-xl border-0 bg-transparent p-0"
+                        value={draftColorValue}
+                        onChange={event => setDraftColor(normalizeTagColor(event.target.value))}
+                        aria-label="Tag color"
+                      />
+                      <div className="min-w-0 flex-1 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5 text-sm text-base-content/70 md:max-w-[180px]">
+                        {draftColor ?? 'No custom color'}
+                      </div>
+                      {draftColor ? (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-base-content/10 px-3 py-2 text-sm text-base-content/65 transition hover:border-base-content/20 hover:bg-base-200 hover:text-base-content"
+                          onClick={() => setDraftColor(null)}
+                          title="Clear custom color"
+                          aria-label="Clear custom color"
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-medium text-base-content">Assigned Items</div>
+                    <button
+                      type="button"
+                      className="flex h-8 w-8 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 text-base-content/72 transition hover:border-base-content/20 hover:bg-base-200 hover:text-base-content"
+                      onClick={() =>
+                        dialogActions.open({ component: AssignTagItemsDialog, props: { tagId: selectedTag.id, tagName: selectedTag.name } })
+                      }
+                      aria-label="Assign items"
+                      title="Assign items"
+                    >
+                      <PlusIcon className="size-4" />
+                    </button>
+                  </div>
+                  {assignedItems.length === 0 ? <p className="text-sm text-base-content/45">No items assigned.</p> : null}
+                  {assignedItems.map(item => (
+                    <div
+                      key={`${item.itemType}:${item.id}`}
+                      className="flex items-center gap-3 rounded-2xl border border-base-content/10 bg-base-100 px-3 py-2.5"
+                    >
+                      <button
+                        type="button"
+                        className="flex size-7 shrink-0 items-center justify-center rounded-xl text-base-content/40 transition hover:bg-error/10 hover:text-error"
+                        onClick={() =>
+                          void TagsCoordinator.replaceTagItems(
+                            selectedTag.id,
+                            assignedItems
+                              .filter(currentItem => !(currentItem.itemType === item.itemType && currentItem.id === item.id))
+                              .map(currentItem => ({ itemType: currentItem.itemType, itemId: currentItem.id }))
+                          )
+                        }
+                        aria-label={`Remove ${item.name}`}
+                        title={`Remove ${item.name}`}
+                      >
+                        <Trash2Icon className="size-4" />
+                      </button>
+                      {item.itemType === 'folder' ? (
+                        <FolderIcon className="size-4 shrink-0 text-base-content/55" />
+                      ) : (
+                        <RequestMethodTag method={item.method} requestType={item.requestType} />
+                      )}
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 cursor-pointer text-left"
+                        onClick={() => {
+                          TagsCoordinator.setSidebarTab('requests')
+                          void FolderExplorerCoordinator.selectItem({ itemType: item.itemType, id: item.id }, { mode: 'pin' })
+                        }}
+                      >
+                        <div className="truncate text-sm font-medium text-base-content">{item.name}</div>
+                        <div className="truncate text-xs text-base-content/45">
+                          {buildItemPath(explorerItemMap, item.itemType, item.id, item.name)}
+                        </div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
         ) : (
           <div className="flex h-full items-center justify-center px-8 text-sm text-base-content/45">Select a tag</div>
         )}

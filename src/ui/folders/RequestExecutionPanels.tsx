@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { ChevronDownIcon, ChevronRightIcon, CopyIcon, SaveIcon, SearchIcon, TerminalSquareIcon, Trash2Icon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  SaveIcon,
+  SearchIcon,
+  TerminalSquareIcon,
+  Trash2Icon,
+} from 'lucide-react'
 import { isSseContentType, parseSseEvents } from '@common/Sse'
-import type { RequestConsoleEntry, RequestExecutionRecord, RequestHistoryListItem, RequestScriptError, WebSocketSessionRecord } from '@common/Requests'
+import type {
+  RequestConsoleEntry,
+  RequestExecutionRecord,
+  RequestHistoryListItem,
+  RequestScriptError,
+  WebSocketSessionRecord,
+} from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toast } from '@/lib/components/toast'
@@ -50,13 +64,17 @@ export function HistoryPanel() {
 
       {!historyLoaded && historyLoading ? <EmptyExecutionState message="Loading history..." /> : null}
       {historyLoaded && visibleHistory.length === 0 ? (
-        <EmptyExecutionState message={searchValue.trim() ? 'No history matches your search.' : 'Send a request to start building history.'} />
+        <EmptyExecutionState
+          message={searchValue.trim() ? 'No history matches your search.' : 'Send a request to start building history.'}
+        />
       ) : null}
-      {visibleHistory.map(execution => (
-        execution.itemType === 'http'
-          ? <ExecutionCard key={execution.id} execution={execution} />
-          : <WebSocketHistoryCard key={execution.id} session={execution} />
-      ))}
+      {visibleHistory.map(execution =>
+        execution.itemType === 'http' ? (
+          <ExecutionCard key={execution.id} execution={execution} />
+        ) : (
+          <WebSocketHistoryCard key={execution.id} session={execution} />
+        )
+      )}
       {historyNextOffset !== null ? (
         <button
           type="button"
@@ -85,7 +103,7 @@ function HistoryToolbar({
   onTrimNow: () => void
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-base-content/10 bg-base-100/50 p-4 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+    <div className="grid gap-3 bg-base-100/50 md:grid-cols-[minmax(0,1fr)_220px_auto]">
       <label className="flex items-center gap-3 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5">
         <SearchIcon className="size-4 shrink-0 text-base-content/40" />
         <input
@@ -123,7 +141,15 @@ function HistoryToolbar({
   )
 }
 
-function ExecutionPanelShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+function ExecutionPanelShell({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+}) {
   return (
     <div className="flex h-full min-w-0 flex-col px-6 py-6">
       <div className="text-sm font-semibold text-base-content">{title}</div>
@@ -134,7 +160,11 @@ function ExecutionPanelShell({ title, description, children }: { title: string; 
 }
 
 export function EmptyExecutionState({ message }: { message: string }) {
-  return <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">{message}</div>
+  return (
+    <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">
+      {message}
+    </div>
+  )
 }
 
 export function ExecutionCard({
@@ -154,8 +184,14 @@ export function ExecutionCard({
   return (
     <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
       <div className="flex items-start gap-2 px-4 py-3 transition hover:bg-base-100/60">
-        <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => setExpanded(current => !current)}>
-          <div className="mt-0.5 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+          onClick={() => setExpanded(current => !current)}
+        >
+          <div className="mt-0.5 text-base-content/45">
+            {expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className={`text-xs font-semibold tracking-[0.12em] ${tone}`}>{execution.request.method}</span>
@@ -250,8 +286,14 @@ function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) 
   return (
     <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
       <div className="flex items-start gap-2 px-4 py-3 transition hover:bg-base-100/60">
-        <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => setExpanded(current => !current)}>
-          <div className="mt-0.5 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+          onClick={() => setExpanded(current => !current)}
+        >
+          <div className="mt-0.5 text-base-content/45">
+            {expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-xs font-semibold tracking-[0.12em] text-accent">WS</span>
@@ -305,11 +347,11 @@ function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) 
             <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-base-content/50">Messages</div>
             <div className="space-y-2">
               {session.messages.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">No messages saved</div>
+                <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">
+                  No messages saved
+                </div>
               ) : (
-                session.messages.map(message => (
-                  <HistoryWebSocketMessageRow key={message.id} message={message} />
-                ))
+                session.messages.map(message => <HistoryWebSocketMessageRow key={message.id} message={message} />)
               )}
             </div>
           </div>
@@ -326,7 +368,9 @@ function ConsoleEntriesSection({ entries }: { entries: RequestConsoleEntry[] }) 
         <TerminalSquareIcon className="size-3.5" /> Console
       </div>
       {entries.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">No script logs</div>
+        <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">
+          No script logs
+        </div>
       ) : (
         <div className="min-w-0 overflow-hidden rounded-xl border border-base-content/10 bg-base-100/60">
           {entries.map(entry => (
@@ -336,7 +380,9 @@ function ConsoleEntriesSection({ entries }: { entries: RequestConsoleEntry[] }) 
                 <span>{entry.sourceName}</span>
                 <span>{formatTimestamp(entry.timestamp)}</span>
               </div>
-              <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">{entry.message}</pre>
+              <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">
+                {entry.message}
+              </pre>
             </div>
           ))}
         </div>
@@ -370,7 +416,10 @@ function ExecutionVariablesSection({ variables }: { variables: Record<string, st
           No variables used
         </div>
       ) : (
-        <div className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60" style={{ maxHeight: '500px' }}>
+        <div
+          className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60"
+          style={{ maxHeight: '500px' }}
+        >
           <div className="grid min-w-0 grid-cols-[minmax(0,180px)_minmax(0,1fr)] border-b border-base-content/10 bg-base-200/35 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">
             <span>Name</span>
             <span>Value</span>
@@ -381,7 +430,9 @@ function ExecutionVariablesSection({ variables }: { variables: Record<string, st
               className="grid min-w-0 grid-cols-[minmax(0,180px)_minmax(0,1fr)] gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0"
             >
               <span className="truncate font-mono text-[12px] leading-5 text-base-content/70">{key}</span>
-              <span className="whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">{value}</span>
+              <span className="whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">
+                {value}
+              </span>
             </div>
           ))}
         </div>
@@ -428,7 +479,9 @@ function ExecutionResponseSection({
                   type="button"
                   className={[
                     'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                    sseViewMode === 'rows' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                    sseViewMode === 'rows'
+                      ? 'bg-base-200/80 text-base-content'
+                      : 'text-base-content/55 hover:text-base-content',
                   ].join(' ')}
                   onClick={() => setSseViewMode('rows')}
                 >
@@ -438,7 +491,9 @@ function ExecutionResponseSection({
                   type="button"
                   className={[
                     'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                    sseViewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                    sseViewMode === 'raw'
+                      ? 'bg-base-200/80 text-base-content'
+                      : 'text-base-content/55 hover:text-base-content',
                   ].join(' ')}
                   onClick={() => setSseViewMode('raw')}
                 >
@@ -449,18 +504,25 @@ function ExecutionResponseSection({
             {sseViewMode === 'rows' ? (
               <SseTranscript
                 events={parseSseEvents(execution.response.body)}
-                emptyMessage={execution.response.bodyOmitted ? 'Events omitted from history (over 500 KB)' : 'No SSE events recorded.'}
+                emptyMessage={
+                  execution.response.bodyOmitted
+                    ? 'Events omitted from history (over 500 KB)'
+                    : 'No SSE events recorded.'
+                }
               />
             ) : (
               <pre
                 className="min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content"
                 style={{ maxHeight: '500px' }}
               >
-                {execution.response.body || (execution.response.bodyOmitted ? 'Body omitted from history (over 500 KB)' : '(empty)')}
+                {execution.response.body ||
+                  (execution.response.bodyOmitted ? 'Body omitted from history (over 500 KB)' : '(empty)')}
               </pre>
             )}
           </div>
-          {execution.response.headers ? <ExecutionSubsection title="Headers" value={execution.response.headers} /> : null}
+          {execution.response.headers ? (
+            <ExecutionSubsection title="Headers" value={execution.response.headers} />
+          ) : null}
         </div>
       </div>
     )
@@ -532,7 +594,11 @@ async function saveExecutionAsExample(execution: RequestExecutionRecord) {
 
   await FolderExplorerCoordinator.loadItems()
   FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
-  toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${execution.requestName}.` })
+  toast.show({
+    severity: 'success',
+    title: 'Example saved',
+    message: `Saved response example for ${execution.requestName}.`,
+  })
 }
 
 async function saveWebSocketSessionAsExample(session: WebSocketSessionRecord) {
@@ -558,7 +624,11 @@ async function saveWebSocketSessionAsExample(session: WebSocketSessionRecord) {
 
   await FolderExplorerCoordinator.loadItems()
   FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
-  toast.show({ severity: 'success', title: 'Example saved', message: `Saved transcript example for ${session.requestName}.` })
+  toast.show({
+    severity: 'success',
+    title: 'Example saved',
+    message: `Saved transcript example for ${session.requestName}.`,
+  })
 }
 
 async function copyTextToClipboard({
@@ -695,7 +765,9 @@ function getConsoleTone(level: RequestConsoleEntry['level']) {
 
 function isRenderableExecution(value: RequestHistoryListItem | null | undefined): value is RequestHistoryListItem {
   return Boolean(
-    value && typeof value.id === 'string' && (value.itemType === 'http' ? value.request && typeof value.request.url === 'string' : typeof value.url === 'string')
+    value &&
+    typeof value.id === 'string' &&
+    (value.itemType === 'http' ? value.request && typeof value.request.url === 'string' : typeof value.url === 'string')
   )
 }
 
@@ -706,7 +778,9 @@ function formatWebSocketConnection(session: WebSocketSessionRecord) {
     session.disconnectedAt ? `Disconnected ${formatTimestamp(session.disconnectedAt)}` : '',
     session.closeCode !== null ? `Close Code ${session.closeCode}` : '',
     session.closeReason ? `Close Reason ${session.closeReason}` : '',
-  ].filter(Boolean).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function formatBytes(value: number) {
@@ -733,8 +807,14 @@ function HistoryWebSocketMessageRow({ message }: { message: WebSocketSessionReco
 
   return (
     <div className="rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3">
-      <button type="button" className="flex min-w-0 w-full items-start gap-2 text-left" onClick={() => setExpanded(current => !current)}>
-        <div className="mt-0.5 shrink-0 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
+      <button
+        type="button"
+        className="flex min-w-0 w-full items-start gap-2 text-left"
+        onClick={() => setExpanded(current => !current)}
+      >
+        <div className="mt-0.5 shrink-0 text-base-content/45">
+          {expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-base-content/45">
             <span className={message.direction === 'sent' ? 'text-info' : 'text-success'}>{message.direction}</span>
@@ -743,9 +823,13 @@ function HistoryWebSocketMessageRow({ message }: { message: WebSocketSessionReco
             {message.mimeType ? <span>{message.mimeType}</span> : null}
           </div>
           {expanded ? (
-            <pre className="mt-1 overflow-auto whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">{message.body || '(empty)'}</pre>
+            <pre className="mt-1 overflow-auto whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">
+              {message.body || '(empty)'}
+            </pre>
           ) : (
-            <div className="mt-1 truncate font-mono text-[12px] text-base-content/75">{getCollapsedMessagePreview(message.body)}</div>
+            <div className="mt-1 truncate font-mono text-[12px] text-base-content/75">
+              {getCollapsedMessagePreview(message.body)}
+            </div>
           )}
         </div>
       </button>

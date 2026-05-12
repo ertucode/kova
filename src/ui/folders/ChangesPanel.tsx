@@ -63,14 +63,18 @@ export function ChangesPanel() {
   const selectedOperations = visibleOperations.filter(operation => selectedIds.includes(operation.id))
   const visibleIds = visibleOperations.map(operation => operation.id)
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id))
-  const undoableSelectedIds = selectedOperations.filter(operation => operation.status === 'active').map(operation => operation.id)
+  const undoableSelectedIds = selectedOperations
+    .filter(operation => operation.status === 'active')
+    .map(operation => operation.id)
 
   return (
     <div className="flex h-full min-w-0 flex-col px-6 py-6">
       <div className="text-sm font-semibold text-base-content">Changes</div>
-      <div className="mt-2 text-sm leading-6 text-base-content/45">Track completed and reversible actions like deletes and imports.</div>
+      <div className="mt-2 text-sm leading-6 text-base-content/45">
+        Track completed and reversible actions like deletes and imports.
+      </div>
 
-      <div className="mt-5 grid gap-3 rounded-2xl border border-base-content/10 bg-base-100/50 p-4">
+      <div className="mt-5 grid gap-3 rounded-2xl bg-base-100/50">
         <label className="flex items-center gap-3 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5">
           <SearchIcon className="size-4 shrink-0 text-base-content/40" />
           <input
@@ -143,9 +147,15 @@ export function ChangesPanel() {
       </div>
 
       <div className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-auto pr-1">
-        {loading ? <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">Loading changes...</div> : null}
+        {loading ? (
+          <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">
+            Loading changes...
+          </div>
+        ) : null}
         {!loading && visibleOperations.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">No changes found.</div>
+          <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">
+            No changes found.
+          </div>
         ) : null}
         {visibleOperations.map(operation => (
           <ChangeRow key={operation.id} operation={operation} selected={selectedIds.includes(operation.id)} />
@@ -171,7 +181,9 @@ function ChangeRow({ operation, selected }: { operation: OperationRecord; select
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <div className="truncate text-sm font-medium text-base-content">{operation.title}</div>
-            <span className={`rounded-full px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] ${badgeClassName}`}>
+            <span
+              className={`rounded-full px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] ${badgeClassName}`}
+            >
               {getStatusLabel(operation.status)}
             </span>
           </div>

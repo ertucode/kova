@@ -1,5 +1,9 @@
 import { createStore } from '@xstate/store'
 import type { SharedScriptRecord, SharedScriptScopeType } from '@common/SharedScripts'
+import { z } from 'zod'
+
+const PERSISTED_SELECTED_SCRIPT_IDS_KEY = 'sharedScriptEditor:selectedIdsByScope'
+const persistedSelectedScriptIdsSchema = z.record(z.string(), z.string().nullable())
 
 export type SharedScriptEntry = {
   base: SharedScriptRecord
@@ -22,7 +26,7 @@ type SharedScriptEditorContext = {
 export const sharedScriptEditorStore = createStore({
   context: {
     entriesByScope: {},
-    selectedIdsByScope: {},
+    selectedIdsByScope: loadPersistedSelectedScriptIdsByScope(),
     focusIdsByScope: {},
   } as SharedScriptEditorContext,
   on: {
@@ -192,6 +196,10 @@ export const sharedScriptEditorStore = createStore({
   },
 })
 
+sharedScriptEditorStore.subscribe(state => {
+  persistSelectedScriptIdsByScope(state.context.selectedIdsByScope)
+})
+
 export function getSharedScriptScopeKey(scopeType: SharedScriptScopeType, scopeId: string | null) {
   return `${scopeType}:${scopeId ?? ''}`
 }
@@ -212,4 +220,25 @@ export function isSharedScriptEntryDirty(entry: SharedScriptEntry | null | undef
   }
 
   return serializeSharedScript(entry.base) !== serializeSharedScript(entry.current)
+}
+
+function loadPersistedSelectedScriptIdsByScope() {
+  try {
+    const value = localStorage.getItem(PERSISTED_SELECTED_SCRIPT_IDS_KEY)
+    if (!value) {
+      return {}
+    }
+
+    return persistedSelectedScriptIdsSchema.parse(JSON.parse(value))
+  } catch {
+    return {}
+  }
+}
+
+function persistSelectedScriptIdsByScope(selectedIdsByScope: Record<string, string | null>) {
+  try {
+    localStorage.setItem(PERSISTED_SELECTED_SCRIPT_IDS_KEY, JSON.stringify(selectedIdsByScope))
+  } catch {
+    return
+  }
 }

@@ -416,7 +416,7 @@ function SharedScriptDetail({
 
   return (
     <div className="min-h-full flex flex-col">
-      <div className="border-b border-base-content/10 px-6 py-5">
+      <div className="border-b border-base-content/10 px-6 pt-5 pb-0">
         <div className="flex items-center gap-4">
           <div className="group relative shrink-0 rounded-2xl border border-base-content/10 bg-base-100 px-4 py-3 text-sm font-medium text-base-content/60">
             <FileBracesIcon className="size-4" />

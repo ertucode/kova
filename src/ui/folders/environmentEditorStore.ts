@@ -1,5 +1,9 @@
 import { createStore } from '@xstate/store'
 import type { EnvironmentRecord } from '@common/Environments'
+import { z } from 'zod'
+
+const PERSISTED_SELECTED_ENVIRONMENT_KEY = 'environmentEditor:selectedId'
+const persistedSelectedEnvironmentSchema = z.string().nullable()
 
 export type EnvironmentDetailsDraft = {
   name: string
@@ -28,7 +32,7 @@ type EnvironmentEditorContext = {
 export const environmentEditorStore = createStore({
   context: {
     items: [],
-    selectedId: null,
+    selectedId: loadPersistedSelectedEnvironmentId(),
     focusEnvironmentId: null,
     loading: false,
     entries: {},
@@ -169,6 +173,10 @@ export const environmentEditorStore = createStore({
   },
 })
 
+environmentEditorStore.subscribe(state => {
+  persistSelectedEnvironmentId(state.context.selectedId)
+})
+
 export function createEmptyEnvironmentEntry(): EnvironmentEntry {
   return {
     base: null,
@@ -207,4 +215,25 @@ export function isEnvironmentEntryDirty(entry: EnvironmentEntry | null | undefin
   }
 
   return serializeEnvironmentDraft(entry.current) !== serializeEnvironmentDraft(entry.base)
+}
+
+function loadPersistedSelectedEnvironmentId() {
+  try {
+    const value = localStorage.getItem(PERSISTED_SELECTED_ENVIRONMENT_KEY)
+    if (!value) {
+      return null
+    }
+
+    return persistedSelectedEnvironmentSchema.parse(JSON.parse(value))
+  } catch {
+    return null
+  }
+}
+
+function persistSelectedEnvironmentId(selectedId: string | null) {
+  try {
+    localStorage.setItem(PERSISTED_SELECTED_ENVIRONMENT_KEY, JSON.stringify(selectedId))
+  } catch {
+    return
+  }
 }
