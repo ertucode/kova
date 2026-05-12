@@ -23,6 +23,8 @@ type FolderExplorerTabViewModel = {
   createdAt: number
   updatedAt: number
   name: string
+  displayName: string
+  pathSegments: string[]
   fullPath: string
   isSaving: boolean
   isDirty: boolean
@@ -44,15 +46,18 @@ export function FolderExplorerTabs() {
   const tabsWithState = useMemo<FolderExplorerTabViewModel[]>(() => {
     const itemMap = new Map(items.map(item => [`${item.itemType}:${item.id}`, item] as const))
 
-    return tabs.map(tab => {
+    const tabsWithPaths = tabs.map(tab => {
       const entry = entries[`${tab.itemType}:${tab.itemId}`]
       const item = itemMap.get(`${tab.itemType}:${tab.itemId}`)
       const name = entry?.current?.name ?? item?.name ?? 'Untitled'
+      const pathSegments = buildItemPathSegments(itemMap, { itemType: tab.itemType, id: tab.itemId }, name)
 
       return {
         ...tab,
         name,
-        fullPath: buildItemPath(itemMap, { itemType: tab.itemType, id: tab.itemId }, name),
+        displayName: name,
+        pathSegments,
+        fullPath: pathSegments.join(' / '),
         isSaving: Boolean(entry?.saving),
         isDirty: Boolean(entry && isEntryDirty(entry)),
         method:
@@ -70,6 +75,8 @@ export function FolderExplorerTabs() {
         exampleType: item?.itemType === 'example' ? item.exampleType : null,
       }
     })
+
+    return disambiguateTabNames(tabsWithPaths)
   }, [entries, items, tabs])
 
   useEffect(() => {
@@ -217,7 +224,9 @@ export function FolderExplorerTabs() {
                     )}
                   </div>
 
-                  <div className={['min-w-0 flex-1 truncate', tab.isPinned ? '' : 'italic'].join(' ')}>{tab.name}</div>
+                  <div className={['min-w-0 flex-1 truncate', tab.isPinned ? '' : 'italic'].join(' ')}>
+                    {tab.displayName}
+                  </div>
 
                   {tab.isSaving || tab.isDirty ? (
                     <div
@@ -357,29 +366,70 @@ function RequestMethodGlyph({
   )
 }
 
-function buildItemPath(
+function buildItemPathSegments(
   itemMap: Map<string, ExplorerItem>,
   selection: { itemType: 'folder' | 'request' | 'example'; id: string },
   currentName: string
 ) {
   const item = itemMap.get(`${selection.itemType}:${selection.id}`)
   if (!item) {
-    return currentName
+    return [currentName]
   }
 
   if (item.itemType === 'folder') {
-    return [...getFolderPathSegments(itemMap, item.parentFolderId), currentName].join(' / ')
+    return [...getFolderPathSegments(itemMap, item.parentFolderId), currentName]
   }
 
   if (item.itemType === 'request') {
-    return [...getFolderPathSegments(itemMap, item.parentFolderId), currentName].join(' / ')
+    return [...getFolderPathSegments(itemMap, item.parentFolderId), currentName]
   }
 
   const request = itemMap.get(`request:${item.requestId}`)
   const requestPath =
     request?.itemType === 'request' ? [...getFolderPathSegments(itemMap, request.parentFolderId), request.name] : []
 
-  return [...requestPath, currentName].join(' / ')
+  return [...requestPath, currentName]
+}
+
+function disambiguateTabNames(tabs: FolderExplorerTabViewModel[]) {
+  const tabsByName = new Map<string, FolderExplorerTabViewModel[]>()
+
+  for (const tab of tabs) {
+    const group = tabsByName.get(tab.name)
+    if (group) {
+      group.push(tab)
+      continue
+    }
+
+    tabsByName.set(tab.name, [tab])
+  }
+
+  return tabs.map(tab => {
+    const duplicates = tabsByName.get(tab.name)
+    if (!duplicates || duplicates.length === 1) {
+      return tab
+    }
+
+    for (let depth = 2; depth <= tab.pathSegments.length; depth += 1) {
+      const candidate = tab.pathSegments.slice(-depth).join(' / ')
+      const hasConflict = duplicates.some(otherTab => {
+        if (otherTab.id === tab.id || otherTab.pathSegments.length < depth) {
+          return false
+        }
+
+        return otherTab.pathSegments.slice(-depth).join(' / ') === candidate
+      })
+
+      if (!hasConflict) {
+        return {
+          ...tab,
+          displayName: candidate,
+        }
+      }
+    }
+
+    return tab
+  })
 }
 
 function getFolderPathSegments(itemMap: Map<string, ExplorerItem>, parentFolderId: string | null) {
