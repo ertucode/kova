@@ -31,3 +31,5 @@
 - Make a different request based on the response
 - Full autocomplete and typescript support in script bodies
 - Colored tags and shortcuts for easily navigating to them (Option+1, Option+2 ...)
+- Write to the clipboard in the scripts
+- Zod is included in the script runtime for easy validation
