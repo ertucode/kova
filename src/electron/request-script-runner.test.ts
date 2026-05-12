@@ -543,9 +543,85 @@ describe('createRequestScriptRuntime', () => {
       }
     )
 
-    expect(postRequestErrors).toEqual([])
-    expect(hiddenToastIds).toEqual(['loading-toast'])
+  expect(postRequestErrors).toEqual([])
+  expect(hiddenToastIds).toEqual(['loading-toast'])
+})
+
+it('allows post-request scripts to mutate response headers', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      method: 'GET',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
   })
+  const response = {
+    status: 200,
+    statusText: 'OK',
+    headers: 'content-type: application/json\nset-cookie: session=old',
+    body: { type: 'json', data: { ok: true } } as const,
+  }
+
+  const errors = await runtime.runPostRequestScripts(
+    [
+      {
+        name: 'Request: Test',
+        script:
+          "response.headers.set('x-scripted', '1')\nresponse.headers.set('set-cookie', 'session=new; Path=/')\nresponse.headers.delete('content-type')\nscope.set('header', response.headers.get('x-scripted') ?? '')",
+      },
+    ],
+    response
+  )
+
+  expect(errors).toEqual([])
+  expect(runtime.getRequestScopeValues().header).toBe('1')
+  expect(response.headers).toBe('set-cookie: session=new; Path=/\nx-scripted: 1')
+})
+
+it('parses and rewrites response cookies from the header helper', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      method: 'GET',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
+  })
+  const response = {
+    status: 200,
+    statusText: 'OK',
+    headers:
+      'set-cookie: cookiesession1=skip; Path=/; HttpOnly, session=keep; Path=/; Secure; SameSite=None',
+    body: { type: 'text', data: '' } as const,
+  }
+
+  const errors = await runtime.runPostRequestScripts(
+    [
+      {
+        name: 'Request: Test',
+        script:
+          "if (response.headers.get('set-cookie')) {\n  const c = cookies.parse(response.headers.get('set-cookie'))\n  const filtered = c.filter(c => c.name !== 'cookiesession1')\n  response.headers.set('set-cookie', cookies.stringify(filtered))\n}\n\nif (response.hasCookies()) {\n  const c = response.parseCookies()\n  const filtered = c.filter(c => c.name !== 'cookiesession1')\n  response.headers.set('set-cookie', cookies.stringify(filtered))\n}",
+      },
+    ],
+    response
+  )
+
+  expect(errors).toEqual([])
+  expect(response.headers).toBe('set-cookie: session=keep; Path=/; Secure; SameSite=None')
+})
 
   it('returns the prompted text value to the script', async () => {
     const promptedOptions: Array<Record<string, unknown>> = []

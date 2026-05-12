@@ -298,25 +298,6 @@ export async function getCookieHeaderForUrl(url: string) {
   return matchingCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
 }
 
-export function getSetCookieHeaderValues(headers: Headers) {
-  const valuesFromEntries = getSetCookieHeaderValuesFromEntries(headers.entries())
-  if (valuesFromEntries.length > 0) {
-    return valuesFromEntries
-  }
-
-  const values = headers.getSetCookie()
-  if (values.length > 0) {
-    return values.length === 1 ? splitCombinedSetCookieHeader(values[0]) : values
-  }
-
-  const combined = headers.get('set-cookie')
-  if (!combined) {
-    return []
-  }
-
-  return splitCombinedSetCookieHeader(combined)
-}
-
 export function getSetCookieHeaderValuesFromEntries(entries: Iterable<[string, string]>) {
   const values: string[] = []
 
@@ -577,7 +558,7 @@ function defaultCookiePath(pathname: string) {
   return lastSlashIndex <= 0 ? '/' : pathname.slice(0, lastSlashIndex)
 }
 
-function splitCombinedSetCookieHeader(value: string) {
+export function splitCombinedSetCookieHeader(value: string) {
   const parts: string[] = []
   let start = 0
   let inExpires = false

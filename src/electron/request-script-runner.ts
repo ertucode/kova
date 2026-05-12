@@ -21,10 +21,12 @@ import type {
 import type { SharedScriptRecord } from '../common/SharedScripts.js'
 import type { ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
 import { createScriptClipboardApi, type ScriptClipboardBridge } from './script-clipboard.js'
+import { splitCombinedSetCookieHeader } from './db/cookies.js'
 import { createScriptMakeRequestApi, type ScriptMakeRequestBridge } from './script-make-request.js'
 import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
+import type { CookieSameSite } from '../common/Cookies.js'
 
 const SCRIPT_TIMEOUT_MS = 500
 
@@ -72,6 +74,32 @@ type RequestApi = {
   pathParams: ScriptPathParam[]
   resolveUrl: () => string
   headers: HeaderApi
+}
+
+type RuntimeResponseState = {
+  status: number
+  statusText: string
+  headers: string
+  body: ScriptResponseBody
+}
+
+type RuntimeResponseApiState = {
+  status: number
+  statusText: string
+  headers: HeaderApi
+  body: ScriptResponseBody
+}
+
+type ScriptCookie = {
+  name: string
+  value: string
+  domain: string | null
+  path: string | null
+  secure: boolean
+  httpOnly: boolean
+  sameSite: CookieSameSite | null
+  expires: string | null
+  maxAge: number | null
 }
 
 type ScriptErrorDetails = {
@@ -122,7 +150,7 @@ export type ScriptRuntime = {
   runPreRequestScripts: (sources: ScriptSource[]) => Promise<RequestScriptError[]>
   runPostRequestScripts: (
     sources: ScriptSource[],
-    response: { status: number; statusText: string; headers: string; body: ScriptResponseBody }
+    response: RuntimeResponseState
   ) => Promise<RequestScriptError[]>
 }
 
@@ -306,6 +334,7 @@ export function createRequestScriptRuntime(input: {
     },
     runPostRequestScripts: async (sources, response) => {
       const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
+      const responseHeaders = createResponseHeaderEditor(response.headers)
 
       try {
         const scriptErrors = await runScriptPhase({
@@ -314,7 +343,10 @@ export function createRequestScriptRuntime(input: {
           sharedScripts: input.sharedScripts ?? [],
           runtimeRequest,
           requestScope,
-          response,
+          response: {
+            ...response,
+            headers: responseHeaders,
+          },
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           toastBridge: input.toast,
@@ -326,6 +358,8 @@ export function createRequestScriptRuntime(input: {
           ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
           return scriptErrors
         }
+
+        response.headers = responseHeaders.serialize()
 
         if (pendingEnvironmentIds.size > 0) {
           environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
@@ -461,7 +495,7 @@ async function runScriptPhase(input: {
   sharedScripts: SharedScriptRecord[]
   runtimeRequest: RuntimeRequestState
   requestScope: Map<string, string>
-  response: { status: number; statusText: string; headers: string; body: ScriptResponseBody } | null
+  response: RuntimeResponseApiState | null
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
   toastBridge?: ScriptToastBridge
@@ -486,6 +520,7 @@ async function runScriptPhase(input: {
     toast: createScriptToastApi(input.toastBridge),
     clipboard: createScriptClipboardApi(input.clipboardBridge),
     crypto: createCryptoApi(),
+    cookies: createCookiesApi(),
     prompt: createPromptProxy(() => currentPrompt.value),
     ...(input.phase === 'post-request' ? { makeRequest: createMakeRequestProxy(() => currentMakeRequest.value) } : {}),
     z,
@@ -817,6 +852,25 @@ function createCryptoApi() {
   }
 }
 
+function createCookiesApi() {
+  return {
+    parse(value: string) {
+      if (typeof value !== 'string') {
+        throw new Error('cookies.parse requires a string')
+      }
+
+      return splitCombinedSetCookieHeader(value).flatMap(parseSetCookieForScript)
+    },
+    stringify(cookies: ScriptCookie[]) {
+      if (!Array.isArray(cookies)) {
+        throw new Error('cookies.stringify requires an array')
+      }
+
+      return cookies.map(stringifyScriptCookie).join(', ')
+    },
+  }
+}
+
 function createScriptConsole(sourceName: string, consoleEntries: RequestConsoleEntry[]) {
   return {
     log: (...values: unknown[]) => pushConsoleEntry(consoleEntries, sourceName, 'log', values),
@@ -1013,11 +1067,20 @@ function applyAuthToUrl(url: string, auth: HttpAuth) {
   }
 }
 
-function createResponseApi(response: { status: number; statusText: string; headers: string; body: ScriptResponseBody }) {
+function createResponseApi(response: RuntimeResponseApiState) {
   return {
     status: response.status,
     statusText: response.statusText,
-    headers: parseResponseHeaders(response.headers),
+    headers: response.headers,
+    hasCookies() {
+      return response.headers.has('set-cookie')
+    },
+    parseCookies() {
+      return response.headers
+        .entries()
+        .filter(([key]) => key.trim().toLowerCase() === 'set-cookie')
+        .flatMap(([, value]) => splitCombinedSetCookieHeader(value).flatMap(parseSetCookieForScript))
+    },
     body: response.body,
   }
 }
@@ -1075,7 +1138,7 @@ async function evaluateTemplateExpression(input: {
   expressionSource: string
   runtimeRequest: RuntimeRequestState
   requestScope: Map<string, string>
-  response: { status: number; statusText: string; headers: string; body: ScriptResponseBody } | null
+  response: RuntimeResponseApiState | null
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
   sharedScripts: SharedScriptRecord[]
@@ -1095,6 +1158,7 @@ async function evaluateTemplateExpression(input: {
     scope: createScopeApi(input.requestScope),
     clipboard: createScriptClipboardApi(input.clipboardBridge),
     crypto: createCryptoApi(),
+    cookies: createCookiesApi(),
     prompt: createPromptProxy(() => createScriptPromptApi(input.promptBridge, executionController)),
     z,
   }
@@ -1438,20 +1502,182 @@ function createHeaderEditor(runtimeRequest: RuntimeRequestState): HeaderApi {
   }
 }
 
-function parseResponseHeaders(headers: string) {
-  return Object.fromEntries(
-    headers
-      .split('\n')
-      .map(line => {
-        const separatorIndex = line.indexOf(':')
-        if (separatorIndex < 0) {
-          return null
+function createResponseHeaderEditor(headers: string): HeaderApi {
+  let entries = parseResponseHeaderEntries(headers)
+
+  return {
+    get(name) {
+      const normalizedName = name.trim().toLowerCase()
+      const entry = entries.find(([key]) => key.trim().toLowerCase() === normalizedName)
+      return entry?.[1] ?? null
+    },
+    set(name, value) {
+      const normalizedName = name.trim()
+      const normalizedLowercaseName = normalizedName.toLowerCase()
+      const firstMatch = entries.findIndex(([key]) => key.trim().toLowerCase() === normalizedLowercaseName)
+
+      if (firstMatch === -1) {
+        entries = [...entries, [normalizedName, value]]
+        return
+      }
+
+      entries = entries.flatMap(([key, entryValue], index) => {
+        if (key.trim().toLowerCase() !== normalizedLowercaseName) {
+          return [[key, entryValue] satisfies [string, string]]
         }
 
-        return [line.slice(0, separatorIndex).trim(), line.slice(separatorIndex + 1).trim()] satisfies [string, string]
+        if (index !== firstMatch) {
+          return []
+        }
+
+        return [[normalizedName, value] satisfies [string, string]]
       })
-      .filter((entry): entry is [string, string] => entry !== null)
-  )
+    },
+    delete(name) {
+      const normalizedName = name.trim().toLowerCase()
+      entries = entries.filter(([key]) => key.trim().toLowerCase() !== normalizedName)
+    },
+    has(name) {
+      const normalizedName = name.trim().toLowerCase()
+      return entries.some(([key]) => key.trim().toLowerCase() === normalizedName)
+    },
+    entries() {
+      return entries.map(([key, value]) => [key, value] satisfies [string, string])
+    },
+    toObject() {
+      return Object.fromEntries(entries)
+    },
+    serialize() {
+      return serializeResponseHeaderEntries(entries)
+    },
+  }
+}
+
+function parseResponseHeaderEntries(headers: string) {
+  return headers
+    .split('\n')
+    .map(line => {
+      const separatorIndex = line.indexOf(':')
+      if (separatorIndex < 0) {
+        return null
+      }
+
+      return [line.slice(0, separatorIndex).trim(), line.slice(separatorIndex + 1).trim()] satisfies [string, string]
+    })
+    .filter((entry): entry is [string, string] => entry !== null)
+}
+
+function serializeResponseHeaderEntries(entries: Array<[string, string]>) {
+  return entries.map(([key, value]) => `${key}: ${value}`).join('\n')
+}
+
+function parseSetCookieForScript(value: string): ScriptCookie[] {
+  const segments = value
+    .split(';')
+    .map(segment => segment.trim())
+    .filter(Boolean)
+  if (segments.length === 0) {
+    return []
+  }
+
+  const separatorIndex = segments[0].indexOf('=')
+  if (separatorIndex <= 0) {
+    return []
+  }
+
+  const name = segments[0].slice(0, separatorIndex).trim()
+  if (!name || /[\s;=]/u.test(name)) {
+    return []
+  }
+
+  const cookie: ScriptCookie = {
+    name,
+    value: segments[0].slice(separatorIndex + 1),
+    domain: null,
+    path: null,
+    secure: false,
+    httpOnly: false,
+    sameSite: null,
+    expires: null,
+    maxAge: null,
+  }
+
+  for (const attribute of segments.slice(1)) {
+    const attributeSeparatorIndex = attribute.indexOf('=')
+    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex)).trim().toLowerCase()
+    const attributeValue = attributeSeparatorIndex === -1 ? '' : attribute.slice(attributeSeparatorIndex + 1).trim()
+
+    if (attributeName === 'domain') {
+      cookie.domain = attributeValue || null
+    } else if (attributeName === 'path') {
+      cookie.path = attributeValue || null
+    } else if (attributeName === 'secure') {
+      cookie.secure = true
+    } else if (attributeName === 'httponly') {
+      cookie.httpOnly = true
+    } else if (attributeName === 'samesite') {
+      cookie.sameSite = normalizeScriptCookieSameSite(attributeValue)
+    } else if (attributeName === 'expires') {
+      cookie.expires = attributeValue || null
+    } else if (attributeName === 'max-age') {
+      const parsed = Number.parseInt(attributeValue, 10)
+      cookie.maxAge = Number.isFinite(parsed) ? parsed : null
+    }
+  }
+
+  return [cookie]
+}
+
+function stringifyScriptCookie(cookie: ScriptCookie) {
+  if (typeof cookie !== 'object' || cookie === null) {
+    throw new Error('cookies.stringify expects cookie objects')
+  }
+
+  const name = typeof cookie.name === 'string' ? cookie.name.trim() : ''
+  if (!name || /[\s;=]/u.test(name)) {
+    throw new Error('cookies.stringify encountered a cookie with an invalid name')
+  }
+
+  const parts = [`${name}=${typeof cookie.value === 'string' ? cookie.value : ''}`]
+  if (typeof cookie.domain === 'string' && cookie.domain.trim()) {
+    parts.push(`Domain=${cookie.domain.trim()}`)
+  }
+  if (typeof cookie.path === 'string' && cookie.path.trim()) {
+    parts.push(`Path=${cookie.path.trim()}`)
+  }
+  if (cookie.maxAge !== null && cookie.maxAge !== undefined) {
+    if (!Number.isInteger(cookie.maxAge)) {
+      throw new Error('cookies.stringify encountered a cookie with an invalid maxAge')
+    }
+    parts.push(`Max-Age=${cookie.maxAge}`)
+  }
+  if (typeof cookie.expires === 'string' && cookie.expires.trim()) {
+    parts.push(`Expires=${cookie.expires.trim()}`)
+  }
+  if (cookie.secure) {
+    parts.push('Secure')
+  }
+  if (cookie.httpOnly) {
+    parts.push('HttpOnly')
+  }
+  if (cookie.sameSite) {
+    parts.push(`SameSite=${capitalizeCookieSameSite(cookie.sameSite)}`)
+  }
+
+  return parts.join('; ')
+}
+
+function normalizeScriptCookieSameSite(value: string): CookieSameSite | null {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'strict' || normalized === 'lax' || normalized === 'none') {
+    return normalized
+  }
+
+  return null
+}
+
+function capitalizeCookieSameSite(value: CookieSameSite) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function setEnvironmentValue(input: {

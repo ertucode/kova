@@ -130,6 +130,14 @@ const sharedSections: ScriptDocumentationSection[] = [
     entries: [{ label: 'clipboard.write(value)', detail: 'Writes a string value to the system clipboard.' }],
   },
   {
+    title: 'Cookies',
+    description: 'Parse and rewrite Set-Cookie header values.',
+    entries: [
+      { label: 'cookies.parse(value)', detail: 'Parses one or more Set-Cookie header values into cookie objects.' },
+      { label: 'cookies.stringify(cookies)', detail: 'Serializes cookie objects into a Set-Cookie header value.' },
+    ],
+  },
+  {
     title: 'Validation',
     description: 'Use Zod schemas to validate request and response data inside scripts.',
     entries: [
@@ -148,7 +156,14 @@ const responseSection: ScriptDocumentationSection = {
   entries: [
     { label: 'response.status', detail: 'Numeric status code.' },
     { label: 'response.statusText', detail: 'Response status text.' },
-    { label: 'response.headers', detail: 'Response headers as an object.' },
+    { label: 'response.headers.get(name)', detail: 'Read a response header value.' },
+    { label: 'response.headers.set(name, value)', detail: 'Add or replace a response header.' },
+    { label: 'response.headers.delete(name)', detail: 'Remove a response header.' },
+    { label: 'response.headers.has(name)', detail: 'Check whether a response header exists.' },
+    { label: 'response.headers.entries()', detail: 'Return response headers as key/value pairs.' },
+    { label: 'response.headers.toObject()', detail: 'Return response headers as an object.' },
+    { label: 'response.hasCookies()', detail: 'Check whether the response currently has any Set-Cookie headers.' },
+    { label: 'response.parseCookies()', detail: 'Parse all current Set-Cookie response headers.' },
     { label: 'response.body.type', detail: 'Either json or text.' },
     { label: 'response.body.data', detail: 'Parsed JSON value or raw text body.' },
   ],
@@ -234,6 +249,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         code: "if (response.status >= 400) {\n  console.error('Request failed', response.status, response.statusText)\n}",
       },
       {
+        title: 'Remove a cookie before persistence',
+        code: "if (response.hasCookies()) {\n  const filtered = response.parseCookies().filter(cookie => cookie.name !== 'cookiesession1')\n  response.headers.set('set-cookie', cookies.stringify(filtered))\n}",
+      },
+      {
         title: 'Measure roundtrip flow',
         code: "const startedAt = scope.get('startedAt')\nif (startedAt) {\n  console.info('Elapsed', Date.now() - Number(startedAt), 'ms')\n}",
       },
@@ -276,7 +295,13 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         entries: [
           { label: 'response?.status', detail: 'Numeric status code.' },
           { label: 'response?.statusText', detail: 'Response status text.' },
-          { label: 'response?.headers', detail: 'Parsed response headers as an object.' },
+          { label: 'response?.headers.get(name)', detail: 'Read a response header value.' },
+          { label: 'response?.headers.set(name, value)', detail: 'Add or replace a response header.' },
+          { label: 'response?.headers.delete(name)', detail: 'Remove a response header.' },
+          { label: 'response?.hasCookies()', detail: 'Check whether the response currently has any Set-Cookie headers.' },
+          { label: 'response?.parseCookies()', detail: 'Parse all current Set-Cookie response headers.' },
+          { label: 'cookies.parse(value)', detail: 'Parse one or more Set-Cookie header values.' },
+          { label: 'cookies.stringify(cookies)', detail: 'Serialize cookie objects into a Set-Cookie header value.' },
           { label: 'response?.body.type', detail: 'Either json or text.' },
           { label: 'response?.body.data', detail: 'Parsed JSON value or raw text body.' },
           { label: 'env.get(name, environmentName?)', detail: 'Read an environment value.' },

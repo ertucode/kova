@@ -82,25 +82,14 @@ export async function sendRequest(
       signal: abortController.signal,
     })
     const responseHeaderEntries = Array.from(response.headers.entries())
-    const setCookieHeaderEntries = responseHeaderEntries.filter(([key]) => key.toLowerCase() === 'set-cookie')
-    const extractedSetCookieValues = getSetCookieHeaderValuesFromEntries(responseHeaderEntries)
+    let responseHeaders = serializeResponseHeaderEntries(responseHeaderEntries)
 
     console.info('[cookies] response received', {
       requestUrl: url,
       responseUrl: response.url,
       status: response.status,
-      setCookieHeaderEntries,
-      extractedSetCookieValues,
+      responseHeaders,
     })
-
-    await storeResponseCookies({
-      requestUrl: response.url || url,
-      setCookieValues: extractedSetCookieValues,
-    })
-
-    const responseHeaders = responseHeaderEntries
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n')
 
     if (isSseContentType(getResponseContentType(responseHeaders))) {
       return await consumeSseResponse({
@@ -120,11 +109,19 @@ export async function sendRequest(
     const bodyText = await readResponseBody(response, responseHeaders)
     const durationMs = Date.now() - startedAt
 
-    const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, {
+    const scriptResponse = {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
       body: parseScriptResponseBody(bodyText, responseHeaders),
+    }
+    const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
+    responseHeaders = scriptResponse.headers
+
+    const extractedSetCookieValues = getSetCookieHeaderValuesFromEntries(parseResponseHeaderEntries(responseHeaders))
+    await storeResponseCookies({
+      requestUrl: response.url || url,
+      setCookieValues: extractedSetCookieValues,
     })
 
     const updatedEnvironments = runtime.getUpdatedEnvironments()
@@ -198,7 +195,8 @@ async function consumeSseResponse(input: {
   sentAt: number
   startedAt: number
 }): Promise<GenericResult<SendRequestResponse>> {
-  const { response, responseHeaders, requestName, runtime, postRequestScriptSources, executedRequest, executionId, sentAt } = input
+  const { response, requestName, runtime, postRequestScriptSources, executedRequest, executionId, sentAt } = input
+  let { responseHeaders } = input
   const reader = response.body?.getReader()
   let bodyText = ''
   let buffer = ''
@@ -249,11 +247,18 @@ async function consumeSseResponse(input: {
     }))
 
     const durationMs = Date.now() - input.startedAt
-    const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, {
+    const scriptResponse = {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
       body: parseScriptResponseBody(bodyText, responseHeaders),
+    }
+    const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
+    responseHeaders = scriptResponse.headers
+
+    await storeResponseCookies({
+      requestUrl: response.url || executedRequest.url,
+      setCookieValues: getSetCookieHeaderValuesFromEntries(parseResponseHeaderEntries(responseHeaders)),
     })
     const updatedEnvironments = runtime.getUpdatedEnvironments()
 
@@ -298,6 +303,7 @@ async function consumeSseResponse(input: {
     streamState = {
       ...streamState,
       body: bodyText,
+      headers: responseHeaders,
       durationMs,
       state: 'completed',
     }
@@ -438,6 +444,24 @@ function buildExecutedRequestSnapshot(input: {
     rawType: input.request.rawType,
     sentAt: input.sentAt,
   }
+}
+
+function serializeResponseHeaderEntries(entries: Array<[string, string]>) {
+  return entries.map(([key, value]) => `${key}: ${value}`).join('\n')
+}
+
+function parseResponseHeaderEntries(headers: string) {
+  return headers
+    .split('\n')
+    .map(line => {
+      const separatorIndex = line.indexOf(':')
+      if (separatorIndex < 0) {
+        return null
+      }
+
+      return [line.slice(0, separatorIndex).trim(), line.slice(separatorIndex + 1).trim()] satisfies [string, string]
+    })
+    .filter((entry): entry is [string, string] => entry !== null)
 }
 
 function collectUsedVariables(

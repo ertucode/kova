@@ -14,7 +14,7 @@ import { resolveTemplateVariables } from '@common/RequestVariables'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import { CodeEditor } from '../folders/CodeEditor'
 
-type VisualizerResponseApi = {
+type VisualizerResponsePayload = {
   status: number
   statusText: string
   headers: Record<string, string>
@@ -29,8 +29,25 @@ type VisualizerResponseApi = {
       }
 }
 
+type VisualizerResponseApi = {
+  status: number
+  statusText: string
+  headers: ReturnType<typeof createHeaderApi>
+  hasCookies: () => boolean
+  parseCookies: () => Array<ReturnType<typeof parseSetCookieForScript>[number]>
+  body:
+    | {
+        type: 'json'
+        data: unknown
+      }
+    | {
+        type: 'text'
+        data: string
+      }
+}
+
 type VisualizerPayload = {
-  response: VisualizerResponseApi | null
+  response: VisualizerResponsePayload | null
   request: {
     method: string
     url: string
@@ -142,7 +159,22 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
   const request = createRequestApi(payload)
   const env = createEnvironmentApi(payload.env)
   const scope = createScopeApi(payload.scope)
-  const response = payload.response
+  const cookies = createCookiesApi()
+  const response: VisualizerResponseApi | null = payload.response
+    ? {
+        ...payload.response,
+        headers: createHeaderApi(Object.entries(payload.response.headers).map(([key, value]) => ({ key, value }))),
+        hasCookies() {
+          return this.headers.has('set-cookie')
+        },
+        parseCookies() {
+          return this.headers
+            .entries()
+            .filter(([key]) => key.trim().toLowerCase() === 'set-cookie')
+            .flatMap(([, value]) => splitCombinedSetCookieHeader(value).flatMap(parseSetCookieForScript))
+        },
+      }
+    : null
   const Table = createTableComponent()
   const VisualizerCodeEditor = createVisualizerCodeEditor()
   const {
@@ -175,6 +207,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     scope,
     request,
     response,
+    cookies,
     Table,
     CodeEditor: VisualizerCodeEditor,
   })
@@ -201,6 +234,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     'response',
     'requireScript',
     'crypto',
+    'cookies',
     'z',
     'formatXml',
     'formatJson',
@@ -229,6 +263,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     response,
     requireScript,
     crypto,
+    cookies,
     z,
     formatXml,
     formatJson,
@@ -269,7 +304,8 @@ function createSharedScriptModuleLoader(
       rawType: string
       headers: ReturnType<typeof createHeaderApi>
     }
-    response: VisualizerPayload['response']
+    response: VisualizerResponseApi | null
+    cookies: ReturnType<typeof createCookiesApi>
     Table: ReturnType<typeof createTableComponent>
     CodeEditor: VisualizerCodeEditorComponent
   }
@@ -547,6 +583,174 @@ function createHeaderApi(initialHeaders: Array<{ key: string; value: string }>) 
       return Object.fromEntries(rows.map(item => [item.key, item.value]))
     },
   }
+}
+
+function createCookiesApi() {
+  return {
+    parse(value: string) {
+      if (typeof value !== 'string') {
+        throw new Error('cookies.parse requires a string')
+      }
+
+      return splitCombinedSetCookieHeader(value).flatMap(parseSetCookieForScript)
+    },
+    stringify(cookies: Array<ReturnType<typeof parseSetCookieForScript>[number]>) {
+      if (!Array.isArray(cookies)) {
+        throw new Error('cookies.stringify requires an array')
+      }
+
+      return cookies.map(stringifyScriptCookie).join(', ')
+    },
+  }
+}
+
+function splitCombinedSetCookieHeader(value: string) {
+  const parts: string[] = []
+  let start = 0
+  let inExpires = false
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (!inExpires && value.slice(index, index + 8).toLowerCase() === 'expires=') {
+      inExpires = true
+      index += 7
+      continue
+    }
+
+    if (inExpires && value[index] === ';') {
+      inExpires = false
+      continue
+    }
+
+    if (value[index] !== ',' || inExpires) {
+      continue
+    }
+
+    const nextCookieStart = index + 1
+    const nextEqualsIndex = value.indexOf('=', nextCookieStart)
+    if (nextEqualsIndex === -1) {
+      continue
+    }
+
+    const nextToken = value.slice(nextCookieStart, nextEqualsIndex).trim()
+    if (!nextToken || /[\s;,]/u.test(nextToken)) {
+      continue
+    }
+
+    parts.push(value.slice(start, index).trim())
+    start = nextCookieStart
+  }
+
+  const lastPart = value.slice(start).trim()
+  if (lastPart) {
+    parts.push(lastPart)
+  }
+
+  return parts
+}
+
+function parseSetCookieForScript(value: string) {
+  const segments = value
+    .split(';')
+    .map(segment => segment.trim())
+    .filter(Boolean)
+  if (segments.length === 0) {
+    return []
+  }
+
+  const separatorIndex = segments[0].indexOf('=')
+  if (separatorIndex <= 0) {
+    return []
+  }
+
+  const name = segments[0].slice(0, separatorIndex).trim()
+  if (!name || /[\s;=]/u.test(name)) {
+    return []
+  }
+
+  const cookie = {
+    name,
+    value: segments[0].slice(separatorIndex + 1),
+    domain: null as string | null,
+    path: null as string | null,
+    secure: false,
+    httpOnly: false,
+    sameSite: null as 'strict' | 'lax' | 'none' | null,
+    expires: null as string | null,
+    maxAge: null as number | null,
+  }
+
+  for (const attribute of segments.slice(1)) {
+    const attributeSeparatorIndex = attribute.indexOf('=')
+    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex)).trim().toLowerCase()
+    const attributeValue = attributeSeparatorIndex === -1 ? '' : attribute.slice(attributeSeparatorIndex + 1).trim()
+
+    if (attributeName === 'domain') {
+      cookie.domain = attributeValue || null
+    } else if (attributeName === 'path') {
+      cookie.path = attributeValue || null
+    } else if (attributeName === 'secure') {
+      cookie.secure = true
+    } else if (attributeName === 'httponly') {
+      cookie.httpOnly = true
+    } else if (attributeName === 'samesite') {
+      cookie.sameSite = normalizeCookieSameSite(attributeValue)
+    } else if (attributeName === 'expires') {
+      cookie.expires = attributeValue || null
+    } else if (attributeName === 'max-age') {
+      const parsed = Number.parseInt(attributeValue, 10)
+      cookie.maxAge = Number.isFinite(parsed) ? parsed : null
+    }
+  }
+
+  return [cookie]
+}
+
+function stringifyScriptCookie(cookie: ReturnType<typeof parseSetCookieForScript>[number]) {
+  if (typeof cookie !== 'object' || cookie === null) {
+    throw new Error('cookies.stringify expects cookie objects')
+  }
+
+  const name = typeof cookie.name === 'string' ? cookie.name.trim() : ''
+  if (!name || /[\s;=]/u.test(name)) {
+    throw new Error('cookies.stringify encountered a cookie with an invalid name')
+  }
+
+  const parts = [`${name}=${typeof cookie.value === 'string' ? cookie.value : ''}`]
+  if (typeof cookie.domain === 'string' && cookie.domain.trim()) {
+    parts.push(`Domain=${cookie.domain.trim()}`)
+  }
+  if (typeof cookie.path === 'string' && cookie.path.trim()) {
+    parts.push(`Path=${cookie.path.trim()}`)
+  }
+  if (cookie.maxAge !== null && cookie.maxAge !== undefined) {
+    if (!Number.isInteger(cookie.maxAge)) {
+      throw new Error('cookies.stringify encountered a cookie with an invalid maxAge')
+    }
+    parts.push(`Max-Age=${cookie.maxAge}`)
+  }
+  if (typeof cookie.expires === 'string' && cookie.expires.trim()) {
+    parts.push(`Expires=${cookie.expires.trim()}`)
+  }
+  if (cookie.secure) {
+    parts.push('Secure')
+  }
+  if (cookie.httpOnly) {
+    parts.push('HttpOnly')
+  }
+  if (cookie.sameSite) {
+    parts.push(`SameSite=${cookie.sameSite.charAt(0).toUpperCase() + cookie.sameSite.slice(1)}`)
+  }
+
+  return parts.join('; ')
+}
+
+function normalizeCookieSameSite(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'strict' || normalized === 'lax' || normalized === 'none') {
+    return normalized
+  }
+
+  return null
 }
 
 function createEnvironmentApi(snapshot: VisualizerPayload['env']) {

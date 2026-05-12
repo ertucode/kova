@@ -76,6 +76,27 @@ interface ScriptHeaderApi {
   toObject(): Record<string, string>
 }
 
+type ScriptCookieSameSite = 'strict' | 'lax' | 'none'
+
+interface ScriptCookie {
+  name: string
+  value: string
+  domain: string | null
+  path: string | null
+  secure: boolean
+  httpOnly: boolean
+  sameSite: ScriptCookieSameSite | null
+  expires: string | null
+  maxAge: number | null
+}
+
+interface ScriptCookieApi {
+  /** Parse one or more Set-Cookie header values into cookie objects. */
+  parse(value: string): ScriptCookie[]
+  /** Serialize cookie objects into a Set-Cookie header value. */
+  stringify(cookies: ScriptCookie[]): string
+}
+
 interface ScriptPathParam {
   /** Path param name. */
   key: string
@@ -163,6 +184,7 @@ declare const scope: ScriptRequestScopeApi
 declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
 declare const clipboard: ScriptClipboardApi
+declare const cookies: ScriptCookieApi
 declare const z: typeof import('./vendor/zod/index.cjs').z
 declare function formatXml(xml: string): string
 declare function formatJson(json: string, indentation?: number): string
@@ -182,8 +204,12 @@ interface ScriptResponseApi {
   status: number
   /** HTTP status text. */
   statusText: string
-  /** Parsed response headers. */
-  headers: Record<string, string>
+  /** Response header helper API. */
+  headers: ScriptHeaderApi
+  /** Check whether the response currently has any Set-Cookie headers. */
+  hasCookies(): boolean
+  /** Parse all current Set-Cookie response headers. */
+  parseCookies(): ScriptCookie[]
   /** Parsed response body. */
   body: ScriptResponseBody
 }

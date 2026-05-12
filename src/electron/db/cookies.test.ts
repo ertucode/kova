@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cookieMatchesUrl, getSetCookieHeaderValues, getSetCookieHeaderValuesFromEntries, parseSetCookieHeader } from './cookies.js'
+import { cookieMatchesUrl, getSetCookieHeaderValuesFromEntries, parseSetCookieHeader } from './cookies.js'
 
 describe('parseSetCookieHeader', () => {
   it('parses host-only cookies with default path', () => {
@@ -40,15 +40,16 @@ describe('parseSetCookieHeader', () => {
   })
 })
 
-describe('getSetCookieHeaderValues', () => {
-  it('falls back to splitting a combined set-cookie header', () => {
-    const headers = new Headers()
-    headers.set(
-      'set-cookie',
-      'investag-auth=token; Domain=v2-api.investag.co; Path=/; Secure; SameSite=None; HttpOnly, theme=dark; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Path=/'
-    )
-
-    expect(getSetCookieHeaderValues(headers)).toEqual([
+describe('getSetCookieHeaderValuesFromEntries', () => {
+  it('splits a combined set-cookie header entry', () => {
+    expect(
+      getSetCookieHeaderValuesFromEntries([
+        [
+          'set-cookie',
+          'investag-auth=token; Domain=v2-api.investag.co; Path=/; Secure; SameSite=None; HttpOnly, theme=dark; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Path=/',
+        ],
+      ])
+    ).toEqual([
       'investag-auth=token; Domain=v2-api.investag.co; Path=/; Secure; SameSite=None; HttpOnly',
       'theme=dark; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Path=/',
     ])
