@@ -3,7 +3,7 @@
 - npm run build-mas (Build for Mac App Store)
 - xattr -cr /Applications/Kova.app (For your friend to run the built app)
 
-![Kova example](./kova-example.png)
+![Kova example](./example.png)
 
 # Features
 
