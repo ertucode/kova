@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { CopyIcon, InfoIcon, LibraryBigIcon, PencilIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import type { Extension } from '@codemirror/state'
@@ -327,6 +327,24 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       })),
     [variableTooltipRows]
   )
+  const responsePanelRequestDraft = useMemo(
+    () => ({
+      method: draft.method,
+      url: draft.url,
+      pathParams: draft.pathParams,
+      searchParams: draft.searchParams,
+      auth: draft.auth,
+      headers: draft.headers,
+      body: draft.body,
+      bodyType: draft.bodyType,
+      rawType: draft.rawType,
+    }),
+    [draft.auth, draft.body, draft.bodyType, draft.headers, draft.method, draft.pathParams, draft.rawType, draft.searchParams, draft.url]
+  )
+  const visualizerSharedScripts = useMemo(
+    () => visibleSharedScripts.filter(script => script.targets.includes('response-visualizer')),
+    [visibleSharedScripts]
+  )
   const hasPreRequestScript = draft.preRequestScript.trim().length > 0
   const hasPostRequestScript = draft.postRequestScript.trim().length > 0
   const usedVariableNames = useMemo(() => getUsedRequestVariableNames(draft), [draft])
@@ -531,6 +549,29 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [updateMetaTab]
   )
 
+  const updateResponseVisualizer = useCallback((value: string) => {
+    const latestDraft = draftRef.current
+
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...latestDraft,
+      responseVisualizer: value,
+    })
+  }, [])
+
+  const fillResponseVisualizerTemplate = useCallback(() => {
+    const latestDraft = draftRef.current
+
+    FolderExplorerCoordinator.updateSelectedDraft({
+      ...latestDraft,
+      responseVisualizer: `
+export default function View() {
+  
+}
+`,
+    })
+    setTimeout(() => responseVisualizerEditorRef.current?.focusLine(3, 4), 0)
+  }, [])
+
   const bodyTab = (
     <RequestBodyTab
       draft={draft}
@@ -701,81 +742,101 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       ) : null}
 
       {metaTab === 'response-visualizer' ? (
-        <section className="min-h-0 flex-1">
-          <div className="relative h-full">
-            <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
-              <Tooltip content="Fill in the script" placement="left">
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center cursor-pointer rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
-                  onClick={() => {
-                    FolderExplorerCoordinator.updateSelectedDraft({
-                      ...draft,
-                      responseVisualizer: `
-export default function View() {
-  
-}
-`,
-                    })
-                    setTimeout(() => responseVisualizerEditorRef.current?.focusLine(3, 4), 0)
-                  }}
-                  aria-label="Copy response visualizer"
-                >
-                  <PencilIcon className="size-4" />
-                </button>
-              </Tooltip>
-              <Tooltip content="Copy" placement="left">
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center cursor-pointer rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
-                  onClick={() =>
-                    void copyTextToClipboard(draft.responseVisualizer, 'Response visualizer copied to clipboard.')
-                  }
-                  aria-label="Copy response visualizer"
-                >
-                  <CopyIcon className="size-4" />
-                </button>
-              </Tooltip>
-              <ScriptDocumentationButton
-                phase="response-visualizer"
-                mode="examples"
-                tooltip="Examples"
-                className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 px-0 backdrop-blur"
-              />
-              <ScriptDocumentationButton
-                phase="response-visualizer"
-                tooltip="Documentation"
-                className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 backdrop-blur"
-              />
-            </div>
-            <CodeEditor
-              ref={responseVisualizerEditorRef}
-              value={draft.responseVisualizer}
-              language="jsx"
-              size="small"
-              showLineNumbers
-              minHeightClassName="min-h-0 h-full"
-              className="h-full border-x-0 border-b-0 border-t-0"
-              placeholder={RESPONSE_VISUALIZER_PLACEHOLDER}
-              extensions={responseVisualizerExtensions}
-              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseVisualizer: value })}
-              onBlur={() => undefined}
-            />
-          </div>
-        </section>
+        <ResponseVisualizerTab
+          value={draft.responseVisualizer}
+          extensions={responseVisualizerExtensions}
+          editorRef={responseVisualizerEditorRef}
+          onChange={updateResponseVisualizer}
+          onFillTemplate={fillResponseVisualizerTemplate}
+        />
       ) : null}
 
       <RequestDetailsResponsePanel
         isSending={isSending}
-        draft={draft}
+        requestName={draft.name}
+        requestHeaders={draft.headers}
+        requestBody={draft.body}
+        requestBodyType={draft.bodyType}
+        requestRawType={draft.rawType}
+        responseVisualizer={draft.responseVisualizer}
+        responseTableAccessor={draft.responseTableAccessor}
+        preferredResponseBodyView={draft.preferredResponseBodyView}
+        visualizerRequestDraft={responsePanelRequestDraft}
         onJumpToScriptError={handleJumpToScriptError}
         visualizerEnvironments={visualizerEnvironments}
-        sharedScripts={visibleSharedScripts.filter(script => script.targets.includes('response-visualizer'))}
+        sharedScripts={visualizerSharedScripts}
         scriptPackageArtifacts={scriptPackageArtifacts}
       />
     </div>
   )
 }
+
+const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
+  value,
+  extensions,
+  editorRef,
+  onChange,
+  onFillTemplate,
+}: {
+  value: string
+  extensions: Extension[]
+  editorRef: RefObject<CodeEditorHandle | null>
+  onChange: (value: string) => void
+  onFillTemplate: () => void
+}) {
+  return (
+    <section className="min-h-0 flex-1">
+      <div className="relative h-full">
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          <Tooltip content="Fill in the script" placement="left">
+            <button
+              type="button"
+              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
+              onClick={onFillTemplate}
+              aria-label="Fill response visualizer"
+            >
+              <PencilIcon className="size-4" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Copy" placement="left">
+            <button
+              type="button"
+              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-base-content/10 bg-base-100/90 px-2.5 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:text-base-content"
+              onClick={() => void copyTextToClipboard(value, 'Response visualizer copied to clipboard.')}
+              aria-label="Copy response visualizer"
+            >
+              <CopyIcon className="size-4" />
+            </button>
+          </Tooltip>
+          <ScriptDocumentationButton
+            phase="response-visualizer"
+            mode="examples"
+            tooltip="Examples"
+            className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 px-0 backdrop-blur"
+          />
+          <ScriptDocumentationButton
+            phase="response-visualizer"
+            tooltip="Documentation"
+            className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 backdrop-blur"
+          />
+        </div>
+        <CodeEditor
+          ref={editorRef}
+          value={value}
+          language="jsx"
+          size="small"
+          showLineNumbers
+          minHeightClassName="min-h-0 h-full"
+          className="h-full border-x-0 border-b-0 border-t-0"
+          placeholder={RESPONSE_VISUALIZER_PLACEHOLDER}
+          extensions={extensions}
+          onChange={onChange}
+          onBlur={() => undefined}
+        />
+      </div>
+    </section>
+  )
+})
 
 function ScriptDocumentationButton({
   phase,

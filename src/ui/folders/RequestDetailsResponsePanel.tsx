@@ -22,6 +22,7 @@ import { SseTranscript } from './SseTranscript'
 import { RequestHistoryDialog } from './RequestHistoryDialog'
 import { ResponseVisualizerPreview } from './ResponseVisualizerPreview'
 import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderExplorerEditorStore'
+import { toSelectionKey } from './folderExplorerUtils'
 import { requestExecutionStore } from './requestExecutionStore'
 import { AppSettingsCoordinator, appSettingsStore } from '@/global/appSettingsStore'
 import { Tooltip } from '../components/Tooltip'
@@ -30,16 +31,35 @@ import { formatXml } from '@common/formatXml'
 const readOnlyCodeEditorOnChange = () => undefined
 const jsonResponsePathExtension = createJsonResponsePathExtension()
 
-export function RequestDetailsResponsePanel({
+export const RequestDetailsResponsePanel = memo(function RequestDetailsResponsePanel({
   isSending,
-  draft,
+  requestName,
+  requestHeaders,
+  requestBody,
+  requestBodyType,
+  requestRawType,
+  responseVisualizer,
+  responseTableAccessor,
+  preferredResponseBodyView,
+  visualizerRequestDraft,
   onJumpToScriptError,
   visualizerEnvironments,
   sharedScripts,
   scriptPackageArtifacts,
 }: {
   isSending: boolean
-  draft: RequestDetailsDraft
+  requestName: string
+  requestHeaders: string
+  requestBody: string
+  requestBodyType: RequestDetailsDraft['bodyType']
+  requestRawType: RequestDetailsDraft['rawType']
+  responseVisualizer: string
+  responseTableAccessor: string
+  preferredResponseBodyView: RequestDetailsDraft['preferredResponseBodyView']
+  visualizerRequestDraft: Pick<
+    RequestDetailsDraft,
+    'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'
+  >
   onJumpToScriptError: (error: RequestScriptError) => void
   visualizerEnvironments: Array<{
     id: string
@@ -80,22 +100,6 @@ export function RequestDetailsResponsePanel({
   const responseBodyRequestSelection = useMemo(
     () => (selectedRequestId ? { itemType: 'request' as const, id: selectedRequestId } : null),
     [selectedRequestId]
-  )
-  const responseVisualizerRequestDraft = useMemo<
-    Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
-  >(
-    () => ({
-      method: draft.method,
-      url: draft.url,
-      pathParams: draft.pathParams,
-      searchParams: draft.searchParams,
-      auth: draft.auth,
-      headers: draft.headers,
-      body: draft.body,
-      bodyType: draft.bodyType,
-      rawType: draft.rawType,
-    }),
-    [draft.auth, draft.body, draft.bodyType, draft.headers, draft.method, draft.pathParams, draft.rawType, draft.searchParams, draft.url]
   )
   const responseContentType = useMemo(() => getResponseContentType(response?.headers ?? ''), [response?.headers])
   const sseStreamContentType = useMemo(() => getResponseContentType(sseStream?.headers ?? ''), [sseStream?.headers])
@@ -138,16 +142,16 @@ export function RequestDetailsResponsePanel({
       return
     }
 
-    const result = await getWindowElectron().createRequestExample({
-      requestId: selectedRequestId,
-      name: `${draft.name} ${responseSource.status || responseSource.statusText}`,
-      requestHeaders: draft.headers,
-      requestBody: draft.body,
-      requestBodyType: draft.bodyType,
-      requestRawType: draft.rawType,
-      responseStatus: responseSource.status,
-      responseStatusText: responseSource.statusText,
-      responseHeaders: responseSource.headers,
+      const result = await getWindowElectron().createRequestExample({
+        requestId: selectedRequestId,
+        name: `${requestName} ${responseSource.status || responseSource.statusText}`,
+        requestHeaders,
+        requestBody,
+        requestBodyType,
+        requestRawType,
+        responseStatus: responseSource.status,
+        responseStatusText: responseSource.statusText,
+        responseHeaders: responseSource.headers,
       responseBody: responseSource.body,
     })
 
@@ -158,14 +162,24 @@ export function RequestDetailsResponsePanel({
 
     await FolderExplorerCoordinator.loadItems()
     FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
-    toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${draft.name}.` })
-  }, [draft, response, selectedRequestId, sseStream])
+    toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${requestName}.` })
+  }, [requestBody, requestBodyType, requestHeaders, requestName, requestRawType, response, selectedRequestId, sseStream])
 
   const updateResponseTableAccessor = useCallback(
     (value: string) => {
-      FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseTableAccessor: value })
+      const { selected, entries } = folderExplorerEditorStore.getSnapshot().context
+      if (!selected) {
+        return
+      }
+
+      const currentDraft = entries[toSelectionKey(selected)]?.current
+      if (currentDraft?.itemType !== 'request') {
+        return
+      }
+
+      FolderExplorerCoordinator.updateSelectedDraft({ ...currentDraft, responseTableAccessor: value })
     },
-    [draft]
+    []
   )
 
   useEffect(() => {
@@ -285,7 +299,7 @@ export function RequestDetailsResponsePanel({
               stream={sseStream}
               response={response}
               requestId={selectedRequestId}
-              requestName={draft.name}
+              requestName={requestName}
               requestHistoryCount={requestHistoryCount}
               events={displayedSseEvents}
               onSaveAsExample={
@@ -299,17 +313,17 @@ export function RequestDetailsResponsePanel({
                 rawBody={response?.body ?? ''}
                 headers={response?.headers ?? ''}
                 requestId={selectedRequestId}
-                requestName={draft.name}
+                requestName={requestName}
                 requestHistoryCount={requestHistoryCount}
                 description="Response body will appear here."
                 headersDescription="Response headers will appear here."
                 contentType={responseContentType}
-                responseVisualizer={draft.responseVisualizer}
-                responseTableAccessor={draft.responseTableAccessor}
-                preferredResponseBodyView={draft.preferredResponseBodyView}
+                responseVisualizer={responseVisualizer}
+                responseTableAccessor={responseTableAccessor}
+                preferredResponseBodyView={preferredResponseBodyView}
                 responseBodyDisplayMode={responseBodyDisplayMode}
                 requestSelection={responseBodyRequestSelection}
-                requestDraft={responseVisualizerRequestDraft}
+                requestDraft={visualizerRequestDraft}
                 sharedScripts={sharedScripts}
                 scriptPackageArtifacts={scriptPackageArtifacts}
                 onUpdateResponseTableAccessor={updateResponseTableAccessor}
@@ -324,7 +338,7 @@ export function RequestDetailsResponsePanel({
       </div>
     </section>
   )
-}
+})
 
 const ResponseScriptErrors = memo(function ResponseScriptErrors({
   responseError,
