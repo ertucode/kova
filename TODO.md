@@ -1,1 +1,0 @@
-- prerequest script değişince response visualizer rerender oluyo.

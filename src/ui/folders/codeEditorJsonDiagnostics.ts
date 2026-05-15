@@ -5,7 +5,7 @@ import { getJson5Diagnostic } from '@common/Json5'
 import { toast } from '@/lib/components/toast'
 import { findTemplateScriptExpressions } from './codeEditorTemplateScript'
 import { requestScriptDiagnostics } from './scriptAutocompleteClient'
-import type { ScriptAutocompleteSharedScript, ScriptDiagnosticsSuccess } from './scriptAutocompleteTypes'
+import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript, ScriptDiagnosticsSuccess } from './scriptAutocompleteTypes'
 
 const DIAGNOSTIC_DEBOUNCE_MS = 180
 const setInlineDiagnosticsEffect = StateEffect.define<readonly JsonEditorDiagnostic[]>()
@@ -72,7 +72,10 @@ const inlineDiagnosticsTheme = EditorView.theme({
   },
 })
 
-export function jsonDiagnosticsExtension(options?: { getSharedScripts?: () => ScriptAutocompleteSharedScript[] }): Extension {
+export function jsonDiagnosticsExtension(options?: {
+  getSharedScripts?: () => ScriptAutocompleteSharedScript[]
+  getPackages?: () => ScriptAutocompletePackage[]
+}): Extension {
   return [
     inlineDiagnosticsField,
     inlineDiagnosticsTheme,
@@ -104,6 +107,7 @@ export function jsonDiagnosticsExtension(options?: { getSharedScripts?: () => Sc
               runtimeContext: { templatePhase: 'pre-request' },
               code: expression.code,
               sharedScripts: options?.getSharedScripts?.(),
+              packages: options?.getPackages?.(),
               signal: abortController.signal,
             })
           )

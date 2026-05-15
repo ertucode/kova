@@ -139,7 +139,7 @@ export function FolderExplorerTabs() {
     <>
       <div
         ref={tabsContainerRef}
-        className="flex h-11 min-w-0 items-stretch gap-1 overflow-x-auto border-b border-base-content/10 bg-base-100/95 px-2 py-1.5"
+        className="flex h-11 min-w-0 items-stretch gap-0 overflow-x-auto border-b border-base-content/10 bg-base-100/95"
         onWheel={event => {
           const container = tabsContainerRef.current
           if (!container) {
@@ -175,9 +175,9 @@ export function FolderExplorerTabs() {
                 <div
                   draggable
                   className={[
-                    'group flex h-full w-[220px] shrink-0 items-center gap-2 rounded-xl border px-3 text-sm transition',
+                    'group flex h-full w-[220px] shrink-0 items-center gap-2 border px-3 text-sm transition',
                     isActive
-                      ? 'border-base-content/12 bg-base-100 text-base-content shadow-[0_10px_24px_rgba(0,0,0,0.10)]'
+                      ? 'border-base-content/12 bg-base-300/80 text-base-content shadow-[0_10px_24px_rgba(0,0,0,0.10)]'
                       : 'border-transparent bg-base-200/40 text-base-content/70 hover:border-base-content/10 hover:bg-base-200/65',
                     draggedTabId === tab.id ? 'opacity-50' : '',
                   ].join(' ')}

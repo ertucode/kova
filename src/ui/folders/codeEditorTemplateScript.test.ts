@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findTemplateScriptExpressionAtPosition } from './codeEditorTemplateScript'
+import { findTemplateScriptExpressionAtPosition, findTemplateScriptExpressions } from './codeEditorTemplateScript'
 
 describe('findTemplateScriptExpressionAtPosition', () => {
   it('finds the enclosing expression and maps its content range', () => {
@@ -19,5 +19,11 @@ describe('findTemplateScriptExpressionAtPosition', () => {
     const source = String.raw`\{{$crypto.randomUUID()}}`
 
     expect(findTemplateScriptExpressionAtPosition(source, source.indexOf('crypto'))).toBeNull()
+  })
+
+  it('strips the template marker before runtime parsing', () => {
+    const [expression] = findTemplateScriptExpressions("{{$loadPackage('lodash').isArray([])}}")
+
+    expect(expression?.code).toBe("loadPackage('lodash').isArray([])")
   })
 })

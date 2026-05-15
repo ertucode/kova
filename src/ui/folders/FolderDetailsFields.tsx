@@ -115,6 +115,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
@@ -124,6 +125,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
             getEnvironmentNames: () => activeEnvironmentNamesRef.current,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
             getSharedScripts: () => visibleSharedScriptsRef.current,
+            getPackages: () => scriptPackageArtifactsRef.current,
           }),
         ],
       }),

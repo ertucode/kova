@@ -39,7 +39,7 @@ import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
-import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
+import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
@@ -179,6 +179,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         extraSources: [
@@ -186,6 +187,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             getEnvironmentNames: () => activeEnvironmentNamesRef.current,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
             getSharedScripts: () => visibleSharedScriptsRef.current,
+            getPackages: () => scriptPackageArtifactsRef.current,
           }),
         ],
       }),
@@ -208,6 +210,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
         fallbackToBrowserTab: true,
       }),
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
@@ -217,6 +220,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
             getEnvironmentNames: () => activeEnvironmentNamesRef.current,
             getVariableNames: () => activeEnvironmentVariableNamesRef.current,
             getSharedScripts: () => visibleSharedScriptsRef.current,
+            getPackages: () => scriptPackageArtifactsRef.current,
           }),
         ],
       }),
@@ -577,6 +581,7 @@ export default function View() {
       draft={draft}
       formatJsonBody={formatJsonBody}
       getSharedScripts={() => visibleSharedScriptsRef.current}
+      getPackages={() => scriptPackageArtifactsRef.current}
       pickFormDataFilePath={pickFormDataFilePath}
       showHeader={compactRequestView}
       variableEditorExtensions={variableEditorExtensions}
@@ -1092,6 +1097,7 @@ function RequestBodyTab({
   draft,
   formatJsonBody,
   getSharedScripts,
+  getPackages,
   pickFormDataFilePath,
   showHeader,
   variableEditorExtensions,
@@ -1100,6 +1106,7 @@ function RequestBodyTab({
   draft: RequestDetailsDraft
   formatJsonBody: () => Promise<void>
   getSharedScripts: () => ScriptAutocompleteSharedScript[]
+  getPackages: () => ScriptAutocompletePackage[]
   pickFormDataFilePath: (row: KeyValueRow) => Promise<string | null>
   showHeader: boolean
   variableEditorExtensions: Extension[]
@@ -1110,8 +1117,8 @@ function RequestBodyTab({
       return variableEditorExtensions
     }
 
-    return [...variableEditorExtensions, jsonDiagnosticsExtension({ getSharedScripts })]
-  }, [draft.bodyType, draft.rawType, getSharedScripts, variableEditorExtensions])
+    return [...variableEditorExtensions, jsonDiagnosticsExtension({ getSharedScripts, getPackages })]
+  }, [draft.bodyType, draft.rawType, getPackages, getSharedScripts, variableEditorExtensions])
 
   return (
     <section className="h-full min-h-0 flex-1">

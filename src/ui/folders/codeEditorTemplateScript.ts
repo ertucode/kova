@@ -10,7 +10,8 @@ import { highlightTree, tagHighlighter, tags } from '@lezer/highlight'
 import { parser as javaScriptParser } from '@lezer/javascript'
 import { RangeSetBuilder, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
-import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
+import { formatScriptPackageSpecifier } from '@common/ScriptPackages'
+import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
@@ -20,6 +21,7 @@ type TemplateScriptOptions = {
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
+  getPackages?: () => ScriptAutocompletePackage[]
   fallbackToBrowserTab?: boolean
 }
 
@@ -98,7 +100,7 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
 }
 
 export function createTemplateCompletionSource(
-  options: Pick<TemplateScriptOptions, 'getEnvironmentNames' | 'getVariableNames' | 'getSharedScripts'>,
+  options: Pick<TemplateScriptOptions, 'getEnvironmentNames' | 'getVariableNames' | 'getSharedScripts' | 'getPackages'>,
   phase: ScriptAutocompletePhase = 'pre-request'
 ): CompletionSource {
   return async context => {
@@ -112,7 +114,12 @@ export function createTemplateCompletionSource(
       return environmentResult
     }
 
-    return completeTemplateScriptApi(context, phase, options.getSharedScripts)
+    const packageResult = completeTemplatePackageSpecifier(context, options.getPackages)
+    if (packageResult) {
+      return packageResult
+    }
+
+    return completeTemplateScriptApi(context, phase, options.getSharedScripts, options.getPackages)
   }
 }
 
@@ -167,7 +174,7 @@ function buildTemplateScriptDecorations(view: EditorView) {
     const contentTo = matchTo - 2
 
     builder.add(matchFrom, matchTo, templateExpressionDecoration)
-    builder.add(matchFrom, contentFrom, templateDelimiterDecoration)
+    builder.add(matchFrom, contentFrom, templateOpeningDelimiterDecoration)
     builder.add(contentFrom, contentTo, templateContentDecoration)
 
     for (const token of scanTemplateScriptTokens(match[1] ?? '')) {
@@ -180,7 +187,7 @@ function buildTemplateScriptDecorations(view: EditorView) {
         builder.add(tokenFrom, tokenTo, Decoration.mark({ class: token.className }))
       }
 
-    builder.add(contentTo, contentTo + 2, templateDelimiterDecoration)
+    builder.add(contentTo, contentTo + 2, templateClosingDelimiterDecoration)
   }
 
   return builder.finish()
@@ -309,7 +316,8 @@ function completeTemplateEnvironmentName(
 async function completeTemplateScriptApi(
   context: CompletionContext,
   phase: ScriptAutocompletePhase,
-  getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined
+  getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined,
+  getPackages: (() => ScriptAutocompletePackage[]) | undefined
 ): Promise<CompletionResult | null> {
   const expression = findTemplateScriptExpressionAtPosition(context.state.doc.toString(), context.pos)
   if (!expression) {
@@ -332,6 +340,7 @@ async function completeTemplateScriptApi(
       code: expression.code,
       position: relativePosition,
       sharedScripts: getSharedScripts?.(),
+      packages: getPackages?.(),
       signal: abortController.signal,
     })
 
@@ -363,7 +372,8 @@ function shouldStartTemplateScriptCompletion(textBeforeCursor: string) {
     /scope\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     /request\.headers\.(?:get|has|set|delete)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     /env\.(?:get|has)\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
-    /env\.set\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor)
+    /env\.set\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
+    getPackageSpecifierContext(textBeforeCursor) !== null
   ) {
     return true
   }
@@ -394,8 +404,134 @@ function buildQuotedStringCompletion(option: Completion, quote: string, suffix =
   }
 }
 
-const templateDelimiterDecoration = Decoration.mark({
-  class: 'cm-template-script-delimiter',
+function completeTemplatePackageSpecifier(
+  context: CompletionContext,
+  getPackages: (() => ScriptAutocompletePackage[]) | undefined
+): CompletionResult | null {
+  if (!getPackages) {
+    return null
+  }
+
+  const expression = findTemplateScriptExpressionAtPosition(context.state.doc.toString(), context.pos)
+  if (!expression) {
+    return null
+  }
+
+  const before = expression.code.slice(Math.max(0, context.pos - expression.contentFrom - 240), context.pos - expression.contentFrom)
+  const packageContext = getPackageSpecifierContext(before)
+  if (!packageContext) {
+    return null
+  }
+
+  const options = buildPackageStringCompletions(getPackages, packageContext.query).map(option =>
+    buildQuotedStringCompletion(option, packageContext.quote, packageContext.suffix)
+  )
+
+  if (options.length === 0) {
+    return null
+  }
+
+  return {
+    from: context.pos - packageContext.query.length,
+    to: context.pos,
+    options,
+    filter: false,
+    validFor: /^[^'"]*$/,
+  }
+}
+
+function buildPackageStringCompletions(
+  getPackages: (() => ScriptAutocompletePackage[]) | undefined,
+  query: string
+): Completion[] {
+  if (!getPackages) {
+    return []
+  }
+
+  const packages = getPackages()
+  const packageCounts = new Map<string, number>()
+  for (const pkg of packages) {
+    packageCounts.set(pkg.packageName, (packageCounts.get(pkg.packageName) ?? 0) + 1)
+  }
+
+  const entries: Array<{ label: string; detail: string; boost: number }> = []
+  const seen = new Set<string>()
+  const normalizedQuery = query.toLowerCase()
+
+  for (const pkg of packages) {
+    if (pkg.downloadStatus !== 'ready') {
+      continue
+    }
+
+    if ((packageCounts.get(pkg.packageName) ?? 0) === 1 && !seen.has(pkg.packageName)) {
+      seen.add(pkg.packageName)
+      entries.push({
+        label: pkg.packageName,
+        detail: `package ${pkg.packageVersion}`,
+        boost: 20,
+      })
+    }
+
+    const versionedSpecifier = formatScriptPackageSpecifier(pkg.packageName, pkg.packageVersion)
+    if (!seen.has(versionedSpecifier)) {
+      seen.add(versionedSpecifier)
+      entries.push({
+        label: versionedSpecifier,
+        detail: `package ${pkg.packageVersion}`,
+        boost: 10,
+      })
+    }
+  }
+
+  return entries
+    .filter(entry => normalizedQuery === '' || entry.label.toLowerCase().includes(normalizedQuery))
+    .sort((left, right) => {
+      const leftVersionless = !left.label.includes('@', 1)
+      const rightVersionless = !right.label.includes('@', 1)
+      if (leftVersionless !== rightVersionless) {
+        return leftVersionless ? -1 : 1
+      }
+
+      return left.label.localeCompare(right.label)
+    })
+    .map(entry => ({
+      label: entry.label,
+      type: 'module',
+      detail: entry.detail,
+      boost: entry.boost,
+    }))
+}
+
+function getPackageSpecifierContext(sourceBeforeCursor: string) {
+  const patterns = [
+    { pattern: /loadPackage\(\s*(['"])([^'"]*)$/, suffix: ')' },
+    { pattern: /import\(\s*(['"])([^'"]*)$/, suffix: ')' },
+    { pattern: /(?:^|[\s;])import\s+(?:type\s+)?(?:[^'"\n]+?\s+from\s+)?(['"])([^'"]*)$/, suffix: '' },
+    { pattern: /(?:^|[\s;])export\s+[^'"\n]+?\s+from\s+(['"])([^'"]*)$/, suffix: '' },
+  ]
+
+  for (const { pattern, suffix } of patterns) {
+    const match = sourceBeforeCursor.match(pattern)
+    if (!match) {
+      continue
+    }
+
+    return {
+      quote: match[1] ?? '"',
+      query: match[2] ?? '',
+      suffix,
+    }
+  }
+
+  return null
+}
+
+const templateOpeningDelimiterDecoration = Decoration.mark({
+  class: 'cm-template-script-delimiter cm-template-script-delimiter-open',
+})
+
+const templateClosingDelimiterDecoration = Decoration.mark({
+  class: 'cm-template-script-delimiter cm-template-script-delimiter-close',
 })
 
 const templateContentDecoration = Decoration.mark({
@@ -411,10 +547,28 @@ const templateExpressionDecoration = Decoration.mark({
 
 const templateScriptTheme = EditorView.baseTheme({
   '.cm-template-script-expression': {
+    background: 'transparent !important',
+    borderRadius: '0',
+    padding: '0',
+    boxShadow: 'none',
+  },
+  '.cm-template-script-delimiter, .cm-template-script-content': {
     background: 'color-mix(in oklab, var(--color-secondary) 16%, transparent) !important',
-    borderRadius: '0.375rem',
-    padding: '0 0.12rem',
-    boxShadow: 'inset 0 0 0 1px color-mix(in oklab, var(--color-secondary) 30%, transparent)',
+    boxShadow: 'inset 0 1px 0 color-mix(in oklab, var(--color-secondary) 30%, transparent), inset 0 -1px 0 color-mix(in oklab, var(--color-secondary) 30%, transparent)',
+  },
+  '.cm-template-script-delimiter-open': {
+    borderTopLeftRadius: '0.375rem',
+    borderBottomLeftRadius: '0.375rem',
+    paddingLeft: '0.12rem',
+    boxShadow:
+      'inset 1px 0 0 color-mix(in oklab, var(--color-secondary) 30%, transparent), inset 0 1px 0 color-mix(in oklab, var(--color-secondary) 30%, transparent), inset 0 -1px 0 color-mix(in oklab, var(--color-secondary) 30%, transparent)',
+  },
+  '.cm-template-script-delimiter-close': {
+    borderTopRightRadius: '0.375rem',
+    borderBottomRightRadius: '0.375rem',
+    paddingRight: '0.12rem',
+    boxShadow:
+      'inset -1px 0 0 color-mix(in oklab, var(--color-secondary) 30%, transparent), inset 0 1px 0 color-mix(in oklab, var(--color-secondary) 30%, transparent), inset 0 -1px 0 color-mix(in oklab, var(--color-secondary) 30%, transparent)',
   },
   '.cm-template-script-content, .cm-template-script-content *': {
     color: 'color-mix(in oklab, var(--color-base-content) 88%, var(--color-secondary) 12%) !important',

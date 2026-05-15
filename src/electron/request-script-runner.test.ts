@@ -345,6 +345,36 @@ describe('createRequestScriptRuntime', () => {
     expect(runtime.getRequestScopeValues().traceId).toBe(result)
   })
 
+  it('loads installed packages inside template expressions', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      scriptPackages: [
+        {
+          packageName: 'lodash',
+          packageVersion: '4.17.21',
+          typesPackageName: '@types/lodash',
+          typesPackageVersion: '4.17.20',
+          cacheDirectory: path.resolve('.'),
+        },
+      ],
+    })
+
+    const result = await runtime.resolveTemplateExpressions('{{$loadPackage("lodash").isArray([])}}', 'Request Body')
+
+    expect(result).toBe('true')
+  })
+
   it('only exposes pre-request shared modules to template expressions', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
