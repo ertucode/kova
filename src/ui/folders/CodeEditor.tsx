@@ -145,15 +145,23 @@ const editorTheme = EditorView.theme({
     borderRight: '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
     paddingRight: '0',
   },
-  '.cm-lintGutter': {
+  '.cm-gutter-lint': {
     width: '1.05rem',
   },
-  '.cm-lintGutter .cm-gutterElement': {
+  '.cm-gutter-lint .cm-gutterElement': {
+    alignItems: 'center',
+    display: 'flex',
     padding: '0',
     width: '1.05rem',
     justifyContent: 'center',
   },
+  '.cm-gutter-lint .cm-lint-marker': {
+    display: 'block',
+    flex: 'none',
+  },
   '.cm-lineNumbers .cm-gutterElement': {
+    alignItems: 'center',
+    display: 'flex',
     minWidth: '1rem',
     padding: '0 0.2rem 0 0.3rem',
   },
@@ -182,6 +190,7 @@ const editorTheme = EditorView.theme({
   },
   '.cm-gutterElement': {
     color: 'color-mix(in oklab, var(--color-base-content) 42%, transparent)',
+    boxSizing: 'border-box',
   },
   '.cm-foldGutter .cm-gutterElement:hover': {
     color: 'var(--color-base-content)',
