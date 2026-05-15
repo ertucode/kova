@@ -42,6 +42,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   listExplorerItems: () => ipcInvoke('listExplorerItems', undefined),
   listFolderExplorerTabs: () => ipcInvoke('listFolderExplorerTabs', undefined),
   saveFolderExplorerTabs: input => ipcInvoke('saveFolderExplorerTabs', input),
+  updateFolderExplorerTab: input => ipcInvoke('updateFolderExplorerTab', input),
   createFolder: input => ipcInvoke('createFolder', input),
   getFolder: input => ipcInvoke('getFolder', input),
   renameFolder: input => ipcInvoke('renameFolder', input),

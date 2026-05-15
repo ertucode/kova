@@ -3,6 +3,7 @@ import { CopyIcon, InfoIcon, LibraryBigIcon, PencilIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import type { Extension } from '@codemirror/state'
 import { getAuthVariableSources } from '@common/Auth'
+import type { RequestMetaTab } from '@common/FolderExplorerTabs'
 import type { RequestScriptError, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
 import { parseCurlRequest } from '@common/curl'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
@@ -52,16 +53,6 @@ import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { twMerge } from 'tailwind-merge'
 
-type RequestMetaTab =
-  | 'overview'
-  | 'body'
-  | 'search-params'
-  | 'headers'
-  | 'auth'
-  | 'path-params'
-  | 'scripts'
-  | 'response-visualizer'
-
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
   const compactRequestView = useSelector(
@@ -70,7 +61,6 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
   const [metaTab, setMetaTab] = useState<RequestMetaTab>('overview')
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
-  const metaTabByRequestIdRef = useRef<Record<string, RequestMetaTab>>({})
   const draftRef = useRef(draft)
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const postRequestEditorRef = useRef<CodeEditorHandle | null>(null)
@@ -78,6 +68,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
+  const selectedRequestMetaTab = useSelector(folderExplorerEditorStore, state =>
+    state.context.selected?.itemType === 'request'
+      ? state.context.tabs.find(tab => tab.id === state.context.activeTabId)?.requestMetaTab ?? null
+      : null
+  )
+  const currentRequestSelection = selectedRequestId ? { itemType: 'request' as const, id: selectedRequestId } : null
   const selectedRequestIdRef = useRef<string | null>(selectedRequestId)
   const selectedRequestFolderId = useSelector(folderExplorerTreeStore, state => {
     const request = state.context.items.find(
@@ -359,7 +355,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       return
     }
 
-    const existingMetaTab = metaTabByRequestIdRef.current[selectedRequestId]
+    const existingMetaTab = selectedRequestMetaTab
     if (existingMetaTab) {
       setMetaTab(normalizeMetaTabForLayout(existingMetaTab, compactRequestView))
       return
@@ -370,16 +366,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       : compactRequestView
         ? 'overview'
         : 'body'
-    metaTabByRequestIdRef.current[selectedRequestId] = initialMetaTab
+    void FolderExplorerCoordinator.updateSelectedRequestMetaTab(initialMetaTab)
     setMetaTab(initialMetaTab)
-  }, [compactRequestView, draft, selectedRequestId])
+  }, [compactRequestView, draft, selectedRequestId, selectedRequestMetaTab])
 
   const updateMetaTab = useCallback(
     (nextMetaTab: RequestMetaTab) => {
       const normalizedMetaTab = normalizeMetaTabForLayout(nextMetaTab, compactRequestView)
 
       if (selectedRequestId) {
-        metaTabByRequestIdRef.current[selectedRequestId] = normalizedMetaTab
+        void FolderExplorerCoordinator.updateSelectedRequestMetaTab(normalizedMetaTab)
       }
 
       setMetaTab(normalizedMetaTab)
@@ -416,25 +412,36 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     }
   }
 
+  const updateRequestDraft = useCallback(
+    (nextDraft: RequestDetailsDraft, debugLabel?: string) => {
+      if (!currentRequestSelection) {
+        return false
+      }
+
+      return FolderExplorerCoordinator.updateSelectedDraftIfMatching(currentRequestSelection, nextDraft, debugLabel)
+    },
+    [currentRequestSelection]
+  )
+
   const updateUrl = useCallback((nextUrl: string) => {
     const latestDraft = draftRef.current
 
-    FolderExplorerCoordinator.updateSelectedDraft({
+    updateRequestDraft({
       ...latestDraft,
       url: nextUrl,
       pathParams: syncPathParamsWithUrl(nextUrl, latestDraft.pathParams),
       searchParams: syncSearchParamsWithUrl(nextUrl, latestDraft.searchParams),
-    })
-  }, [])
+    }, 'request-url')
+  }, [updateRequestDraft])
 
   const importUrl = (nextUrl: string) => {
     const importedUrlFields = buildImportedHttpUrlFields(nextUrl, draft.bodyType)
     const { metaTab: nextMetaTab, ...nextUrlFields } = importedUrlFields
 
-    FolderExplorerCoordinator.updateSelectedDraft({
+    updateRequestDraft({
       ...draft,
       ...nextUrlFields,
-    })
+    }, 'request-import-url')
 
     updateMetaTab(nextMetaTab)
 
@@ -450,7 +457,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     if (parsedCurl) {
       const shouldShowSearchParams = parsedCurl.bodyType === 'none' && parsedCurl.searchParams.trim() !== ''
 
-      FolderExplorerCoordinator.updateSelectedDraft({
+      updateRequestDraft({
         ...draft,
         method: parsedCurl.method,
         url: parsedCurl.url,
@@ -461,7 +468,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         body: parsedCurl.body,
         bodyType: parsedCurl.bodyType,
         rawType: parsedCurl.rawType,
-      })
+      }, 'request-import-curl')
 
       updateMetaTab(shouldShowSearchParams ? 'search-params' : compactRequestView ? 'overview' : 'body')
 
@@ -496,31 +503,31 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const updatePathParams = useCallback((nextPathParams: string) => {
     const latestDraft = draftRef.current
 
-    FolderExplorerCoordinator.updateSelectedDraft({
+    updateRequestDraft({
       ...latestDraft,
       pathParams: nextPathParams,
       url: syncUrlWithSearchParams(syncUrlWithPathParams(latestDraft.url, nextPathParams), latestDraft.searchParams),
-    })
-  }, [])
+    }, 'request-path-params')
+  }, [updateRequestDraft])
 
   const updateSearchParams = useCallback((nextSearchParams: string) => {
     const latestDraft = draftRef.current
 
-    FolderExplorerCoordinator.updateSelectedDraft({
+    updateRequestDraft({
       ...latestDraft,
       searchParams: nextSearchParams,
       url: syncUrlWithSearchParams(latestDraft.url, nextSearchParams),
-    })
-  }, [])
+    }, 'request-search-params')
+  }, [updateRequestDraft])
 
   const formatJsonBody = async () => {
     try {
       const latestDraft = draftRef.current
       const formatted = await formatJson5PreferringJsonWithTemplates(latestDraft.body)
-      FolderExplorerCoordinator.updateSelectedDraft({
+      updateRequestDraft({
         ...latestDraft,
         body: formatted,
-      })
+      }, 'request-format-json-body')
     } catch {
       toast.show({
         severity: 'warning',
@@ -556,25 +563,25 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const updateResponseVisualizer = useCallback((value: string) => {
     const latestDraft = draftRef.current
 
-    FolderExplorerCoordinator.updateSelectedDraft({
+    updateRequestDraft({
       ...latestDraft,
       responseVisualizer: value,
-    })
-  }, [])
+    }, 'request-response-visualizer')
+  }, [updateRequestDraft])
 
   const fillResponseVisualizerTemplate = useCallback(() => {
     const latestDraft = draftRef.current
 
-    FolderExplorerCoordinator.updateSelectedDraft({
+    updateRequestDraft({
       ...latestDraft,
       responseVisualizer: `
 export default function View() {
   
 }
 `,
-    })
+    }, 'request-fill-response-visualizer-template')
     setTimeout(() => responseVisualizerEditorRef.current?.focusLine(3, 4), 0)
-  }, [])
+  }, [updateRequestDraft])
 
   const bodyTab = (
     <RequestBodyTab
@@ -584,6 +591,7 @@ export default function View() {
       getPackages={() => scriptPackageArtifactsRef.current}
       pickFormDataFilePath={pickFormDataFilePath}
       showHeader={compactRequestView}
+      updateRequestDraft={updateRequestDraft}
       variableEditorExtensions={variableEditorExtensions}
       variableHighlightRefreshKey={variableHighlightRefreshKey}
     />
@@ -603,9 +611,7 @@ export default function View() {
               label: <MethodBadge method={option} />,
             }))}
             renderValue={option => option.label}
-            onChange={value =>
-              FolderExplorerCoordinator.updateSelectedDraft({ ...draft, method: value as RequestMethod })
-            }
+              onChange={value => updateRequestDraft({ ...draft, method: value as RequestMethod }, 'request-method')}
           />
 
           <CodeEditor
@@ -654,6 +660,7 @@ export default function View() {
           body={bodyTab}
           draft={draft}
           updatePathParams={updatePathParams}
+          updateRequestDraft={updateRequestDraft}
           variableEditorExtensionsWithBrowserTabFallback={variableEditorExtensionsWithBrowserTabFallback}
           variableHighlightRefreshKey={variableHighlightRefreshKey}
         />
@@ -679,7 +686,7 @@ export default function View() {
             showHeader={false}
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
+            onChange={value => updateRequestDraft({ ...draft, headers: value }, 'request-headers-tab')}
           />
         </section>
       ) : null}
@@ -688,7 +695,7 @@ export default function View() {
         <section className="min-h-0 flex-1 overflow-auto">
           <AuthorizationEditor
             value={draft.auth}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
+            onChange={value => updateRequestDraft({ ...draft, auth: value }, 'request-auth-tab')}
             allowInherit
             showHeader={false}
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
@@ -725,7 +732,7 @@ export default function View() {
             extensions={preRequestScriptExtensions}
             editorRef={preRequestEditorRef}
             headerActions={<ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
+            onChange={value => updateRequestDraft({ ...draft, preRequestScript: value }, 'request-pre-script')}
             onBlur={() => undefined}
           />
 
@@ -740,7 +747,7 @@ export default function View() {
             extensions={postRequestScriptExtensions}
             editorRef={postRequestEditorRef}
             headerActions={<ScriptDocumentationButton phase="post-request" tooltip="Documentation" />}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
+            onChange={value => updateRequestDraft({ ...draft, postRequestScript: value }, 'request-post-script')}
             onBlur={() => undefined}
           />
         </section>
@@ -1047,12 +1054,14 @@ function RequestOverviewTab({
   body,
   draft,
   updatePathParams,
+  updateRequestDraft,
   variableEditorExtensionsWithBrowserTabFallback,
   variableHighlightRefreshKey,
 }: {
   body: ReactNode
   draft: RequestDetailsDraft
   updatePathParams: (nextPathParams: string) => void
+  updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
   variableEditorExtensionsWithBrowserTabFallback: Extension[]
   variableHighlightRefreshKey: string
 }) {
@@ -1062,21 +1071,21 @@ function RequestOverviewTab({
         {body}
       </div>
 
-      <div className="flex min-h-0 flex-col overflow-y-auto">
-        <AuthorizationEditor
-          value={draft.auth}
-          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, auth: value })}
-          allowInherit
-          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-          valueEditorRefreshKey={variableHighlightRefreshKey}
-        />
+        <div className="flex min-h-0 flex-col overflow-y-auto">
+          <AuthorizationEditor
+            value={draft.auth}
+            onChange={value => updateRequestDraft({ ...draft, auth: value }, 'request-auth-overview')}
+            allowInherit
+            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+            valueEditorRefreshKey={variableHighlightRefreshKey}
+          />
 
-        <HeadersEditor
-          value={draft.headers}
-          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-          valueEditorRefreshKey={variableHighlightRefreshKey}
-          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
-        />
+          <HeadersEditor
+            value={draft.headers}
+            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+            valueEditorRefreshKey={variableHighlightRefreshKey}
+            onChange={value => updateRequestDraft({ ...draft, headers: value }, 'request-headers-overview')}
+          />
 
         <KeyValueEditor
           label="Path Params"
@@ -1100,6 +1109,7 @@ function RequestBodyTab({
   getPackages,
   pickFormDataFilePath,
   showHeader,
+  updateRequestDraft,
   variableEditorExtensions,
   variableHighlightRefreshKey,
 }: {
@@ -1109,6 +1119,7 @@ function RequestBodyTab({
   getPackages: () => ScriptAutocompletePackage[]
   pickFormDataFilePath: (row: KeyValueRow) => Promise<string | null>
   showHeader: boolean
+  updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
   variableEditorExtensions: Extension[]
   variableHighlightRefreshKey: string
 }) {
@@ -1126,11 +1137,11 @@ function RequestBodyTab({
         {showHeader ? (
           <DetailsSectionHeader
             title="Body"
-            actions={<RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} />}
+            actions={<RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} updateRequestDraft={updateRequestDraft} />}
           />
         ) : (
           <div className="flex h-12 min-h-12 max-h-12 items-stretch justify-start border-b border-base-content/10 bg-base-100/70">
-            <RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} />
+            <RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} updateRequestDraft={updateRequestDraft} />
           </div>
         )}
 
@@ -1145,7 +1156,7 @@ function RequestBodyTab({
             placeholder={'{\n  "hello": "world"\n}'}
             extensions={jsonBodyExtensions}
             refreshKey={variableHighlightRefreshKey}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: value })}
+            onChange={value => updateRequestDraft({ ...draft, body: value }, 'request-body-raw')}
           />
         ) : null}
 
@@ -1154,10 +1165,13 @@ function RequestBodyTab({
             label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
             value={draft.body}
             onChange={value =>
-              FolderExplorerCoordinator.updateSelectedDraft({
-                ...draft,
-                body: draft.bodyType === 'form-data' ? normalizeFormDataBody(value) : value,
-              })
+              updateRequestDraft(
+                {
+                  ...draft,
+                  body: draft.bodyType === 'form-data' ? normalizeFormDataBody(value) : value,
+                },
+                'request-body-params'
+              )
             }
             keyPlaceholder="key"
             valuePlaceholder={draft.bodyType === 'form-data' ? 'value or local file path' : 'value'}
@@ -1179,9 +1193,11 @@ function RequestBodyTab({
 function RequestBodyTabActions({
   draft,
   formatJsonBody,
+  updateRequestDraft,
 }: {
   draft: RequestDetailsDraft
   formatJsonBody: () => Promise<void>
+  updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
 }) {
   return (
     <>
@@ -1195,10 +1211,13 @@ function RequestBodyTabActions({
           label: <span className="capitalize">{option}</span>,
         }))}
         onChange={value =>
-          FolderExplorerCoordinator.updateSelectedDraft({
-            ...draft,
-            bodyType: value as RequestBodyType,
-          })
+          updateRequestDraft(
+            {
+              ...draft,
+              bodyType: value as RequestBodyType,
+            },
+            'request-body-type'
+          )
         }
       />
       <DropdownSelect
@@ -1211,10 +1230,13 @@ function RequestBodyTabActions({
           label: <span className="uppercase">{option}</span>,
         }))}
         onChange={value =>
-          FolderExplorerCoordinator.updateSelectedDraft({
-            ...draft,
-            rawType: value as RequestRawType,
-          })
+          updateRequestDraft(
+            {
+              ...draft,
+              rawType: value as RequestRawType,
+            },
+            'request-raw-type'
+          )
         }
       />
       {draft.bodyType === 'raw' && draft.rawType === 'json' ? (

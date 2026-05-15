@@ -11,7 +11,7 @@ import { clearCookies, createCookie, deleteCookie, listCookies, updateCookie } f
 import { closeDatabase, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
 import { getAppSettings, updateAppSettings } from './db/app-settings.js'
 import { findHttpRequestByPath, listExplorerItems } from './db/explorer.js'
-import { listFolderExplorerTabs, saveFolderExplorerTabs } from './db/folder-explorer-tabs.js'
+import { listFolderExplorerTabs, saveFolderExplorerTabs, updateFolderExplorerTab } from './db/folder-explorer-tabs.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
 import {
   createEnvironment,
@@ -441,6 +441,10 @@ app.on('ready', async () => {
 
   ipcHandle('saveFolderExplorerTabs', async input => {
     return saveFolderExplorerTabs(input)
+  })
+
+  ipcHandle('updateFolderExplorerTab', async input => {
+    return updateFolderExplorerTab(input)
   })
 
   ipcHandle('createFolder', async input => {

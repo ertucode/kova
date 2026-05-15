@@ -6,7 +6,7 @@ import {
   type DeleteCookieInput,
   type UpdateCookieInput,
 } from './Cookies.js'
-import { type FolderExplorerTabRecord, type SaveFolderExplorerTabsInput } from './FolderExplorerTabs.js'
+import { type FolderExplorerTabRecord, type SaveFolderExplorerTabsInput, type UpdateFolderExplorerTabInput } from './FolderExplorerTabs.js'
 import {
   type CreateFolderInput,
   type DeleteFolderInput,
@@ -183,6 +183,7 @@ export type EventResponseMapping = {
   listExplorerItems: Promise<ExplorerItem[]>
   listFolderExplorerTabs: Promise<FolderExplorerTabRecord[]>
   saveFolderExplorerTabs: Promise<GenericResult<void>>
+  updateFolderExplorerTab: Promise<GenericResult<void>>
   createFolder: Promise<GenericResult<FolderRecord>>
   getFolder: Promise<GenericResult<FolderRecord>>
   renameFolder: Promise<GenericResult<void>>
@@ -296,6 +297,7 @@ export type EventRequestMapping = {
   listExplorerItems: void
   listFolderExplorerTabs: void
   saveFolderExplorerTabs: SaveFolderExplorerTabsInput
+  updateFolderExplorerTab: UpdateFolderExplorerTabInput
   createFolder: CreateFolderInput
   getFolder: GetFolderInput
   renameFolder: RenameFolderInput
@@ -419,6 +421,7 @@ export type WindowElectron = {
   listExplorerItems: () => Promise<ExplorerItem[]>
   listFolderExplorerTabs: () => Promise<FolderExplorerTabRecord[]>
   saveFolderExplorerTabs: (input: SaveFolderExplorerTabsInput) => Promise<GenericResult<void>>
+  updateFolderExplorerTab: (input: UpdateFolderExplorerTabInput) => Promise<GenericResult<void>>
   createFolder: (input: CreateFolderInput) => Promise<GenericResult<FolderRecord>>
   getFolder: (input: GetFolderInput) => Promise<GenericResult<FolderRecord>>
   renameFolder: (input: RenameFolderInput) => Promise<GenericResult<void>>

@@ -62,6 +62,7 @@ export function KeyValueEditor({
   const [draggedRowId, setDraggedRowId] = useState<string | null>(null)
   const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null)
   const lastEmittedValueRef = useRef(value)
+  const isSyncingExternalValueRef = useRef(false)
   const hasMountedRef = useRef(false)
   const rootRef = useRef<HTMLElement | null>(null)
   const rowsRef = useRef(rows)
@@ -82,6 +83,7 @@ export function KeyValueEditor({
 
   useEffect(() => {
     if (value !== lastEmittedValueRef.current) {
+      isSyncingExternalValueRef.current = true
       setRows(currentRows => buildRows(value, currentRows))
       lastEmittedValueRef.current = value
     }
@@ -97,6 +99,11 @@ export function KeyValueEditor({
     if (!hasMountedRef.current) {
       hasMountedRef.current = true
       lastEmittedValueRef.current = nextValue
+      return
+    }
+
+    if (isSyncingExternalValueRef.current) {
+      isSyncingExternalValueRef.current = false
       return
     }
 

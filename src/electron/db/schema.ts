@@ -260,6 +260,7 @@ export const folderExplorerTabs = sqliteTable(
     id: text('id').primaryKey(),
     itemType: text('item_type').notNull(),
     itemId: text('item_id').notNull(),
+    requestMetaTab: text('request_meta_tab'),
     position: integer('position').notNull().default(0),
     isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
@@ -271,6 +272,10 @@ export const folderExplorerTabs = sqliteTable(
     index('folder_explorer_tabs_item_ref_idx').on(table.itemType, table.itemId),
     index('folder_explorer_tabs_active_idx').on(table.isActive),
     check('folder_explorer_tabs_item_type_check', sql`${table.itemType} in ('folder', 'request', 'example')`),
+    check(
+      'folder_explorer_tabs_request_meta_tab_check',
+      sql`${table.requestMetaTab} is null or ${table.requestMetaTab} in ('overview', 'body', 'search-params', 'headers', 'auth', 'path-params', 'scripts', 'response-visualizer')`
+    ),
   ]
 )
 

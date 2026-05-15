@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { CopyIcon, FileCode2Icon, FolderIcon, RotateCcwIcon } from 'lucide-react'
+import { dialogActions } from '@/global/dialogStore'
 import { FolderDetailsFields } from './FolderDetailsFields'
 import { RequestExampleDetailsFields } from './RequestExampleDetailsFields'
 import { RequestDetailsFields } from './RequestDetailsFields'
+import { UnsavedChangesDebugDialog } from './UnsavedChangesDebugDialog'
 import { WebSocketRequestDetailsFields } from './WebSocketRequestDetailsFields'
 import { WebSocketExampleDetailsFields } from './WebSocketExampleDetailsFields'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toSelectionKey } from './folderExplorerUtils'
-import { folderExplorerEditorStore } from './folderExplorerEditorStore'
+import { folderExplorerEditorStore, type EditorEntry } from './folderExplorerEditorStore'
 
 export function DetailsPanel() {
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
@@ -17,17 +19,19 @@ export function DetailsPanel() {
     return currentSelected ? (state.context.entries[toSelectionKey(currentSelected)] ?? null) : null
   })
 
+  const selectedKey = selected ? toSelectionKey(selected) : null
   const draft = entry?.current ?? null
   const lastDraftRef = useRef<typeof draft>(null)
+  const lastDraftKeyRef = useRef<string | null>(null)
 
-  if (draft && !entry?.loading) {
+  if (draft && !entry?.loading && selectedKey) {
     lastDraftRef.current = draft
+    lastDraftKeyRef.current = selectedKey
   }
 
-  const displayDraft = lastDraftRef.current ?? draft
+  const displayDraft = selectedKey !== null && lastDraftKeyRef.current === selectedKey ? (lastDraftRef.current ?? draft) : draft
   const isLoading = Boolean(selected && (!entry || entry.loading))
   const isSaving = Boolean(entry?.saving)
-  const isDirty = Boolean(entry?.isDirty)
 
   useEffect(() => {
     if (!selected) {
@@ -71,6 +75,14 @@ export function DetailsPanel() {
 
   const renderSelected = selected ?? displayDraft!
 
+  const updateDisplayedDraftName = (name: string) => {
+    if (!selected) {
+      return
+    }
+
+    FolderExplorerCoordinator.updateSelectedDraftIfMatching(selected, { ...renderDraft, name }, 'details-name')
+  }
+
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="flex h-full min-w-0 w-full flex-col items-stretch">
@@ -98,13 +110,11 @@ export function DetailsPanel() {
                         ? 'Request name'
                         : 'Example name'
                   }
-                  onChange={event =>
-                    FolderExplorerCoordinator.updateSelectedDraft({ ...renderDraft, name: event.target.value })
-                  }
+                  onChange={event => updateDisplayedDraftName(event.target.value)}
                   onBlur={() => undefined}
                 />
 
-                <SaveIndicator isDirty={isDirty} isSaving={isSaving} />
+                <SaveIndicator entry={entry ?? null} itemName={renderDraft.name} />
               </div>
 
               <div className="mt-2 h-5 text-sm text-base-content/45">
@@ -132,7 +142,10 @@ export function DetailsPanel() {
   )
 }
 
-function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: boolean }) {
+function SaveIndicator({ entry, itemName }: { entry: EditorEntry | null; itemName: string }) {
+  const isDirty = Boolean(entry?.isDirty)
+  const isSaving = Boolean(entry?.saving)
+
   return (
     <div className="group relative mr-4 flex shrink-0 items-center">
       <div
@@ -150,17 +163,27 @@ function SaveIndicator({ isDirty, isSaving }: { isDirty: boolean; isSaving: bool
 
       {!isSaving && isDirty ? (
         <>
-          <button
-            type="button"
-            className="pointer-events-none absolute right-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-warning/25 bg-base-100 px-1.5 py-0.5 text-[11px] font-semibold text-base-content/70 opacity-0 shadow-[0_14px_30px_rgba(0,0,0,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:border-warning/40 hover:bg-warning/6 hover:text-base-content focus:pointer-events-auto focus:opacity-100"
-            onClick={() => FolderExplorerCoordinator.discardSelectedChanges()}
-            title="Remove unsaved changes"
-          >
-            <span className="flex size-5 items-center justify-center rounded-full bg-warning/12 text-warning">
-              <RotateCcwIcon className="size-3" />
-            </span>
-            <span>Remove unsaved changes</span>
-          </button>
+          <div className="pointer-events-none absolute right-0 top-1/2 z-10 inline-flex -translate-y-1/2 overflow-hidden rounded-full border border-warning/25 bg-base-100 opacity-0 shadow-[0_14px_30px_rgba(0,0,0,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 whitespace-nowrap border-r border-warning/15 px-2.5 py-1 text-[11px] font-semibold text-base-content/70 transition hover:bg-warning/6 hover:text-base-content"
+              onClick={() => dialogActions.open({ component: UnsavedChangesDebugDialog, props: { entry, itemName } })}
+              title="Show pending changes diff"
+            >
+              <span>Show diff</span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 whitespace-nowrap px-1.5 py-1 text-[11px] font-semibold text-base-content/70 transition hover:bg-warning/6 hover:text-base-content"
+              onClick={() => FolderExplorerCoordinator.discardSelectedChanges()}
+              title="Remove unsaved changes"
+            >
+              <span className="flex size-5 items-center justify-center rounded-full bg-warning/12 text-warning">
+                <RotateCcwIcon className="size-3" />
+              </span>
+              <span>Remove unsaved changes</span>
+            </button>
+          </div>
         </>
       ) : null}
     </div>

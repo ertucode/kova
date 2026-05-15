@@ -1,5 +1,5 @@
 import { createElement } from 'react'
-import type { FolderExplorerTabRecord } from '@common/FolderExplorerTabs'
+import type { FolderExplorerTabRecord, RequestMetaTab } from '@common/FolderExplorerTabs'
 import type { HttpAuth } from '@common/Auth'
 import type { FolderRecord } from '@common/Folders'
 import { errorResponseToMessage } from '@common/GenericError'
@@ -141,6 +141,7 @@ export namespace FolderExplorerCoordinator {
             id: crypto.randomUUID(),
             itemType: selection.itemType,
             itemId: selection.id,
+            requestMetaTab: null,
             position: state.tabs.length,
             isPinned: mode === 'pin',
             isActive: false,
@@ -258,6 +259,52 @@ export namespace FolderExplorerCoordinator {
     folderExplorerEditorStore.trigger.selectedDraftUpdated({ draft })
     void pinActivePreviewTabIfDirty()
     persistUnsavedDrafts()
+  }
+
+  export function updateSelectedDraftIfMatching(selection: Selection, draft: DetailsDraft | null, debugLabel?: string) {
+    if (!draft) {
+      return false
+    }
+
+    void debugLabel
+
+    const currentSelection = folderExplorerEditorStore.getSnapshot().context.selected
+    const matchesCurrentSelection = currentSelection
+      ? currentSelection.itemType === selection.itemType && currentSelection.id === selection.id
+      : false
+
+    if (!matchesCurrentSelection) {
+      return false
+    }
+
+    updateSelectedDraft(draft)
+    return true
+  }
+
+  export async function updateSelectedRequestMetaTab(requestMetaTab: RequestMetaTab) {
+    const state = folderExplorerEditorStore.getSnapshot().context
+    const selected = state.selected
+    if (!selected || selected.itemType !== 'request' || !state.activeTabId) {
+      return
+    }
+
+    const activeTab = state.tabs.find(tab => tab.id === state.activeTabId)
+    if (!activeTab || activeTab.itemType !== 'request' || activeTab.itemId !== selected.id) {
+      return
+    }
+
+    if (activeTab.requestMetaTab === requestMetaTab) {
+      return
+    }
+
+    const updatedAt = Date.now()
+    const nextTabs = state.tabs.map(tab => (tab.id === activeTab.id ? { ...tab, requestMetaTab, updatedAt } : tab))
+    folderExplorerEditorStore.trigger.tabsStateReplaced({ tabs: nextTabs, activeTabId: state.activeTabId })
+
+    const result = await getWindowElectron().updateFolderExplorerTab({ id: activeTab.id, requestMetaTab })
+    if (!result.success) {
+      toast.show(result)
+    }
   }
 
   export function updateDraft(selection: Selection, draft: DetailsDraft | null) {
