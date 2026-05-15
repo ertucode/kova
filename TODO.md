@@ -1,5 +1,1 @@
-- Load arbitrary script
-- Cached? Typed?
-- loadPackage typescript
-- install ettikten sonra types eklenmiyo
 - prerequest script değişince response visualizer rerender oluyo.

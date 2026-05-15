@@ -174,11 +174,12 @@ export function FolderExplorer() {
         )
         .filter(item =>
           tagAssignments.some(
-            assignment => assignment.tagId === tag.id && assignment.itemType === item.itemType && assignment.itemId === item.id
+            assignment =>
+              assignment.tagId === tag.id && assignment.itemType === item.itemType && assignment.itemId === item.id
           )
         )
         .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt)
-        .map(item => ({ itemType: item.itemType, id: item.id } as const))
+        .map(item => ({ itemType: item.itemType, id: item.id }) as const)
 
       void (async () => {
         await FolderExplorerCoordinator.closeAllTabs()
@@ -582,8 +583,8 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },
     { id: 'changes', label: 'Changes', icon: Undo2Icon, disabled: false },
     { id: 'scripts', label: 'Scripts', icon: FileJsonIcon, disabled: false },
-    { id: 'cookies', label: 'Cookies', icon: CookieIcon, disabled: false },
     { id: 'packages', label: 'Packages', icon: PackageIcon, disabled: false },
+    { id: 'cookies', label: 'Cookies', icon: CookieIcon, disabled: false },
   ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
 
   return (

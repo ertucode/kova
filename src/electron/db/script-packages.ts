@@ -8,6 +8,7 @@ import {
   type CreateScriptPackageInput,
   type DeleteScriptPackageInput,
   type ScriptPackageRecord,
+  type UpdateScriptPackageInput,
 } from '../../common/ScriptPackages.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
@@ -36,8 +37,8 @@ export async function createScriptPackage(input: CreateScriptPackageInput): Prom
   }
 
   try {
-    const duplicate = db
-      .select({ id: scriptPackages.id })
+    const matchingRows = db
+      .select()
       .from(scriptPackages)
       .where(
         and(
@@ -49,16 +50,30 @@ export async function createScriptPackage(input: CreateScriptPackageInput): Prom
           normalized.typesPackageVersion === null
             ? isNull(scriptPackages.typesPackageVersion)
             : eq(scriptPackages.typesPackageVersion, normalized.typesPackageVersion),
-          isNull(scriptPackages.deletedAt)
         )
       )
-      .get()
+      .orderBy(desc(scriptPackages.deletedAt), desc(scriptPackages.createdAt))
+      .all()
+
+    const duplicate = matchingRows.find(row => row.deletedAt === null)
 
     if (duplicate) {
       return GenericError.Message(`Package ${buildScriptPackageDisplayName(normalized)} already exists in this workspace`)
     }
 
     const now = Date.now()
+    const deletedDuplicate = matchingRows.find(row => row.deletedAt !== null)
+    if (deletedDuplicate) {
+      db.update(scriptPackages).set({ createdAt: now, deletedAt: null }).where(eq(scriptPackages.id, deletedDuplicate.id)).run()
+      return Result.Success(
+        toScriptPackageRecord({
+          ...deletedDuplicate,
+          createdAt: now,
+          deletedAt: null,
+        })
+      )
+    }
+
     const row: ScriptPackageRow = {
       id: crypto.randomUUID(),
       packageName: normalized.packageName,
@@ -91,6 +106,68 @@ export async function deleteScriptPackage(input: DeleteScriptPackageInput): Prom
     }
 
     return Result.Success(undefined)
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
+export async function updateScriptPackage(input: UpdateScriptPackageInput): Promise<GenericResult<ScriptPackageRecord>> {
+  const db = getDb()
+
+  try {
+    const existing = db.select().from(scriptPackages).where(and(eq(scriptPackages.id, input.id), isNull(scriptPackages.deletedAt))).get()
+    if (!existing) {
+      return GenericError.Message('Package not found')
+    }
+
+    const normalized = normalizeScriptPackageInput({
+      packageName: existing.packageName,
+      packageVersion: existing.packageVersion,
+      typesPackageName: input.typesPackageName,
+      typesPackageVersion: input.typesPackageVersion,
+    })
+    const validationError = validateScriptPackageInput(normalized)
+    if (validationError) {
+      return GenericError.Message(validationError)
+    }
+
+    const duplicate = db
+      .select({ id: scriptPackages.id })
+      .from(scriptPackages)
+      .where(
+        and(
+          eq(scriptPackages.packageName, existing.packageName),
+          eq(scriptPackages.packageVersion, existing.packageVersion),
+          normalized.typesPackageName === null
+            ? isNull(scriptPackages.typesPackageName)
+            : eq(scriptPackages.typesPackageName, normalized.typesPackageName),
+          normalized.typesPackageVersion === null
+            ? isNull(scriptPackages.typesPackageVersion)
+            : eq(scriptPackages.typesPackageVersion, normalized.typesPackageVersion),
+          isNull(scriptPackages.deletedAt)
+        )
+      )
+      .get()
+
+    if (duplicate && duplicate.id !== existing.id) {
+      return GenericError.Message(`Package ${buildScriptPackageDisplayName(normalized)} already exists in this workspace`)
+    }
+
+    db.update(scriptPackages)
+      .set({
+        typesPackageName: normalized.typesPackageName,
+        typesPackageVersion: normalized.typesPackageVersion,
+      })
+      .where(eq(scriptPackages.id, existing.id))
+      .run()
+
+    return Result.Success(
+      toScriptPackageRecord({
+        ...existing,
+        typesPackageName: normalized.typesPackageName,
+        typesPackageVersion: normalized.typesPackageVersion,
+      })
+    )
   } catch (error) {
     return GenericError.Unknown(error)
   }

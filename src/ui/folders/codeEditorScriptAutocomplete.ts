@@ -8,6 +8,7 @@ import {
 } from '@codemirror/autocomplete'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { formatScriptPackageSpecifier } from '@common/ScriptPackages'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
@@ -36,6 +37,7 @@ export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions):
       override: [
         context => completeVariableName(context, options.getVariableNames),
         context => completeEnvironmentName(context, options.getEnvironmentNames),
+        context => completePackageSpecifier(context, options.getPackages),
         context => completeScriptApi(context, runtimeContext, options.getSharedScripts, options.getPackages),
       ],
     }),
@@ -150,6 +152,36 @@ function completeEnvironmentName(
   return null
 }
 
+function completePackageSpecifier(
+  context: CompletionContext,
+  getPackages: (() => ScriptAutocompletePackage[]) | undefined
+): CompletionResult | null {
+  if (!getPackages) {
+    return null
+  }
+
+  const before = context.state.doc.sliceString(Math.max(0, context.pos - 240), context.pos)
+  const packageContext = getPackageSpecifierContext(before)
+  if (!packageContext) {
+    return null
+  }
+
+  const options = buildPackageStringCompletions(getPackages, packageContext.query)
+    .map(option => buildQuotedStringCompletion(option, packageContext.quote, packageContext.suffix))
+
+  if (options.length === 0) {
+    return null
+  }
+
+  return {
+    from: context.pos - packageContext.query.length,
+    to: context.pos,
+    options,
+    filter: false,
+    validFor: /^[^'"]*$/,
+  }
+}
+
 async function completeScriptApi(
   context: CompletionContext,
   runtimeContext: { phase: ScriptAutocompletePhase } | { targets: SharedScriptTarget[] },
@@ -202,7 +234,8 @@ function shouldStartCompletion(textBeforeCursor: string) {
     /scope\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     /request\.headers\.(?:get|has|set|delete)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     /env\.(?:get|has)\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
-    /env\.set\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor)
+    /env\.set\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
+    getPackageSpecifierContext(textBeforeCursor) !== null
   ) {
     return true
   }
@@ -236,6 +269,87 @@ function buildEnvironmentStringCompletions(getEnvironmentNames: (() => string[])
       type: 'constant',
       detail: 'environment',
     }))
+}
+
+function buildPackageStringCompletions(
+  getPackages: (() => ScriptAutocompletePackage[]) | undefined,
+  query: string
+): Completion[] {
+  if (!getPackages) {
+    return []
+  }
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const seen = new Set<string>()
+  const entries: Array<{ label: string; detail: string; boost: number }> = []
+  const packageCounts = new Map<string, number>()
+
+  for (const pkg of getPackages()) {
+    packageCounts.set(pkg.packageName, (packageCounts.get(pkg.packageName) ?? 0) + 1)
+  }
+
+  for (const pkg of getPackages()) {
+    if (packageCounts.get(pkg.packageName) === 1 && !seen.has(pkg.packageName)) {
+      seen.add(pkg.packageName)
+      entries.push({
+        label: pkg.packageName,
+        detail: 'package',
+        boost: 30,
+      })
+    }
+
+    const versionedSpecifier = formatScriptPackageSpecifier(pkg.packageName, pkg.packageVersion)
+    if (!seen.has(versionedSpecifier)) {
+      seen.add(versionedSpecifier)
+      entries.push({
+        label: versionedSpecifier,
+        detail: `package ${pkg.packageVersion}`,
+        boost: 10,
+      })
+    }
+  }
+
+  return entries
+    .filter(entry => normalizedQuery === '' || entry.label.toLowerCase().includes(normalizedQuery))
+    .sort((left, right) => {
+      const leftVersionless = !left.label.includes('@', 1)
+      const rightVersionless = !right.label.includes('@', 1)
+      if (leftVersionless !== rightVersionless) {
+        return leftVersionless ? -1 : 1
+      }
+
+      return left.label.localeCompare(right.label)
+    })
+    .map(entry => ({
+      label: entry.label,
+      type: 'module',
+      detail: entry.detail,
+      boost: entry.boost,
+    }))
+}
+
+function getPackageSpecifierContext(sourceBeforeCursor: string) {
+  const patterns = [
+    { pattern: /loadPackage\(\s*(['"])([^'"]*)$/, suffix: ')' },
+    { pattern: /import\(\s*(['"])([^'"]*)$/, suffix: ')' },
+    { pattern: /(?:^|[\s;])import\s+(?:type\s+)?(?:[^'"\n]+?\s+from\s+)?(['"])([^'"]*)$/, suffix: '' },
+    { pattern: /(?:^|[\s;])export\s+[^'"\n]+?\s+from\s+(['"])([^'"]*)$/, suffix: '' },
+  ]
+
+  for (const { pattern, suffix } of patterns) {
+    const match = sourceBeforeCursor.match(pattern)
+    if (!match) {
+      continue
+    }
+
+    return {
+      quote: match[1] ?? '"',
+      query: match[2] ?? '',
+      suffix,
+    }
+  }
+
+  return null
 }
 
 function buildQuotedStringCompletion(option: Completion, quote: string, suffix = ''): Completion {

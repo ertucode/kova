@@ -1,6 +1,6 @@
 import ts from 'typescript'
 import type { SharedScriptTarget } from '@common/SharedScripts'
-import { parseScriptPackageSpecifier } from '@common/ScriptPackages'
+import { formatScriptPackageSpecifier, parseScriptPackageSpecifier } from '@common/ScriptPackages'
 import {
   getScriptRuntimeDeclarations,
   getScriptRuntimeTargets,
@@ -17,15 +17,19 @@ import type {
   ScriptDiagnosticsResponse,
   ScriptEditorDiagnostic,
 } from './scriptAutocompleteTypes'
+import { sanitizePackageTypeFileContent } from './scriptAutocompletePackageTypes'
 
 type PhaseState = {
   runtimeContext: ScriptRuntimeContext
   service: ts.LanguageService
   files: Map<string, string>
   versions: Map<string, number>
+  projectVersion: number
   userFileName: string
   declarationFileName: string
+  rootFileNames: Set<string>
   dynamicFileNames: Set<string>
+  dynamicRootFileNames: Set<string>
   packages: ScriptAutocompletePackage[]
 }
 
@@ -166,6 +170,7 @@ function updatePhaseSource(
   sharedScripts: ScriptAutocompleteSharedScript[],
   packages: ScriptAutocompletePackage[]
 ) {
+  phaseState.projectVersion += 1
   phaseState.files.set(phaseState.userFileName, code)
   phaseState.versions.set(phaseState.userFileName, (phaseState.versions.get(phaseState.userFileName) ?? 0) + 1)
   phaseState.packages = packages
@@ -175,10 +180,16 @@ function updatePhaseSource(
     phaseState.versions.delete(fileName)
   }
   phaseState.dynamicFileNames.clear()
+  for (const fileName of phaseState.dynamicRootFileNames) {
+    phaseState.rootFileNames.delete(fileName)
+  }
+  phaseState.dynamicRootFileNames.clear()
 
   const sharedScriptFiles = createSharedScriptFiles(phaseState.runtimeContext, sharedScripts)
   for (const file of sharedScriptFiles.files) {
     phaseState.dynamicFileNames.add(file.fileName)
+    phaseState.dynamicRootFileNames.add(file.fileName)
+    phaseState.rootFileNames.add(file.fileName)
     phaseState.files.set(file.fileName, file.content)
     phaseState.versions.set(file.fileName, (phaseState.versions.get(file.fileName) ?? 0) + 1)
   }
@@ -187,14 +198,20 @@ function updatePhaseSource(
     for (const [relativePath, content] of Object.entries(pkg.typeFiles)) {
       const fileName = toVirtualPackageFileName(pkg.cacheKey, relativePath)
       phaseState.dynamicFileNames.add(fileName)
-      phaseState.files.set(fileName, content)
+      phaseState.files.set(fileName, sanitizePackageTypeFileContent(content))
       phaseState.versions.set(fileName, (phaseState.versions.get(fileName) ?? 0) + 1)
     }
   }
 
   phaseState.files.set(
     phaseState.declarationFileName,
-    `${getScriptRuntimeDeclarations(phaseState.runtimeContext)}\n${buildRequireScriptDeclarations(sharedScriptFiles.modules)}\n/// <reference lib="esnext.iterator" />\n`
+    [
+      getScriptRuntimeDeclarations(phaseState.runtimeContext),
+      buildRequireScriptDeclarations(sharedScriptFiles.modules),
+      buildLoadPackageDeclarations(packages),
+      '/// <reference lib="esnext.iterator" />',
+      '',
+    ].join('\n')
   )
   phaseState.versions.set(phaseState.declarationFileName, (phaseState.versions.get(phaseState.declarationFileName) ?? 0) + 1)
 }
@@ -258,6 +275,7 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
   const files = new Map(declarationFiles.files)
   files.set(declarationFileName, `${getScriptRuntimeDeclarations(runtimeContext)}\n/// <reference lib=\"esnext.iterator\" />\n`)
   files.set(userFileName, '')
+  const rootFileNames = new Set(files.keys())
 
   const versions = new Map<string, number>()
   for (const fileName of files.keys()) {
@@ -281,8 +299,9 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
       noLib: false,
       types: [],
     }),
-    getScriptFileNames: () => Array.from(files.keys()),
+    getScriptFileNames: () => Array.from(rootFileNames),
     getScriptVersion: fileName => String(versions.get(fileName) ?? 0),
+    getProjectVersion: () => String(phaseState.projectVersion),
     getScriptSnapshot: fileName => {
       const content = files.get(fileName)
       return content === undefined ? undefined : ts.ScriptSnapshot.fromString(content)
@@ -319,9 +338,12 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
     service: ts.createLanguageService(host, ts.createDocumentRegistry()),
     files,
     versions,
+    projectVersion: 0,
     userFileName,
     declarationFileName,
+    rootFileNames,
     dynamicFileNames: new Set<string>(),
+    dynamicRootFileNames: new Set<string>(),
     packages: [],
   }
 
@@ -418,6 +440,39 @@ function buildRequireScriptDeclarations(modules: Map<string, string>) {
   )
 
   lines.push('declare function requireScript(name: string): unknown')
+
+  return lines.join('\n')
+}
+
+function buildLoadPackageDeclarations(packages: ScriptAutocompletePackage[]) {
+  const packageCounts = new Map<string, number>()
+  for (const pkg of packages) {
+    packageCounts.set(pkg.packageName, (packageCounts.get(pkg.packageName) ?? 0) + 1)
+  }
+
+  const packageEntries = new Map<string, string>()
+  for (const pkg of packages) {
+    if (pkg.downloadStatus !== 'ready') {
+      continue
+    }
+
+    const exactSpecifier = formatScriptPackageSpecifier(pkg.packageName, pkg.packageVersion)
+    packageEntries.set(exactSpecifier, exactSpecifier)
+
+    if (packageCounts.get(pkg.packageName) === 1) {
+      packageEntries.set(pkg.packageName, exactSpecifier)
+    }
+  }
+
+  if (packageEntries.size === 0) {
+    return ''
+  }
+
+  const lines = ['interface ScriptRuntimeInstalledPackageMap {']
+  for (const [specifier, importSpecifier] of packageEntries) {
+    lines.push(`  ${JSON.stringify(specifier)}: typeof import(${JSON.stringify(importSpecifier)})`)
+  }
+  lines.push('}')
 
   return lines.join('\n')
 }

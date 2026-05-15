@@ -186,7 +186,13 @@ declare const crypto: ScriptCryptoApi
 declare const clipboard: ScriptClipboardApi
 declare const cookies: ScriptCookieApi
 declare const z: typeof import('./vendor/zod/index.cjs').z
-declare function loadPackage<T = unknown>(name: string): T
+
+interface ScriptRuntimeInstalledPackageMap {}
+
+declare function loadPackage<TName extends keyof ScriptRuntimeInstalledPackageMap>(
+  name: TName
+): ScriptRuntimeInstalledPackageMap[TName]
+declare function loadPackage<TName extends string>(name: string extends TName ? TName : never): unknown
 declare function formatXml(xml: string): string
 declare function formatJson(json: string, indentation?: number): string
 `

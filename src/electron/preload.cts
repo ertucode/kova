@@ -92,6 +92,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   replaceTagItems: input => ipcInvoke('replaceTagItems', input),
   listScriptPackages: () => ipcInvoke('listScriptPackages', undefined),
   createScriptPackage: input => ipcInvoke('createScriptPackage', input),
+  updateScriptPackage: input => ipcInvoke('updateScriptPackage', input),
   deleteScriptPackage: input => ipcInvoke('deleteScriptPackage', input),
   suggestScriptPackageVersion: input => ipcInvoke('suggestScriptPackageVersion', input),
   suggestTypesScriptPackage: input => ipcInvoke('suggestTypesScriptPackage', input),

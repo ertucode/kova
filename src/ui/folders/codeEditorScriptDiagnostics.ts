@@ -92,6 +92,8 @@ export function scriptDiagnosticsExtension(options: {
         const abortController = new AbortController()
         pluginState.abortController = abortController
         const code = view.state.doc.toString()
+        const requestVersion = pluginState.requestVersion + 1
+        pluginState.requestVersion = requestVersion
 
         void requestScriptDiagnostics({
           runtimeContext,
@@ -101,7 +103,13 @@ export function scriptDiagnosticsExtension(options: {
           signal: abortController.signal,
         })
           .then(result => {
-            if (abortController.signal.aborted || !result || !view.dom.isConnected) {
+            if (
+              abortController.signal.aborted ||
+              !result ||
+              !view.dom.isConnected ||
+              pluginState.requestVersion !== requestVersion ||
+              view.state.doc.toString() !== code
+            ) {
               return
             }
 
@@ -124,7 +132,11 @@ export function scriptDiagnosticsExtension(options: {
             })
           })
           .catch(() => {
-            if (!view.dom.isConnected) {
+            if (
+              !view.dom.isConnected ||
+              pluginState.requestVersion !== requestVersion ||
+              view.state.doc.toString() !== code
+            ) {
               return
             }
 
@@ -148,6 +160,7 @@ type ScriptDiagnosticsState = {
   initialized: boolean
   timeoutId: number | null
   abortController: AbortController | null
+  requestVersion: number
 }
 
 function getScriptDiagnosticsState(view: EditorView) {
@@ -156,6 +169,7 @@ function getScriptDiagnosticsState(view: EditorView) {
     initialized: false,
     timeoutId: null,
     abortController: null,
+    requestVersion: 0,
   }
   return viewWithState.__kovaScriptDiagnosticsState
 }

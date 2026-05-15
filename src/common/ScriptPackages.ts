@@ -31,6 +31,12 @@ export type DeleteScriptPackageInput = {
   id: string
 }
 
+export type UpdateScriptPackageInput = {
+  id: string
+  typesPackageName: string | null
+  typesPackageVersion: string | null
+}
+
 export type DeleteDownloadedScriptPackageInput = {
   packageName: string
   packageVersion: string

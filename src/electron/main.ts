@@ -65,7 +65,7 @@ import {
   moveSharedScript,
   updateSharedScript,
 } from './db/shared-scripts.js'
-import { createScriptPackage, deleteScriptPackage, listScriptPackages, toScriptPackageCacheKey } from './db/script-packages.js'
+import { createScriptPackage, deleteScriptPackage, listScriptPackages, toScriptPackageCacheKey, updateScriptPackage } from './db/script-packages.js'
 import {
   createTag,
   deleteTag,
@@ -625,6 +625,10 @@ app.on('ready', async () => {
 
   ipcHandle('createScriptPackage', async input => {
     return createScriptPackage(input)
+  })
+
+  ipcHandle('updateScriptPackage', async input => {
+    return updateScriptPackage(input)
   })
 
   ipcHandle('deleteScriptPackage', async input => {

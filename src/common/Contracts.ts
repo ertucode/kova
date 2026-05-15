@@ -154,6 +154,7 @@ import {
   type SuggestedTypesScriptPackage,
   type SuggestScriptPackageVersionInput,
   type SuggestTypesScriptPackageInput,
+  type UpdateScriptPackageInput,
 } from './ScriptPackages.js'
 
 export type EventResponseMapping = {
@@ -264,6 +265,7 @@ export type EventResponseMapping = {
   replaceTagItems: Promise<GenericResult<void>>
   listScriptPackages: Promise<ScriptPackageListItem[]>
   createScriptPackage: Promise<GenericResult<ScriptPackageRecord>>
+  updateScriptPackage: Promise<GenericResult<ScriptPackageRecord>>
   deleteScriptPackage: Promise<GenericResult<void>>
   suggestScriptPackageVersion: Promise<GenericResult<SuggestedScriptPackageVersion>>
   suggestTypesScriptPackage: Promise<GenericResult<SuggestedTypesScriptPackage>>
@@ -376,6 +378,7 @@ export type EventRequestMapping = {
   replaceTagItems: ReplaceTagItemsInput
   listScriptPackages: void
   createScriptPackage: CreateScriptPackageInput
+  updateScriptPackage: UpdateScriptPackageInput
   deleteScriptPackage: DeleteScriptPackageInput
   suggestScriptPackageVersion: SuggestScriptPackageVersionInput
   suggestTypesScriptPackage: SuggestTypesScriptPackageInput
@@ -500,6 +503,7 @@ export type WindowElectron = {
   replaceTagItems: (input: ReplaceTagItemsInput) => Promise<GenericResult<void>>
   listScriptPackages: () => Promise<ScriptPackageListItem[]>
   createScriptPackage: (input: CreateScriptPackageInput) => Promise<GenericResult<ScriptPackageRecord>>
+  updateScriptPackage: (input: UpdateScriptPackageInput) => Promise<GenericResult<ScriptPackageRecord>>
   deleteScriptPackage: (input: DeleteScriptPackageInput) => Promise<GenericResult<void>>
   suggestScriptPackageVersion: (
     input: SuggestScriptPackageVersionInput
