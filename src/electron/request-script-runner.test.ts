@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import path from 'node:path'
 import { createRequestScriptRuntime } from './request-script-runner.js'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -196,6 +197,114 @@ describe('createRequestScriptRuntime', () => {
 
     expect(errors).toEqual([])
     expect(runtime.getRequestScopeValues().authorization).toBe('Bearer module-token')
+  })
+
+  it('loads installed packages through loadPackage', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      scriptPackages: [
+        {
+          packageName: 'lodash',
+          packageVersion: '4.17.21',
+          typesPackageName: '@types/lodash',
+          typesPackageVersion: '4.17.20',
+          cacheDirectory: path.resolve('.'),
+        },
+      ],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "const { camelCase } = loadPackage('lodash@4.17.21'); scope.set('value', camelCase('hello world'))",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().value).toBe('helloWorld')
+  })
+
+  it('loads installed packages through versioned import syntax', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      scriptPackages: [
+        {
+          packageName: 'lodash',
+          packageVersion: '4.17.21',
+          typesPackageName: '@types/lodash',
+          typesPackageVersion: '4.17.20',
+          cacheDirectory: path.resolve('.'),
+        },
+      ],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "import { kebabCase } from 'lodash@4.17.21'\nscope.set('value', kebabCase('Hello World'))",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().value).toBe('hello-world')
+  })
+
+  it('loads CommonJS default imports from installed packages', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      scriptPackages: [
+        {
+          packageName: 'lodash',
+          packageVersion: '4.17.21',
+          typesPackageName: '@types/lodash',
+          typesPackageVersion: '4.17.20',
+          cacheDirectory: path.resolve('.'),
+        },
+      ],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script: "import _ from 'lodash@4.17.21'\nscope.set('value', _.isArray([]).toString())",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues().value).toBe('true')
   })
 
   it('loads shared modules inside template expressions with pre-request semantics', async () => {

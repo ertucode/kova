@@ -14,6 +14,7 @@ import {
   sharedScriptEditorStore,
   type SharedScriptEditorSelection,
 } from './sharedScriptEditorStore'
+import { useScriptPackageArtifacts } from './useScriptPackages'
 import { notifySharedScriptsChanged, useScopedSharedScripts } from './useVisibleSharedScripts'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer']
@@ -34,6 +35,7 @@ export function SharedScriptsSection({
   visibleSharedScripts: SharedScriptRecord[]
   onScriptsChanged?: () => void
 }) {
+  const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const { scripts, loading, hasLoaded, reload } = useScopedSharedScripts(scopeType, scopeId)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const scopeKey = getSharedScriptScopeKey(scopeType, scopeId)
@@ -275,6 +277,7 @@ export function SharedScriptsSection({
         {draft && selectedId ? (
           <SharedScriptDetail
             draft={draft}
+            scriptPackages={scriptPackageArtifacts}
             visibleSharedScripts={visibleSharedScripts}
             isDirty={isDirty}
             isSaving={isSaving}
@@ -297,6 +300,7 @@ export function SharedScriptsSection({
 
 function SharedScriptDetail({
   draft,
+  scriptPackages,
   visibleSharedScripts,
   isDirty,
   isSaving,
@@ -308,6 +312,7 @@ function SharedScriptDetail({
   onSave,
 }: {
   draft: SharedScriptRecord
+  scriptPackages: import('./scriptAutocompleteTypes').ScriptAutocompletePackage[]
   visibleSharedScripts: SharedScriptRecord[]
   isDirty: boolean
   isSaving: boolean
@@ -326,16 +331,23 @@ function SharedScriptDetail({
     [draft.id, visibleSharedScripts]
   )
   const autocompleteSharedScriptsRef = useRef(autocompleteSharedScripts)
+  const scriptPackagesRef = useRef(scriptPackages)
 
   autocompleteSharedScriptsRef.current = autocompleteSharedScripts
+  scriptPackagesRef.current = scriptPackages
 
   const extensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ targets, getSharedScripts: () => autocompleteSharedScriptsRef.current }),
+      scriptDiagnosticsExtension({
+        targets,
+        getSharedScripts: () => autocompleteSharedScriptsRef.current,
+        getPackages: () => scriptPackagesRef.current,
+      }),
       scriptAutocompleteExtension({
         includeResponse: false,
         targets,
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
+        getPackages: () => scriptPackagesRef.current,
       }),
     ],
     [targets]

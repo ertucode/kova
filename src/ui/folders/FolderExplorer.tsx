@@ -16,6 +16,7 @@ import {
   FlaskConicalIcon,
   FolderIcon,
   MoreHorizontalIcon,
+  PackageIcon,
   SearchIcon,
   TagIcon,
   Undo2Icon,
@@ -31,6 +32,7 @@ import { ChangesPanel } from './ChangesPanel'
 import { CookiesPanel } from './CookiesPanel'
 import { HistoryPanel } from './RequestExecutionPanels'
 import { SharedScriptsPanel } from './SharedScriptsPanel'
+import { PackagesPanel } from './PackagesPanel'
 import { TagsPanel } from './TagsPanel'
 import { TagsCoordinator } from './tagsCoordinator'
 import { buildTree, filterTreeWithDrafts, toSelectionKey } from './folderExplorerUtils'
@@ -436,6 +438,7 @@ export function FolderExplorer() {
         {sidebarTab === 'cookies' ? <CookiesPanel /> : null}
         {sidebarTab === 'history' ? <HistoryPanel /> : null}
         {sidebarTab === 'changes' ? <ChangesPanel /> : null}
+        {sidebarTab === 'packages' ? <PackagesPanel /> : null}
       </main>
     </div>
   )
@@ -580,6 +583,7 @@ function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
     { id: 'changes', label: 'Changes', icon: Undo2Icon, disabled: false },
     { id: 'scripts', label: 'Scripts', icon: FileJsonIcon, disabled: false },
     { id: 'cookies', label: 'Cookies', icon: CookieIcon, disabled: false },
+    { id: 'packages', label: 'Packages', icon: PackageIcon, disabled: false },
   ] as const satisfies ReadonlyArray<{ id: SidebarTab; label: string; icon: typeof FileCode2Icon; disabled: boolean }>
 
   return (

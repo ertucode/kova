@@ -65,6 +65,7 @@ import {
   moveSharedScript,
   updateSharedScript,
 } from './db/shared-scripts.js'
+import { createScriptPackage, deleteScriptPackage, listScriptPackages, toScriptPackageCacheKey } from './db/script-packages.js'
 import {
   createTag,
   deleteTag,
@@ -98,6 +99,15 @@ import {
   createScriptPromptRegistry,
   createScriptToastBridge,
 } from './script-ui-bridges.js'
+import {
+  configureScriptPackageRegistry,
+  deleteDownloadedScriptPackage,
+  downloadScriptPackage,
+  getScriptPackageArtifact,
+  getScriptPackageRegistryEntry,
+  suggestScriptPackageVersion,
+  suggestTypesScriptPackage,
+} from './script-package-registry.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -278,6 +288,7 @@ app.on('ready', async () => {
   ]
   const menu = Menu.buildFromTemplate(menuTemplate)
   Menu.setApplicationMenu(menu)
+  configureScriptPackageRegistry(path.join(app.getPath('userData'), 'shared'))
 
   app.on('web-contents-created', (_event, contents) => {
     // if (contents.getType() === 'webview') return
@@ -590,6 +601,56 @@ app.on('ready', async () => {
 
   ipcHandle('listVisibleSharedScripts', async input => {
     return listVisibleSharedScripts({ folderId: input.folderId, onlyActive: true })
+  })
+
+  ipcHandle('listScriptPackages', async () => {
+    const records = await listScriptPackages()
+    const items = await Promise.all(
+      records.map(async record => {
+        const cacheKey = toScriptPackageCacheKey(record)
+        const registryEntry = await getScriptPackageRegistryEntry(record)
+        return {
+          ...record,
+          cacheKey,
+          downloadStatus: registryEntry?.status ?? 'not-downloaded',
+          cacheDirectory: registryEntry?.cacheDirectory ?? null,
+          errorMessage: registryEntry?.errorMessage ?? null,
+          downloadedAt: registryEntry?.downloadedAt ?? null,
+        }
+      })
+    )
+
+    return items
+  })
+
+  ipcHandle('createScriptPackage', async input => {
+    return createScriptPackage(input)
+  })
+
+  ipcHandle('deleteScriptPackage', async input => {
+    return deleteScriptPackage(input)
+  })
+
+  ipcHandle('suggestScriptPackageVersion', async input => {
+    return suggestScriptPackageVersion(input)
+  })
+
+  ipcHandle('suggestTypesScriptPackage', async input => {
+    return suggestTypesScriptPackage(input)
+  })
+
+  ipcHandle('downloadScriptPackage', async input => {
+    return downloadScriptPackage(input)
+  })
+
+  ipcHandle('deleteDownloadedScriptPackage', async input => {
+    return deleteDownloadedScriptPackage(input)
+  })
+
+  ipcHandle('getScriptPackageArtifacts', async () => {
+    const records = await listScriptPackages()
+    const artifacts = await Promise.all(records.map(record => getScriptPackageArtifact(record)))
+    return artifacts.filter((artifact): artifact is NonNullable<typeof artifact> => artifact !== null)
   })
 
   ipcHandle('listTags', async () => {

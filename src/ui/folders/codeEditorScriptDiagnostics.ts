@@ -5,7 +5,7 @@ import type { SharedScriptTarget } from '@common/SharedScripts'
 import { toast } from '@/lib/components/toast'
 import { requestScriptDiagnostics } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
-import type { ScriptAutocompleteSharedScript, ScriptEditorDiagnostic } from './scriptAutocompleteTypes'
+import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript, ScriptEditorDiagnostic } from './scriptAutocompleteTypes'
 
 const DIAGNOSTIC_DEBOUNCE_MS = 180
 const setInlineDiagnosticsEffect = StateEffect.define<readonly ScriptEditorDiagnostic[]>()
@@ -63,8 +63,9 @@ export function scriptDiagnosticsExtension(options: {
   phase?: ScriptAutocompletePhase
   targets?: SharedScriptTarget[]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
+  getPackages?: () => ScriptAutocompletePackage[]
 }): Extension {
-  const { phase = 'pre-request', getSharedScripts, targets } = options
+  const { phase = 'pre-request', getSharedScripts, getPackages, targets } = options
   const runtimeContext = targets ? { targets } : { phase }
 
   return [
@@ -92,7 +93,13 @@ export function scriptDiagnosticsExtension(options: {
         pluginState.abortController = abortController
         const code = view.state.doc.toString()
 
-        void requestScriptDiagnostics({ runtimeContext, code, sharedScripts: getSharedScripts?.(), signal: abortController.signal })
+        void requestScriptDiagnostics({
+          runtimeContext,
+          code,
+          sharedScripts: getSharedScripts?.(),
+          packages: getPackages?.(),
+          signal: abortController.signal,
+        })
           .then(result => {
             if (abortController.signal.aborted || !result || !view.dom.isConnected) {
               return

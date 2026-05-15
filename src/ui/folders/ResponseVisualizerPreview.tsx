@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap } from '@common/EnvironmentVariables'
 import type { HttpAuth } from '@common/Auth'
 import type { SendRequestResponse } from '@common/Requests'
+import type { ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
 
@@ -54,6 +55,7 @@ type VisualizerPayload = {
   }
   scope: Record<string, string>
   sharedScripts: Array<Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>>
+  scriptPackages: ScriptPackageArtifact[]
 }
 
 const READY_EVENT = 'kova-response-visualizer-ready'
@@ -66,6 +68,7 @@ export function ResponseVisualizerPreview({
   requestDraft,
   environments,
   sharedScripts,
+  scriptPackages,
 }: {
   source: string
   response: SendRequestResponse | null
@@ -73,6 +76,7 @@ export function ResponseVisualizerPreview({
   requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
   environments: VisualizerEnvironmentSnapshot[]
   sharedScripts: SharedScriptRecord[]
+  scriptPackages: ScriptPackageArtifact[]
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [isIframeReady, setIsIframeReady] = useState(false)
@@ -127,8 +131,9 @@ export function ResponseVisualizerPreview({
       },
       scope: response?.requestScope ?? {},
       sharedScripts,
+      scriptPackages,
     }
-  }, [contentType, environments, requestDraft, response, sharedScripts])
+  }, [contentType, environments, requestDraft, response, scriptPackages, sharedScripts])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {

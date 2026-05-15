@@ -1,5 +1,6 @@
 import vm from 'node:vm'
 import { randomUUID } from 'node:crypto'
+import { createRequire } from 'node:module'
 import ts from 'typescript'
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping'
 import { z } from 'zod'
@@ -27,6 +28,7 @@ import { createScriptPromptApi, type ScriptExecutionPauseController, type Script
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
 import type { CookieSameSite } from '../common/Cookies.js'
+import { parseScriptPackageSpecifier } from '../common/ScriptPackages.js'
 
 const SCRIPT_TIMEOUT_MS = 500
 
@@ -137,6 +139,14 @@ type EnvironmentContext = {
   setValue: (name: string, value: string, environmentName?: string) => void
 }
 
+export type ScriptRuntimePackage = {
+  packageName: string
+  packageVersion: string
+  typesPackageName: string | null
+  typesPackageVersion: string | null
+  cacheDirectory: string | null
+}
+
 export type ScriptRuntime = {
   request: RuntimeRequestState
   requestScope: Map<string, string>
@@ -158,6 +168,7 @@ export function createRequestScriptRuntime(input: {
   request: RuntimeRequestState
   environments: EnvironmentRecord[]
   sharedScripts?: SharedScriptRecord[]
+  scriptPackages?: ScriptRuntimePackage[]
   toast?: ScriptToastBridge
   prompt?: ScriptPromptBridge
   clipboard?: ScriptClipboardBridge
@@ -193,6 +204,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          scriptPackages: input.scriptPackages ?? [],
           promptBridge: input.prompt,
           clipboardBridge: input.clipboard,
         })
@@ -209,6 +221,7 @@ export function createRequestScriptRuntime(input: {
             environmentContext: createEnvironmentContext(),
             consoleEntries,
             sharedScripts: input.sharedScripts ?? [],
+            scriptPackages: input.scriptPackages ?? [],
             promptBridge: input.prompt,
             clipboardBridge: input.clipboard,
           })
@@ -225,6 +238,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          scriptPackages: input.scriptPackages ?? [],
           promptBridge: input.prompt,
           clipboardBridge: input.clipboard,
         })
@@ -239,6 +253,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          scriptPackages: input.scriptPackages ?? [],
           promptBridge: input.prompt,
           clipboardBridge: input.clipboard,
         })
@@ -253,6 +268,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          scriptPackages: input.scriptPackages ?? [],
           promptBridge: input.prompt,
         })
       )
@@ -267,6 +283,7 @@ export function createRequestScriptRuntime(input: {
             environmentContext: createEnvironmentContext(),
             consoleEntries,
             sharedScripts: input.sharedScripts ?? [],
+            scriptPackages: input.scriptPackages ?? [],
             promptBridge: input.prompt,
             clipboardBridge: input.clipboard,
           })
@@ -282,6 +299,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          scriptPackages: input.scriptPackages ?? [],
           promptBridge: input.prompt,
           clipboardBridge: input.clipboard,
         })
@@ -296,6 +314,7 @@ export function createRequestScriptRuntime(input: {
           environmentContext: createEnvironmentContext(),
           consoleEntries,
           sharedScripts: input.sharedScripts ?? [],
+          scriptPackages: input.scriptPackages ?? [],
           promptBridge: input.prompt,
           clipboardBridge: input.clipboard,
         })
@@ -316,6 +335,7 @@ export function createRequestScriptRuntime(input: {
           promptBridge: input.prompt,
           clipboardBridge: input.clipboard,
           makeRequestBridge: input.makeRequest,
+          scriptPackages: input.scriptPackages ?? [],
         })
       if (scriptErrors.length > 0) {
         ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
@@ -353,6 +373,7 @@ export function createRequestScriptRuntime(input: {
           promptBridge: input.prompt,
           clipboardBridge: input.clipboard,
           makeRequestBridge: input.makeRequest,
+          scriptPackages: input.scriptPackages ?? [],
         })
         if (scriptErrors.length > 0) {
           ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
@@ -493,6 +514,7 @@ async function runScriptPhase(input: {
   phase: 'pre-request' | 'post-request'
   sources: ScriptSource[]
   sharedScripts: SharedScriptRecord[]
+  scriptPackages: ScriptRuntimePackage[]
   runtimeRequest: RuntimeRequestState
   requestScope: Map<string, string>
   response: RuntimeResponseApiState | null
@@ -525,16 +547,23 @@ async function runScriptPhase(input: {
     ...(input.phase === 'post-request' ? { makeRequest: createMakeRequestProxy(() => currentMakeRequest.value) } : {}),
     z,
   }
+  const requirePackage = createInstalledPackageLoader(input.scriptPackages)
   const requireScript = createSharedModuleLoader({
     phase: input.phase,
     sharedScripts: input.sharedScripts,
     consoleEntries: input.consoleEntries,
     baseGlobals: sandboxGlobals,
+    loadPackage: requirePackage,
   })
+  const sharedModule = { exports: {} as Record<string, unknown> }
   const sharedContext = vm.createContext({
+    module: sharedModule,
+    exports: sharedModule.exports,
     ...sandboxGlobals,
     console: createSharedContextConsole(currentSourceName, input.consoleEntries),
     requireScript,
+    require: requirePackage,
+    loadPackage: requirePackage,
   })
 
   for (const source of [...getActiveGlobalScriptSources(input.sharedScripts, input.phase), ...input.sources]) {
@@ -806,6 +835,8 @@ function compileRequestScript(sourceCode: string): CompiledRequestScript {
       inlineSources: true,
       noImplicitAny: false,
       strict: true,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports: true,
     },
     fileName: 'request-script.ts',
     reportDiagnostics: true,
@@ -1142,6 +1173,7 @@ async function evaluateTemplateExpression(input: {
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
   sharedScripts: SharedScriptRecord[]
+  scriptPackages: ScriptRuntimePackage[]
   promptBridge?: ScriptPromptBridge
   clipboardBridge?: ScriptClipboardBridge
 }) {
@@ -1162,19 +1194,33 @@ async function evaluateTemplateExpression(input: {
     prompt: createPromptProxy(() => createScriptPromptApi(input.promptBridge, executionController)),
     z,
   }
+  const requirePackage = createInstalledPackageLoader(input.scriptPackages)
   const requireScript = createSharedModuleLoader({
     phase: 'pre-request',
     sharedScripts: input.sharedScripts,
     consoleEntries: input.consoleEntries,
     baseGlobals: sandbox,
+    loadPackage: requirePackage,
   })
+  const runtimeModule = { exports: {} as Record<string, unknown> }
 
   let compiledScript: CompiledRequestScript | null = null
 
   try {
     compiledScript = compileTemplateExpressionScript(input.expressionSource)
     const result = await resolveTemplateExpressionResult(
-      await executeScript(compiledScript.code, { ...sandbox, requireScript }, executionController)
+      await executeScript(
+        compiledScript.code,
+        {
+          module: runtimeModule,
+          exports: runtimeModule.exports,
+          ...sandbox,
+          requireScript,
+          require: requirePackage,
+          loadPackage: requirePackage,
+        },
+        executionController
+      )
     )
     input.runtimeRequest.headers = headerEditor.serialize()
     return stringifyTemplateExpressionResult(result)
@@ -1274,6 +1320,7 @@ function createSharedModuleLoader(input: {
   phase: 'pre-request' | 'post-request'
   sharedScripts: SharedScriptRecord[]
   consoleEntries: RequestConsoleEntry[]
+  loadPackage: (specifier: string) => unknown
   baseGlobals: {
     request: RequestApi
     response: ReturnType<typeof createResponseApi> | undefined
@@ -1284,6 +1331,7 @@ function createSharedModuleLoader(input: {
     toast?: ReturnType<typeof createScriptToastApi>
     prompt?: ReturnType<typeof createPromptProxy>
     makeRequest?: ReturnType<typeof createMakeRequestProxy>
+    loadPackage?: (specifier: string) => unknown
   }
 }) {
   const visibleModules = input.sharedScripts.filter(
@@ -1321,7 +1369,9 @@ function createSharedModuleLoader(input: {
         {
           module,
           exports,
+          require: input.loadPackage,
           requireScript: loadModule,
+          loadPackage: input.loadPackage,
           console: createScriptConsole(getSharedScriptDisplayName(script), input.consoleEntries),
           ...input.baseGlobals,
         },
@@ -1346,6 +1396,45 @@ function createSharedModuleLoader(input: {
   }
 
   return loadModule
+}
+
+function createInstalledPackageLoader(scriptPackages: ScriptRuntimePackage[]) {
+  const requireCache = new Map<string, NodeRequire>()
+
+  return (specifier: string) => {
+    const parsedSpecifier = parseScriptPackageSpecifier(specifier)
+    if (!parsedSpecifier) {
+      throw new Error(`Package specifier ${specifier} is invalid`)
+    }
+
+    const matchingPackages = scriptPackages.filter(pkg => pkg.packageName === parsedSpecifier.packageName)
+    if (matchingPackages.length === 0) {
+      throw new Error(`Package ${parsedSpecifier.packageName} is not available in this workspace`)
+    }
+
+    const selectedPackage = parsedSpecifier.version
+      ? matchingPackages.find(pkg => pkg.packageVersion === parsedSpecifier.version)
+      : matchingPackages.length === 1
+        ? matchingPackages[0]
+        : null
+
+    if (!selectedPackage) {
+      if (!parsedSpecifier.version) {
+        throw new Error(`Multiple ${parsedSpecifier.packageName} versions are configured. Import an exact version.`)
+      }
+
+      throw new Error(`Package ${parsedSpecifier.packageName}@${parsedSpecifier.version} is not available in this workspace`)
+    }
+
+    if (!selectedPackage.cacheDirectory) {
+      throw new Error(`Package ${selectedPackage.packageName}@${selectedPackage.packageVersion} is not downloaded`)
+    }
+
+    const cacheKey = `${selectedPackage.packageName}@${selectedPackage.packageVersion}`
+    const packageRequire = requireCache.get(cacheKey) ?? createRequire(`${selectedPackage.cacheDirectory}/package.json`)
+    requireCache.set(cacheKey, packageRequire)
+    return packageRequire(`${selectedPackage.packageName}${parsedSpecifier.subpath}`)
+  }
 }
 
 function getSharedScriptDisplayName(script: SharedScriptRecord) {

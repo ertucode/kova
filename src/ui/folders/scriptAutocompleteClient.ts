@@ -1,6 +1,7 @@
 import type { ScriptAutocompletePhase, ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 import type {
   ScriptAutocompleteRequest,
+  ScriptAutocompletePackage,
   ScriptAutocompleteResponse,
   ScriptAutocompleteSharedScript,
   ScriptAutocompleteSuccess,
@@ -34,6 +35,7 @@ class ScriptAutocompleteClient {
     code: string
     position: number
     sharedScripts?: ScriptAutocompleteSharedScript[]
+    packages?: ScriptAutocompletePackage[]
     signal?: AbortSignal
   }) {
     const requestId = this.nextRequestId++
@@ -44,6 +46,7 @@ class ScriptAutocompleteClient {
       code: input.code,
       position: input.position,
       sharedScripts: input.sharedScripts,
+      packages: input.packages,
     }
 
     return new Promise<ScriptAutocompleteSuccess | null>((resolve, reject) => {
@@ -72,6 +75,7 @@ class ScriptAutocompleteClient {
     runtimeContext?: ScriptRuntimeContext
     code: string
     sharedScripts?: ScriptAutocompleteSharedScript[]
+    packages?: ScriptAutocompletePackage[]
     signal?: AbortSignal
   }) {
     const requestId = this.nextRequestId++
@@ -81,6 +85,7 @@ class ScriptAutocompleteClient {
       runtimeContext: input.runtimeContext ?? { phase: input.phase ?? 'pre-request' },
       code: input.code,
       sharedScripts: input.sharedScripts,
+      packages: input.packages,
     }
 
     return new Promise<ScriptDiagnosticsSuccess | null>((resolve, reject) => {
@@ -153,6 +158,7 @@ export function requestScriptAutocomplete(input: {
   code: string
   position: number
   sharedScripts?: ScriptAutocompleteSharedScript[]
+  packages?: ScriptAutocompletePackage[]
   signal?: AbortSignal
 }) {
   client ??= new ScriptAutocompleteClient()
@@ -164,6 +170,7 @@ export function requestScriptDiagnostics(input: {
   runtimeContext?: ScriptRuntimeContext
   code: string
   sharedScripts?: ScriptAutocompleteSharedScript[]
+  packages?: ScriptAutocompletePackage[]
   signal?: AbortSignal
 }) {
   client ??= new ScriptAutocompleteClient()

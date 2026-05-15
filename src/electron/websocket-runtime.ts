@@ -28,6 +28,7 @@ import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getEnvironmentsByIds } from './db/environments.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
+import { listScriptPackages } from './db/script-packages.js'
 import { listVisibleSharedScripts } from './db/shared-scripts.js'
 import {
   createWebSocketHistory,
@@ -37,6 +38,7 @@ import {
 import { getRequestParentFolderId } from './db/explorer.js'
 import { emitGenericEvent } from './generic-events.js'
 import { createRequestScriptRuntime } from './request-script-runner.js'
+import { getScriptPackageRegistryEntry } from './script-package-registry.js'
 
 type ActiveWebSocketSession = {
   socket: WebSocket
@@ -87,9 +89,10 @@ export async function connectWebSocket(
       getRequestParentFolderId(input.requestId),
     ])
 
-    const [folders, sharedScripts] = await Promise.all([
+    const [folders, sharedScripts, workspacePackages] = await Promise.all([
       getFolderAncestorChain(parentFolderId),
       listVisibleSharedScripts({ folderId: parentFolderId, onlyActive: true }),
+      resolveReadyWorkspaceScriptPackages(),
     ])
     const runtime = createRequestScriptRuntime({
       request: {
@@ -108,6 +111,7 @@ export async function connectWebSocket(
       },
       environments: activeEnvironments,
       sharedScripts,
+      scriptPackages: workspacePackages,
       toast: options?.toast,
       prompt: options?.prompt,
       clipboard: options?.clipboard,
@@ -307,6 +311,24 @@ export async function connectWebSocket(
     console.error(error)
     return GenericError.Message(formatRuntimeError(error))
   }
+}
+
+async function resolveReadyWorkspaceScriptPackages() {
+  const records = await listScriptPackages()
+  const entries = await Promise.all(
+    records.map(async record => {
+      const registryEntry = await getScriptPackageRegistryEntry(record)
+      return {
+        packageName: record.packageName,
+        packageVersion: record.packageVersion,
+        typesPackageName: record.typesPackageName,
+        typesPackageVersion: record.typesPackageVersion,
+        cacheDirectory: registryEntry?.status === 'ready' ? (registryEntry.cacheDirectory ?? null) : null,
+      }
+    })
+  )
+
+  return entries
 }
 
 export async function sendWebSocketMessage(input: WebSocketSendMessageInput): Promise<GenericResult<void>> {

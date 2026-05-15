@@ -123,6 +123,36 @@ export const sharedScripts = sqliteTable(
   ]
 )
 
+export const scriptPackages = sqliteTable(
+  'script_packages',
+  {
+    id: text('id').primaryKey(),
+    packageName: text('package_name').notNull(),
+    packageVersion: text('package_version').notNull(),
+    typesPackageName: text('types_package_name'),
+    typesPackageVersion: text('types_package_version'),
+    createdAt: integer('created_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    index('script_packages_deleted_at_idx').on(table.deletedAt),
+    index('script_packages_name_version_idx').on(table.packageName, table.packageVersion),
+    uniqueIndex('script_packages_unique_active_idx').on(
+      table.packageName,
+      table.packageVersion,
+      table.typesPackageName,
+      table.typesPackageVersion,
+      table.deletedAt
+    ),
+    check('script_packages_name_not_empty', sql`length(trim(${table.packageName})) > 0`),
+    check('script_packages_version_not_empty', sql`length(trim(${table.packageVersion})) > 0`),
+    check(
+      'script_packages_types_pair_check',
+      sql`(${table.typesPackageName} is null and ${table.typesPackageVersion} is null) or (${table.typesPackageName} is not null and ${table.typesPackageVersion} is not null)`
+    ),
+  ]
+)
+
 export const tags = sqliteTable(
   'tags',
   {

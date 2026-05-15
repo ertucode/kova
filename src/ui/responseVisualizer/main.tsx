@@ -11,6 +11,7 @@ import { formatJson } from '@common/Json5'
 import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '@common/PathParams'
 import { resolveTemplateVariables } from '@common/RequestVariables'
+import { parseScriptPackageSpecifier, type ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import { CodeEditor } from '../folders/CodeEditor'
 
@@ -71,6 +72,7 @@ type VisualizerPayload = {
   }
   scope: Record<string, string>
   sharedScripts: Array<Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>>
+  scriptPackages: Array<Pick<ScriptPackageArtifact, 'cacheKey' | 'packageName' | 'packageVersion' | 'browserBundleCode'>>
 }
 
 type VisualizerErrorDetails = {
@@ -105,7 +107,9 @@ window.addEventListener('message', event => {
   }
 
   try {
-    renderVisualizer(code, payload ?? createEmptyPayload())
+    void renderVisualizer(code, payload ?? createEmptyPayload()).catch(error => {
+      renderError(formatVisualizerError(error, code))
+    })
   } catch (error) {
     renderError(formatVisualizerError(error, code))
   }
@@ -123,6 +127,8 @@ function compileVisualizer(source: string) {
       module: ts.ModuleKind.CommonJS,
       inlineSourceMap: true,
       inlineSources: true,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports: true,
     },
     fileName: 'response-visualizer.tsx',
     reportDiagnostics: true,
@@ -142,18 +148,18 @@ function compileVisualizer(source: string) {
   return result.outputText
 }
 
-function renderVisualizer(source: string, payload: VisualizerPayload) {
+async function renderVisualizer(source: string, payload: VisualizerPayload) {
   const globalScripts = payload.sharedScripts.filter(
     script => script.isActive && script.kind === 'global' && script.targets.includes('response-visualizer')
   )
   const combinedSource = [...globalScripts.map(script => script.code), source].filter(Boolean).join('\n\n')
   const transpiled = compileVisualizer(combinedSource)
-  const rendered = runVisualizer(transpiled, payload)
+  const rendered = await runVisualizer(transpiled, payload)
 
   root.render(<VisualizerErrorBoundary source={source}>{rendered}</VisualizerErrorBoundary>)
 }
 
-function runVisualizer(code: string, payload: VisualizerPayload) {
+async function runVisualizer(code: string, payload: VisualizerPayload) {
   const module = { exports: {} as Record<string, unknown> }
   const exports = module.exports
   const request = createRequestApi(payload)
@@ -190,6 +196,7 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     useRef,
     useState,
   } = React
+  const requirePackage = createInstalledBrowserPackageLoader(payload.scriptPackages)
   const requireScript = createSharedScriptModuleLoader(payload, {
     React,
     Fragment,
@@ -232,7 +239,9 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     'scope',
     'request',
     'response',
+    'require',
     'requireScript',
+    'loadPackage',
     'crypto',
     'cookies',
     'z',
@@ -261,7 +270,9 @@ function runVisualizer(code: string, payload: VisualizerPayload) {
     scope,
     request,
     response,
+    requirePackage,
     requireScript,
+    requirePackage,
     crypto,
     cookies,
     z,
@@ -323,6 +334,7 @@ function createSharedScriptModuleLoader(
   )
   const cache = new Map<string, Record<string, unknown>>()
   const loading = new Set<string>()
+  const requirePackage = createInstalledBrowserPackageLoader(payload.scriptPackages)
 
   const loadModule = (name: string): Record<string, unknown> => {
     const script = modulesByName.get(name)
@@ -365,7 +377,9 @@ function createSharedScriptModuleLoader(
         'scope',
         'request',
         'response',
+        'require',
         'requireScript',
+        'loadPackage',
         'crypto',
         'z',
         'formatXml',
@@ -393,7 +407,9 @@ function createSharedScriptModuleLoader(
         globals.scope,
         globals.request,
         globals.response,
+        requirePackage,
         loadModule,
+        requirePackage,
         crypto,
         z,
         formatXml,
@@ -415,6 +431,88 @@ function createSharedScriptModuleLoader(
   }
 
   return loadModule
+}
+
+function createInstalledBrowserPackageLoader(
+  scriptPackages: VisualizerPayload['scriptPackages']
+) {
+  const moduleCache = new Map<string, Record<string, unknown>>()
+  const loadPackage = (specifier: string) => {
+    const parsedSpecifier = parseScriptPackageSpecifier(specifier)
+    if (!parsedSpecifier) {
+      throw new Error(`Package specifier ${specifier} is invalid`)
+    }
+
+    if (parsedSpecifier.subpath) {
+      throw new Error(`Package subpath imports are not supported in the response visualizer yet: ${specifier}`)
+    }
+
+    const matchingPackages = scriptPackages.filter(pkg => pkg.packageName === parsedSpecifier.packageName)
+    if (matchingPackages.length === 0) {
+      throw new Error(`Package ${parsedSpecifier.packageName} was not found`)
+    }
+
+    const selectedPackage = parsedSpecifier.version
+      ? matchingPackages.find(pkg => pkg.packageVersion === parsedSpecifier.version)
+      : matchingPackages.length === 1
+        ? matchingPackages[0]
+        : null
+
+    if (!selectedPackage) {
+      if (!parsedSpecifier.version) {
+        throw new Error(`Multiple ${parsedSpecifier.packageName} versions are configured. Import an exact version.`)
+      }
+
+      throw new Error(`Package ${parsedSpecifier.packageName}@${parsedSpecifier.version} was not found`)
+    }
+
+    const cachedModule = moduleCache.get(selectedPackage.cacheKey)
+    if (cachedModule) {
+      return cachedModule
+    }
+
+    if (!selectedPackage.browserBundleCode) {
+      throw new Error(`Package ${selectedPackage.packageName}@${selectedPackage.packageVersion} is not downloaded`)
+    }
+
+    const module = { exports: {} as Record<string, unknown> }
+    const exports = module.exports
+    new Function('module', 'exports', 'require', `${selectedPackage.browserBundleCode}\n//# sourceURL=${selectedPackage.packageName}.bundle.js`)(
+      module,
+      exports,
+      createVisualizerExternalRequire(loadPackage)
+    )
+    moduleCache.set(selectedPackage.cacheKey, module.exports)
+    return module.exports
+  }
+
+  return loadPackage
+}
+
+function createVisualizerExternalRequire(loadPackage: (specifier: string) => unknown) {
+  const reactModule = {
+    ...React,
+    default: React,
+  }
+  const jsxRuntimeModule = {
+    Fragment: React.Fragment,
+    jsx: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
+    jsxs: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
+  }
+
+  return (specifier: string) => {
+    switch (specifier) {
+      case 'react':
+        return reactModule
+      case 'react/jsx-runtime':
+      case 'react/jsx-dev-runtime':
+        return jsxRuntimeModule
+      case 'react-dom':
+        return { default: null }
+      default:
+        return loadPackage(specifier)
+    }
+  }
 }
 
 function renderError(error: VisualizerErrorDetails) {
@@ -1102,5 +1200,6 @@ function createEmptyPayload(): VisualizerPayload {
     },
     scope: {},
     sharedScripts: [],
+    scriptPackages: [],
   }
 }

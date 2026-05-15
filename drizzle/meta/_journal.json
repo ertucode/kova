@@ -225,6 +225,13 @@
       "when": 1778422892473,
       "tag": "0031_cool_longshot",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1778802656551,
+      "tag": "0032_good_sentinel",
+      "breakpoints": true
     }
   ]
 }

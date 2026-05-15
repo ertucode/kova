@@ -101,13 +101,7 @@ const typeScriptLibFiles = [
   'lib.es2023.intl.d.ts',
   'lib.esnext.iterator.d.ts',
 ]
-const zodDeclarationRoots = [
-  'index.d.cts',
-  'v4/index.d.cts',
-  'v4/classic',
-  'v4/core',
-  'v4/locales',
-]
+const zodDeclarationRoots = ['index.d.cts', 'v4/index.d.cts', 'v4/classic', 'v4/core', 'v4/locales']
 
 const inputHash = await computeInputHash(rootDir, [
   'package.json',
@@ -116,6 +110,7 @@ const inputHash = await computeInputHash(rootDir, [
   'scripts/build-cache.mjs',
   'scripts/build-script-autocomplete-worker.mjs',
   'src/common/SharedScripts.ts',
+  'src/common/ScriptPackages.ts',
   'src/ui/folders/scriptAutocomplete.worker.ts',
   'src/ui/folders/scriptAutocompleteTypes.ts',
   'src/ui/folders/scriptRuntimeDeclarations.ts',
@@ -222,12 +217,43 @@ function aliasPlugin() {
   return {
     name: 'kova-aliases',
     setup(build) {
-      build.onResolve({ filter: /^@common\// }, args => ({
-        path: path.join(rootDir, 'src/common', args.path.slice('@common/'.length)),
+      build.onResolve({ filter: /^@common\// }, async args => ({
+        path: await resolveAliasedPath(path.join(rootDir, 'src/common', args.path.slice('@common/'.length))),
       }))
-      build.onResolve({ filter: /^@\// }, args => ({
-        path: path.join(rootDir, 'src/ui', args.path.slice(2)),
+      build.onResolve({ filter: /^@\// }, async args => ({
+        path: await resolveAliasedPath(path.join(rootDir, 'src/ui', args.path.slice(2))),
       }))
     },
+  }
+}
+
+async function resolveAliasedPath(basePath) {
+  const candidatePaths = [
+    basePath,
+    `${basePath}.ts`,
+    `${basePath}.tsx`,
+    `${basePath}.js`,
+    `${basePath}.jsx`,
+    path.join(basePath, 'index.ts'),
+    path.join(basePath, 'index.tsx'),
+    path.join(basePath, 'index.js'),
+    path.join(basePath, 'index.jsx'),
+  ]
+
+  for (const candidatePath of candidatePaths) {
+    if (await pathExists(candidatePath)) {
+      return candidatePath
+    }
+  }
+
+  return basePath
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.stat(filePath)
+    return true
+  } catch {
+    return false
   }
 }

@@ -14,12 +14,14 @@ import {
   sharedScriptEditorStore,
   type SharedScriptEditorSelection,
 } from './sharedScriptEditorStore'
+import { useScriptPackageArtifacts } from './useScriptPackages'
 import { notifySharedScriptsChanged, useScopedSharedScripts, useVisibleSharedScripts } from './useVisibleSharedScripts'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer']
 const EMPTY_ENTRIES: Record<string, never> = {}
 
 export function SharedScriptsPanel() {
+  const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const { scripts: visibleSharedScripts, reload: reloadVisibleSharedScripts } = useVisibleSharedScripts(null)
   const { scripts, loading, hasLoaded, reload } = useScopedSharedScripts('workspace', null)
   const [draggedScriptId, setDraggedScriptId] = useState<string | null>(null)
@@ -349,6 +351,7 @@ export function SharedScriptsPanel() {
           <SharedScriptDetail
             key={selectedId}
             draft={draft}
+            scriptPackages={scriptPackageArtifacts}
             visibleSharedScripts={visibleSharedScripts}
             isDirty={isDirty}
             isSaving={isSaving}
@@ -371,6 +374,7 @@ export function SharedScriptsPanel() {
 
 function SharedScriptDetail({
   draft,
+  scriptPackages,
   visibleSharedScripts,
   isDirty,
   isSaving,
@@ -382,6 +386,7 @@ function SharedScriptDetail({
   onSave,
 }: {
   draft: SharedScriptRecord
+  scriptPackages: import('./scriptAutocompleteTypes').ScriptAutocompletePackage[]
   visibleSharedScripts: SharedScriptRecord[]
   isDirty: boolean
   isSaving: boolean
@@ -399,16 +404,23 @@ function SharedScriptDetail({
     return visibleSharedScripts.filter(item => item.id !== draft.id)
   }, [draft.id, visibleSharedScripts])
   const autocompleteSharedScriptsRef = useRef(autocompleteSharedScripts)
+  const scriptPackagesRef = useRef(scriptPackages)
 
   autocompleteSharedScriptsRef.current = autocompleteSharedScripts
+  scriptPackagesRef.current = scriptPackages
 
   const extensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ targets, getSharedScripts: () => autocompleteSharedScriptsRef.current }),
+      scriptDiagnosticsExtension({
+        targets,
+        getSharedScripts: () => autocompleteSharedScriptsRef.current,
+        getPackages: () => scriptPackagesRef.current,
+      }),
       scriptAutocompleteExtension({
         includeResponse: false,
         targets,
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
+        getPackages: () => scriptPackagesRef.current,
       }),
     ],
     [targets]

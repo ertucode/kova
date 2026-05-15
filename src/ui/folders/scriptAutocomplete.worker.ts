@@ -1,5 +1,6 @@
 import ts from 'typescript'
 import type { SharedScriptTarget } from '@common/SharedScripts'
+import { parseScriptPackageSpecifier } from '@common/ScriptPackages'
 import {
   getScriptRuntimeDeclarations,
   getScriptRuntimeTargets,
@@ -8,6 +9,7 @@ import {
 } from './scriptRuntimeDeclarations'
 import type {
   ScriptAutocompleteOption,
+  ScriptAutocompletePackage,
   ScriptAutocompleteRequest,
   ScriptAutocompleteResponse,
   ScriptAutocompleteSharedScript,
@@ -24,6 +26,7 @@ type PhaseState = {
   userFileName: string
   declarationFileName: string
   dynamicFileNames: Set<string>
+  packages: ScriptAutocompletePackage[]
 }
 
 type DeclarationPayload = {
@@ -83,7 +86,7 @@ async function complete(request: ScriptAutocompleteRequest): Promise<ScriptAutoc
   try {
     const phaseState = await getOrCreatePhaseState(request.runtimeContext)
 
-    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
+    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [], request.packages ?? [])
 
     const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, request.position, {
       includeCompletionsForModuleExports: false,
@@ -127,7 +130,7 @@ async function getDiagnostics(request: ScriptDiagnosticsRequest): Promise<Script
   try {
     const phaseState = await getOrCreatePhaseState(request.runtimeContext)
 
-    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [])
+    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [], request.packages ?? [])
 
     return {
       requestId: request.requestId,
@@ -157,9 +160,15 @@ function shouldIgnoreDiagnostic(runtimeContext: ScriptRuntimeContext, diagnostic
   return allowedTopLevelScriptDiagnosticCodes.has(diagnostic.code)
 }
 
-function updatePhaseSource(phaseState: PhaseState, code: string, sharedScripts: ScriptAutocompleteSharedScript[]) {
+function updatePhaseSource(
+  phaseState: PhaseState,
+  code: string,
+  sharedScripts: ScriptAutocompleteSharedScript[],
+  packages: ScriptAutocompletePackage[]
+) {
   phaseState.files.set(phaseState.userFileName, code)
   phaseState.versions.set(phaseState.userFileName, (phaseState.versions.get(phaseState.userFileName) ?? 0) + 1)
+  phaseState.packages = packages
 
   for (const fileName of phaseState.dynamicFileNames) {
     phaseState.files.delete(fileName)
@@ -172,6 +181,15 @@ function updatePhaseSource(phaseState: PhaseState, code: string, sharedScripts: 
     phaseState.dynamicFileNames.add(file.fileName)
     phaseState.files.set(file.fileName, file.content)
     phaseState.versions.set(file.fileName, (phaseState.versions.get(file.fileName) ?? 0) + 1)
+  }
+
+  for (const pkg of packages) {
+    for (const [relativePath, content] of Object.entries(pkg.typeFiles)) {
+      const fileName = toVirtualPackageFileName(pkg.cacheKey, relativePath)
+      phaseState.dynamicFileNames.add(fileName)
+      phaseState.files.set(fileName, content)
+      phaseState.versions.set(fileName, (phaseState.versions.get(fileName) ?? 0) + 1)
+    }
   }
 
   phaseState.files.set(
@@ -250,11 +268,14 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
     getCompilationSettings: () => ({
       target: ts.ScriptTarget.ES2023,
       module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
       lib: [declarationFiles.rootLibFile],
       strict: true,
       noImplicitAny: false,
       allowJs: true,
       checkJs: true,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports: true,
       jsx: ts.JsxEmit.ReactJSX,
       noEmit: true,
       noLib: false,
@@ -285,9 +306,15 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
     directoryExists: () => true,
     getDirectories: () => [],
     useCaseSensitiveFileNames: () => true,
+    resolveModuleNames: (moduleNames, containingFile) => {
+      const compilerOptions = host.getCompilationSettings()
+      return moduleNames.map(moduleName =>
+        resolvePackageAwareModuleName(moduleName, containingFile, compilerOptions, files, phaseState.packages)
+      )
+    },
   }
 
-  return {
+  const phaseState: PhaseState = {
     runtimeContext,
     service: ts.createLanguageService(host, ts.createDocumentRegistry()),
     files,
@@ -295,7 +322,10 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
     userFileName,
     declarationFileName,
     dynamicFileNames: new Set<string>(),
+    packages: [],
   }
+
+  return phaseState
 }
 
 function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScripts: ScriptAutocompleteSharedScript[]) {
@@ -390,6 +420,82 @@ function buildRequireScriptDeclarations(modules: Map<string, string>) {
   lines.push('declare function requireScript(name: string): unknown')
 
   return lines.join('\n')
+}
+
+function resolvePackageAwareModuleName(
+  moduleName: string,
+  containingFile: string,
+  compilerOptions: ts.CompilerOptions,
+  files: Map<string, string>,
+  packages: ScriptAutocompletePackage[]
+) {
+  const parsedSpecifier = parseScriptPackageSpecifier(moduleName)
+  const matchingPackages = parsedSpecifier ? packages.filter(pkg => pkg.packageName === parsedSpecifier.packageName) : []
+
+  const resolvedPackage =
+    parsedSpecifier && parsedSpecifier.version
+      ? matchingPackages.find(pkg => pkg.packageVersion === parsedSpecifier.version)
+      : matchingPackages.length === 1
+        ? matchingPackages[0]
+        : null
+
+  const moduleResolutionHost: ts.ModuleResolutionHost = {
+    fileExists: fileName => files.has(fileName),
+    readFile: fileName => files.get(fileName),
+    directoryExists: directoryPath => hasDirectory(files, directoryPath),
+    getDirectories: directoryPath => listDirectories(files, directoryPath),
+    realpath: fileName => fileName,
+    useCaseSensitiveFileNames: () => true,
+    getCurrentDirectory: () => '/',
+  }
+
+  if (!parsedSpecifier || matchingPackages.length === 0) {
+    return ts.resolveModuleName(moduleName, containingFile, compilerOptions, moduleResolutionHost).resolvedModule
+  }
+
+  if (!resolvedPackage || resolvedPackage.downloadStatus !== 'ready') {
+    return undefined
+  }
+
+  const internalModuleName = `${parsedSpecifier.packageName}${parsedSpecifier.subpath}`
+  const syntheticContainingFile = `/__script_packages__/${resolvedPackage.cacheKey}/index.ts`
+  return ts.resolveModuleName(internalModuleName, syntheticContainingFile, compilerOptions, moduleResolutionHost).resolvedModule
+}
+
+function toVirtualPackageFileName(cacheKey: string, relativePath: string) {
+  return `/__script_packages__/${cacheKey}/node_modules/${relativePath.replace(/\\/g, '/')}`
+}
+
+function hasDirectory(files: Map<string, string>, directoryPath: string) {
+  const normalizedDirectoryPath = directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`
+  for (const fileName of files.keys()) {
+    if (fileName.startsWith(normalizedDirectoryPath)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function listDirectories(files: Map<string, string>, directoryPath: string) {
+  const normalizedDirectoryPath = directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`
+  const directories = new Set<string>()
+
+  for (const fileName of files.keys()) {
+    if (!fileName.startsWith(normalizedDirectoryPath)) {
+      continue
+    }
+
+    const remainder = fileName.slice(normalizedDirectoryPath.length)
+    const slashIndex = remainder.indexOf('/')
+    if (slashIndex <= 0) {
+      continue
+    }
+
+    directories.add(remainder.slice(0, slashIndex))
+  }
+
+  return Array.from(directories)
 }
 
 function isAllowedEntry(entry: ts.CompletionEntry) {

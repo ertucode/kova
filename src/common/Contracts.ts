@@ -142,6 +142,19 @@ import {
   type TagRecord,
   type UpdateTagInput,
 } from './Tags.js'
+import {
+  type CreateScriptPackageInput,
+  type DeleteDownloadedScriptPackageInput,
+  type DeleteScriptPackageInput,
+  type DownloadScriptPackageInput,
+  type ScriptPackageArtifact,
+  type ScriptPackageListItem,
+  type ScriptPackageRecord,
+  type SuggestedScriptPackageVersion,
+  type SuggestedTypesScriptPackage,
+  type SuggestScriptPackageVersionInput,
+  type SuggestTypesScriptPackageInput,
+} from './ScriptPackages.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -249,6 +262,14 @@ export type EventResponseMapping = {
   moveTag: Promise<GenericResult<void>>
   replaceItemTags: Promise<GenericResult<void>>
   replaceTagItems: Promise<GenericResult<void>>
+  listScriptPackages: Promise<ScriptPackageListItem[]>
+  createScriptPackage: Promise<GenericResult<ScriptPackageRecord>>
+  deleteScriptPackage: Promise<GenericResult<void>>
+  suggestScriptPackageVersion: Promise<GenericResult<SuggestedScriptPackageVersion>>
+  suggestTypesScriptPackage: Promise<GenericResult<SuggestedTypesScriptPackage>>
+  downloadScriptPackage: Promise<GenericResult<void>>
+  deleteDownloadedScriptPackage: Promise<GenericResult<void>>
+  getScriptPackageArtifacts: Promise<ScriptPackageArtifact[]>
 }
 
 export type EventRequestMapping = {
@@ -353,6 +374,14 @@ export type EventRequestMapping = {
   moveTag: MoveTagInput
   replaceItemTags: ReplaceItemTagsInput
   replaceTagItems: ReplaceTagItemsInput
+  listScriptPackages: void
+  createScriptPackage: CreateScriptPackageInput
+  deleteScriptPackage: DeleteScriptPackageInput
+  suggestScriptPackageVersion: SuggestScriptPackageVersionInput
+  suggestTypesScriptPackage: SuggestTypesScriptPackageInput
+  downloadScriptPackage: DownloadScriptPackageInput
+  deleteDownloadedScriptPackage: DeleteDownloadedScriptPackageInput
+  getScriptPackageArtifacts: void
 }
 
 export type EventRequest<Key extends keyof EventResponseMapping> = Key extends keyof EventRequestMapping
@@ -469,4 +498,16 @@ export type WindowElectron = {
   moveTag: (input: MoveTagInput) => Promise<GenericResult<void>>
   replaceItemTags: (input: ReplaceItemTagsInput) => Promise<GenericResult<void>>
   replaceTagItems: (input: ReplaceTagItemsInput) => Promise<GenericResult<void>>
+  listScriptPackages: () => Promise<ScriptPackageListItem[]>
+  createScriptPackage: (input: CreateScriptPackageInput) => Promise<GenericResult<ScriptPackageRecord>>
+  deleteScriptPackage: (input: DeleteScriptPackageInput) => Promise<GenericResult<void>>
+  suggestScriptPackageVersion: (
+    input: SuggestScriptPackageVersionInput
+  ) => Promise<GenericResult<SuggestedScriptPackageVersion>>
+  suggestTypesScriptPackage: (
+    input: SuggestTypesScriptPackageInput
+  ) => Promise<GenericResult<SuggestedTypesScriptPackage>>
+  downloadScriptPackage: (input: DownloadScriptPackageInput) => Promise<GenericResult<void>>
+  deleteDownloadedScriptPackage: (input: DeleteDownloadedScriptPackageInput) => Promise<GenericResult<void>>
+  getScriptPackageArtifacts: () => Promise<ScriptPackageArtifact[]>
 }

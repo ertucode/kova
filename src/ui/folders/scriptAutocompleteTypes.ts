@@ -1,14 +1,23 @@
 import type { Completion } from '@codemirror/autocomplete'
 import type { SharedScriptRecord } from '@common/SharedScripts'
+import type { ScriptPackageArtifact, ScriptPackageDownloadStatus } from '@common/ScriptPackages'
 import type { ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 
 export type ScriptAutocompleteSharedScript = Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>
+
+export type ScriptAutocompletePackage = Pick<
+  ScriptPackageArtifact,
+  'cacheKey' | 'packageName' | 'packageVersion' | 'typesPackageName' | 'typesPackageVersion' | 'typeFiles'
+> & {
+  downloadStatus: ScriptPackageDownloadStatus
+}
 
 type ScriptRequestBase = {
   requestId: number
   runtimeContext: ScriptRuntimeContext
   code: string
   sharedScripts?: ScriptAutocompleteSharedScript[]
+  packages?: ScriptAutocompletePackage[]
 }
 
 export type ScriptAutocompleteRequest = ScriptRequestBase & {

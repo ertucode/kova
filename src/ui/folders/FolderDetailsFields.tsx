@@ -20,10 +20,12 @@ import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { SharedScriptsSection } from './SharedScriptsSection'
+import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
+  const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const selectedFolderId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'folder' ? state.context.selected.id : null
   )
@@ -89,12 +91,14 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const { scripts: visibleSharedScripts, reload: reloadVisibleSharedScripts } =
     useVisibleSharedScripts(selectedFolderId)
   const visibleSharedScriptsRef = useRef(visibleSharedScripts)
+  const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
 
   activeEnvironmentNamesRef.current = activeEnvironmentNames
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
   visibleSharedScriptsRef.current = visibleSharedScripts
+  scriptPackageArtifactsRef.current = scriptPackageArtifacts
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
     () => [
@@ -129,12 +133,17 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
 
   const preRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
+      scriptDiagnosticsExtension({
+        phase: 'pre-request',
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
       scriptAutocompleteExtension({
         includeResponse: false,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
       }),
     ],
     []
@@ -142,12 +151,17 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
 
   const postRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
+      scriptDiagnosticsExtension({
+        phase: 'post-request',
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
       scriptAutocompleteExtension({
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
       }),
     ],
     []

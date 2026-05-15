@@ -22,8 +22,10 @@ import { getEnvironmentsByIds } from './db/environments.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
+import { listScriptPackages } from './db/script-packages.js'
 import { listVisibleSharedScripts } from './db/shared-scripts.js'
 import { createRequestScriptRuntime, type ScriptRuntime } from './request-script-runner.js'
+import { getScriptPackageRegistryEntry } from './script-package-registry.js'
 import type { ScriptMakeRequestBridge } from './script-make-request.js'
 import type { ScriptPromptBridge } from './script-prompt.js'
 
@@ -83,9 +85,10 @@ export async function prepareHttpRequest(
     return GenericError.Message('Use the WebSocket connect flow for websocket requests')
   }
 
-  const [folders, sharedScripts] = await Promise.all([
+  const [folders, sharedScripts, workspacePackages] = await Promise.all([
     getFolderAncestorChain(parentFolderId),
     listVisibleSharedScripts({ folderId: parentFolderId, onlyActive: true }),
+    resolveReadyWorkspaceScriptPackages(),
   ])
   const runtime = createRequestScriptRuntime({
     request: {
@@ -104,6 +107,7 @@ export async function prepareHttpRequest(
     },
     environments: activeEnvironments,
     sharedScripts,
+    scriptPackages: workspacePackages,
     toast: options?.toast,
     prompt: options?.prompt,
     clipboard: options?.clipboard,
@@ -222,6 +226,24 @@ export async function prepareHttpRequest(
         .map(folder => ({ name: `Folder: ${folder.name}`, script: folder.postRequestScript })),
     ],
   })
+}
+
+async function resolveReadyWorkspaceScriptPackages() {
+  const records = await listScriptPackages()
+  const entries = await Promise.all(
+    records.map(async record => {
+      const registryEntry = await getScriptPackageRegistryEntry(record)
+      return {
+        packageName: record.packageName,
+        packageVersion: record.packageVersion,
+        typesPackageName: record.typesPackageName,
+        typesPackageVersion: record.typesPackageVersion,
+        cacheDirectory: registryEntry?.status === 'ready' ? (registryEntry.cacheDirectory ?? null) : null,
+      }
+    })
+  )
+
+  return entries
 }
 
 export function buildCurlCommand(input: Pick<PreparedHttpRequest, 'method' | 'url' | 'headers' | 'resolvedBody'>) {

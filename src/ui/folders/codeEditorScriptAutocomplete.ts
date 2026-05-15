@@ -12,7 +12,7 @@ import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
 import type { SharedScriptTarget } from '@common/SharedScripts'
-import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
+import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 
 type ScriptAutocompleteOptions = {
   includeResponse: boolean
@@ -21,6 +21,7 @@ type ScriptAutocompleteOptions = {
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
+  getPackages?: () => ScriptAutocompletePackage[]
   fallbackToBrowserTab?: boolean
 }
 
@@ -35,7 +36,7 @@ export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions):
       override: [
         context => completeVariableName(context, options.getVariableNames),
         context => completeEnvironmentName(context, options.getEnvironmentNames),
-        context => completeScriptApi(context, runtimeContext, options.getSharedScripts),
+        context => completeScriptApi(context, runtimeContext, options.getSharedScripts, options.getPackages),
       ],
     }),
     EditorView.updateListener.of(update => {
@@ -152,7 +153,8 @@ function completeEnvironmentName(
 async function completeScriptApi(
   context: CompletionContext,
   runtimeContext: { phase: ScriptAutocompletePhase } | { targets: SharedScriptTarget[] },
-  getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined
+  getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined,
+  getPackages: (() => ScriptAutocompletePackage[]) | undefined
 ): Promise<CompletionResult | null> {
   const identifierMatch = context.matchBefore(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.?[A-Za-z_$\d]*$/)
   if (!identifierMatch && !context.explicit) {
@@ -168,6 +170,7 @@ async function completeScriptApi(
       code: context.state.doc.toString(),
       position: context.pos,
       sharedScripts: getSharedScripts?.(),
+      packages: getPackages?.(),
       signal: abortController.signal,
     })
 

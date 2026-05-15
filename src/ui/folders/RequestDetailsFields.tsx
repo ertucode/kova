@@ -49,6 +49,7 @@ import { buildImportedHttpUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
+import { useScriptPackageArtifacts } from './useScriptPackages'
 import { twMerge } from 'tailwind-merge'
 
 type RequestMetaTab =
@@ -68,6 +69,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     state => state.context.settings?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW
   )
   const [metaTab, setMetaTab] = useState<RequestMetaTab>('overview')
+  const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const metaTabByRequestIdRef = useRef<Record<string, RequestMetaTab>>({})
   const draftRef = useRef(draft)
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
@@ -149,6 +151,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
   const visibleSharedScriptsRef = useRef(visibleSharedScripts)
+  const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
   const definedPathParamNamesRef = useRef<string[]>([])
   const pathParamRowsRef = useRef(parseKeyValueRows(draft.pathParams))
 
@@ -157,6 +160,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
   visibleSharedScriptsRef.current = visibleSharedScripts
+  scriptPackageArtifactsRef.current = scriptPackageArtifacts
   pathParamRowsRef.current = parseKeyValueRows(draft.pathParams)
   definedPathParamNamesRef.current = pathParamRowsRef.current.map(row => row.key.trim()).filter(Boolean)
 
@@ -258,12 +262,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const preRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'pre-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
+      scriptDiagnosticsExtension({
+        phase: 'pre-request',
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
       scriptAutocompleteExtension({
         includeResponse: false,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
       }),
     ],
     []
@@ -271,12 +280,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const postRequestScriptExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'post-request', getSharedScripts: () => visibleSharedScriptsRef.current }),
+      scriptDiagnosticsExtension({
+        phase: 'post-request',
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
       scriptAutocompleteExtension({
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
       }),
     ],
     []
@@ -284,13 +298,18 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   const responseVisualizerExtensions = useMemo(
     () => [
-      scriptDiagnosticsExtension({ phase: 'response-visualizer', getSharedScripts: () => visibleSharedScriptsRef.current }),
+      scriptDiagnosticsExtension({
+        phase: 'response-visualizer',
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
       scriptAutocompleteExtension({
         phase: 'response-visualizer',
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
         getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
       }),
     ],
     []
@@ -752,6 +771,7 @@ export default function View() {
         onJumpToScriptError={handleJumpToScriptError}
         visualizerEnvironments={visualizerEnvironments}
         sharedScripts={visibleSharedScripts.filter(script => script.targets.includes('response-visualizer'))}
+        scriptPackageArtifacts={scriptPackageArtifacts}
       />
     </div>
   )
