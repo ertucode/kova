@@ -352,9 +352,6 @@ const editorTheme = EditorView.theme({
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
     backgroundColor: 'color-mix(in oklab, var(--color-primary) 28%, transparent)',
   },
-  '& .cm-line': {
-    padding: '0 !important',
-  },
 })
 
 function createScaledEditorTheme(size: 'normal' | 'small', scale: number) {
@@ -679,7 +676,11 @@ export const CodeEditor = memo(function CodeEditor({
 
   const compactTheme = useMemo(() => {
     if (!compact) {
-      return null
+      return EditorView.theme({
+        '& .cm-line': {
+          padding: '0 !important',
+        },
+      })
     }
 
     return EditorView.theme({
