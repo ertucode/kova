@@ -5,11 +5,15 @@ import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { HeadersEditor } from './HeadersEditor'
 import { CodeEditor } from './CodeEditor'
+import { formatBytes } from '@common/formatBytes'
 
 export function WebSocketExampleDetailsFields({ draft }: { draft: WebSocketExampleDetailsDraft }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <HeadersEditor value={draft.requestHeaders} onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestHeaders: value })} />
+      <HeadersEditor
+        value={draft.requestHeaders}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestHeaders: value })}
+      />
 
       <section className="w-full border-b border-base-content/10">
         <DetailsSectionHeader title="Request Body" />
@@ -27,7 +31,9 @@ export function WebSocketExampleDetailsFields({ draft }: { draft: WebSocketExamp
         <DetailsSectionHeader title="Transcript" />
         <div className="space-y-2 p-3">
           {draft.messages.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">No messages saved</div>
+            <div className="rounded-xl border border-dashed border-base-content/10 px-3 py-3 text-sm text-base-content/40">
+              No messages saved
+            </div>
           ) : (
             draft.messages.map(message => <WebSocketExampleMessageRow key={message.id} message={message} />)
           )}
@@ -42,8 +48,14 @@ function WebSocketExampleMessageRow({ message }: { message: WebSocketExampleDeta
 
   return (
     <div className="rounded-xl border border-base-content/10 bg-base-100/60 px-3 py-3">
-      <button type="button" className="flex w-full min-w-0 items-start gap-2 text-left" onClick={() => setExpanded(current => !current)}>
-        <div className="mt-0.5 shrink-0 text-base-content/45">{expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}</div>
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-start gap-2 text-left"
+        onClick={() => setExpanded(current => !current)}
+      >
+        <div className="mt-0.5 shrink-0 text-base-content/45">
+          {expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-base-content/45">
             <span className={message.direction === 'sent' ? 'text-info' : 'text-success'}>{message.direction}</span>
@@ -52,9 +64,13 @@ function WebSocketExampleMessageRow({ message }: { message: WebSocketExampleDeta
             {message.mimeType ? <span>{message.mimeType}</span> : null}
           </div>
           {expanded ? (
-            <pre className="mt-1 overflow-auto whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">{message.body || '(empty)'}</pre>
+            <pre className="mt-1 overflow-auto whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-base-content">
+              {message.body || '(empty)'}
+            </pre>
           ) : (
-            <div className="mt-1 truncate font-mono text-[12px] text-base-content/75">{getCollapsedMessagePreview(message.body)}</div>
+            <div className="mt-1 truncate font-mono text-[12px] text-base-content/75">
+              {getCollapsedMessagePreview(message.body)}
+            </div>
           )}
         </div>
       </button>
@@ -64,16 +80,6 @@ function WebSocketExampleMessageRow({ message }: { message: WebSocketExampleDeta
 
 function formatTimestamp(value: number) {
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function getCollapsedMessagePreview(value: string) {

@@ -14,7 +14,12 @@ import {
   syncUrlWithPathParams,
   syncUrlWithSearchParams,
 } from '@common/PathParams'
-import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows, type KeyValueRow } from '@common/KeyValueRows'
+import {
+  createEmptyKeyValueRow,
+  parseKeyValueRows,
+  stringifyKeyValueRows,
+  type KeyValueRow,
+} from '@common/KeyValueRows'
 import { formatJson5PreferringJsonWithTemplates } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
@@ -70,7 +75,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
   const selectedRequestMetaTab = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request'
-      ? state.context.tabs.find(tab => tab.id === state.context.activeTabId)?.requestMetaTab ?? null
+      ? (state.context.tabs.find(tab => tab.id === state.context.activeTabId)?.requestMetaTab ?? null)
       : null
   )
   const currentRequestSelection = selectedRequestId ? { itemType: 'request' as const, id: selectedRequestId } : null
@@ -339,7 +344,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       bodyType: draft.bodyType,
       rawType: draft.rawType,
     }),
-    [draft.auth, draft.body, draft.bodyType, draft.headers, draft.method, draft.pathParams, draft.rawType, draft.searchParams, draft.url]
+    [
+      draft.auth,
+      draft.body,
+      draft.bodyType,
+      draft.headers,
+      draft.method,
+      draft.pathParams,
+      draft.rawType,
+      draft.searchParams,
+      draft.url,
+    ]
   )
   const visualizerSharedScripts = useMemo(
     () => visibleSharedScripts.filter(script => script.targets.includes('response-visualizer')),
@@ -423,25 +438,34 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [currentRequestSelection]
   )
 
-  const updateUrl = useCallback((nextUrl: string) => {
-    const latestDraft = draftRef.current
+  const updateUrl = useCallback(
+    (nextUrl: string) => {
+      const latestDraft = draftRef.current
 
-    updateRequestDraft({
-      ...latestDraft,
-      url: nextUrl,
-      pathParams: syncPathParamsWithUrl(nextUrl, latestDraft.pathParams),
-      searchParams: syncSearchParamsWithUrl(nextUrl, latestDraft.searchParams),
-    }, 'request-url')
-  }, [updateRequestDraft])
+      updateRequestDraft(
+        {
+          ...latestDraft,
+          url: nextUrl,
+          pathParams: syncPathParamsWithUrl(nextUrl, latestDraft.pathParams),
+          searchParams: syncSearchParamsWithUrl(nextUrl, latestDraft.searchParams),
+        },
+        'request-url'
+      )
+    },
+    [updateRequestDraft]
+  )
 
   const importUrl = (nextUrl: string) => {
     const importedUrlFields = buildImportedHttpUrlFields(nextUrl, draft.bodyType)
     const { metaTab: nextMetaTab, ...nextUrlFields } = importedUrlFields
 
-    updateRequestDraft({
-      ...draft,
-      ...nextUrlFields,
-    }, 'request-import-url')
+    updateRequestDraft(
+      {
+        ...draft,
+        ...nextUrlFields,
+      },
+      'request-import-url'
+    )
 
     updateMetaTab(nextMetaTab)
 
@@ -457,18 +481,21 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     if (parsedCurl) {
       const shouldShowSearchParams = parsedCurl.bodyType === 'none' && parsedCurl.searchParams.trim() !== ''
 
-      updateRequestDraft({
-        ...draft,
-        method: parsedCurl.method,
-        url: parsedCurl.url,
-        pathParams: parsedCurl.pathParams,
-        searchParams: parsedCurl.searchParams,
-        auth: parsedCurl.auth,
-        headers: parsedCurl.headers,
-        body: parsedCurl.body,
-        bodyType: parsedCurl.bodyType,
-        rawType: parsedCurl.rawType,
-      }, 'request-import-curl')
+      updateRequestDraft(
+        {
+          ...draft,
+          method: parsedCurl.method,
+          url: parsedCurl.url,
+          pathParams: parsedCurl.pathParams,
+          searchParams: parsedCurl.searchParams,
+          auth: parsedCurl.auth,
+          headers: parsedCurl.headers,
+          body: parsedCurl.body,
+          bodyType: parsedCurl.bodyType,
+          rawType: parsedCurl.rawType,
+        },
+        'request-import-curl'
+      )
 
       updateMetaTab(shouldShowSearchParams ? 'search-params' : compactRequestView ? 'overview' : 'body')
 
@@ -500,34 +527,52 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     return true
   }
 
-  const updatePathParams = useCallback((nextPathParams: string) => {
-    const latestDraft = draftRef.current
+  const updatePathParams = useCallback(
+    (nextPathParams: string) => {
+      const latestDraft = draftRef.current
 
-    updateRequestDraft({
-      ...latestDraft,
-      pathParams: nextPathParams,
-      url: syncUrlWithSearchParams(syncUrlWithPathParams(latestDraft.url, nextPathParams), latestDraft.searchParams),
-    }, 'request-path-params')
-  }, [updateRequestDraft])
+      updateRequestDraft(
+        {
+          ...latestDraft,
+          pathParams: nextPathParams,
+          url: syncUrlWithSearchParams(
+            syncUrlWithPathParams(latestDraft.url, nextPathParams),
+            latestDraft.searchParams
+          ),
+        },
+        'request-path-params'
+      )
+    },
+    [updateRequestDraft]
+  )
 
-  const updateSearchParams = useCallback((nextSearchParams: string) => {
-    const latestDraft = draftRef.current
+  const updateSearchParams = useCallback(
+    (nextSearchParams: string) => {
+      const latestDraft = draftRef.current
 
-    updateRequestDraft({
-      ...latestDraft,
-      searchParams: nextSearchParams,
-      url: syncUrlWithSearchParams(latestDraft.url, nextSearchParams),
-    }, 'request-search-params')
-  }, [updateRequestDraft])
+      updateRequestDraft(
+        {
+          ...latestDraft,
+          searchParams: nextSearchParams,
+          url: syncUrlWithSearchParams(latestDraft.url, nextSearchParams),
+        },
+        'request-search-params'
+      )
+    },
+    [updateRequestDraft]
+  )
 
   const formatJsonBody = async () => {
     try {
       const latestDraft = draftRef.current
       const formatted = await formatJson5PreferringJsonWithTemplates(latestDraft.body)
-      updateRequestDraft({
-        ...latestDraft,
-        body: formatted,
-      }, 'request-format-json-body')
+      updateRequestDraft(
+        {
+          ...latestDraft,
+          body: formatted,
+        },
+        'request-format-json-body'
+      )
     } catch {
       toast.show({
         severity: 'warning',
@@ -560,26 +605,35 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [updateMetaTab]
   )
 
-  const updateResponseVisualizer = useCallback((value: string) => {
-    const latestDraft = draftRef.current
+  const updateResponseVisualizer = useCallback(
+    (value: string) => {
+      const latestDraft = draftRef.current
 
-    updateRequestDraft({
-      ...latestDraft,
-      responseVisualizer: value,
-    }, 'request-response-visualizer')
-  }, [updateRequestDraft])
+      updateRequestDraft(
+        {
+          ...latestDraft,
+          responseVisualizer: value,
+        },
+        'request-response-visualizer'
+      )
+    },
+    [updateRequestDraft]
+  )
 
   const fillResponseVisualizerTemplate = useCallback(() => {
     const latestDraft = draftRef.current
 
-    updateRequestDraft({
-      ...latestDraft,
-      responseVisualizer: `
+    updateRequestDraft(
+      {
+        ...latestDraft,
+        responseVisualizer: `
 export default function View() {
   
 }
 `,
-    }, 'request-fill-response-visualizer-template')
+      },
+      'request-fill-response-visualizer-template'
+    )
     setTimeout(() => responseVisualizerEditorRef.current?.focusLine(3, 4), 0)
   }, [updateRequestDraft])
 
@@ -611,7 +665,7 @@ export default function View() {
               label: <MethodBadge method={option} />,
             }))}
             renderValue={option => option.label}
-              onChange={value => updateRequestDraft({ ...draft, method: value as RequestMethod }, 'request-method')}
+            onChange={value => updateRequestDraft({ ...draft, method: value as RequestMethod }, 'request-method')}
           />
 
           <CodeEditor
@@ -1071,21 +1125,21 @@ function RequestOverviewTab({
         {body}
       </div>
 
-        <div className="flex min-h-0 flex-col overflow-y-auto">
-          <AuthorizationEditor
-            value={draft.auth}
-            onChange={value => updateRequestDraft({ ...draft, auth: value }, 'request-auth-overview')}
-            allowInherit
-            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-            valueEditorRefreshKey={variableHighlightRefreshKey}
-          />
+      <div className="flex min-h-0 flex-col overflow-y-auto">
+        <AuthorizationEditor
+          value={draft.auth}
+          onChange={value => updateRequestDraft({ ...draft, auth: value }, 'request-auth-overview')}
+          allowInherit
+          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+          valueEditorRefreshKey={variableHighlightRefreshKey}
+        />
 
-          <HeadersEditor
-            value={draft.headers}
-            valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
-            valueEditorRefreshKey={variableHighlightRefreshKey}
-            onChange={value => updateRequestDraft({ ...draft, headers: value }, 'request-headers-overview')}
-          />
+        <HeadersEditor
+          value={draft.headers}
+          valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
+          valueEditorRefreshKey={variableHighlightRefreshKey}
+          onChange={value => updateRequestDraft({ ...draft, headers: value }, 'request-headers-overview')}
+        />
 
         <KeyValueEditor
           label="Path Params"
@@ -1137,11 +1191,21 @@ function RequestBodyTab({
         {showHeader ? (
           <DetailsSectionHeader
             title="Body"
-            actions={<RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} updateRequestDraft={updateRequestDraft} />}
+            actions={
+              <RequestBodyTabActions
+                draft={draft}
+                formatJsonBody={formatJsonBody}
+                updateRequestDraft={updateRequestDraft}
+              />
+            }
           />
         ) : (
           <div className="flex h-12 min-h-12 max-h-12 items-stretch justify-start border-b border-base-content/10 bg-base-100/70">
-            <RequestBodyTabActions draft={draft} formatJsonBody={formatJsonBody} updateRequestDraft={updateRequestDraft} />
+            <RequestBodyTabActions
+              draft={draft}
+              formatJsonBody={formatJsonBody}
+              updateRequestDraft={updateRequestDraft}
+            />
           </div>
         )}
 
@@ -1258,7 +1322,9 @@ const FORM_DATA_ROW_TYPES = [
 ] satisfies Array<{ value: 'text' | 'file'; label: string }>
 
 function normalizeFormDataBody(value: string) {
-  return stringifyKeyValueRows(parseKeyValueRows(value).map(row => ({ ...row, type: row.type === 'file' ? 'file' : 'text' })))
+  return stringifyKeyValueRows(
+    parseKeyValueRows(value).map(row => ({ ...row, type: row.type === 'file' ? 'file' : 'text' }))
+  )
 }
 
 const SearchParamsTab = memo(function SearchParamsTab({
@@ -1465,41 +1531,4 @@ if (typeof document !== 'undefined' && !document.getElementById('request-loading
     }
   `
   document.head.appendChild(styleElement)
-}
-
-export function getActiveSearchParam(url: string, caretPos: number) {
-  const queryStart = url.indexOf('?')
-  if (queryStart === -1 || caretPos <= queryStart) return null
-
-  // End of query (before hash if exists)
-  const hashIndex = url.indexOf('#', queryStart)
-  const queryEnd = hashIndex === -1 ? url.length : hashIndex
-
-  const query = url.slice(queryStart + 1, queryEnd)
-
-  let cursor = queryStart + 1
-
-  const pairs = query.split('&')
-
-  for (const pair of pairs) {
-    const start = cursor
-    const end = cursor + pair.length
-
-    if (caretPos >= start && caretPos <= end) {
-      const eqIndex = pair.indexOf('=')
-
-      if (eqIndex === -1) {
-        return { key: pair, value: '' }
-      }
-
-      const key = pair.slice(0, eqIndex)
-      const value = pair.slice(eqIndex + 1)
-
-      return { key, value }
-    }
-
-    cursor = end + 1 // skip '&'
-  }
-
-  return null
 }

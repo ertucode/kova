@@ -25,6 +25,9 @@ import { AppSettingsCoordinator, appSettingsStore } from '@/global/appSettingsSt
 import { Tooltip } from '../components/Tooltip'
 import { formatXml } from '@common/formatXml'
 import { createJsonResponsePathExtension } from './requestDetailsJsonResponsePathExtension'
+import { resolveResponseTableRows, type ParsedStructuredResponse } from './requestDetailsResponseTable'
+import { formatHtml } from '@common/formatHtml'
+import { formatBytes } from '@common/formatBytes'
 
 const readOnlyCodeEditorOnChange = () => undefined
 const jsonResponsePathExtension = createJsonResponsePathExtension()
@@ -140,16 +143,16 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
       return
     }
 
-      const result = await getWindowElectron().createRequestExample({
-        requestId: selectedRequestId,
-        name: `${requestName} ${responseSource.status || responseSource.statusText}`,
-        requestHeaders,
-        requestBody,
-        requestBodyType,
-        requestRawType,
-        responseStatus: responseSource.status,
-        responseStatusText: responseSource.statusText,
-        responseHeaders: responseSource.headers,
+    const result = await getWindowElectron().createRequestExample({
+      requestId: selectedRequestId,
+      name: `${requestName} ${responseSource.status || responseSource.statusText}`,
+      requestHeaders,
+      requestBody,
+      requestBodyType,
+      requestRawType,
+      responseStatus: responseSource.status,
+      responseStatusText: responseSource.statusText,
+      responseHeaders: responseSource.headers,
       responseBody: responseSource.body,
     })
 
@@ -161,24 +164,30 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
     await FolderExplorerCoordinator.loadItems()
     FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
     toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${requestName}.` })
-  }, [requestBody, requestBodyType, requestHeaders, requestName, requestRawType, response, selectedRequestId, sseStream])
+  }, [
+    requestBody,
+    requestBodyType,
+    requestHeaders,
+    requestName,
+    requestRawType,
+    response,
+    selectedRequestId,
+    sseStream,
+  ])
 
-  const updateResponseTableAccessor = useCallback(
-    (value: string) => {
-      const { selected, entries } = folderExplorerEditorStore.getSnapshot().context
-      if (!selected) {
-        return
-      }
+  const updateResponseTableAccessor = useCallback((value: string) => {
+    const { selected, entries } = folderExplorerEditorStore.getSnapshot().context
+    if (!selected) {
+      return
+    }
 
-      const currentDraft = entries[toSelectionKey(selected)]?.current
-      if (currentDraft?.itemType !== 'request') {
-        return
-      }
+    const currentDraft = entries[toSelectionKey(selected)]?.current
+    if (currentDraft?.itemType !== 'request') {
+      return
+    }
 
-      FolderExplorerCoordinator.updateSelectedDraft({ ...currentDraft, responseTableAccessor: value })
-    },
-    []
-  )
+    FolderExplorerCoordinator.updateSelectedDraft({ ...currentDraft, responseTableAccessor: value })
+  }, [])
 
   useEffect(() => {
     if (!selectedRequestId) {
@@ -432,7 +441,10 @@ type ResponseBodyContentState =
       source: string
       response: SendRequestResponse
       contentType: string | null
-      requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+      requestDraft: Pick<
+        RequestDetailsDraft,
+        'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'
+      >
       environments: Array<{
         id: string
         name: string
@@ -500,7 +512,10 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   preferredResponseBodyView: 'raw' | 'table' | 'visualizer'
   responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
   requestSelection: { itemType: 'request'; id: string } | null
-  requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  requestDraft: Pick<
+    RequestDetailsDraft,
+    'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'
+  >
   onUpdateResponseTableAccessor: (value: string) => void
   onUpdateResponseBodyDisplayMode: (mode: AppSettingsResponseBodyDisplayMode) => Promise<boolean>
   environments: Array<{
@@ -1276,62 +1291,6 @@ function formatResponseBody(body: string, headers: string) {
   return body
 }
 
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatHtml(html: string): string {
-  const parser = new DOMParser()
-  const documentNode = parser.parseFromString(html, 'text/html')
-  const doctype = documentNode.doctype
-  const doctypeText = doctype
-    ? `<!DOCTYPE ${doctype.name}${doctype.publicId ? ` PUBLIC \"${doctype.publicId}\"` : ''}${doctype.systemId ? ` \"${doctype.systemId}\"` : ''}>\n`
-    : ''
-  return `${doctypeText}${formatMarkup(documentNode.documentElement.outerHTML)}`.trim()
-}
-
-function formatMarkup(markup: string): string {
-  let formatted = ''
-  let indent = 0
-  const lines = markup.replace(/>\s*</g, '>\n<').split('\n')
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-
-    const isClosing = /^<\//.test(trimmed)
-    const isSelfClosing =
-      /\/>$/.test(trimmed) ||
-      /^<!/.test(trimmed) ||
-      /^<meta\b/i.test(trimmed) ||
-      /^<link\b/i.test(trimmed) ||
-      /^<img\b/i.test(trimmed) ||
-      /^<input\b/i.test(trimmed) ||
-      /^<br\b/i.test(trimmed) ||
-      /^<hr\b/i.test(trimmed)
-    const isInlineTextNode = /^(?!<).+/.test(trimmed)
-    const isOpening = /^<[^/!][^>]*>$/.test(trimmed) && !isSelfClosing && !trimmed.includes('</')
-
-    if (isClosing) {
-      indent = Math.max(0, indent - 1)
-    }
-
-    formatted += `${'  '.repeat(Math.max(0, indent - (isInlineTextNode ? 0 : 0)))}${trimmed}\n`
-
-    if (isOpening) {
-      indent += 1
-    }
-  }
-
-  return formatted.trim()
-}
-
 function parseStructuredResponse(body: string, contentType: string | null): ParsedStructuredResponse | null {
   if (!body.trim()) {
     return null
@@ -1352,17 +1311,6 @@ function parseStructuredResponse(body: string, contentType: string | null): Pars
   }
 
   return null
-}
-
-type ParsedStructuredResponse = {
-  format: 'json' | 'xml'
-  root: unknown
-}
-
-type ResponseTableResolution = {
-  isAvailable: boolean
-  rows: Array<Record<string, unknown>>
-  detectedAccessor: string | null
 }
 
 function parseXmlToStructuredResponse(xml: string): ParsedStructuredResponse | null {
@@ -1429,171 +1377,6 @@ function xmlElementToJson(element: Element): unknown {
   }
 
   return children
-}
-
-function resolveResponseTableRows(
-  parsedStructuredResponse: ParsedStructuredResponse | null,
-  accessor: string
-): ResponseTableResolution {
-  if (!parsedStructuredResponse) {
-    return { isAvailable: false, rows: [], detectedAccessor: null }
-  }
-
-  const detectedMatch = findFirstObjectArray(parsedStructuredResponse.root)
-  const candidate = accessor.trim()
-    ? resolveAccessor(parsedStructuredResponse.root, accessor.trim())
-    : detectedMatch?.value
-  const rows = normalizeResponseTableRows(candidate)
-
-  return {
-    isAvailable: true,
-    rows,
-    detectedAccessor: detectedMatch?.path ?? null,
-  }
-}
-
-function resolveAccessor(root: unknown, accessor: string): unknown {
-  const segments = parseAccessorSegments(accessor)
-  if (segments === null) {
-    return undefined
-  }
-
-  let current: unknown = root
-
-  for (const segment of segments) {
-    if (typeof segment === 'number') {
-      if (!Array.isArray(current) || segment < 0 || segment >= current.length) {
-        return undefined
-      }
-
-      current = current[segment]
-      continue
-    }
-
-    if (!isRecordLike(current) || !(segment in current)) {
-      return undefined
-    }
-
-    current = current[segment]
-  }
-
-  return current
-}
-
-function parseAccessorSegments(accessor: string): Array<string | number> | null {
-  const trimmed = accessor.trim()
-  if (!trimmed) {
-    return []
-  }
-
-  if (trimmed === 'r') {
-    return []
-  }
-
-  if (!trimmed.startsWith('r')) {
-    return null
-  }
-
-  const segments: Array<string | number> = []
-  let index = 1
-
-  while (index < trimmed.length) {
-    const currentChar = trimmed[index]
-
-    if (currentChar === '.') {
-      index += 1
-      const start = index
-      while (index < trimmed.length && /[A-Za-z0-9_$-]/.test(trimmed[index] ?? '')) {
-        index += 1
-      }
-
-      if (start === index) {
-        return null
-      }
-
-      segments.push(trimmed.slice(start, index))
-      continue
-    }
-
-    if (currentChar === '[') {
-      const closingIndex = trimmed.indexOf(']', index)
-      if (closingIndex < 0) {
-        return null
-      }
-
-      const innerValue = trimmed.slice(index + 1, closingIndex).trim()
-      if (/^\d+$/.test(innerValue)) {
-        segments.push(Number(innerValue))
-      } else {
-        const quotedMatch = innerValue.match(/^(['"])(.*)\1$/)
-        if (!quotedMatch) {
-          return null
-        }
-
-        segments.push(quotedMatch[2])
-      }
-
-      index = closingIndex + 1
-      continue
-    }
-
-    return null
-  }
-
-  return segments
-}
-
-function findFirstObjectArray(root: unknown): { path: string; value: unknown } | null {
-  const queue: Array<{ value: unknown; path: string }> = [{ value: root, path: 'r' }]
-  const visited = new Set<unknown>()
-
-  while (queue.length > 0) {
-    const currentEntry = queue.shift()
-    const current = currentEntry?.value
-
-    if (!currentEntry || current == null || visited.has(current)) {
-      continue
-    }
-
-    if (typeof current === 'object') {
-      visited.add(current)
-    }
-
-    if (Array.isArray(current) && current.length > 0 && current.every(isRecordLike)) {
-      return currentEntry
-    }
-
-    if (Array.isArray(current)) {
-      current.forEach((item, index) => {
-        queue.push({ value: item, path: `${currentEntry.path}[${index}]` })
-      })
-      continue
-    }
-
-    if (isRecordLike(current)) {
-      Object.entries(current).forEach(([key, value]) => {
-        queue.push({ value, path: `${currentEntry.path}${formatAccessorSegment(key)}` })
-      })
-    }
-  }
-
-  return null
-}
-
-function formatAccessorSegment(key: string) {
-  return /^[A-Za-z_$][A-Za-z0-9_$-]*$/.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`
-}
-
-function normalizeResponseTableRows(value: unknown): Array<Record<string, unknown>> {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value.filter(isRecordLike)
-}
-
-function isRecordLike(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function formatResponseTableValue(value: unknown) {

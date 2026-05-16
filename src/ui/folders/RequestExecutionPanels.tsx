@@ -23,6 +23,7 @@ import { toast } from '@/lib/components/toast'
 import { Tooltip } from '../components/Tooltip'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { SseTranscript } from './SseTranscript'
+import { formatBytes } from '@common/formatBytes'
 
 export function HistoryPanel() {
   const history = useSelector(requestExecutionStore, state => state.context.history)
@@ -781,16 +782,6 @@ function formatWebSocketConnection(session: WebSocketSessionRecord) {
   ]
     .filter(Boolean)
     .join('\n')
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function getCollapsedMessagePreview(value: string) {

@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { ChevronDownIcon, ChevronRightIcon, CopyIcon, InfoIcon, PlugIcon, SearchIcon, SendIcon, Trash2Icon, WifiOffIcon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  InfoIcon,
+  PlugIcon,
+  SearchIcon,
+  SendIcon,
+  Trash2Icon,
+  WifiOffIcon,
+} from 'lucide-react'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap } from '@common/RequestVariables'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
@@ -28,6 +38,7 @@ import { createTemplateCompletionSource, templateScriptExtension } from './codeE
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { buildImportedWebSocketUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
+import { formatBytes } from '@common/formatBytes'
 
 type WebSocketMetaTab = 'overview' | 'search-params' | 'automation'
 type MessageFilter = 'all' | 'sent' | 'received'
@@ -89,7 +100,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
           isActive: activeEnvironmentIds.includes(environment.id),
           priority: nextDraft?.priority ?? environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])),
+          valueByVariableName: new Map(
+            Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])
+          ),
         }
       }),
     [activeEnvironmentIds, environmentEntries, environments]
@@ -106,7 +119,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
   const activeEnvironmentNamesRef = useRef(
-    environments.filter(environment => activeEnvironmentIds.includes(environment.id)).map(environment => environment.name)
+    environments
+      .filter(environment => activeEnvironmentIds.includes(environment.id))
+      .map(environment => environment.name)
   )
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
@@ -127,7 +142,8 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         getEnvironments: () => variableTooltipRowsRef.current,
         onToggleEnvironment: environmentId => EnvironmentCoordinator.toggleActiveEnvironment(environmentId),
         onOpenEnvironment: environmentId => EnvironmentCoordinator.openEnvironmentDetails(environmentId),
-        onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
+        onChangeValue: (environmentId, variableName, value) =>
+          updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       templateScriptExtension({
@@ -155,7 +171,8 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         getEnvironments: () => variableTooltipRowsRef.current,
         onToggleEnvironment: environmentId => EnvironmentCoordinator.toggleActiveEnvironment(environmentId),
         onOpenEnvironment: environmentId => EnvironmentCoordinator.openEnvironmentDetails(environmentId),
-        onChangeValue: (environmentId, variableName, value) => updateEnvironmentVariableDraft(environmentId, variableName, value),
+        onChangeValue: (environmentId, variableName, value) =>
+          updateEnvironmentVariableDraft(environmentId, variableName, value),
         onSaveValue: environmentId => EnvironmentCoordinator.saveEnvironment(environmentId),
       }),
       templateScriptExtension({
@@ -178,7 +195,10 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     []
   )
 
-  const urlEditorExtensions = useMemo(() => [searchParamHighlightExtension(), ...variableEditorExtensions], [variableEditorExtensions])
+  const urlEditorExtensions = useMemo(
+    () => [searchParamHighlightExtension(), ...variableEditorExtensions],
+    [variableEditorExtensions]
+  )
 
   useEffect(() => {
     setMetaTab('overview')
@@ -576,7 +596,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
                           <button
                             type="button"
                             className="rounded-lg p-2 text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content"
-                            onClick={() => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: message.body })}
+                            onClick={() =>
+                              FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body: message.body })
+                            }
                             title="Load into composer"
                           >
                             <CopyIcon className="size-3.5" />
@@ -623,7 +645,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
                   placeholder="graphql-ws, {{protocolName}}"
                   extensions={variableEditorExtensions}
                   refreshKey={variableHighlightRefreshKey}
-                  onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketSubprotocols: value })}
+                  onChange={value =>
+                    FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketSubprotocols: value })
+                  }
                 />
               </div>
             </div>
@@ -681,7 +705,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               placeholder="Sent once as soon as the socket opens"
               extensions={variableEditorExtensions}
               refreshKey={variableHighlightRefreshKey}
-              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketOnOpenMessage: value })}
+              onChange={value =>
+                FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketOnOpenMessage: value })
+              }
             />
             <div className="px-3 py-3 text-sm text-base-content/45">
               Leave empty to skip sending a message on connection open.
@@ -713,7 +739,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
                   step="1"
                   className="h-11 rounded-2xl border border-base-content/10 bg-base-100 px-3 text-sm text-base-content outline-none transition focus:border-base-content/25 disabled:cursor-not-allowed disabled:opacity-45"
                   placeholder="10"
-                  value={draft.websocketAutoSendIntervalSeconds > 0 ? String(draft.websocketAutoSendIntervalSeconds) : ''}
+                  value={
+                    draft.websocketAutoSendIntervalSeconds > 0 ? String(draft.websocketAutoSendIntervalSeconds) : ''
+                  }
                   disabled={!draft.websocketAutoSendEnabled}
                   onChange={event =>
                     FolderExplorerCoordinator.updateSelectedDraft({
@@ -734,7 +762,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               extensions={variableEditorExtensions}
               refreshKey={variableHighlightRefreshKey}
               readOnly={!draft.websocketAutoSendEnabled}
-              onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketAutoSendMessage: value })}
+              onChange={value =>
+                FolderExplorerCoordinator.updateSelectedDraft({ ...draft, websocketAutoSendMessage: value })
+              }
             />
             <div className="px-3 py-3 text-sm text-base-content/45">
               Enable this, then set `10` and `PING` to send a heartbeat every 10 seconds.
@@ -760,7 +790,11 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
               <div className="flex items-center gap-3">
                 <span>Response</span>
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-base-content/45">
-                  {session?.connectionState === 'open' ? <PlugIcon className="size-3.5 text-success" /> : <WifiOffIcon className="size-3.5" />}
+                  {session?.connectionState === 'open' ? (
+                    <PlugIcon className="size-3.5 text-success" />
+                  ) : (
+                    <WifiOffIcon className="size-3.5" />
+                  )}
                   {session ? toConnectionLabel(session.connectionState) : 'Disconnected'}
                 </span>
               </div>
@@ -772,7 +806,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
                     type="checkbox"
                     className="checkbox checkbox-sm"
                     checked={draft.saveToHistory}
-                    onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, saveToHistory: event.target.checked })}
+                    onChange={event =>
+                      FolderExplorerCoordinator.updateSelectedDraft({ ...draft, saveToHistory: event.target.checked })
+                    }
                   />
                   <span>Save to history</span>
                 </label>
@@ -841,11 +877,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   )
 }
 
-function TranscriptRow({
-  message,
-}: {
-  message: WebSocketMessageRecord
-}) {
+function TranscriptRow({ message }: { message: WebSocketMessageRecord }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -904,22 +936,14 @@ function TranscriptRow({
 function getTabClassName(isActive: boolean) {
   return [
     'h-10 border-r border-base-content/10 px-3 text-xs font-semibold transition',
-    isActive ? 'border-b-2 border-b-base-content text-base-content' : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+    isActive
+      ? 'border-b-2 border-b-base-content text-base-content'
+      : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
   ].join(' ')
 }
 
 function formatTimestamp(value: number) {
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function clampResponsePaneHeight(height: number) {

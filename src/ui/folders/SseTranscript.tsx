@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon } from 'lucide-react'
 import { getSseEventDisplayName } from '@common/Sse'
 import type { SseEventRecord } from '@common/Requests'
+import { formatBytes } from '@common/formatBytes'
 
 export function SseTranscript({
   events,
@@ -23,7 +24,11 @@ export function SseTranscript({
   return (
     <div className="space-y-2">
       {events.map((event, index) => (
-        <SseTranscriptRow key={`${event.timestamp ?? 'history'}-${index}-${event.id ?? 'no-id'}`} event={event} showTimestamps={showTimestamps} />
+        <SseTranscriptRow
+          key={`${event.timestamp ?? 'history'}-${index}-${event.id ?? 'no-id'}`}
+          event={event}
+          showTimestamps={showTimestamps}
+        />
       ))}
     </div>
   )
@@ -57,7 +62,9 @@ function SseTranscriptRow({ event, showTimestamps }: { event: SseEventRecord; sh
               {event.data || '(empty)'}
             </pre>
           ) : (
-            <div className="mt-1 truncate font-mono text-xs text-base-content/75">{getCollapsedPreview(event.data)}</div>
+            <div className="mt-1 truncate font-mono text-xs text-base-content/75">
+              {getCollapsedPreview(event.data)}
+            </div>
           )}
         </div>
 
@@ -78,16 +85,6 @@ function SseTranscriptRow({ event, showTimestamps }: { event: SseEventRecord; sh
 
 function formatTimestamp(value: number) {
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function getCollapsedPreview(value: string) {
