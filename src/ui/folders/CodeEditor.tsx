@@ -234,6 +234,71 @@ const editorTheme = EditorView.theme({
   '.cm-panels': {
     backgroundColor: 'var(--color-base-200)',
     color: 'var(--color-base-content)',
+    borderTop: '1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent)',
+  },
+  '.cm-search': {
+    alignItems: 'center',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '0.5rem',
+    padding: '0.75rem',
+  },
+  '.cm-search label': {
+    alignItems: 'center',
+    color: 'color-mix(in oklab, var(--color-base-content) 72%, transparent)',
+    display: 'inline-flex',
+    fontSize: '0.8rem',
+    gap: '0.35rem',
+  },
+  '.cm-search input[type="checkbox"]': {
+    accentColor: 'var(--color-primary)',
+  },
+  '.cm-search .cm-textfield': {
+    appearance: 'none',
+    backgroundColor: 'var(--color-base-100)',
+    border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
+    borderRadius: '0.5rem',
+    color: 'var(--color-base-content)',
+    minHeight: '2rem',
+    padding: '0.35rem 0.65rem',
+  },
+  '.cm-search .cm-textfield::placeholder': {
+    color: 'color-mix(in oklab, var(--color-base-content) 34%, transparent)',
+  },
+  '.cm-search .cm-textfield:focus': {
+    borderColor: 'color-mix(in oklab, var(--color-primary) 55%, var(--color-base-content) 12%)',
+    boxShadow: '0 0 0 3px color-mix(in oklab, var(--color-primary) 18%, transparent)',
+    outline: 'none',
+  },
+  '.cm-search .cm-button': {
+    appearance: 'none',
+    backgroundColor: 'var(--color-base-100)',
+    border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
+    borderRadius: '0.5rem',
+    color: 'var(--color-base-content)',
+    cursor: 'pointer',
+    font: 'inherit',
+    minHeight: '2rem',
+    padding: '0.35rem 0.7rem',
+    transition: 'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
+  },
+  '.cm-search .cm-button:hover': {
+    backgroundColor: 'color-mix(in oklab, var(--color-base-100) 82%, var(--color-primary) 18%)',
+    borderColor: 'color-mix(in oklab, var(--color-primary) 30%, var(--color-base-content) 12%)',
+  },
+  '.cm-search .cm-button:focus-visible': {
+    borderColor: 'color-mix(in oklab, var(--color-primary) 55%, var(--color-base-content) 12%)',
+    boxShadow: '0 0 0 3px color-mix(in oklab, var(--color-primary) 18%, transparent)',
+    outline: 'none',
+  },
+  '.cm-search .cm-button[disabled]': {
+    cursor: 'not-allowed',
+    opacity: '0.5',
+  },
+  '.cm-search .cm-searchMatch': {
+    color: 'color-mix(in oklab, var(--color-base-content) 58%, transparent)',
+    fontSize: '0.8rem',
+    marginLeft: '0.25rem',
   },
   '.cm-tooltip': {
     border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
@@ -272,6 +337,14 @@ const editorTheme = EditorView.theme({
   },
   '.cm-activeLine, .cm-activeLineGutter': {
     backgroundColor: 'color-mix(in oklab, var(--color-base-content) 5%, transparent)',
+  },
+  '.cm-searchMatch': {
+    backgroundColor: 'color-mix(in oklab, var(--color-warning) 28%, transparent)',
+    borderBottom: '1px solid color-mix(in oklab, var(--color-warning) 62%, transparent)',
+  },
+  '.cm-searchMatch.cm-searchMatch-selected': {
+    backgroundColor: 'color-mix(in oklab, var(--color-primary) 24%, transparent)',
+    borderBottom: '1px solid color-mix(in oklab, var(--color-primary) 62%, transparent)',
   },
   '.cm-selectionBackground, ::selection': {
     backgroundColor: 'color-mix(in oklab, currentColor 18%, transparent)',

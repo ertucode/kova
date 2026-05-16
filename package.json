@@ -8,8 +8,8 @@
   "type": "module",
   "main": "dist-electron/electron/main.js",
   "scripts": {
-    "dev": "npm-run-all --parallel dev:react dev:electron",
-    "dev:react": "npm run build:frontend-artifacts && vite",
+    "dev": "npm run build:frontend-artifacts && npm-run-all --parallel dev:react dev:electron",
+    "dev:react": "vite",
     "dev:electron": "npm run transpile:electron && cross-env NODE_ENV=development electron .",
     "build:react": "npm run build:frontend-artifacts && tsc -b && vite build",
     "build:frontend-artifacts": "node scripts/build-script-autocomplete-worker.mjs && node scripts/build-response-visualizer.mjs",
