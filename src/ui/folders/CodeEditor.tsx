@@ -212,13 +212,14 @@ const editorTheme = EditorView.theme({
     fontFamily:
       'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
     lineHeight: '1.5rem',
-    caretColor: 'currentColor',
+    caretColor: 'var(--color-base-content) !important',
   },
   '.cm-focused': {
     outline: 'none',
   },
   '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--color-base-content)',
+    borderLeftWidth: '1.5px !important',
+    borderLeftColor: 'var(--color-base-content) !important',
   },
   '.cm-fat-cursor': {
     backgroundColor: 'color-mix(in oklab, var(--color-base-content) 82%, var(--color-primary) 18%) !important',
