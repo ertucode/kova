@@ -47,7 +47,7 @@ const baseSetupExtensions = codeMirrorBasicSetup({
   allowMultipleSelections: false,
   highlightActiveLine: false,
   highlightActiveLineGutter: false,
-  searchKeymap: false,
+  searchKeymap: true,
 })
 const selectionMatchTheme = EditorView.theme({
   '& .cm-selectionMatch-main': {
