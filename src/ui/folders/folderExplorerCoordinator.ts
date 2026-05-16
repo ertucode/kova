@@ -14,6 +14,7 @@ import { saveToAsyncStorage } from '@/utils/asyncStorage'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import type { ExplorerItem } from '@common/Explorer'
 import type { DetailsDraft, Selection } from './folderExplorerTypes'
+import { parseClipboardHttpRequest } from './requestUrlImport'
 import {
   createEmptyEntry,
   folderExplorerEditorStore,
@@ -442,6 +443,73 @@ export namespace FolderExplorerCoordinator {
 
     await loadItems()
     await selectItem({ itemType: createDraft.itemType, id: result.data.id })
+  }
+
+  export async function createHttpRequestFromClipboard(parentFolderId: string | null, clipboardText: string) {
+    const importedRequest = parseClipboardHttpRequest(clipboardText)
+    if (!importedRequest) {
+      toast.show({
+        severity: 'error',
+        title: 'Clipboard import failed',
+        message: 'Clipboard does not contain a valid URL or cURL command.',
+      })
+      return
+    }
+
+    const createResult = await getWindowElectron().createRequest({
+      parentFolderId,
+      name: importedRequest.name,
+      requestType: 'http',
+    })
+    if (!createResult.success) {
+      toast.show(createResult)
+      return
+    }
+
+    const updateResult = await getWindowElectron().updateRequest({
+      id: createResult.data.id,
+      name: importedRequest.name,
+      requestType: createResult.data.requestType,
+      method: importedRequest.method,
+      url: importedRequest.url,
+      pathParams: importedRequest.pathParams,
+      searchParams: importedRequest.searchParams,
+      auth: importedRequest.auth,
+      preRequestScript: createResult.data.preRequestScript,
+      postRequestScript: createResult.data.postRequestScript,
+      responseVisualizer: createResult.data.responseVisualizer,
+      responseTableAccessor: createResult.data.responseTableAccessor,
+      preferredResponseBodyView: createResult.data.preferredResponseBodyView,
+      headers: importedRequest.headers,
+      body: importedRequest.body,
+      bodyType: importedRequest.bodyType,
+      rawType: importedRequest.rawType,
+      websocketSubprotocols: createResult.data.websocketSubprotocols,
+      websocketOnOpenMessage: createResult.data.websocketOnOpenMessage,
+      websocketAutoSendEnabled: createResult.data.websocketAutoSendEnabled,
+      websocketAutoSendMessage: createResult.data.websocketAutoSendMessage,
+      websocketAutoSendIntervalSeconds: createResult.data.websocketAutoSendIntervalSeconds,
+      saveToHistory: createResult.data.saveToHistory,
+    })
+    if (!updateResult.success) {
+      toast.show(updateResult)
+      await loadItems()
+      await selectItem({ itemType: 'request', id: createResult.data.id })
+      return
+    }
+
+    if (parentFolderId) {
+      folderExplorerEditorStore.trigger.expandedEnsured({ id: parentFolderId })
+      persistUiState()
+    }
+
+    await loadItems()
+    await selectItem({ itemType: 'request', id: updateResult.data.id })
+    toast.show({
+      severity: 'success',
+      title: 'Request created',
+      message: `Created ${updateResult.data.name} from clipboard.`,
+    })
   }
 
   export function requestDelete(item: ExplorerItem) {

@@ -197,6 +197,22 @@ export function ExplorerRow({
               ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'http')
               : undefined
           }
+          onAddRequestFromClipboard={
+            node.itemType === 'folder'
+              ? async () => {
+                  try {
+                    const clipboardText = await navigator.clipboard.readText()
+                    await FolderExplorerCoordinator.createHttpRequestFromClipboard(node.id, clipboardText)
+                  } catch {
+                    toast.show({
+                      severity: 'error',
+                      title: 'Clipboard read failed',
+                      message: 'Could not read text from the clipboard.',
+                    })
+                  }
+                }
+              : undefined
+          }
           onAddWebSocketRequest={
             node.itemType === 'folder'
               ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'websocket')
@@ -374,6 +390,7 @@ function ExplorerMenu({
   activeEnvironmentIds,
   onAddFolder,
   onAddHttpRequest,
+  onAddRequestFromClipboard,
   onAddWebSocketRequest,
   onFlattenFolder,
   onAssignTags,
@@ -385,6 +402,7 @@ function ExplorerMenu({
   activeEnvironmentIds: string[]
   onAddFolder?: () => void
   onAddHttpRequest?: () => void
+  onAddRequestFromClipboard?: () => void | Promise<void>
   onAddWebSocketRequest?: () => void
   onFlattenFolder?: () => void
   onAssignTags?: () => void
@@ -534,6 +552,14 @@ function ExplorerMenu({
               <button type="button" onClick={() => runAction(onAddHttpRequest)}>
                 <PlusIcon className="size-4" />
                 Add HTTP Request
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'folder' && onAddRequestFromClipboard ? (
+            <li>
+              <button type="button" onClick={() => runAction(onAddRequestFromClipboard)}>
+                <CopyIcon className="size-4" />
+                Add Request From Clipboard
               </button>
             </li>
           ) : null}
