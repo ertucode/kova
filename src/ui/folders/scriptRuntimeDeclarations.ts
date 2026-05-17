@@ -225,7 +225,6 @@ declare const response: ScriptResponseApi
 `
 
 const postRequestOnlyDeclarations = String.raw`
-declare function makeRequest(path: string[]): Promise<void>
 `
 
 const responseVisualizerDeclarations = String.raw`

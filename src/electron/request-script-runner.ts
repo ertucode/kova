@@ -23,7 +23,11 @@ import type { SharedScriptRecord } from '../common/SharedScripts.js'
 import type { ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
 import { createScriptClipboardApi, type ScriptClipboardBridge } from './script-clipboard.js'
 import { splitCombinedSetCookieHeader } from './db/cookies.js'
-import { createScriptMakeRequestApi, type ScriptMakeRequestBridge } from './script-make-request.js'
+import {
+  createScriptCallRequestApi,
+  createScriptMakeRequestApi,
+  type ScriptMakeRequestBridge,
+} from './script-make-request.js'
 import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
@@ -531,6 +535,9 @@ async function runScriptPhase(input: {
   const currentMakeRequest = {
     value: createScriptMakeRequestApi(input.makeRequestBridge, createIdleScriptExecutionController()),
   }
+  const currentCallRequest = {
+    value: createScriptCallRequestApi(input.makeRequestBridge, createIdleScriptExecutionController()),
+  }
   const sandboxGlobals = {
     request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
       ...input.environmentContext.getValues(),
@@ -544,7 +551,12 @@ async function runScriptPhase(input: {
     crypto: createCryptoApi(),
     cookies: createCookiesApi(),
     prompt: createPromptProxy(() => currentPrompt.value),
-    ...(input.phase === 'post-request' ? { makeRequest: createMakeRequestProxy(() => currentMakeRequest.value) } : {}),
+    ...(input.phase === 'post-request'
+      ? {
+          navigateAndCallRequest: createMakeRequestProxy(() => currentMakeRequest.value),
+          callRequest: createCallRequestProxy(() => currentCallRequest.value),
+        }
+      : {}),
     z,
   }
   const requirePackage = createInstalledPackageLoader(input.scriptPackages)
@@ -578,6 +590,7 @@ async function runScriptPhase(input: {
       currentSourceName.value = source.name
       currentPrompt.value = createScriptPromptApi(input.promptBridge, executionController)
       currentMakeRequest.value = createScriptMakeRequestApi(input.makeRequestBridge, executionController)
+      currentCallRequest.value = createScriptCallRequestApi(input.makeRequestBridge, executionController)
       compiledScript = compileRequestScript(
         source.globalBindings ? appendGlobalBindingAssignments(source.script, source.globalBindings) : source.script
       )
@@ -1150,6 +1163,17 @@ function createMakeRequestProxy(getMakeRequest: () => ReturnType<typeof createSc
   return async (path: string[]) => getMakeRequest()(path)
 }
 
+function createCallRequestProxy(getCallRequest: () => ReturnType<typeof createScriptCallRequestApi>) {
+  return async (path: string[]) => createResponseApi(createRuntimeResponseApiState(await getCallRequest()(path)))
+}
+
+function createRuntimeResponseApiState(response: RuntimeResponseState): RuntimeResponseApiState {
+  return {
+    ...response,
+    headers: createResponseHeaderEditor(response.headers),
+  }
+}
+
 function createScopeApi(requestScope: Map<string, string>) {
   return {
     get(name: string) {
@@ -1330,7 +1354,8 @@ function createSharedModuleLoader(input: {
     z: typeof z
     toast?: ReturnType<typeof createScriptToastApi>
     prompt?: ReturnType<typeof createPromptProxy>
-    makeRequest?: ReturnType<typeof createMakeRequestProxy>
+    navigateAndCallRequest?: ReturnType<typeof createMakeRequestProxy>
+    callRequest?: ReturnType<typeof createCallRequestProxy>
     loadPackage?: (specifier: string) => unknown
   }
 }) {

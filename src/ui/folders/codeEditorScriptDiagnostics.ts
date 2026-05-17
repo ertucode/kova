@@ -62,10 +62,11 @@ const inlineDiagnosticsTheme = EditorView.theme({
 export function scriptDiagnosticsExtension(options: {
   phase?: ScriptAutocompletePhase
   targets?: SharedScriptTarget[]
+  getRequestPaths?: () => string[][]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
   getPackages?: () => ScriptAutocompletePackage[]
 }): Extension {
-  const { phase = 'pre-request', getSharedScripts, getPackages, targets } = options
+  const { phase = 'pre-request', getRequestPaths, getSharedScripts, getPackages, targets } = options
   const runtimeContext = targets ? { targets } : { phase }
 
   return [
@@ -98,6 +99,7 @@ export function scriptDiagnosticsExtension(options: {
         void requestScriptDiagnostics({
           runtimeContext,
           code,
+          requestPaths: getRequestPaths?.(),
           sharedScripts: getSharedScripts?.(),
           packages: getPackages?.(),
           signal: abortController.signal,

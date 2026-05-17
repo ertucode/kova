@@ -54,6 +54,7 @@ import { jsonDiagnosticsExtension } from './codeEditorJsonDiagnostics'
 import { buildImportedHttpUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { twMerge } from 'tailwind-merge'
@@ -269,6 +270,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     () => [
       scriptDiagnosticsExtension({
         phase: 'pre-request',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -276,6 +278,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         includeResponse: false,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -287,6 +290,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     () => [
       scriptDiagnosticsExtension({
         phase: 'post-request',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -294,6 +298,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -305,6 +310,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     () => [
       scriptDiagnosticsExtension({
         phase: 'response-visualizer',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -313,6 +319,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),

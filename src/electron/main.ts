@@ -698,23 +698,14 @@ app.on('ready', async () => {
   })
 
   ipcHandle('sendRequest', async (input, event) => {
-    const makeRequestBridge = scriptMakeRequestRegistry.createBridge(event.sender)
+    const makeRequestBridge = createScriptRequestBridge(event.sender)
     return sendRequest(input, {
       toast: createScriptToastBridge(event.sender),
       prompt: scriptPromptRegistry.createBridge(event.sender),
       clipboard: {
         writeText: value => clipboard.writeText(value),
       },
-      makeRequest: {
-        makeRequest: async path => {
-          const request = await findHttpRequestByPath(path)
-          if (!request) {
-            throw new Error(`Request path was not found: ${path.join(' / ')}`)
-          }
-
-          return makeRequestBridge.makeRequest(request.id, path)
-        },
-      },
+      makeRequest: makeRequestBridge,
     })
   })
 
@@ -756,23 +747,14 @@ app.on('ready', async () => {
   })
 
   ipcHandle('connectWebSocket', async (input, event) => {
-    const makeRequestBridge = scriptMakeRequestRegistry.createBridge(event.sender)
+    const makeRequestBridge = createScriptRequestBridge(event.sender)
     return connectWebSocket(input, {
       toast: createScriptToastBridge(event.sender),
       prompt: scriptPromptRegistry.createBridge(event.sender),
       clipboard: {
         writeText: value => clipboard.writeText(value),
       },
-      makeRequest: {
-        makeRequest: async path => {
-          const request = await findHttpRequestByPath(path)
-          if (!request) {
-            throw new Error(`Request path was not found: ${path.join(' / ')}`)
-          }
-
-          return makeRequestBridge.makeRequest(request.id, path)
-        },
-      },
+      makeRequest: makeRequestBridge,
     })
   })
 
@@ -1074,6 +1056,29 @@ function buildContextMenuTemplate(
   }
 
   return template
+}
+
+function createScriptRequestBridge(webContents: Electron.WebContents) {
+  const makeRequestBridge = scriptMakeRequestRegistry.createBridge(webContents)
+
+  return {
+    navigateAndCallRequest: async (path: string[]) => {
+      const request = await findHttpRequestByPath(path)
+      if (!request) {
+        throw new Error(`Request path was not found: ${path.join(' / ')}`)
+      }
+
+      return makeRequestBridge.navigateAndCallRequest(request.id, path)
+    },
+    callRequest: async (path: string[]) => {
+      const request = await findHttpRequestByPath(path)
+      if (!request) {
+        throw new Error(`Request path was not found: ${path.join(' / ')}`)
+      }
+
+      return makeRequestBridge.callRequest(request.id, path)
+    },
+  }
 }
 
 // Listen for window focus events and notify renderer

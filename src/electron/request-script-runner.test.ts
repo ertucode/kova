@@ -1156,8 +1156,11 @@ it('parses and rewrites response cookies from the header helper', async () => {
       },
       environments: [],
       makeRequest: {
-        makeRequest: async path => {
+        navigateAndCallRequest: async path => {
           requestedPaths.push(path)
+        },
+        callRequest: async () => {
+          throw new Error('callRequest should not be used in this test')
         },
       },
     })
@@ -1166,7 +1169,58 @@ it('parses and rewrites response cookies from the header helper', async () => {
       [
         {
           name: 'Request: Test',
-          script: "await makeRequest(['Auth', 'Refresh Token'])",
+          script: "await navigateAndCallRequest(['Auth', 'Refresh Token'])",
+        },
+      ],
+      {
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: '',
+        body: { type: 'text', data: '' },
+      }
+    )
+
+    expect(errors).toEqual([])
+    expect(requestedPaths).toEqual([['Auth', 'Refresh Token']])
+  })
+
+  it('allows post-request scripts to call another request and inspect the response', async () => {
+    const requestedPaths: string[][] = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+      makeRequest: {
+        navigateAndCallRequest: async () => {
+          throw new Error('navigateAndCallRequest should not be used in this test')
+        },
+        callRequest: async path => {
+          requestedPaths.push(path)
+          return {
+            status: 200,
+            statusText: 'OK',
+            headers: 'content-type: application/json\nx-trace-id: abc123',
+            body: { type: 'json', data: { token: 'secret' } },
+          }
+        },
+      },
+    })
+
+    const errors = await runtime.runPostRequestScripts(
+      [
+        {
+          name: 'Request: Test',
+          script:
+            "const refreshResponse = await callRequest(['Auth', 'Refresh Token'])\nif (refreshResponse.status !== 200) throw new Error('Unexpected status')\nif (refreshResponse.headers.get('x-trace-id') !== 'abc123') throw new Error('Missing trace header')\nif (refreshResponse.body.type !== 'json') throw new Error('Expected JSON body')\nconst token = typeof refreshResponse.body.data === 'object' && refreshResponse.body.data !== null ? Reflect.get(refreshResponse.body.data, 'token') : null\nif (token !== 'secret') throw new Error('Missing token')",
         },
       ],
       {

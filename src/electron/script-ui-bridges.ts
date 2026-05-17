@@ -1,4 +1,10 @@
-import type { ScriptMakeRequestRequest, ScriptMakeRequestResponse } from '../common/ScriptMakeRequest.js'
+import type {
+  ScriptCallRequestPayload,
+  ScriptCallRequestRequest,
+  ScriptCallRequestResponse,
+  ScriptMakeRequestRequest,
+  ScriptMakeRequestResponse,
+} from '../common/ScriptMakeRequest.js'
 import type { ScriptPromptResponse, ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import { emitGenericEventTo } from './generic-events.js'
@@ -58,11 +64,20 @@ export function createScriptMakeRequestRegistry() {
     string,
     { webContentsId: number; request: ScriptMakeRequestRequest; resolve: () => void; reject: (error: Error) => void }
   >()
+  const pendingScriptCalls = new Map<
+    string,
+    {
+      webContentsId: number
+      request: ScriptCallRequestRequest
+      resolve: (response: ScriptCallRequestPayload) => void
+      reject: (error: Error) => void
+    }
+  >()
 
   return {
     createBridge(webContents: Electron.WebContents) {
       return {
-        makeRequest: (targetRequestId: string, path: string[]) => {
+        navigateAndCallRequest: (targetRequestId: string, path: string[]) => {
           const invocationId = crypto.randomUUID()
           const request: ScriptMakeRequestRequest = { id: invocationId, requestId: targetRequestId, path }
 
@@ -74,25 +89,58 @@ export function createScriptMakeRequestRegistry() {
             })
           })
         },
+        callRequest: (targetRequestId: string, path: string[]) => {
+          const invocationId = crypto.randomUUID()
+          const request: ScriptCallRequestRequest = { id: invocationId, requestId: targetRequestId, path }
+
+          return new Promise<ScriptCallRequestPayload>((resolve, reject) => {
+            pendingScriptCalls.set(invocationId, { webContentsId: webContents.id, request, resolve, reject })
+            emitGenericEventTo(webContents, {
+              type: 'script-call-request',
+              request,
+            })
+          })
+        },
       }
     },
-    resolveResponse(input: ScriptMakeRequestResponse, sender: Electron.WebContents) {
+    resolveResponse(input: ScriptMakeRequestResponse | ScriptCallRequestResponse, sender: Electron.WebContents) {
       const pendingRequest = pendingScriptRequests.get(input.id)
-      if (!pendingRequest) {
+      if (pendingRequest) {
+        if (pendingRequest.webContentsId !== sender.id) {
+          throw new Error('Script navigateAndCallRequest response came from a different window')
+        }
+
+        pendingScriptRequests.delete(input.id)
+        if (input.error) {
+          pendingRequest.reject(new Error(input.error))
+          return
+        }
+
+        pendingRequest.resolve()
         return
       }
 
-      if (pendingRequest.webContentsId !== sender.id) {
-        throw new Error('Script makeRequest response came from a different window')
+      const pendingCall = pendingScriptCalls.get(input.id)
+      if (!pendingCall) {
+        return
       }
 
-      pendingScriptRequests.delete(input.id)
+      if (pendingCall.webContentsId !== sender.id) {
+        throw new Error('Script callRequest response came from a different window')
+      }
+
+      pendingScriptCalls.delete(input.id)
       if (input.error) {
-        pendingRequest.reject(new Error(input.error))
+        pendingCall.reject(new Error(input.error))
         return
       }
 
-      pendingRequest.resolve()
+      if (!('response' in input) || !input.response) {
+        pendingCall.reject(new Error('Script callRequest response was missing data'))
+        return
+      }
+
+      pendingCall.resolve(input.response)
     },
   }
 }

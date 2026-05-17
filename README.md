@@ -20,7 +20,8 @@
 - Import and export
 - Everything is local
 - Request history
-- Save example requests
+- Save example requests/responses
+- Export as curl, fetch. Import from curl
 
 ## Niche Features
 

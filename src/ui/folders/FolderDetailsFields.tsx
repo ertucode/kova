@@ -16,6 +16,7 @@ import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
+import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
@@ -23,6 +24,7 @@ import { SharedScriptsSection } from './SharedScriptsSection'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
+import { buildHttpRequestPaths } from './folderExplorerUtils'
 
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
@@ -137,6 +139,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     () => [
       scriptDiagnosticsExtension({
         phase: 'pre-request',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -144,6 +147,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         includeResponse: false,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -155,6 +159,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     () => [
       scriptDiagnosticsExtension({
         phase: 'post-request',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
@@ -162,6 +167,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),

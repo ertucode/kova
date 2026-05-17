@@ -90,7 +90,7 @@ async function complete(request: ScriptAutocompleteRequest): Promise<ScriptAutoc
   try {
     const phaseState = await getOrCreatePhaseState(request.runtimeContext)
 
-    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [], request.packages ?? [])
+    updatePhaseSource(phaseState, request.code, request.requestPaths ?? [], request.sharedScripts ?? [], request.packages ?? [])
 
     const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, request.position, {
       includeCompletionsForModuleExports: false,
@@ -134,7 +134,7 @@ async function getDiagnostics(request: ScriptDiagnosticsRequest): Promise<Script
   try {
     const phaseState = await getOrCreatePhaseState(request.runtimeContext)
 
-    updatePhaseSource(phaseState, request.code, request.sharedScripts ?? [], request.packages ?? [])
+    updatePhaseSource(phaseState, request.code, request.requestPaths ?? [], request.sharedScripts ?? [], request.packages ?? [])
 
     return {
       requestId: request.requestId,
@@ -167,6 +167,7 @@ function shouldIgnoreDiagnostic(runtimeContext: ScriptRuntimeContext, diagnostic
 function updatePhaseSource(
   phaseState: PhaseState,
   code: string,
+  requestPaths: string[][],
   sharedScripts: ScriptAutocompleteSharedScript[],
   packages: ScriptAutocompletePackage[]
 ) {
@@ -207,6 +208,7 @@ function updatePhaseSource(
     phaseState.declarationFileName,
     [
       getScriptRuntimeDeclarations(phaseState.runtimeContext),
+      buildRequestPathDeclarations(phaseState.runtimeContext, requestPaths),
       buildRequireScriptDeclarations(sharedScriptFiles.modules),
       buildLoadPackageDeclarations(packages),
       '/// <reference lib="esnext.iterator" />',
@@ -214,6 +216,39 @@ function updatePhaseSource(
     ].join('\n')
   )
   phaseState.versions.set(phaseState.declarationFileName, (phaseState.versions.get(phaseState.declarationFileName) ?? 0) + 1)
+}
+
+function buildRequestPathDeclarations(runtimeContext: ScriptRuntimeContext, requestPaths: string[][]) {
+  if (!supportsRequestPathDeclarations(runtimeContext)) {
+    return ''
+  }
+
+  const pathEntries = Array.from(new Set(requestPaths.filter(path => path.length > 0).map(path => JSON.stringify(path)))).sort((left, right) =>
+    left.localeCompare(right)
+  )
+
+  const requestPathType =
+    pathEntries.length > 0 ? pathEntries.map(path => `  | ${path}`).join('\n') : '  | readonly string[]'
+
+  return [
+    'type ScriptRequestPath =',
+    requestPathType,
+    '',
+    'declare function navigateAndCallRequest(path: ScriptRequestPath): Promise<void>',
+    'declare function callRequest(path: ScriptRequestPath): Promise<ScriptResponseApi>',
+  ].join('\n')
+}
+
+function supportsRequestPathDeclarations(runtimeContext: ScriptRuntimeContext) {
+  if ('phase' in runtimeContext) {
+    return runtimeContext.phase === 'post-request'
+  }
+
+  if ('templatePhase' in runtimeContext) {
+    return false
+  }
+
+  return runtimeContext.targets.includes('post-request')
 }
 
 function dedupeDiagnostics(diagnostics: readonly ts.Diagnostic[]) {

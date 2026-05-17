@@ -41,6 +41,19 @@ export function subscribeToGenericEvents() {
           })
         }
       })()
+    } else if (e.type === 'script-call-request') {
+      void (async () => {
+        try {
+          const response = await RequestSendCoordinator.callRequestById(e.request.requestId)
+          await getWindowElectron().resolveScriptMakeRequest({ id: e.request.id, error: null, response })
+        } catch (error) {
+          await getWindowElectron().resolveScriptMakeRequest({
+            id: e.request.id,
+            error: error instanceof Error ? error.message : String(error),
+            response: null,
+          })
+        }
+      })()
     } else {
       const _exhaustiveCheck: never = e
       return _exhaustiveCheck

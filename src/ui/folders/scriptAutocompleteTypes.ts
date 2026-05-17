@@ -16,6 +16,7 @@ type ScriptRequestBase = {
   requestId: number
   runtimeContext: ScriptRuntimeContext
   code: string
+  requestPaths?: string[][]
   sharedScripts?: ScriptAutocompleteSharedScript[]
   packages?: ScriptAutocompletePackage[]
 }

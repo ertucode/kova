@@ -34,6 +34,7 @@ class ScriptAutocompleteClient {
     runtimeContext?: ScriptRuntimeContext
     code: string
     position: number
+    requestPaths?: string[][]
     sharedScripts?: ScriptAutocompleteSharedScript[]
     packages?: ScriptAutocompletePackage[]
     signal?: AbortSignal
@@ -45,6 +46,7 @@ class ScriptAutocompleteClient {
       runtimeContext: input.runtimeContext ?? { phase: input.phase ?? 'pre-request' },
       code: input.code,
       position: input.position,
+      requestPaths: input.requestPaths,
       sharedScripts: input.sharedScripts,
       packages: input.packages,
     }
@@ -74,6 +76,7 @@ class ScriptAutocompleteClient {
     phase?: ScriptAutocompletePhase
     runtimeContext?: ScriptRuntimeContext
     code: string
+    requestPaths?: string[][]
     sharedScripts?: ScriptAutocompleteSharedScript[]
     packages?: ScriptAutocompletePackage[]
     signal?: AbortSignal
@@ -84,6 +87,7 @@ class ScriptAutocompleteClient {
       requestId,
       runtimeContext: input.runtimeContext ?? { phase: input.phase ?? 'pre-request' },
       code: input.code,
+      requestPaths: input.requestPaths,
       sharedScripts: input.sharedScripts,
       packages: input.packages,
     }
@@ -157,6 +161,7 @@ export function requestScriptAutocomplete(input: {
   runtimeContext?: ScriptRuntimeContext
   code: string
   position: number
+  requestPaths?: string[][]
   sharedScripts?: ScriptAutocompleteSharedScript[]
   packages?: ScriptAutocompletePackage[]
   signal?: AbortSignal
@@ -169,6 +174,7 @@ export function requestScriptDiagnostics(input: {
   phase?: ScriptAutocompletePhase
   runtimeContext?: ScriptRuntimeContext
   code: string
+  requestPaths?: string[][]
   sharedScripts?: ScriptAutocompleteSharedScript[]
   packages?: ScriptAutocompletePackage[]
   signal?: AbortSignal

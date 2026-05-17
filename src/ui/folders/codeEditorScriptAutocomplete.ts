@@ -13,7 +13,7 @@ import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
 import type { SharedScriptTarget } from '@common/SharedScripts'
-import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
+import type { ScriptAutocompleteOption, ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 
 type ScriptAutocompleteOptions = {
   includeResponse: boolean
@@ -21,6 +21,7 @@ type ScriptAutocompleteOptions = {
   targets?: SharedScriptTarget[]
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
+  getRequestPaths?: () => string[][]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
   getPackages?: () => ScriptAutocompletePackage[]
   fallbackToBrowserTab?: boolean
@@ -29,6 +30,7 @@ type ScriptAutocompleteOptions = {
 export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions): Extension {
   const phase: ScriptAutocompletePhase = options.phase ?? (options.includeResponse ? 'post-request' : 'pre-request')
   const runtimeContext = options.targets ? { targets: options.targets } : { phase }
+  const supportsRequestPathAutocomplete = options.targets ? options.targets.includes('post-request') : phase === 'post-request'
 
   return [
     codeEditorTabBehaviorExtension(options),
@@ -38,7 +40,13 @@ export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions):
         context => completeVariableName(context, options.getVariableNames),
         context => completeEnvironmentName(context, options.getEnvironmentNames),
         context => completePackageSpecifier(context, options.getPackages),
-        context => completeScriptApi(context, runtimeContext, options.getSharedScripts, options.getPackages),
+        context => completeScriptApi(
+          context,
+          runtimeContext,
+          supportsRequestPathAutocomplete ? options.getRequestPaths : undefined,
+          options.getSharedScripts,
+          options.getPackages
+        ),
       ],
     }),
     EditorView.updateListener.of(update => {
@@ -52,7 +60,7 @@ export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions):
       }
 
       const textBeforeCursor = update.state.doc.sliceString(Math.max(0, selection.from - 240), selection.from)
-      if (!shouldStartCompletion(textBeforeCursor)) {
+      if (!shouldStartCompletion(textBeforeCursor, supportsRequestPathAutocomplete)) {
         return
       }
 
@@ -177,7 +185,6 @@ function completePackageSpecifier(
     from: context.pos - packageContext.query.length,
     to: context.pos,
     options,
-    filter: false,
     validFor: /^[^'"]*$/,
   }
 }
@@ -185,6 +192,7 @@ function completePackageSpecifier(
 async function completeScriptApi(
   context: CompletionContext,
   runtimeContext: { phase: ScriptAutocompletePhase } | { targets: SharedScriptTarget[] },
+  getRequestPaths: (() => string[][]) | undefined,
   getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined,
   getPackages: (() => ScriptAutocompletePackage[]) | undefined
 ): Promise<CompletionResult | null> {
@@ -201,6 +209,7 @@ async function completeScriptApi(
       runtimeContext,
       code: context.state.doc.toString(),
       position: context.pos,
+      requestPaths: getRequestPaths?.(),
       sharedScripts: getSharedScripts?.(),
       packages: getPackages?.(),
       signal: abortController.signal,
@@ -210,10 +219,19 @@ async function completeScriptApi(
       return null
     }
 
+    const requestPathContext = getRequestPathContext(context.state.doc.toString(), context.pos)
+    const filteredOptions = requestPathContext
+      ? filterRequestPathOptions(result.options, getRequestPaths?.() ?? [], requestPathContext)
+      : result.options
+
+    if (filteredOptions.length === 0) {
+      return null
+    }
+
     return {
       from: result.from,
       to: result.to,
-      options: result.options.map(option => ({
+      options: filteredOptions.map(option => ({
         label: option.label,
         type: option.type,
         detail: option.detail,
@@ -228,11 +246,119 @@ async function completeScriptApi(
   }
 }
 
-function shouldStartCompletion(textBeforeCursor: string) {
+function getRequestPathContext(source: string, position: number) {
+  const sourceBeforeCursor = source.slice(Math.max(0, position - 400), position)
+  const invocationMatch = Array.from(sourceBeforeCursor.matchAll(/(?:navigateAndCallRequest|callRequest)\(\s*\[/g)).at(-1)
+  if (!invocationMatch || invocationMatch.index === undefined) {
+    return null
+  }
+
+  const arraySource = sourceBeforeCursor.slice(invocationMatch.index + invocationMatch[0].length)
+  if (arraySource.includes(']')) {
+    return null
+  }
+
+  return parseRequestPathSegments(arraySource)
+}
+
+function parseRequestPathSegments(source: string): { prefixSegments: string[]; query: string } | null {
+  let index = 0
+  const prefixSegments: string[] = []
+
+  while (index < source.length) {
+    index = skipWhitespace(source, index)
+    if (index >= source.length) {
+      return null
+    }
+
+    const quote = source[index]
+    if (quote !== '"' && quote !== "'") {
+      return null
+    }
+
+    index += 1
+    let value = ''
+    let closed = false
+    while (index < source.length) {
+      const character = source[index]
+      if (character === quote) {
+        closed = true
+        index += 1
+        index = skipWhitespace(source, index)
+        if (index >= source.length) {
+          return null
+        }
+        if (source[index] !== ',') {
+          return null
+        }
+        prefixSegments.push(value)
+        index += 1
+        break
+      }
+
+      value += character
+      index += 1
+    }
+
+    if (!closed) {
+      return { prefixSegments, query: value }
+    }
+  }
+
+  return null
+}
+
+function filterRequestPathOptions(
+  options: ScriptAutocompleteOption[],
+  requestPaths: string[][],
+  context: { prefixSegments: string[]; query: string }
+) {
+  const allowedSegments = new Set<string>()
+
+  for (const path of requestPaths) {
+    if (path.length <= context.prefixSegments.length) {
+      continue
+    }
+
+    if (!context.prefixSegments.every((segment, index) => path[index] === segment)) {
+      continue
+    }
+
+    allowedSegments.add(path[context.prefixSegments.length] ?? '')
+  }
+
+  if (allowedSegments.size === 0) {
+    return options
+  }
+
+  const normalizedQuery = context.query.toLowerCase()
+  return options
+    .filter((option: ScriptAutocompleteOption) => allowedSegments.has(option.label))
+    .sort((left: ScriptAutocompleteOption, right: ScriptAutocompleteOption) => {
+      const leftStartsWithQuery = left.label.toLowerCase().startsWith(normalizedQuery)
+      const rightStartsWithQuery = right.label.toLowerCase().startsWith(normalizedQuery)
+      if (leftStartsWithQuery !== rightStartsWithQuery) {
+        return leftStartsWithQuery ? -1 : 1
+      }
+
+      return left.label.localeCompare(right.label)
+    })
+}
+
+function skipWhitespace(source: string, index: number) {
+  while (index < source.length && /\s/.test(source[index] ?? '')) {
+    index += 1
+  }
+
+  return index
+}
+
+function shouldStartCompletion(textBeforeCursor: string, supportsRequestPathAutocomplete: boolean) {
   if (
     /env\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     /scope\.(?:get|has|set)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     /request\.headers\.(?:get|has|set|delete)\(\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
+    (supportsRequestPathAutocomplete && /(?:navigateAndCallRequest|callRequest)\(\s*\[.*$/.test(textBeforeCursor)) ||
     /env\.(?:get|has)\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     /env\.set\(\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*['"]\s*,\s*(['"])[^'"]*$/.test(textBeforeCursor) ||
     getPackageSpecifierContext(textBeforeCursor) !== null

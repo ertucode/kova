@@ -2,10 +2,14 @@ import { confirmation } from '@/lib/components/confirmation'
 import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
+import type { ScriptResponseBody } from '@common/Requests'
+import type { ScriptCallRequestPayload } from '@common/ScriptMakeRequest'
 import { environmentEditorStore } from './environmentEditorStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
+import { toRequestDetailsDraft } from './folderExplorerUtils'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
+import type { RequestDetailsDraft } from './folderExplorerTypes'
 
 export namespace RequestSendCoordinator {
   export async function sendSelectedRequest() {
@@ -83,6 +87,53 @@ export namespace RequestSendCoordinator {
     await FolderExplorerCoordinator.selectItem({ itemType: 'request', id: requestId })
     await sendSelectedRequest()
   }
+
+  export async function callRequestById(requestId: string): Promise<ScriptCallRequestPayload> {
+    const { activeEnvironmentIds } = folderExplorerEditorStore.getSnapshot().context
+    const requestDraft = await getRequestDraftForExecution(requestId)
+    const result = await getWindowElectron().sendRequest({
+      requestId,
+      method: requestDraft.method,
+      url: requestDraft.url,
+      pathParams: requestDraft.pathParams,
+      searchParams: requestDraft.searchParams,
+      auth: requestDraft.auth,
+      preRequestScript: requestDraft.preRequestScript,
+      postRequestScript: requestDraft.postRequestScript,
+      headers: requestDraft.headers,
+      body: requestDraft.body,
+      bodyType: requestDraft.bodyType,
+      rawType: requestDraft.rawType,
+      activeEnvironmentIds,
+      saveToHistory: requestDraft.saveToHistory,
+      historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
+    })
+
+    if (!result.success) {
+      throw new Error(errorResponseToMessage(result.error))
+    }
+
+    return {
+      status: result.data.status,
+      statusText: result.data.statusText,
+      headers: result.data.headers,
+      body: parseScriptResponseBody(result.data.body, result.data.headers),
+    }
+  }
+}
+
+async function getRequestDraftForExecution(requestId: string): Promise<RequestDetailsDraft> {
+  const entry = folderExplorerEditorStore.getSnapshot().context.entries[`request:${requestId}`]
+  if (entry?.current?.itemType === 'request') {
+    return entry.current
+  }
+
+  const result = await getWindowElectron().getRequest({ id: requestId })
+  if (!result.success) {
+    throw new Error(errorResponseToMessage(result.error))
+  }
+
+  return toRequestDetailsDraft(result.data)
 }
 
 function getActiveEnvironments() {
@@ -101,6 +152,28 @@ function getActiveEnvironments() {
         priority: environmentDraft?.priority ?? environment.priority,
       }
     })
+}
+
+function parseScriptResponseBody(body: string, headers: string): ScriptResponseBody {
+  if (isJsonContentType(headers)) {
+    try {
+      return { type: 'json', data: JSON.parse(body) }
+    } catch {
+      return { type: 'text', data: body }
+    }
+  }
+
+  return { type: 'text', data: body }
+}
+
+function isJsonContentType(headers: string) {
+  const contentType = headers
+    .split('\n')
+    .map(line => line.trim())
+    .find(line => line.toLowerCase().startsWith('content-type:'))
+    ?.slice('content-type:'.length)
+
+  return contentType?.trim().toLowerCase().includes('json') ?? false
 }
 
 function shouldWarnBeforeRequest(

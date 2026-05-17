@@ -14,6 +14,8 @@ import {
   sharedScriptEditorStore,
   type SharedScriptEditorSelection,
 } from './sharedScriptEditorStore'
+import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { notifySharedScriptsChanged, useScopedSharedScripts } from './useVisibleSharedScripts'
 
@@ -340,12 +342,14 @@ function SharedScriptDetail({
     () => [
       scriptDiagnosticsExtension({
         targets,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
         getPackages: () => scriptPackagesRef.current,
       }),
       scriptAutocompleteExtension({
         includeResponse: false,
         targets,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
         getPackages: () => scriptPackagesRef.current,
       }),

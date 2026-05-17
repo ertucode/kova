@@ -174,9 +174,14 @@ const requestChainingSection: ScriptDocumentationSection = {
   description: 'Available only in post-request scripts.',
   entries: [
     {
-      label: "await makeRequest(['Folder', 'Request Name'])",
+      label: "await navigateAndCallRequest(['Folder', 'Request Name'])",
       detail:
         'Switches the UI to the target HTTP request and sends it. The path starts at the workspace root and ends with the request name.',
+    },
+    {
+      label: "const authResponse = await callRequest(['Auth', 'Refresh Token'])",
+      detail:
+        'Sends the target HTTP request in place and returns its response without navigating away from the current request.',
     },
   ],
 }
@@ -270,7 +275,11 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       },
       {
         title: 'Trigger a follow-up request',
-        code: "if (response.status === 401) {\n  await makeRequest(['Auth', 'Refresh Token'])\n}",
+        code: "if (response.status === 401) {\n  await navigateAndCallRequest(['Auth', 'Refresh Token'])\n}",
+      },
+      {
+        title: 'Call a request and inspect its response',
+        code: "if (response.status === 401) {\n  const refreshResponse = await callRequest(['Auth', 'Refresh Token'])\n  if (refreshResponse.status === 200) {\n    console.info('Token refreshed')\n  }\n}",
       },
       {
         title: 'Copy a token from the response',

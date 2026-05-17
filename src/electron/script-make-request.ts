@@ -1,7 +1,9 @@
 import type { ScriptExecutionPauseController } from './script-prompt.js'
+import type { ScriptCallRequestPayload } from '../common/ScriptMakeRequest.js'
 
 export type ScriptMakeRequestBridge = {
-  makeRequest: (path: string[]) => Promise<void>
+  navigateAndCallRequest: (path: string[]) => Promise<void>
+  callRequest: (path: string[]) => Promise<ScriptCallRequestPayload>
 }
 
 export function createScriptMakeRequestApi(
@@ -10,13 +12,32 @@ export function createScriptMakeRequestApi(
 ) {
   return async (path: string[]) => {
     if (!makeRequestBridge) {
-      throw new Error('makeRequest is not available in this context')
+      throw new Error('navigateAndCallRequest is not available in this context')
     }
 
     const normalizedPath = normalizeScriptMakeRequestPath(path)
     executionController.pause()
     try {
-      await makeRequestBridge.makeRequest(normalizedPath)
+      await makeRequestBridge.navigateAndCallRequest(normalizedPath)
+    } finally {
+      executionController.resume()
+    }
+  }
+}
+
+export function createScriptCallRequestApi(
+  makeRequestBridge: ScriptMakeRequestBridge | undefined,
+  executionController: ScriptExecutionPauseController
+) {
+  return async (path: string[]) => {
+    if (!makeRequestBridge) {
+      throw new Error('callRequest is not available in this context')
+    }
+
+    const normalizedPath = normalizeScriptMakeRequestPath(path)
+    executionController.pause()
+    try {
+      return await makeRequestBridge.callRequest(normalizedPath)
     } finally {
       executionController.resume()
     }
@@ -25,21 +46,21 @@ export function createScriptMakeRequestApi(
 
 function normalizeScriptMakeRequestPath(path: string[]) {
   if (!Array.isArray(path)) {
-    throw new Error('makeRequest requires an array path')
+    throw new Error('navigateAndCallRequest requires an array path')
   }
 
   if (path.length === 0) {
-    throw new Error('makeRequest path must contain at least one segment')
+    throw new Error('navigateAndCallRequest path must contain at least one segment')
   }
 
   return path.map((segment, index) => {
     if (typeof segment !== 'string') {
-      throw new Error(`makeRequest path segment ${index + 1} must be a string`)
+      throw new Error(`navigateAndCallRequest path segment ${index + 1} must be a string`)
     }
 
     const normalizedSegment = segment.trim()
     if (!normalizedSegment) {
-      throw new Error(`makeRequest path segment ${index + 1} cannot be empty`)
+      throw new Error(`navigateAndCallRequest path segment ${index + 1} cannot be empty`)
     }
 
     return normalizedSegment

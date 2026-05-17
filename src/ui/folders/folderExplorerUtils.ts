@@ -57,6 +57,14 @@ export function buildTree(items: ExplorerItem[]) {
   }
 }
 
+export function buildHttpRequestPaths(items: ExplorerItem[]) {
+  const itemMap = new Map(items.map(item => [item.id, item] satisfies [string, ExplorerItem]))
+
+  return items
+    .filter((item): item is Extract<ExplorerItem, { itemType: 'request' }> => item.itemType === 'request' && item.requestType === 'http')
+    .map(item => [...getFolderPathSegments(itemMap, item.parentFolderId), item.name])
+}
+
 export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
   return filterTreeWithDrafts(nodes, query)
 }
@@ -296,6 +304,23 @@ export function serializeDetails(value: DetailsDraft | null) {
 
 export function toSelectionKey(value: Selection | ExplorerItem) {
   return `${value.itemType}:${value.id}`
+}
+
+function getFolderPathSegments(itemMap: Map<string, ExplorerItem>, parentFolderId: string | null) {
+  const segments: string[] = []
+  let currentFolderId = parentFolderId
+
+  while (currentFolderId) {
+    const folder = itemMap.get(currentFolderId)
+    if (!folder || folder.itemType !== 'folder') {
+      break
+    }
+
+    segments.unshift(folder.name)
+    currentFolderId = folder.parentFolderId
+  }
+
+  return segments
 }
 
 export function parseHeaderRows(value: string): HeaderRow[] {
