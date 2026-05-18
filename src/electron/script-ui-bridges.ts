@@ -89,9 +89,9 @@ export function createScriptMakeRequestRegistry() {
             })
           })
         },
-        callRequest: (targetRequestId: string, path: string[]) => {
+        callRequest: (targetRequestId: string, path: string[], overrides?: ScriptCallRequestRequest['overrides']) => {
           const invocationId = crypto.randomUUID()
-          const request: ScriptCallRequestRequest = { id: invocationId, requestId: targetRequestId, path }
+          const request: ScriptCallRequestRequest = { id: invocationId, requestId: targetRequestId, path, overrides }
 
           return new Promise<ScriptCallRequestPayload>((resolve, reject) => {
             pendingScriptCalls.set(invocationId, { webContentsId: webContents.id, request, resolve, reject })

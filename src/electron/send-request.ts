@@ -2,6 +2,7 @@ import { getAuthVariableSources } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { extractTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
+import type { ScriptCallRequestOverrides } from '../common/ScriptMakeRequest.js'
 import type { ScriptClipboardBridge } from './script-clipboard.js'
 import type { ScriptMakeRequestBridge } from './script-make-request.js'
 import type { ScriptPromptBridge } from './script-prompt.js'
@@ -13,6 +14,7 @@ import type {
   HttpSseStreamState,
   ReceivedResponseSnapshot,
   RequestExecutionRecord,
+  RequestMethod,
   ScriptResponseBody,
   SendRequestInput,
   SendRequestResponse,
@@ -25,6 +27,7 @@ import { emitGenericEvent } from './generic-events.js'
 import { prepareHttpRequest, type PreparedHttpRequest } from './http-request-runtime.js'
 
 const activeHttpRequests = new Map<string, { executionId: string; abortController: AbortController }>()
+const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
 type ScriptToastBridge = {
   show: (options: ScriptToastOptions) => void
@@ -62,7 +65,28 @@ export async function sendRequest(
     emitGenericEvent({ type: 'http-sse-stream-cleared', requestId: input.requestId })
     activeHttpRequests.set(input.requestId, { executionId, abortController })
 
-    const { headers, postRequestScriptSources, requestBody, requestName, runtime, url, variables } = preparedRequest.data
+    const overrideResult = applyScriptCallRequestOverrides({
+      preparedRequest: preparedRequest.data,
+      overrides: input.callRequestOverrides,
+    })
+    if (!overrideResult.success) {
+      return overrideResult
+    }
+
+    const { headers, method, requestBody, url } = overrideResult.data
+    const { postRequestScriptSources, requestName, runtime, variables } = preparedRequest.data
+    if (Object.hasOwn(input.callRequestOverrides ?? {}, 'method')) {
+      runtime.request.method = method
+    }
+    if (Object.hasOwn(input.callRequestOverrides ?? {}, 'url')) {
+      runtime.request.url = url
+    }
+    if (Object.hasOwn(input.callRequestOverrides ?? {}, 'headers')) {
+      runtime.request.headers = serializeHeaderEntries(headers)
+    }
+    if (Object.hasOwn(input.callRequestOverrides ?? {}, 'body')) {
+      runtime.request.body = requestBody.preview
+    }
     const sentAt = Date.now()
     const executedRequest = buildExecutedRequestSnapshot({
       requestId: input.requestId,
@@ -76,7 +100,7 @@ export async function sendRequest(
     })
     const startedAt = Date.now()
     const response = await fetch(url, {
-      method: runtime.request.method,
+      method,
       headers,
       body: requestBody.body,
       signal: abortController.signal,
@@ -181,6 +205,65 @@ export async function sendRequest(
   } finally {
     clearActiveHttpRequest(input.requestId, executionId)
   }
+}
+
+export function applyScriptCallRequestOverrides(input: {
+  preparedRequest: PreparedHttpRequest
+  overrides: ScriptCallRequestOverrides | undefined
+}): GenericResult<{
+  method: RequestMethod
+  url: string
+  headers: Headers
+  requestBody: PreparedHttpRequest['requestBody']
+}> {
+  let method = input.preparedRequest.method
+  let url = input.preparedRequest.url
+  let headers = cloneHeaders(input.preparedRequest.headers)
+  let requestBody = input.preparedRequest.requestBody
+
+  if (input.overrides === undefined) {
+    return Result.Success({ method, url, headers, requestBody })
+  }
+
+  if (Object.hasOwn(input.overrides, 'method')) {
+    const normalizedMethod = input.overrides.method?.trim().toUpperCase()
+    if (!normalizedMethod || !REQUEST_METHODS.includes(normalizedMethod as RequestMethod)) {
+      return GenericError.Message('callRequest override method is invalid')
+    }
+
+    method = normalizedMethod as RequestMethod
+  }
+
+  if (Object.hasOwn(input.overrides, 'url')) {
+    const normalizedUrl = input.overrides.url?.trim()
+    if (!normalizedUrl) {
+      return GenericError.Message('callRequest override url is required')
+    }
+
+    try {
+      url = new URL(normalizedUrl).toString()
+    } catch {
+      return GenericError.Message('callRequest override url is invalid')
+    }
+  }
+
+  if (Object.hasOwn(input.overrides, 'headers')) {
+    headers = new Headers()
+    for (const [name, value] of Object.entries(input.overrides.headers ?? {})) {
+      const normalizedName = name.trim()
+      if (!normalizedName || value === undefined) {
+        continue
+      }
+
+      headers.set(normalizedName, value)
+    }
+  }
+
+  if (Object.hasOwn(input.overrides, 'body')) {
+    requestBody = input.overrides.body === undefined ? { body: undefined, preview: '' } : { body: input.overrides.body, preview: input.overrides.body }
+  }
+
+  return Result.Success({ method, url, headers, requestBody })
 }
 
 async function consumeSseResponse(input: {
@@ -448,6 +531,16 @@ function buildExecutedRequestSnapshot(input: {
 
 function serializeResponseHeaderEntries(entries: Array<[string, string]>) {
   return entries.map(([key, value]) => `${key}: ${value}`).join('\n')
+}
+
+function serializeHeaderEntries(headers: Headers) {
+  return Array.from(headers.entries())
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('\n')
+}
+
+function cloneHeaders(headers: Headers) {
+  return new Headers(Array.from(headers.entries()))
 }
 
 function parseResponseHeaderEntries(headers: string) {

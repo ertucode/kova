@@ -1,4 +1,11 @@
-import type { ScriptResponseBody } from './Requests.js'
+import type { RequestMethod, ScriptResponseBody } from './Requests.js'
+
+export type ScriptCallRequestOverrides = {
+  method?: RequestMethod
+  url?: string
+  headers?: Record<string, string | undefined>
+  body?: string | undefined
+}
 
 export type ScriptMakeRequestRequest = {
   id: string
@@ -10,6 +17,7 @@ export type ScriptCallRequestRequest = {
   id: string
   requestId: string
   path: string[]
+  overrides?: ScriptCallRequestOverrides
 }
 
 export type ScriptCallRequestPayload = {

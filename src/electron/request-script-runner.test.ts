@@ -1186,6 +1186,7 @@ it('parses and rewrites response cookies from the header helper', async () => {
 
   it('allows post-request scripts to call another request and inspect the response', async () => {
     const requestedPaths: string[][] = []
+    const requestedOverrides: unknown[] = []
     const runtime = createRequestScriptRuntime({
       request: {
         method: 'GET',
@@ -1203,8 +1204,9 @@ it('parses and rewrites response cookies from the header helper', async () => {
         navigateAndCallRequest: async () => {
           throw new Error('navigateAndCallRequest should not be used in this test')
         },
-        callRequest: async path => {
+        callRequest: async (path, overrides) => {
           requestedPaths.push(path)
+          requestedOverrides.push(overrides)
           return {
             status: 200,
             statusText: 'OK',
@@ -1233,5 +1235,52 @@ it('parses and rewrites response cookies from the header helper', async () => {
 
     expect(errors).toEqual([])
     expect(requestedPaths).toEqual([['Auth', 'Refresh Token']])
+    expect(requestedOverrides).toEqual([undefined])
+  })
+
+  it('allows pre-request scripts to call another request with overrides', async () => {
+    const requestedPaths: string[][] = []
+    const requestedOverrides: unknown[] = []
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: 'x-base: original',
+        body: 'payload',
+        bodyType: 'raw',
+        rawType: 'text',
+      },
+      environments: [],
+      makeRequest: {
+        navigateAndCallRequest: async () => {
+          throw new Error('navigateAndCallRequest should not be used in this test')
+        },
+        callRequest: async (path, overrides) => {
+          requestedPaths.push(path)
+          requestedOverrides.push(overrides)
+          return {
+            status: 204,
+            statusText: 'No Content',
+            headers: '',
+            body: { type: 'text', data: '' },
+          }
+        },
+      },
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script:
+          "const refreshResponse = await callRequest(['Auth', 'Refresh Token'], { headers: {}, body: undefined })\nif (refreshResponse.status !== 204) throw new Error('Unexpected status')",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(requestedPaths).toEqual([['Auth', 'Refresh Token']])
+    expect(requestedOverrides).toEqual([{ headers: {}, body: undefined }])
   })
 })

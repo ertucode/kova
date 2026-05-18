@@ -44,7 +44,7 @@ export function subscribeToGenericEvents() {
     } else if (e.type === 'script-call-request') {
       void (async () => {
         try {
-          const response = await RequestSendCoordinator.callRequestById(e.request.requestId)
+          const response = await RequestSendCoordinator.callRequestById(e.request.requestId, e.request.overrides)
           await getWindowElectron().resolveScriptMakeRequest({ id: e.request.id, error: null, response })
         } catch (error) {
           await getWindowElectron().resolveScriptMakeRequest({

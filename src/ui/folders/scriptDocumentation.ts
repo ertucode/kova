@@ -169,19 +169,31 @@ const responseSection: ScriptDocumentationSection = {
   ],
 }
 
-const requestChainingSection: ScriptDocumentationSection = {
-  title: 'Request Chaining',
+const callRequestSection: ScriptDocumentationSection = {
+  title: 'callRequest',
+  description: 'Available in pre-request and post-request scripts.',
+  entries: [
+    {
+      label: "const authResponse = await callRequest(['Auth', 'Refresh Token'])",
+      detail:
+        'Sends the target HTTP request in place and returns its response without navigating away from the current request.',
+    },
+    {
+      label: "await callRequest(['Auth', 'Refresh Token'], { url: 'https://api.example.com/refresh', headers: {}, body: undefined })",
+      detail:
+        'Omitted fields keep the prepared request. Present fields replace the outbound method, URL, header set, or body just before send.',
+    },
+  ],
+}
+
+const navigateAndCallRequestSection: ScriptDocumentationSection = {
+  title: 'navigateAndCallRequest',
   description: 'Available only in post-request scripts.',
   entries: [
     {
       label: "await navigateAndCallRequest(['Folder', 'Request Name'])",
       detail:
         'Switches the UI to the target HTTP request and sends it. The path starts at the workspace root and ends with the request name.',
-    },
-    {
-      label: "const authResponse = await callRequest(['Auth', 'Refresh Token'])",
-      detail:
-        'Sends the target HTTP request in place and returns its response without navigating away from the current request.',
     },
   ],
 }
@@ -197,7 +209,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'Response data is not available in pre-request scripts.',
       'Zod is available globally as z.',
     ],
-    sections: sharedSections,
+    sections: [...sharedSections, callRequestSection],
     examples: [
       {
         title: 'Set an auth header',
@@ -231,6 +243,11 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         title: 'Copy the resolved URL',
         code: 'clipboard.write(request.resolveUrl())',
       },
+      {
+        title: 'Refresh a token before sending',
+        code:
+          "const refreshResponse = await callRequest(['Auth', 'Refresh Token'], { headers: {} })\nif (refreshResponse.status !== 200) {\n  throw new Error('Could not refresh token')\n}",
+      },
     ],
   },
   'post-request': {
@@ -243,7 +260,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'Environment changes made here are rolled back if the script throws.',
       'Zod is available globally as z.',
     ],
-    sections: [...sharedSections, responseSection, requestChainingSection],
+    sections: [...sharedSections, responseSection, callRequestSection, navigateAndCallRequestSection],
     examples: [
       {
         title: 'Persist a token from JSON',

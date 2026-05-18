@@ -127,6 +127,32 @@ interface ScriptRequestApi {
   headers: ScriptHeaderApi
 }
 
+interface ScriptCallRequestOptions {
+  /** Override the outbound request method. Omit to keep the prepared method. */
+  method?: string
+  /** Override the outbound request URL. Omit to keep the prepared URL. */
+  url?: string
+  /** Replace the outbound header set. Omit to keep the prepared headers. */
+  headers?: Record<string, string | undefined>
+  /** Override the outbound request body. Pass undefined to send no body. */
+  body?: string | undefined
+}
+
+interface ScriptResponseApi {
+  /** Numeric HTTP status code. */
+  status: number
+  /** HTTP status text. */
+  statusText: string
+  /** Response header helper API. */
+  headers: ScriptHeaderApi
+  /** Check whether the response currently has any Set-Cookie headers. */
+  hasCookies(): boolean
+  /** Parse all current Set-Cookie response headers. */
+  parseCookies(): ScriptCookie[]
+  /** Parsed response body. */
+  body: ScriptResponseBody
+}
+
 interface ScriptCryptoApi {
   /** Generate a UUID string inside the script runtime. */
   randomUUID(): string
@@ -206,21 +232,6 @@ declare const prompt: ScriptPromptApi
 `
 
 const postRequestDeclarations = String.raw`
-interface ScriptResponseApi {
-  /** Numeric HTTP status code. */
-  status: number
-  /** HTTP status text. */
-  statusText: string
-  /** Response header helper API. */
-  headers: ScriptHeaderApi
-  /** Check whether the response currently has any Set-Cookie headers. */
-  hasCookies(): boolean
-  /** Parse all current Set-Cookie response headers. */
-  parseCookies(): ScriptCookie[]
-  /** Parsed response body. */
-  body: ScriptResponseBody
-}
-
 declare const response: ScriptResponseApi
 `
 

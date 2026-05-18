@@ -42,6 +42,8 @@ type ScriptSource = {
   globalBindings?: string[]
 }
 
+type CallRequestApi = ReturnType<typeof createScriptCallRequestApi>
+
 type RuntimeRequestState = {
   method: RequestMethod
   url: string
@@ -551,10 +553,10 @@ async function runScriptPhase(input: {
     crypto: createCryptoApi(),
     cookies: createCookiesApi(),
     prompt: createPromptProxy(() => currentPrompt.value),
+    callRequest: createCallRequestProxy(() => currentCallRequest.value),
     ...(input.phase === 'post-request'
       ? {
           navigateAndCallRequest: createMakeRequestProxy(() => currentMakeRequest.value),
-          callRequest: createCallRequestProxy(() => currentCallRequest.value),
         }
       : {}),
     z,
@@ -1163,8 +1165,9 @@ function createMakeRequestProxy(getMakeRequest: () => ReturnType<typeof createSc
   return async (path: string[]) => getMakeRequest()(path)
 }
 
-function createCallRequestProxy(getCallRequest: () => ReturnType<typeof createScriptCallRequestApi>) {
-  return async (path: string[]) => createResponseApi(createRuntimeResponseApiState(await getCallRequest()(path)))
+function createCallRequestProxy(getCallRequest: () => CallRequestApi) {
+  return async (path: string[], overrides?: Parameters<CallRequestApi>[1]) =>
+    createResponseApi(createRuntimeResponseApiState(await getCallRequest()(path, overrides)))
 }
 
 function createRuntimeResponseApiState(response: RuntimeResponseState): RuntimeResponseApiState {

@@ -234,12 +234,28 @@ function buildRequestPathDeclarations(runtimeContext: ScriptRuntimeContext, requ
     'type ScriptRequestPath =',
     requestPathType,
     '',
-    'declare function navigateAndCallRequest(path: ScriptRequestPath): Promise<void>',
-    'declare function callRequest(path: ScriptRequestPath): Promise<ScriptResponseApi>',
-  ].join('\n')
+    supportsNavigateAndCallRequestDeclarations(runtimeContext)
+      ? 'declare function navigateAndCallRequest(path: ScriptRequestPath): Promise<void>'
+      : '',
+    'declare function callRequest(path: ScriptRequestPath, overrides?: ScriptCallRequestOptions): Promise<ScriptResponseApi>',
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function supportsRequestPathDeclarations(runtimeContext: ScriptRuntimeContext) {
+  if ('phase' in runtimeContext) {
+    return runtimeContext.phase === 'pre-request' || runtimeContext.phase === 'post-request'
+  }
+
+  if ('templatePhase' in runtimeContext) {
+    return false
+  }
+
+  return runtimeContext.targets.some(target => target === 'pre-request' || target === 'post-request')
+}
+
+function supportsNavigateAndCallRequestDeclarations(runtimeContext: ScriptRuntimeContext) {
   if ('phase' in runtimeContext) {
     return runtimeContext.phase === 'post-request'
   }

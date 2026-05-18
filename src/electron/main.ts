@@ -1070,13 +1070,13 @@ function createScriptRequestBridge(webContents: Electron.WebContents) {
 
       return makeRequestBridge.navigateAndCallRequest(request.id, path)
     },
-    callRequest: async (path: string[]) => {
+    callRequest: async (path: string[], overrides?: Parameters<typeof makeRequestBridge.callRequest>[2]) => {
       const request = await findHttpRequestByPath(path)
       if (!request) {
         throw new Error(`Request path was not found: ${path.join(' / ')}`)
       }
 
-      return makeRequestBridge.callRequest(request.id, path)
+      return makeRequestBridge.callRequest(request.id, path, overrides)
     },
   }
 }

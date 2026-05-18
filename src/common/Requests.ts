@@ -1,6 +1,7 @@
 import type { HttpAuth } from './Auth.js'
 import type { EnvironmentRecord } from './Environments.js'
 import type { OperationRecord } from './Operations.js'
+import type { ScriptCallRequestOverrides } from './ScriptMakeRequest.js'
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
@@ -109,6 +110,7 @@ export type SendRequestInput = {
   activeEnvironmentIds: string[]
   saveToHistory: boolean
   historyKeepLast: number
+  callRequestOverrides?: ScriptCallRequestOverrides
 }
 
 export type CancelHttpRequestInput = {

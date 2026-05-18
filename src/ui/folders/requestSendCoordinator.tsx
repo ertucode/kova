@@ -3,7 +3,7 @@ import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
 import type { ScriptResponseBody } from '@common/Requests'
-import type { ScriptCallRequestPayload } from '@common/ScriptMakeRequest'
+import type { ScriptCallRequestOverrides, ScriptCallRequestPayload } from '@common/ScriptMakeRequest'
 import { environmentEditorStore } from './environmentEditorStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
@@ -88,7 +88,10 @@ export namespace RequestSendCoordinator {
     await sendSelectedRequest()
   }
 
-  export async function callRequestById(requestId: string): Promise<ScriptCallRequestPayload> {
+  export async function callRequestById(
+    requestId: string,
+    overrides?: ScriptCallRequestOverrides
+  ): Promise<ScriptCallRequestPayload> {
     const { activeEnvironmentIds } = folderExplorerEditorStore.getSnapshot().context
     const requestDraft = await getRequestDraftForExecution(requestId)
     const result = await getWindowElectron().sendRequest({
@@ -107,6 +110,7 @@ export namespace RequestSendCoordinator {
       activeEnvironmentIds,
       saveToHistory: requestDraft.saveToHistory,
       historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
+      callRequestOverrides: overrides,
     })
 
     if (!result.success) {
