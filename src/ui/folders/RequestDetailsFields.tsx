@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { CopyIcon, InfoIcon, LibraryBigIcon, PencilIcon } from 'lucide-react'
+import { CopyIcon, InfoIcon, LibraryBigIcon, PencilIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import type { Extension } from '@codemirror/state'
 import { getAuthVariableSources } from '@common/Auth'
@@ -1270,8 +1270,157 @@ function RequestBodyTabActions({
   formatJsonBody: () => Promise<void>
   updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
 }) {
+  const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
+    state.context.selected?.itemType === 'request' ? state.context.selected.id : null
+  )
+  const [bodyPreviewByExampleId, setBodyPreviewByExampleId] = useState<Record<string, string>>({})
+  const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
+  const requestBodyExamples = useMemo(
+    () =>
+      explorerItems.filter(
+        (item): item is Extract<(typeof explorerItems)[number], { itemType: 'example' }> =>
+          item.itemType === 'example' && item.requestId === selectedRequestId && item.responseStatus !== null
+      ),
+    [explorerItems, selectedRequestId]
+  )
+
+  useEffect(() => {
+    if (requestBodyExamples.length === 0) {
+      setBodyPreviewByExampleId({})
+      return
+    }
+
+    let isCancelled = false
+
+    void Promise.all(
+      requestBodyExamples.map(async exampleItem => {
+        const result = await getWindowElectron().getRequestExample({ id: exampleItem.id })
+        return result.success ? [exampleItem.id, result.data.requestBody] : null
+      })
+    ).then(entries => {
+      if (isCancelled) {
+        return
+      }
+
+      setBodyPreviewByExampleId(
+        Object.fromEntries(entries.filter((entry): entry is [string, string] => entry !== null))
+      )
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [requestBodyExamples])
+
+  const bodyExampleOptions = useMemo(
+    () =>
+      requestBodyExamples.map(exampleItem => ({
+        value: exampleItem.id,
+        label: (
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,220px)] items-start gap-3">
+            <span className="pt-0.5 text-[11px] leading-4 text-base-content">{exampleItem.name}</span>
+            {bodyPreviewByExampleId[exampleItem.id] ? (
+              <pre className="max-h-[84px] overflow-auto whitespace-pre-wrap break-all font-mono text-[9px] leading-3.5 text-base-content/75">
+                {bodyPreviewByExampleId[exampleItem.id]}
+              </pre>
+            ) : null}
+          </div>
+        ),
+        description: undefined,
+      })),
+    [bodyPreviewByExampleId, requestBodyExamples]
+  )
+
+  const applyRequestBodyExample = useCallback(
+    async (exampleId: string) => {
+      const result = await getWindowElectron().getRequestExample({ id: exampleId })
+      if (!result.success) {
+        toast.show(result)
+        return
+      }
+
+      updateRequestDraft(
+        {
+          ...draft,
+          body: result.data.requestBody,
+          bodyType: result.data.requestBodyType,
+          rawType: result.data.requestRawType,
+        },
+        'request-body-example-apply'
+      )
+    },
+    [draft, updateRequestDraft]
+  )
+
+  const saveRequestBodyExample = useCallback(async () => {
+    if (!selectedRequestId) {
+      return
+    }
+
+    const exampleName = await dialogActions.promptText({
+      title: 'Save body as example',
+      message: 'Enter a name for this reusable request body.',
+      defaultValue: draft.name ? `${draft.name} Body` : '',
+      placeholder: 'Body example',
+      confirmText: 'Save',
+      cancelText: 'Cancel',
+      required: true,
+    })
+
+    if (!exampleName) {
+      return
+    }
+
+    const result = await getWindowElectron().createRequestExample({
+      requestId: selectedRequestId,
+      name: exampleName,
+      requestHeaders: draft.headers,
+      requestBody: draft.body,
+      requestBodyType: draft.bodyType,
+      requestRawType: draft.rawType,
+      responseStatus: 200,
+      responseStatusText: 'OK',
+      responseHeaders: '',
+      responseBody: '',
+    })
+
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    await FolderExplorerCoordinator.loadItems()
+    toast.show({ severity: 'success', title: 'Example saved', message: 'Saved request body for reuse.' })
+  }, [draft, selectedRequestId])
+
   return (
     <>
+      {requestBodyExamples.length > 0 ? (
+        <DropdownSelect
+          value={REQUEST_BODY_EXAMPLE_PLACEHOLDER}
+          className="w-[58px]"
+          triggerClassName="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-2 text-xs font-medium"
+          menuClassName="w-[420px]"
+          options={bodyExampleOptions}
+          placeholder={<LibraryBigIcon className="size-3.5 text-base-content" />}
+          onChange={value => {
+            if (value !== REQUEST_BODY_EXAMPLE_PLACEHOLDER) {
+              void applyRequestBodyExample(value)
+            }
+          }}
+          renderValue={() => <LibraryBigIcon className="size-3.5 text-base-content" />}
+        />
+      ) : null}
+      <Tooltip content="Save body example" placement="left">
+        <button
+          type="button"
+          className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-base-content/60 transition hover:bg-base-200/70 hover:text-base-content"
+          onClick={() => void saveRequestBodyExample()}
+          aria-label="Save body example"
+        >
+          <SaveIcon className="size-4" />
+        </button>
+      </Tooltip>
       <DropdownSelect
         value={draft.bodyType}
         className="w-[100px]"
@@ -1327,6 +1476,8 @@ const FORM_DATA_ROW_TYPES = [
   { value: 'text', label: 'Text' },
   { value: 'file', label: 'File' },
 ] satisfies Array<{ value: 'text' | 'file'; label: string }>
+
+const REQUEST_BODY_EXAMPLE_PLACEHOLDER = '__request-body-example-placeholder__'
 
 function normalizeFormDataBody(value: string) {
   return stringifyKeyValueRows(

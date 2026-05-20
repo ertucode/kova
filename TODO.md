@@ -1,2 +1,1 @@
 - Request arama daha zeki olmalı
-- sample requests

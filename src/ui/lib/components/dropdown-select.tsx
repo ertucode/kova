@@ -16,6 +16,7 @@ export function DropdownSelect<T extends string>({
   triggerClassName,
   menuClassName,
   renderValue,
+  placeholder,
 }: {
   value: T
   options: DropdownSelectOption<T>[]
@@ -24,13 +25,14 @@ export function DropdownSelect<T extends string>({
   triggerClassName?: string
   menuClassName?: string
   renderValue?: (option: DropdownSelectOption<T>) => ReactNode
+  placeholder?: ReactNode
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const listId = useId()
 
-  const selectedOption = options.find(option => option.value === value) ?? options[0]
+  const selectedOption = options.find(option => option.value === value)
 
   useEffect(() => {
     if (!isOpen) {
@@ -61,7 +63,7 @@ export function DropdownSelect<T extends string>({
     }
   }, [isOpen])
 
-  if (!selectedOption) {
+  if (!selectedOption && !placeholder) {
     return null
   }
 
@@ -79,7 +81,9 @@ export function DropdownSelect<T extends string>({
         aria-controls={listId}
         onClick={() => setIsOpen(current => !current)}
       >
-        <span className="min-w-0 truncate">{renderValue ? renderValue(selectedOption) : selectedOption.label}</span>
+         <span className="min-w-0 truncate">
+           {selectedOption ? (renderValue ? renderValue(selectedOption) : selectedOption.label) : placeholder}
+         </span>
         <ChevronDownIcon className={cn('size-4 shrink-0 text-base-content/45 transition', isOpen ? 'rotate-180' : '')} />
       </button>
 
