@@ -1,3 +1,2 @@
 - Request arama daha zeki olmalı
-- comment support
 - sample requests

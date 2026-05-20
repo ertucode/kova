@@ -1,16 +1,18 @@
 import { createElement, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
+import { toggleBlockComment, toggleLineComment } from '@codemirror/commands'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
-import { HighlightStyle, foldGutter, syntaxHighlighting } from '@codemirror/language'
+import { HighlightStyle, foldGutter, syntaxHighlighting, syntaxTree } from '@codemirror/language'
 import { forEachDiagnostic, lintGutter } from '@codemirror/lint'
 import { json } from '@codemirror/lang-json'
 import { json5 as json5Language } from 'codemirror-json5'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
-import { EditorView, lineNumbers, placeholder as placeholderExtension } from '@codemirror/view'
+import { EditorView, keymap, lineNumbers, placeholder as placeholderExtension } from '@codemirror/view'
 import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
+import type { SyntaxNode } from '@lezer/common'
 import { tags } from '@lezer/highlight'
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -88,8 +90,18 @@ const foldGutterExtension = foldGutter({ markerDOM: open => createFoldMarker(ope
 const lintGutterExtension = lintGutter()
 const lineNumbersExtension = lineNumbers()
 const vimExtension = vim()
+const commentKeymapExtension = keymap.of([
+  { key: 'Mod-Shift-K', run: toggleLineComment },
+  { key: 'Mod-Shift-B', run: runBlockCommentCommand },
+])
 const jsonLanguageExtension = json()
 const json5LanguageExtension = json5Language()
+const json5CommentTokensExtension = json5LanguageExtension.language.data.of({
+  commentTokens: {
+    line: '//',
+    block: { open: '/*', close: '*/' },
+  },
+})
 const javascriptLanguageExtension = javascript({ typescript: true })
 const jsxLanguageExtension = javascript({ jsx: true, typescript: true })
 const htmlLanguageExtension = html()
@@ -391,6 +403,7 @@ function createFoldMarker(isOpen: boolean) {
 }
 
 let diagnosticMappingsInstalled = false
+let commentMappingsInstalled = false
 
 function installDiagnosticVimMappings() {
   if (diagnosticMappingsInstalled) return
@@ -415,7 +428,122 @@ function installDiagnosticVimMappings() {
   Vim.mapCommand('[d', 'action', 'previousDiagnosticAction', undefined, { silent: true })
 }
 
+function installCommentVimMappings() {
+  if (commentMappingsInstalled) return
+  commentMappingsInstalled = true
+
+  Vim.defineAction('toggleLineCommentAction', cm => {
+    const view = cm.cm6
+    if (!view) return
+    toggleLineComment(view)
+    view.focus()
+  })
+
+  Vim.defineAction('toggleBlockCommentAction', cm => {
+    const view = cm.cm6
+    if (!view) return
+    runBlockCommentCommand(view)
+    view.focus()
+  })
+
+  Vim.mapCommand('gc', 'action', 'toggleLineCommentAction', undefined, { silent: true, context: 'normal' })
+  Vim.mapCommand('gc', 'action', 'toggleLineCommentAction', undefined, { silent: true, context: 'visual' })
+  Vim.mapCommand('gb', 'action', 'toggleBlockCommentAction', undefined, { silent: true, context: 'normal' })
+  Vim.mapCommand('gb', 'action', 'toggleBlockCommentAction', undefined, { silent: true, context: 'visual' })
+}
+
 installDiagnosticVimMappings()
+installCommentVimMappings()
+
+function supportsCommentCommands(language: CodeEditorLanguage) {
+  return language === 'json5' || language === 'javascript' || language === 'jsx'
+}
+
+function runBlockCommentCommand(view: EditorView) {
+  const selection = view.state.selection.main
+  if (!selection.empty) {
+    return toggleBlockComment(view)
+  }
+
+  const originalCursor = selection.head
+
+  const commentTokens = view.state.languageDataAt('commentTokens', selection.head, 1)[0] as
+    | { block?: { open: string; close: string } }
+    | undefined
+  const blockTokens = commentTokens?.block
+  if (!blockTokens) {
+    return toggleBlockComment(view)
+  }
+
+  const blockComment = findEnclosingBlockComment(view.state, selection.head)
+  if (!blockComment) {
+    return toggleBlockComment(view)
+  }
+
+  const commentText = view.state.sliceDoc(blockComment.from, blockComment.to)
+  if (!commentText.startsWith(blockTokens.open) || !commentText.endsWith(blockTokens.close)) {
+    return toggleBlockComment(view)
+  }
+
+  const trailingWhitespaceBeforeClose = Number(/\s/.test(commentText.charAt(commentText.length - blockTokens.close.length - 1)))
+  const removedRanges = [
+    { from: blockComment.from, to: blockComment.from + blockTokens.open.length },
+    {
+      from: blockComment.to - blockTokens.close.length - trailingWhitespaceBeforeClose,
+      to: blockComment.to,
+    },
+  ]
+
+  let nextCursor = originalCursor
+  for (const range of removedRanges) {
+    if (nextCursor <= range.from) {
+      continue
+    }
+
+    if (nextCursor <= range.to) {
+      nextCursor = range.from
+      continue
+    }
+
+    nextCursor -= range.to - range.from
+  }
+
+  const innerSelection = {
+    anchor: blockComment.from + blockTokens.open.length,
+    head: blockComment.to - blockTokens.close.length,
+  }
+
+  view.dispatch({ selection: innerSelection })
+  const didToggle = toggleBlockComment(view)
+  if (!didToggle) {
+    return false
+  }
+
+  view.dispatch({ selection: { anchor: nextCursor } })
+  return true
+}
+
+function findEnclosingBlockComment(state: EditorState, position: number) {
+  const tree = syntaxTree(state)
+  const positions = [position, Math.min(position + 1, state.doc.length), Math.max(position - 1, 0)]
+  const sides: Array<-1 | 0 | 1> = [0, 1, -1]
+
+  for (const resolvedPosition of positions) {
+    for (const side of sides) {
+      let node: SyntaxNode | null = tree.resolveInner(resolvedPosition, side)
+
+      while (node) {
+        if (node.type.name === 'BlockComment') {
+          return { from: node.from, to: node.to }
+        }
+
+        node = node.parent
+      }
+    }
+  }
+
+  return null
+}
 
 function moveDiagnosticSelection(view: EditorView, direction: 'next' | 'previous') {
   const diagnostics: Array<{ from: number; to: number }> = []
@@ -763,9 +891,14 @@ export const CodeEditor = memo(function CodeEditor({
       selectionMatchTheme,
       selectionListenerExtension,
     ]
+    const canComment = !readOnly && supportsCommentCommands(language)
 
     if (resolvedVimMode) {
       nextExtensions.unshift(vimExtension)
+    }
+
+    if (canComment) {
+      nextExtensions.push(commentKeymapExtension)
     }
 
     if (compactTheme) {
@@ -782,6 +915,10 @@ export const CodeEditor = memo(function CodeEditor({
 
     if (languageExtension) {
       nextExtensions.push(languageExtension)
+    }
+
+    if (language === 'json5') {
+      nextExtensions.push(json5CommentTokensExtension)
     }
 
     if (readOnly) {
@@ -817,6 +954,7 @@ export const CodeEditor = memo(function CodeEditor({
     compactTheme,
     extensions,
     hideFocusOutline,
+    language,
     languageExtension,
     pasteHandlerExtension,
     placeholderValueExtension,
