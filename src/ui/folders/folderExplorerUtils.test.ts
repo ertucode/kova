@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { ExplorerItem } from '@common/Explorer'
-import { buildTree, createFolderTreeSearchManager, filterTreeWithDrafts, toSelectionKey, type SearchDraftEntries, type SearchTagNames } from './folderExplorerUtils'
+import {
+  createFolderTreeSearchManager,
+  filterTreeWithDrafts,
+  type SearchDraftEntries,
+  type SearchTagNames,
+} from './folderExplorerSearch'
+import { buildTree, toSelectionKey } from './folderExplorerUtils'
 
 describe('folderExplorerUtils search', () => {
   it('matches request text fuzzily and keeps the parent folder visible', () => {
