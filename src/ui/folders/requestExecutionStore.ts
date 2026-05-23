@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { errorResponseToMessage } from '@common/GenericError'
 import type {
   HttpSseStreamState,
+  ListRecentHttpRequestUsageResponse,
   RequestScriptError,
   RequestExecutionRecord,
   RequestHistoryListItem,
@@ -35,6 +36,11 @@ type RequestExecutionContext = {
   historyLoaded: boolean
   historyNextOffset: number | null
   historyKeepLast: number
+  recentHttpRequestUsageRequestIds: string[]
+  recentHttpRequestUsageCountByRequestId: Record<string, number>
+  recentHttpRequestUsageLoaded: boolean
+  recentHttpRequestUsageLoading: boolean
+  recentHttpRequestUsageVersion: number
   responseByRequestId: Record<string, SendRequestResponse | null>
   errorByRequestId: Record<string, string | null>
   scriptErrorsByRequestId: Record<string, RequestScriptError[]>
@@ -54,6 +60,11 @@ export const requestExecutionStore = createStore({
     historyLoaded: false,
     historyNextOffset: 0,
     historyKeepLast: normalizeKeepLast(initialSettings.keepLast),
+    recentHttpRequestUsageRequestIds: [],
+    recentHttpRequestUsageCountByRequestId: {},
+    recentHttpRequestUsageLoaded: false,
+    recentHttpRequestUsageLoading: false,
+    recentHttpRequestUsageVersion: 0,
     responseByRequestId: {},
     errorByRequestId: {},
     scriptErrorsByRequestId: {},
@@ -153,10 +164,77 @@ export const requestExecutionStore = createStore({
       ...context,
       historyKeepLast: normalizeKeepLast(event.keepLast),
     }),
-    historyEntryDeleted: (context, event: { id: string }) => ({
+    recentHttpRequestUsageLoadingStarted: context => ({
       ...context,
-      history: context.history.filter(entry => entry.id !== event.id),
+      recentHttpRequestUsageLoading: true,
     }),
+    recentHttpRequestUsageLoaded: (context, event: ListRecentHttpRequestUsageResponse) => ({
+      ...context,
+      recentHttpRequestUsageRequestIds: event.requestIds,
+      recentHttpRequestUsageCountByRequestId: buildRecentHttpRequestUsageCountByRequestId(event.requestIds),
+      recentHttpRequestUsageLoaded: true,
+      recentHttpRequestUsageLoading: false,
+      recentHttpRequestUsageVersion: context.recentHttpRequestUsageVersion + 1,
+    }),
+    recentHttpRequestUsageLoadFailed: context => ({
+      ...context,
+      recentHttpRequestUsageLoading: false,
+    }),
+    recentHttpRequestUsageRecorded: (context, event: { requestId: string }) => ({
+      ...context,
+      recentHttpRequestUsageRequestIds: [event.requestId, ...context.recentHttpRequestUsageRequestIds],
+      recentHttpRequestUsageCountByRequestId: addRecentHttpRequestUsage(
+        context.recentHttpRequestUsageCountByRequestId,
+        event.requestId
+      ),
+      recentHttpRequestUsageVersion: context.recentHttpRequestUsageVersion + 1,
+    }),
+    recentHttpRequestUsageDeleted: (context, event: { requestId: string }) => {
+      const nextRequestIds = removeRecentHttpRequestUsage(context.recentHttpRequestUsageRequestIds, event.requestId)
+
+      if (nextRequestIds === context.recentHttpRequestUsageRequestIds) {
+        return context
+      }
+
+      return {
+        ...context,
+        recentHttpRequestUsageRequestIds: nextRequestIds,
+        recentHttpRequestUsageCountByRequestId: buildRecentHttpRequestUsageCountByRequestId(nextRequestIds),
+        recentHttpRequestUsageVersion: context.recentHttpRequestUsageVersion + 1,
+      }
+    },
+    recentHttpRequestUsageTrimmed: (context, event: { keepLast: number }) => {
+      const nextRequestIds = context.recentHttpRequestUsageRequestIds.slice(0, event.keepLast)
+      if (nextRequestIds.length === context.recentHttpRequestUsageRequestIds.length) {
+        return context
+      }
+
+      return {
+        ...context,
+        recentHttpRequestUsageRequestIds: nextRequestIds,
+        recentHttpRequestUsageCountByRequestId: buildRecentHttpRequestUsageCountByRequestId(nextRequestIds),
+        recentHttpRequestUsageVersion: context.recentHttpRequestUsageVersion + 1,
+      }
+    },
+    historyEntryDeleted: (context, event: { id: string; requestId?: string }) => {
+      const nextRequestIds = event.requestId
+        ? removeRecentHttpRequestUsage(context.recentHttpRequestUsageRequestIds, event.requestId)
+        : context.recentHttpRequestUsageRequestIds
+
+      return {
+        ...context,
+        history: context.history.filter(entry => entry.id !== event.id),
+        recentHttpRequestUsageRequestIds: nextRequestIds,
+        recentHttpRequestUsageCountByRequestId:
+          nextRequestIds === context.recentHttpRequestUsageRequestIds
+            ? context.recentHttpRequestUsageCountByRequestId
+            : buildRecentHttpRequestUsageCountByRequestId(nextRequestIds),
+        recentHttpRequestUsageVersion:
+          nextRequestIds === context.recentHttpRequestUsageRequestIds
+            ? context.recentHttpRequestUsageVersion
+            : context.recentHttpRequestUsageVersion + 1,
+      }
+    },
     websocketSessionUpdated: (context, event: { session: WebSocketSessionRecord }) => ({
       ...context,
       websocketSessionByRequestId: {
@@ -192,6 +270,22 @@ export namespace RequestExecutionCoordinator {
     await refreshHistory()
   }
 
+  export async function ensureRecentHttpRequestUsageLoaded() {
+    const state = requestExecutionStore.getSnapshot().context
+    if (state.recentHttpRequestUsageLoaded || state.recentHttpRequestUsageLoading) {
+      return
+    }
+
+    requestExecutionStore.trigger.recentHttpRequestUsageLoadingStarted()
+
+    try {
+      const result = await getWindowElectron().listRecentHttpRequestUsage()
+      requestExecutionStore.trigger.recentHttpRequestUsageLoaded(result)
+    } catch {
+      requestExecutionStore.trigger.recentHttpRequestUsageLoadFailed()
+    }
+  }
+
   export async function refreshHistory() {
     await loadHistoryPage({ append: false })
   }
@@ -213,13 +307,16 @@ export namespace RequestExecutionCoordinator {
     requestExecutionStore.trigger.historyKeepLastChanged({ keepLast })
   }
 
-  export async function deleteHistoryEntry(id: string) {
-    const result = await getWindowElectron().deleteRequestHistoryEntry({ id })
+  export async function deleteHistoryEntry(input: { id: string; itemType: 'http' | 'websocket'; requestId?: string }) {
+    const result = await getWindowElectron().deleteRequestHistoryEntry({ id: input.id })
     if (!result.success) {
       throw new Error(errorResponseToMessage(result.error))
     }
 
-    requestExecutionStore.trigger.historyEntryDeleted({ id })
+    requestExecutionStore.trigger.historyEntryDeleted({
+      id: input.id,
+      requestId: input.itemType === 'http' ? input.requestId : undefined,
+    })
   }
 
   export async function trimHistory() {
@@ -230,6 +327,11 @@ export namespace RequestExecutionCoordinator {
     }
 
     await refreshHistory()
+    requestExecutionStore.trigger.recentHttpRequestUsageTrimmed({ keepLast })
+  }
+
+  export function recordRecentHttpRequestUsage(requestId: string) {
+    requestExecutionStore.trigger.recentHttpRequestUsageRecorded({ requestId })
   }
 }
 
@@ -337,6 +439,29 @@ function normalizeSendRequestResponse(event: {
     consoleEntries: event.response.consoleEntries ?? [],
     execution: execution ?? event.response.execution,
   }
+}
+
+function buildRecentHttpRequestUsageCountByRequestId(requestIds: string[]) {
+  return requestIds.reduce<Record<string, number>>((counts, requestId) => {
+    counts[requestId] = (counts[requestId] ?? 0) + 1
+    return counts
+  }, {})
+}
+
+function addRecentHttpRequestUsage(counts: Record<string, number>, requestId: string) {
+  return {
+    ...counts,
+    [requestId]: (counts[requestId] ?? 0) + 1,
+  }
+}
+
+function removeRecentHttpRequestUsage(requestIds: string[], requestId: string) {
+  const requestIndex = requestIds.indexOf(requestId)
+  if (requestIndex < 0) {
+    return requestIds
+  }
+
+  return requestIds.slice(0, requestIndex).concat(requestIds.slice(requestIndex + 1))
 }
 
 function normalizeScriptErrors(errors: RequestScriptError[]): RequestScriptError[] {

@@ -244,7 +244,11 @@ export function ExecutionCard({
             className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
             onClick={event => {
               event.stopPropagation()
-              void RequestExecutionCoordinator.deleteHistoryEntry(execution.id)
+              void RequestExecutionCoordinator.deleteHistoryEntry({
+                id: execution.id,
+                itemType: 'http',
+                requestId: execution.requestId,
+              })
                 .then(() => {
                   onDelete?.(execution.id)
                 })
@@ -354,7 +358,10 @@ function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) 
             className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
             onClick={event => {
               event.stopPropagation()
-              void RequestExecutionCoordinator.deleteHistoryEntry(session.id).catch(error => {
+              void RequestExecutionCoordinator.deleteHistoryEntry({
+                id: session.id,
+                itemType: 'websocket',
+              }).catch(error => {
                 console.error('deleteHistoryEntry failed', error)
               })
             }}

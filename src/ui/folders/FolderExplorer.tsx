@@ -39,6 +39,7 @@ import { filterTreeWithDrafts } from './folderExplorerSearch'
 import { buildTree, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
+import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { dialogActions } from '@/global/dialogStore'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
@@ -57,6 +58,11 @@ export function FolderExplorer() {
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const selectionScrollTarget = useSelector(folderExplorerEditorStore, state => state.context.selectionScrollTarget)
   const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
+  const recentHttpRequestUsageCountByRequestId = useSelector(
+    requestExecutionStore,
+    state => state.context.recentHttpRequestUsageCountByRequestId
+  )
+  const recentHttpRequestUsageVersion = useSelector(requestExecutionStore, state => state.context.recentHttpRequestUsageVersion)
   const tagItems = useSelector(tagsStore, state => state.context.items)
   const tagAssignments = useSelector(tagsStore, state => state.context.assignments)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
@@ -90,10 +96,11 @@ export function FolderExplorer() {
     void FolderExplorerCoordinator.initialize()
     void EnvironmentCoordinator.loadEnvironments()
     void TagsCoordinator.loadTags()
+    void RequestExecutionCoordinator.ensureRecentHttpRequestUsageLoaded()
   }, [])
 
   const { roots, itemMap } = useMemo(() => buildTree(items), [items])
-  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const normalizedSearch = localSearchQuery.trim().toLowerCase()
   const tagNamesBySelection = useMemo(() => {
     const tagNameById = new Map(tagItems.map(item => [item.id, item.name]))
     return Object.fromEntries(
@@ -111,8 +118,15 @@ export function FolderExplorer() {
     )
   }, [items, tagAssignments, tagItems])
   const visibleRoots = useMemo(
-    () => filterTreeWithDrafts(roots, normalizedSearch, entries, tagNamesBySelection),
-    [entries, roots, normalizedSearch, tagNamesBySelection]
+    () => filterTreeWithDrafts(
+      roots,
+      normalizedSearch,
+      entries,
+      tagNamesBySelection,
+      recentHttpRequestUsageCountByRequestId,
+      recentHttpRequestUsageVersion
+    ),
+    [entries, recentHttpRequestUsageCountByRequestId, recentHttpRequestUsageVersion, roots, normalizedSearch, tagNamesBySelection]
   )
   const visibleNodes = useMemo(
     () => flattenVisibleNodes(visibleRoots, normalizedSearch.length > 0, expandedIds),
@@ -205,6 +219,17 @@ export function FolderExplorer() {
   }, [handleTagShortcut])
 
   const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      const firstRequestNode = visibleNodes.find(node => node.itemType === 'request')
+      if (!firstRequestNode) {
+        return
+      }
+
+      event.preventDefault()
+      void FolderExplorerCoordinator.selectItem({ itemType: 'request', id: firstRequestNode.id })
+      return
+    }
+
     if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
       return
     }

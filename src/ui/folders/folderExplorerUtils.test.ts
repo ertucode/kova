@@ -134,6 +134,64 @@ describe('folderExplorerUtils search', () => {
 
     expect(secondResult).toBe(firstResult)
   })
+
+  it('ranks an exact request name above a longer prefix match', () => {
+    const roots = createRoots([
+      requestItem({ id: 'request-1', name: 'Login Validate', method: 'POST', url: '/auth/login/validate' }),
+      requestItem({ id: 'request-2', name: 'Login', method: 'POST', url: '/auth/login' }),
+    ])
+
+    const visibleRoots = filterTreeWithDrafts(roots, 'login')
+
+    expect(visibleRoots.map(node => node.name)).toEqual(['Login', 'Login Validate'])
+  })
+
+  it('ranks an exact subpath match above a fuzzier request name match', () => {
+    const roots = createRoots([
+      requestItem({ id: 'request-1', name: 'Session Start', method: 'POST', url: '/auth/login' }),
+      requestItem({ id: 'request-2', name: 'Logging Session', method: 'POST', url: '/auth/session' }),
+    ])
+
+    const visibleRoots = filterTreeWithDrafts(roots, 'login')
+
+    expect(visibleRoots.map(node => node.name)).toEqual(['Session Start', 'Logging Session'])
+  })
+
+  it('uses recent request frequency to break ties between similarly relevant matches', () => {
+    const roots = createRoots([
+      requestItem({ id: 'request-1', name: 'Login One', method: 'POST', url: '/auth/login-one' }),
+      requestItem({ id: 'request-2', name: 'Login Two', method: 'POST', url: '/auth/login-two' }),
+    ])
+
+    const visibleRoots = filterTreeWithDrafts(
+      roots,
+      'login',
+      undefined,
+      undefined,
+      { 'request-1': 2, 'request-2': 8 },
+      1
+    )
+
+    expect(visibleRoots.map(node => node.name)).toEqual(['Login Two', 'Login One'])
+  })
+
+  it('keeps an exact request name ahead of a more frequently used broader match', () => {
+    const roots = createRoots([
+      requestItem({ id: 'request-1', name: 'Login Validate', method: 'POST', url: '/auth/login/validate' }),
+      requestItem({ id: 'request-2', name: 'Login', method: 'POST', url: '/auth/login' }),
+    ])
+
+    const visibleRoots = filterTreeWithDrafts(
+      roots,
+      'login',
+      undefined,
+      undefined,
+      { 'request-1': 50, 'request-2': 1 },
+      1
+    )
+
+    expect(visibleRoots.map(node => node.name)).toEqual(['Login', 'Login Validate'])
+  })
 })
 
 function createRoots(items: ExplorerItem[]) {

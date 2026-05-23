@@ -53,6 +53,7 @@ import {
   type GetRequestHistoryCountResponse,
   type GetRequestInput,
   type HttpRequestRecord,
+  type ListRecentHttpRequestUsageResponse,
   type ListRequestHistoryInput,
   type ListRequestHistoryResponse,
   type ListWebSocketSavedMessagesInput,
@@ -230,6 +231,7 @@ export type EventResponseMapping = {
   updateWebSocketSavedMessage: Promise<GenericResult<WebSocketSavedMessageRecord>>
   deleteWebSocketSavedMessage: Promise<GenericResult<void>>
   getRequestHistoryCount: Promise<GetRequestHistoryCountResponse>
+  listRecentHttpRequestUsage: Promise<ListRecentHttpRequestUsageResponse>
   listRequestHistory: Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: Promise<GenericResult<void>>
   trimRequestHistory: Promise<GenericResult<void>>
@@ -344,6 +346,7 @@ export type EventRequestMapping = {
   updateWebSocketSavedMessage: UpdateWebSocketSavedMessageInput
   deleteWebSocketSavedMessage: DeleteWebSocketSavedMessageInput
   getRequestHistoryCount: GetRequestHistoryCountInput
+  listRecentHttpRequestUsage: void
   listRequestHistory: ListRequestHistoryInput
   deleteRequestHistoryEntry: DeleteRequestHistoryEntryInput
   trimRequestHistory: TrimRequestHistoryInput
@@ -470,6 +473,7 @@ export type WindowElectron = {
   updateWebSocketSavedMessage: (input: UpdateWebSocketSavedMessageInput) => Promise<GenericResult<WebSocketSavedMessageRecord>>
   deleteWebSocketSavedMessage: (input: DeleteWebSocketSavedMessageInput) => Promise<GenericResult<void>>
   getRequestHistoryCount: (input: GetRequestHistoryCountInput) => Promise<GetRequestHistoryCountResponse>
+  listRecentHttpRequestUsage: () => Promise<ListRecentHttpRequestUsageResponse>
   listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: (input: DeleteRequestHistoryEntryInput) => Promise<GenericResult<void>>
   trimRequestHistory: (input: TrimRequestHistoryInput) => Promise<GenericResult<void>>

@@ -335,6 +335,10 @@ export type GetRequestHistoryCountResponse = {
   totalCount: number
 }
 
+export type ListRecentHttpRequestUsageResponse = {
+  requestIds: string[]
+}
+
 export type DeleteRequestHistoryEntryInput = {
   id: string
 }

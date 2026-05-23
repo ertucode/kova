@@ -24,6 +24,7 @@ import {
 import {
   deleteRequestHistoryEntry,
   getRequestHistoryCount,
+  listRecentHttpRequestUsage,
   listRequestHistory,
   trimRequestHistory,
 } from './db/request-history.js'
@@ -788,6 +789,10 @@ app.on('ready', async () => {
 
   ipcHandle('getRequestHistoryCount', async input => {
     return getRequestHistoryCount(input)
+  })
+
+  ipcHandle('listRecentHttpRequestUsage', async () => {
+    return listRecentHttpRequestUsage()
   })
 
   ipcHandle('deleteRequestHistoryEntry', async input => {

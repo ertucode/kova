@@ -4,6 +4,7 @@ import type { DetailsDraft, TreeNode } from './folderExplorerTypes'
 
 export type SearchDraftEntries = Record<string, { base: DetailsDraft | null; current: DetailsDraft | null } | undefined>
 export type SearchTagNames = Record<string, string[] | undefined>
+export type SearchRequestUsageCounts = Record<string, number | undefined>
 
 type SearchDocument = {
   selectionKey: string
@@ -46,7 +47,9 @@ export type FolderTreeSearchManager = {
     nodes: TreeNode[],
     query: string,
     entries?: SearchDraftEntries,
-    tagNamesBySelection?: SearchTagNames
+    tagNamesBySelection?: SearchTagNames,
+    requestUsageCountByRequestId?: SearchRequestUsageCounts,
+    requestUsageVersion?: number
   ) => TreeNode[]
 }
 
@@ -54,7 +57,7 @@ export function createFolderTreeSearchManager(): FolderTreeSearchManager {
   const bundleCacheByNodes = new WeakMap<TreeNode[], EntriesBundleCache>()
 
   return {
-    filter(nodes, query, entries, tagNamesBySelection) {
+    filter(nodes, query, entries, tagNamesBySelection, requestUsageCountByRequestId, requestUsageVersion = 0) {
       const normalizedQuery = query.trim().toLowerCase()
       if (!normalizedQuery) {
         return nodes
@@ -66,14 +69,14 @@ export function createFolderTreeSearchManager(): FolderTreeSearchManager {
       }
 
       const searchBundle = getSearchBundle(nodes, entries, tagNamesBySelection)
-      const cacheKey = buildQueryCacheKey(termGroups)
+      const cacheKey = buildQueryCacheKey(termGroups, requestUsageVersion)
       const cachedResult = searchBundle.queryResultCache.get(cacheKey)
       if (cachedResult) {
         return cachedResult
       }
 
       const scoreByKey = searchMatchingScores(searchBundle, termGroups)
-      const filteredTree = filterNodesByMatchingScore(nodes, scoreByKey)
+      const filteredTree = filterNodesByMatchingScore(nodes, scoreByKey, termGroups, entries, requestUsageCountByRequestId)
       searchBundle.queryResultCache.set(cacheKey, filteredTree)
       return filteredTree
     },
@@ -116,9 +119,18 @@ export function filterTreeWithDrafts(
   nodes: TreeNode[],
   query: string,
   entries?: SearchDraftEntries,
-  tagNamesBySelection?: SearchTagNames
+  tagNamesBySelection?: SearchTagNames,
+  requestUsageCountByRequestId?: SearchRequestUsageCounts,
+  requestUsageVersion?: number
 ): TreeNode[] {
-  return defaultFolderTreeSearchManager.filter(nodes, query, entries, tagNamesBySelection)
+  return defaultFolderTreeSearchManager.filter(
+    nodes,
+    query,
+    entries,
+    tagNamesBySelection,
+    requestUsageCountByRequestId,
+    requestUsageVersion
+  )
 }
 
 export function getSearchParts(node: TreeNode, entries?: SearchDraftEntries): string[] {
@@ -177,8 +189,8 @@ function parseSearchTerms(query: string): SearchTermGroups {
   }
 }
 
-function buildQueryCacheKey({ textTerms, tagTerms }: SearchTermGroups): string {
-  return `text:${textTerms.join('\u0001')}|tags:${tagTerms.join('\u0001')}`
+function buildQueryCacheKey({ textTerms, tagTerms }: SearchTermGroups, requestUsageVersion: number): string {
+  return `text:${textTerms.join('\u0001')}|tags:${tagTerms.join('\u0001')}|usage:${requestUsageVersion}`
 }
 
 function flattenSearchDocuments(
@@ -316,31 +328,53 @@ function intersectMatchingScores(
   )
 }
 
-function filterNodesByMatchingScore(nodes: TreeNode[], scoreByKey: Map<string, number>): TreeNode[] {
+function filterNodesByMatchingScore(
+  nodes: TreeNode[],
+  scoreByKey: Map<string, number>,
+  termGroups: SearchTermGroups,
+  entries?: SearchDraftEntries,
+  requestUsageCountByRequestId?: SearchRequestUsageCounts
+): TreeNode[] {
   return nodes
-    .map((node, index) => buildRankedNode(node, index, scoreByKey))
+    .map((node, index) => buildRankedNode(node, index, scoreByKey, termGroups, entries, requestUsageCountByRequestId))
     .filter((entry): entry is RankedTreeNode => entry !== null)
-    .sort((left, right) => left.sortScore - right.sortScore || left.originalIndex - right.originalIndex)
+    .sort(compareRankedTreeNodes)
     .map(entry => entry.node)
 }
 
 type RankedTreeNode = {
   node: TreeNode
-  sortScore: number
+  sortRank: SearchRank
   originalIndex: number
 }
 
-function buildRankedNode(node: TreeNode, originalIndex: number, scoreByKey: Map<string, number>): RankedTreeNode | null {
+type SearchRank = {
+  exactNameMatch: boolean
+  exactSubpathMatch: boolean
+  prefixNameMatch: boolean
+  prefixSubpathMatch: boolean
+  usageCount: number
+  score: number
+}
+
+function buildRankedNode(
+  node: TreeNode,
+  originalIndex: number,
+  scoreByKey: Map<string, number>,
+  termGroups: SearchTermGroups,
+  entries?: SearchDraftEntries,
+  requestUsageCountByRequestId?: SearchRequestUsageCounts
+): RankedTreeNode | null {
   const rankedChildren = node.children
-    .map((child, childIndex) => buildRankedNode(child, childIndex, scoreByKey))
+    .map((child, childIndex) => buildRankedNode(child, childIndex, scoreByKey, termGroups, entries, requestUsageCountByRequestId))
     .filter((entry): entry is RankedTreeNode => entry !== null)
-    .sort((left, right) => left.sortScore - right.sortScore || left.originalIndex - right.originalIndex)
+    .sort(compareRankedTreeNodes)
 
-  const ownScore = scoreByKey.get(toSelectionKey(node))
-  const bestChildScore = rankedChildren[0]?.sortScore
-  const sortScore = Math.min(ownScore ?? Number.POSITIVE_INFINITY, bestChildScore ?? Number.POSITIVE_INFINITY)
+  const ownRank = buildOwnSearchRank(node, scoreByKey, termGroups, entries, requestUsageCountByRequestId)
+  const bestChildRank = rankedChildren[0]?.sortRank
+  const sortRank = pickBetterSearchRank(ownRank, bestChildRank)
 
-  if (!Number.isFinite(sortScore)) {
+  if (!sortRank) {
     return null
   }
 
@@ -349,7 +383,96 @@ function buildRankedNode(node: TreeNode, originalIndex: number, scoreByKey: Map<
       ...node,
       children: rankedChildren.map(entry => entry.node),
     },
-    sortScore,
+    sortRank,
     originalIndex,
   }
+}
+
+function compareRankedTreeNodes(left: RankedTreeNode, right: RankedTreeNode) {
+  return compareSearchRanks(left.sortRank, right.sortRank) || left.originalIndex - right.originalIndex
+}
+
+function buildOwnSearchRank(
+  node: TreeNode,
+  scoreByKey: Map<string, number>,
+  { textTerms }: SearchTermGroups,
+  entries?: SearchDraftEntries,
+  requestUsageCountByRequestId?: SearchRequestUsageCounts
+): SearchRank | null {
+  const score = scoreByKey.get(toSelectionKey(node))
+  if (score === undefined) {
+    return null
+  }
+
+  const requestMetadata = getRequestSearchMetadata(node, entries)
+  return {
+    exactNameMatch: requestMetadata ? requestMetadata.normalizedName === textTerms.join(' ') : false,
+    exactSubpathMatch: requestMetadata ? textTerms.some(term => requestMetadata.pathSegments.includes(term)) : false,
+    prefixNameMatch: requestMetadata ? startsWithCompositeTerm(requestMetadata.normalizedName, textTerms) : false,
+    prefixSubpathMatch: requestMetadata ? textTerms.some(term => requestMetadata.pathSegments.some(segment => segment.startsWith(term))) : false,
+    usageCount: node.itemType === 'request' ? (requestUsageCountByRequestId?.[node.id] ?? 0) : 0,
+    score,
+  }
+}
+
+function pickBetterSearchRank(left: SearchRank | null, right: SearchRank | null): SearchRank | null {
+  if (!left) {
+    return right
+  }
+
+  if (!right) {
+    return left
+  }
+
+  return compareSearchRanks(left, right) <= 0 ? left : right
+}
+
+function compareSearchRanks(left: SearchRank, right: SearchRank) {
+  return (
+    compareDescendingBoolean(left.exactNameMatch, right.exactNameMatch) ||
+    compareDescendingBoolean(left.exactSubpathMatch, right.exactSubpathMatch) ||
+    compareDescendingBoolean(left.prefixNameMatch, right.prefixNameMatch) ||
+    compareDescendingBoolean(left.prefixSubpathMatch, right.prefixSubpathMatch) ||
+    right.usageCount - left.usageCount ||
+    left.score - right.score
+  )
+}
+
+function compareDescendingBoolean(left: boolean, right: boolean) {
+  return Number(right) - Number(left)
+}
+
+function startsWithCompositeTerm(value: string, terms: string[]) {
+  const joinedTerms = terms.join(' ')
+  return Boolean(joinedTerms) && value.startsWith(joinedTerms)
+}
+
+function getRequestSearchMetadata(node: TreeNode, entries?: SearchDraftEntries) {
+  if (node.itemType !== 'request') {
+    return null
+  }
+
+  const selectionKey = toSelectionKey(node)
+  const entry = entries?.[selectionKey]
+  const currentDraft = entry?.current?.itemType === 'request' ? entry.current : null
+  const baseDraft = entry?.base?.itemType === 'request' ? entry.base : null
+  const normalizedName = normalizeSearchValue(currentDraft?.name ?? baseDraft?.name ?? node.name)
+  const normalizedUrl = normalizeSearchValue(currentDraft?.url ?? baseDraft?.url ?? node.url)
+
+  return {
+    normalizedName,
+    pathSegments: extractPathSegments(normalizedUrl),
+  }
+}
+
+function normalizeSearchValue(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function extractPathSegments(value: string) {
+  return value
+    .split(/[/?#&=]+/u)
+    .map(segment => segment.replace(/[^\p{L}\p{N}]+/gu, ' ').trim())
+    .flatMap(segment => segment.split(/\s+/u))
+    .filter(Boolean)
 }

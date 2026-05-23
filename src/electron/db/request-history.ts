@@ -5,6 +5,7 @@ import type {
   DeleteRequestHistoryEntryInput,
   GetRequestHistoryCountInput,
   GetRequestHistoryCountResponse,
+  ListRecentHttpRequestUsageResponse,
   ListRequestHistoryInput,
   ListRequestHistoryResponse,
   RequestHistoryListItem,
@@ -22,6 +23,7 @@ type RequestHistoryRow = typeof requestHistory.$inferSelect
 const MAX_HISTORY_PAGE_SIZE = 20
 const MAX_KEEP_LAST = 1000
 const MAX_RESPONSE_BODY_BYTES = 500 * 1024
+const RECENT_HTTP_REQUEST_USAGE_LIMIT = 1000
 
 export async function listRequestHistory(input: ListRequestHistoryInput): Promise<ListRequestHistoryResponse> {
   const db = getDb()
@@ -65,6 +67,18 @@ export async function getRequestHistoryCount(input: GetRequestHistoryCountInput)
     .get()?.count ?? 0
 
   return { totalCount }
+}
+
+export async function listRecentHttpRequestUsage(): Promise<ListRecentHttpRequestUsageResponse> {
+  const requestIds = getDb()
+    .select({ requestId: requestHistory.requestId })
+    .from(requestHistory)
+    .orderBy(desc(requestHistory.createdAt), desc(requestHistory.id))
+    .limit(RECENT_HTTP_REQUEST_USAGE_LIMIT)
+    .all()
+    .map(row => row.requestId)
+
+  return { requestIds }
 }
 
 export async function persistRequestHistory(input: { execution: RequestExecutionRecord; keepLast: number }) {

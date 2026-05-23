@@ -1,1 +1,0 @@
-- Request arama daha zeki olmalı

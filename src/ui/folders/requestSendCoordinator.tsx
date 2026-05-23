@@ -80,6 +80,9 @@ export namespace RequestSendCoordinator {
       requestDraft: latestDraft,
       response: result.data,
     })
+    if (latestDraft.saveToHistory) {
+      RequestExecutionCoordinator.recordRecentHttpRequestUsage(selected.id)
+    }
     void RequestExecutionCoordinator.refreshHistory()
   }
 
@@ -115,6 +118,10 @@ export namespace RequestSendCoordinator {
 
     if (!result.success) {
       throw new Error(errorResponseToMessage(result.error))
+    }
+
+    if (requestDraft.saveToHistory) {
+      RequestExecutionCoordinator.recordRecentHttpRequestUsage(requestId)
     }
 
     return {
