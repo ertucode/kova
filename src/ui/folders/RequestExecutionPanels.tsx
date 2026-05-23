@@ -6,6 +6,7 @@ import {
   CopyIcon,
   SaveIcon,
   SearchIcon,
+  SendIcon,
   TerminalSquareIcon,
   Trash2Icon,
 } from 'lucide-react'
@@ -24,6 +25,7 @@ import { Tooltip } from '../components/Tooltip'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { SseTranscript } from './SseTranscript'
 import { formatBytes } from '@common/formatBytes'
+import { EnvironmentCoordinator } from './environmentCoordinator'
 
 export function HistoryPanel() {
   const history = useSelector(requestExecutionStore, state => state.context.history)
@@ -218,6 +220,18 @@ export function ExecutionCard({
             className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
             onClick={event => {
               event.stopPropagation()
+              void openRequestFromHistory(execution.requestId)
+            }}
+            aria-label="Go to request"
+            title="Go to Request"
+          >
+            <SendIcon className="size-4" />
+          </button>
+          <button
+            type="button"
+            className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
+            onClick={event => {
+              event.stopPropagation()
               void saveExecutionAsExample(execution)
             }}
             aria-label="Save as example"
@@ -311,6 +325,18 @@ function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) 
           </div>
         </button>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="rounded-xl px-3 py-2 text-xs font-medium text-base-content/50 transition hover:bg-base-100/80 hover:text-base-content"
+            onClick={event => {
+              event.stopPropagation()
+              void openRequestFromHistory(session.requestId)
+            }}
+            aria-label="Go to request"
+            title="Go to Request"
+          >
+            <SendIcon className="size-4" />
+          </button>
           <button
             type="button"
             className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
@@ -600,6 +626,11 @@ async function saveExecutionAsExample(execution: RequestExecutionRecord) {
     title: 'Example saved',
     message: `Saved response example for ${execution.requestName}.`,
   })
+}
+
+async function openRequestFromHistory(requestId: string) {
+  EnvironmentCoordinator.setSidebarTab('requests')
+  await FolderExplorerCoordinator.selectItem({ itemType: 'request', id: requestId })
 }
 
 async function saveWebSocketSessionAsExample(session: WebSocketSessionRecord) {
