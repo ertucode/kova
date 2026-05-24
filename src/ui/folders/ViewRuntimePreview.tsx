@@ -54,6 +54,7 @@ export function ViewRuntimePreview({
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [isIframeReady, setIsIframeReady] = useState(false)
+  const lastHandledRunTriggerVersionRef = useRef(runTriggerVersion)
 
   const payload = useMemo<ViewRuntimePayload>(() => {
     const activeEnvironments = environments
@@ -179,6 +180,12 @@ export function ViewRuntimePreview({
     if (!isIframeReady || !iframeRef.current?.contentWindow) {
       return
     }
+
+    if (runTriggerVersion === lastHandledRunTriggerVersionRef.current) {
+      return
+    }
+
+    lastHandledRunTriggerVersionRef.current = runTriggerVersion
 
     iframeRef.current.contentWindow.postMessage({ type: VIEW_RUNTIME_TRIGGER_RUN_EVENT }, '*')
   }, [isIframeReady, runTriggerVersion])
