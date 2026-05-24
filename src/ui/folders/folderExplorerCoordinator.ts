@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import type { FolderExplorerTabRecord, RequestMetaTab } from '@common/FolderExplorerTabs'
 import type { HttpAuth } from '@common/Auth'
 import type { FolderRecord } from '@common/Folders'
@@ -34,6 +35,7 @@ import {
 } from './folderExplorerUtils'
 import type { MoveExplorerItemInput } from '@common/Explorer'
 import { ChangesCoordinator } from './changesCoordinator'
+import { formatScriptBlock } from './formatScriptBlock'
 
 const loadTokens: Record<string, number> = {}
 const saveTokens: Record<string, number> = {}
@@ -57,6 +59,7 @@ type MoveUndoEntry = {
 let isUndoingMove = false
 const moveUndoStack: MoveUndoEntry[] = []
 let persistUnsavedDraftsTimeout: ReturnType<typeof setTimeout> | null = null
+let selectedSaveHandler: (() => Promise<void>) | null = null
 
 export namespace FolderExplorerCoordinator {
   export async function initialize() {
@@ -371,9 +374,28 @@ export namespace FolderExplorerCoordinator {
   }
 
   export async function saveSelectedItem() {
+    if (selectedSaveHandler) {
+      await selectedSaveHandler()
+      return
+    }
+
+    await saveSelectedItemDirect()
+  }
+
+  export async function saveSelectedItemDirect(options?: { skipFormatting?: boolean }) {
     const selection = folderExplorerEditorStore.getSnapshot().context.selected
     if (!selection) return
-    await saveItem(selection)
+    await saveItem(selection, options)
+  }
+
+  export function registerSelectedSaveHandler(handler: (() => Promise<void>) | null) {
+    selectedSaveHandler = handler
+
+    return () => {
+      if (selectedSaveHandler === handler) {
+        selectedSaveHandler = null
+      }
+    }
   }
 
   export async function duplicateSelectedRequest() {
@@ -1238,13 +1260,24 @@ async function loadItem(selection: Selection) {
   persistUnsavedDrafts()
 }
 
-async function saveItem(selection: Selection) {
+async function saveItem(selection: Selection, options?: { skipFormatting?: boolean }) {
   const key = toSelectionKey(selection)
-  const entry = folderExplorerEditorStore.getSnapshot().context.entries[key]
-  if (!entry?.current || !isEntryDirty(entry)) return
+  const initialEntry = folderExplorerEditorStore.getSnapshot().context.entries[key]
+  if (!initialEntry?.current || !isEntryDirty(initialEntry)) return
 
+  let draft = initialEntry.current
+  if (!options?.skipFormatting && getFormatScriptBlocksOnSave()) {
+    draft = await maybeFormatDetailsDraftScriptsForSave(draft)
+
+    if (serializeDetails(draft) !== initialEntry.serializedCurrent) {
+      folderExplorerEditorStore.trigger.entryDraftUpdated({ key, draft })
+      persistUnsavedDrafts()
+    }
+  }
+
+  const entry = folderExplorerEditorStore.getSnapshot().context.entries[key] ?? initialEntry
   const version = entry.version
-  const draft = entry.current
+  draft = entry.current ?? draft
   const token = (saveTokens[key] ?? 0) + 1
   saveTokens[key] = token
   folderExplorerEditorStore.trigger.entrySavingStarted({ key })
@@ -1332,6 +1365,44 @@ async function saveItem(selection: Selection) {
   })
   patchTreeItem(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord)
   persistUnsavedDrafts()
+}
+
+async function maybeFormatDetailsDraftScriptsForSave(draft: DetailsDraft) {
+  if (draft.itemType === 'folder') {
+    return {
+      ...draft,
+      preRequestScript: await maybeFormatScriptBlock(draft.preRequestScript, 'Pre-request script'),
+      postRequestScript: await maybeFormatScriptBlock(draft.postRequestScript, 'Post-request script'),
+    }
+  }
+
+  if (draft.itemType === 'request') {
+    return {
+      ...draft,
+      preRequestScript: await maybeFormatScriptBlock(draft.preRequestScript, 'Pre-request script'),
+      postRequestScript: await maybeFormatScriptBlock(draft.postRequestScript, 'Post-request script'),
+      responseVisualizer: await maybeFormatScriptBlock(draft.responseVisualizer, 'Response visualizer'),
+    }
+  }
+
+  return draft
+}
+
+async function maybeFormatScriptBlock(value: string, label: string) {
+  if (value.trim().length === 0) {
+    return value
+  }
+
+  try {
+    return await formatScriptBlock(value)
+  } catch {
+    toast.show({
+      severity: 'warning',
+      title: 'Script formatting failed',
+      message: `${label} was saved without formatting.`,
+    })
+    return value
+  }
 }
 
 function patchTreeItem(selection: Selection, value: FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord) {

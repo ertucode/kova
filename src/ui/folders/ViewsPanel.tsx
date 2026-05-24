@@ -5,13 +5,15 @@ import type { ExplorerItem, ExplorerRequestItem } from '@common/Explorer'
 import { parseKeyValueRows } from '@common/KeyValueRows'
 import type { ViewLayoutMode, ViewRecord } from '@common/Views'
 import { getWindowElectron } from '@/getWindowElectron'
+import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import { dialogActions } from '@/global/dialogStore'
 import { toast } from '@/lib/components/toast'
 import { Tooltip } from '../components/Tooltip'
-import { CodeEditor } from './CodeEditor'
+import { CodeEditor, type CodeEditorHandle, type CodeEditorSelection } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { environmentEditorStore } from './environmentEditorStore'
+import { formatScriptBlockWithCursor } from './formatScriptBlock'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { buildHttpRequestPaths } from './folderExplorerUtils'
@@ -51,6 +53,9 @@ export function ViewsPanel() {
     startX: number
     startY: number
   } | null>(null)
+  const viewEditorRef = useRef<CodeEditorHandle | null>(null)
+  const viewSelectionRef = useRef<CodeEditorSelection | null>(null)
+  const pendingSelectionRestoreRef = useRef<{ viewId: string; selection: CodeEditorSelection; code: string } | null>(null)
 
   const sharedScriptsRef = useRef(visibleSharedScripts)
   const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
@@ -204,6 +209,20 @@ export function ViewsPanel() {
   const selectedEntry = selectedId ? entries[selectedId] ?? null : null
   const selectedDraft = selectedEntry?.current ?? null
   const selectedSavedView = selectedEntry?.saved ?? null
+
+  useEffect(() => {
+    const pendingSelectionRestore = pendingSelectionRestoreRef.current
+    if (!pendingSelectionRestore || !selectedId || pendingSelectionRestore.viewId !== selectedId) {
+      return
+    }
+
+    if (selectedDraft?.code !== pendingSelectionRestore.code) {
+      return
+    }
+
+    pendingSelectionRestoreRef.current = null
+  }, [selectedDraft?.code, selectedId])
+
   const runtimeSharedScripts = useMemo(
     () => visibleSharedScripts.filter(script => script.targets.includes('view-runtime')),
     [visibleSharedScripts]
@@ -363,7 +382,14 @@ export function ViewsPanel() {
                 }
               >
                 <CodeEditor
+                  ref={viewEditorRef}
                   value={selectedDraft.code}
+                  externalSelection={
+                    pendingSelectionRestoreRef.current?.viewId === selectedDraft.id
+                      && pendingSelectionRestoreRef.current.code === selectedDraft.code
+                      ? pendingSelectionRestoreRef.current.selection
+                      : null
+                  }
                   language="jsx"
                   size="small"
                   showLineNumbers
@@ -372,6 +398,9 @@ export function ViewsPanel() {
                   placeholder={DEFAULT_VIEW_SOURCE}
                   extensions={viewRuntimeExtensions}
                   onChange={value => updateDraft(selectedDraft.id, draft => ({ ...draft, code: value }))}
+                  onSelectionChange={selection => {
+                    viewSelectionRef.current = selection
+                  }}
                   onBlur={() => undefined}
                 />
               </section>
@@ -458,39 +487,94 @@ export function ViewsPanel() {
       return
     }
 
+    let draftToSave = latestDraft
+    if (getFormatScriptBlocksOnSave() && latestDraft.code.trim().length > 0) {
+      try {
+        const selection = viewSelectionRef.current
+        const cursorOffset = Math.max(0, Math.min(selection?.head ?? 0, latestDraft.code.length))
+        const { formatted, cursorOffset: formattedCursorOffset } = await formatScriptBlockWithCursor(
+          latestDraft.code,
+          cursorOffset
+        )
+        const formattedCode = formatted
+        if (formattedCode !== latestDraft.code) {
+          draftToSave = { ...latestDraft, code: formattedCode }
+          pendingSelectionRestoreRef.current = {
+            viewId,
+            selection: {
+              anchor: formattedCursorOffset,
+              head: formattedCursorOffset,
+            },
+            code: formattedCode,
+          }
+          setEntries(currentEntries => {
+            const currentEntry = currentEntries[viewId]
+            if (!currentEntry) {
+              return currentEntries
+            }
+
+            return {
+              ...currentEntries,
+              [viewId]: {
+                ...currentEntry,
+                current: draftToSave,
+                isDirty: serializeViewDraft(draftToSave) !== serializeViewDraft(currentEntry.saved),
+              },
+            }
+          })
+        }
+      } catch {
+        toast.show({
+          severity: 'warning',
+          title: 'Script formatting failed',
+          message: 'The view was saved without formatting.',
+        })
+      }
+    }
+
     setEntries(currentEntries => ({
       ...currentEntries,
       [viewId]: {
         ...currentEntries[viewId],
+        current: draftToSave,
         saving: true,
       },
     }))
 
     try {
       const result = await getWindowElectron().updateView({
-        id: latestDraft.id,
-        name: latestDraft.name,
-        code: latestDraft.code,
-        layoutMode: latestDraft.layoutMode,
-        splitRatio: clampSplitRatio(latestDraft.splitRatio),
-        rememberRequests: latestDraft.rememberRequests,
+        id: draftToSave.id,
+        name: draftToSave.name,
+        code: draftToSave.code,
+        layoutMode: draftToSave.layoutMode,
+        splitRatio: clampSplitRatio(draftToSave.splitRatio),
+        rememberRequests: draftToSave.rememberRequests,
       })
       if (!result.success) {
         toast.show(result)
         return
       }
 
-      setEntries(currentEntries => ({
-        ...currentEntries,
-        [viewId]: {
-          saved: result.data,
-          current: result.data,
-          isDirty: false,
-          saving: false,
-        },
-      }))
-      notifyViewsChanged()
-      await reload()
+      setEntries(currentEntries => {
+        const currentEntry = currentEntries[viewId]
+        if (!currentEntry) {
+          return currentEntries
+        }
+
+        const nextCurrent = serializeViewDraft(currentEntry.current) === serializeViewDraft(result.data)
+          ? currentEntry.current
+          : result.data
+
+        return {
+          ...currentEntries,
+          [viewId]: {
+            saved: result.data,
+            current: nextCurrent,
+            isDirty: false,
+            saving: false,
+          },
+        }
+      })
     } finally {
       setEntries(currentEntries => {
         const currentEntry = currentEntries[viewId]

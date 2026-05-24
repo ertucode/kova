@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from 'react'
 import type { Extension } from '@codemirror/state'
-import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage } from './CodeEditor'
+import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage, type CodeEditorSelection } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 
 export function DetailsTextArea({
@@ -14,8 +14,10 @@ export function DetailsTextArea({
   placeholder,
   extensions,
   editorRef,
+  externalSelection,
   headerActions,
   onChange,
+  onSelectionChange,
   onBlur,
 }: {
   label: string | null
@@ -28,8 +30,10 @@ export function DetailsTextArea({
   placeholder?: string
   extensions?: Extension[]
   editorRef?: Ref<CodeEditorHandle>
+  externalSelection?: CodeEditorSelection | null
   headerActions?: ReactNode
   onChange: (value: string) => void
+  onSelectionChange?: (selection: CodeEditorSelection) => void
   onBlur: () => void
 }) {
   return (
@@ -46,7 +50,9 @@ export function DetailsTextArea({
           className="flex-1 border-x-0 border-b-0"
           placeholder={placeholder}
           extensions={extensions}
+          externalSelection={externalSelection}
           onChange={onChange}
+          onSelectionChange={onSelectionChange}
           onBlur={onBlur}
         />
       ) : (

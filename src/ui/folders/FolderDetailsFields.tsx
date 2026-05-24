@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { InfoIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
@@ -7,6 +7,7 @@ import { dialogActions } from '@/global/dialogStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import type { FolderDetailsDraft } from './folderExplorerTypes'
 import { DetailsTextArea } from './DetailsTextArea'
+import type { CodeEditorSelection } from './CodeEditor'
 import { HeadersEditor } from './HeadersEditor'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
@@ -25,6 +26,9 @@ import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { buildHttpRequestPaths } from './folderExplorerUtils'
+import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
+import type { PendingScriptSelection } from './scriptFormatOnSave'
+import { formatScriptValueForSave } from './scriptFormatOnSave'
 
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
@@ -94,6 +98,10 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     useVisibleSharedScripts(selectedFolderId)
   const visibleSharedScriptsRef = useRef(visibleSharedScripts)
   const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
+  const preRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
+  const postRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
+  const pendingPreRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
+  const pendingPostRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
 
   activeEnvironmentNamesRef.current = activeEnvironmentNames
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
@@ -175,6 +183,28 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     []
   )
 
+  const handleSaveWithFormatting = useCallback(async () => {
+    let nextDraft = draft
+    if (getFormatScriptBlocksOnSave()) {
+      nextDraft = await formatFolderDraftScriptsForSave(
+        draft,
+        preRequestSelectionRef,
+        postRequestSelectionRef,
+        pendingPreRequestSelectionRef,
+        pendingPostRequestSelectionRef
+      )
+      if (nextDraft !== draft) {
+        FolderExplorerCoordinator.updateSelectedDraft(nextDraft)
+      }
+    }
+
+    await FolderExplorerCoordinator.saveSelectedItemDirect({ skipFormatting: true })
+  }, [draft])
+
+  useEffect(() => {
+    return FolderExplorerCoordinator.registerSelectedSaveHandler(handleSaveWithFormatting)
+  }, [handleSaveWithFormatting])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="shrink-0">
@@ -212,8 +242,19 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           editorLanguage="javascript"
           editorSize="small"
           extensions={preRequestScriptExtensions}
+          externalSelection={
+            pendingPreRequestSelectionRef.current?.code === draft.preRequestScript
+              ? pendingPreRequestSelectionRef.current.selection
+              : null
+          }
           headerActions={<ScriptDocumentationButton phase="pre-request" />}
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
+          onSelectionChange={selection => {
+            preRequestSelectionRef.current = selection
+            if (pendingPreRequestSelectionRef.current?.code === draft.preRequestScript) {
+              pendingPreRequestSelectionRef.current = null
+            }
+          }}
           onBlur={() => undefined}
         />
 
@@ -225,8 +266,19 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           editorLanguage="javascript"
           editorSize="small"
           extensions={postRequestScriptExtensions}
+          externalSelection={
+            pendingPostRequestSelectionRef.current?.code === draft.postRequestScript
+              ? pendingPostRequestSelectionRef.current.selection
+              : null
+          }
           headerActions={<ScriptDocumentationButton phase="post-request" />}
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
+          onSelectionChange={selection => {
+            postRequestSelectionRef.current = selection
+            if (pendingPostRequestSelectionRef.current?.code === draft.postRequestScript) {
+              pendingPostRequestSelectionRef.current = null
+            }
+          }}
           onBlur={() => undefined}
         />
       </div>
@@ -249,6 +301,48 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
       ) : null}
     </div>
   )
+}
+
+async function formatFolderDraftScriptsForSave(
+  draft: FolderDetailsDraft,
+  preRequestSelectionRef: { current: CodeEditorSelection | null },
+  postRequestSelectionRef: { current: CodeEditorSelection | null },
+  pendingPreRequestSelectionRef: { current: { selection: CodeEditorSelection; code: string } | null },
+  pendingPostRequestSelectionRef: { current: { selection: CodeEditorSelection; code: string } | null }
+) {
+  let changed = false
+
+  const preRequestScript = await formatFolderScriptValueWithSelection(
+    draft.preRequestScript,
+    preRequestSelectionRef.current,
+    pendingPreRequestSelectionRef
+  )
+  changed = changed || preRequestScript !== draft.preRequestScript
+
+  const postRequestScript = await formatFolderScriptValueWithSelection(
+    draft.postRequestScript,
+    postRequestSelectionRef.current,
+    pendingPostRequestSelectionRef
+  )
+  changed = changed || postRequestScript !== draft.postRequestScript
+
+  if (!changed) {
+    return draft
+  }
+
+  return {
+    ...draft,
+    preRequestScript,
+    postRequestScript,
+  }
+}
+
+async function formatFolderScriptValueWithSelection(
+  value: string,
+  selection: CodeEditorSelection | null,
+  pendingSelectionRef: { current: PendingScriptSelection | null }
+) {
+  return formatScriptValueForSave(value, selection, pendingSelectionRef, 'Folder script')
 }
 
 function ScriptDocumentationButton({ phase }: { phase: 'pre-request' | 'post-request' }) {

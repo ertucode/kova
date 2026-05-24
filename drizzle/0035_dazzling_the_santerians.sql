@@ -1,0 +1,1 @@
+ALTER TABLE `app_settings` ADD `format_script_blocks_on_save` integer DEFAULT true NOT NULL;

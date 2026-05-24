@@ -220,6 +220,8 @@ export const appSettings = sqliteTable('app_settings', {
   responseBodyDisplayMode: text('response_body_display_mode').notNull().default('raw'),
   compactRequestView: integer('compact_request_view', { mode: 'boolean' }).notNull().default(true),
   vimMode: integer('vim_mode', { mode: 'boolean' }).notNull().default(false),
+  formatScriptBlocksOnSave: integer('format_script_blocks_on_save', { mode: 'boolean' }).notNull().default(true),
+  scriptBlockPrettierConfig: text('script_block_prettier_config').notNull().default('{}'),
   cookiesEnabled: integer('cookies_enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),

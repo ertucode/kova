@@ -26,10 +26,16 @@ import { DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
 import { toast } from '@/lib/components/toast'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { dialogActions } from '@/global/dialogStore'
-import { appSettingsStore } from '@/global/appSettingsStore'
+import { appSettingsStore, getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import { Tooltip } from '../components/Tooltip'
 import { HeadersEditor } from './HeadersEditor'
-import { CodeEditor, type CodeEditorHandle, type CodeEditorLanguage, type CodeEditorPasteParams } from './CodeEditor'
+import {
+  CodeEditor,
+  type CodeEditorHandle,
+  type CodeEditorLanguage,
+  type CodeEditorPasteParams,
+  type CodeEditorSelection,
+} from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { KeyValueEditor } from './KeyValueEditor'
 import { environmentEditorStore } from './environmentEditorStore'
@@ -57,6 +63,8 @@ import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { useScriptPackageArtifacts } from './useScriptPackages'
+import type { PendingScriptSelection } from './scriptFormatOnSave'
+import { formatScriptValueForSave } from './scriptFormatOnSave'
 import { twMerge } from 'tailwind-merge'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
@@ -71,6 +79,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const postRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const responseVisualizerEditorRef = useRef<CodeEditorHandle | null>(null)
+  const preRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
+  const postRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
+  const responseVisualizerSelectionRef = useRef<CodeEditorSelection | null>(null)
+  const pendingPreRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
+  const pendingPostRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
+  const pendingResponseVisualizerSelectionRef = useRef<PendingScriptSelection | null>(null)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
@@ -423,6 +437,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     }
   }, [isSending])
 
+  useEffect(() => {
+    return FolderExplorerCoordinator.registerSelectedSaveHandler(handleSaveWithFormatting)
+  }, [handleSaveWithFormatting])
+
   const sendRequest = async () => {
     setIsSending(true)
     try {
@@ -445,6 +463,22 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [currentRequestSelection]
   )
 
+  async function handleSaveWithFormatting() {
+    if (!currentRequestSelection) {
+      return
+    }
+
+    let nextDraft = draftRef.current
+    if (getFormatScriptBlocksOnSave()) {
+      nextDraft = await formatRequestDraftScriptsForSave(nextDraft)
+      if (nextDraft !== draftRef.current) {
+        updateRequestDraft(nextDraft, 'request-format-save')
+      }
+    }
+
+    await FolderExplorerCoordinator.saveSelectedItemDirect({ skipFormatting: true })
+  }
+
   const updateUrl = useCallback(
     (nextUrl: string) => {
       const latestDraft = draftRef.current
@@ -461,6 +495,45 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     },
     [updateRequestDraft]
   )
+
+  async function formatRequestDraftScriptsForSave(sourceDraft: RequestDetailsDraft) {
+    let changed = false
+
+    const preRequestScript = await formatScriptValueWithSelection(
+      sourceDraft.preRequestScript,
+      preRequestSelectionRef.current,
+      pendingPreRequestSelectionRef,
+      'Pre-request script'
+    )
+    changed = changed || preRequestScript !== sourceDraft.preRequestScript
+
+    const postRequestScript = await formatScriptValueWithSelection(
+      sourceDraft.postRequestScript,
+      postRequestSelectionRef.current,
+      pendingPostRequestSelectionRef,
+      'Post-request script'
+    )
+    changed = changed || postRequestScript !== sourceDraft.postRequestScript
+
+    const responseVisualizer = await formatScriptValueWithSelection(
+      sourceDraft.responseVisualizer,
+      responseVisualizerSelectionRef.current,
+      pendingResponseVisualizerSelectionRef,
+      'Response visualizer'
+    )
+    changed = changed || responseVisualizer !== sourceDraft.responseVisualizer
+
+    if (!changed) {
+      return sourceDraft
+    }
+
+    return {
+      ...sourceDraft,
+      preRequestScript,
+      postRequestScript,
+      responseVisualizer,
+    }
+  }
 
   const importUrl = (nextUrl: string) => {
     const importedUrlFields = buildImportedHttpUrlFields(nextUrl, draft.bodyType)
@@ -792,8 +865,19 @@ export default function View() {
             showLineNumbers
             extensions={preRequestScriptExtensions}
             editorRef={preRequestEditorRef}
+            externalSelection={
+              pendingPreRequestSelectionRef.current?.code === draft.preRequestScript
+                ? pendingPreRequestSelectionRef.current.selection
+                : null
+            }
             headerActions={<ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />}
             onChange={value => updateRequestDraft({ ...draft, preRequestScript: value }, 'request-pre-script')}
+            onSelectionChange={selection => {
+              preRequestSelectionRef.current = selection
+              if (pendingPreRequestSelectionRef.current?.code === draft.preRequestScript) {
+                pendingPreRequestSelectionRef.current = null
+              }
+            }}
             onBlur={() => undefined}
           />
 
@@ -807,8 +891,19 @@ export default function View() {
             showLineNumbers
             extensions={postRequestScriptExtensions}
             editorRef={postRequestEditorRef}
+            externalSelection={
+              pendingPostRequestSelectionRef.current?.code === draft.postRequestScript
+                ? pendingPostRequestSelectionRef.current.selection
+                : null
+            }
             headerActions={<ScriptDocumentationButton phase="post-request" tooltip="Documentation" />}
             onChange={value => updateRequestDraft({ ...draft, postRequestScript: value }, 'request-post-script')}
+            onSelectionChange={selection => {
+              postRequestSelectionRef.current = selection
+              if (pendingPostRequestSelectionRef.current?.code === draft.postRequestScript) {
+                pendingPostRequestSelectionRef.current = null
+              }
+            }}
             onBlur={() => undefined}
           />
         </section>
@@ -819,7 +914,18 @@ export default function View() {
           value={draft.responseVisualizer}
           extensions={responseVisualizerExtensions}
           editorRef={responseVisualizerEditorRef}
+          externalSelection={
+            pendingResponseVisualizerSelectionRef.current?.code === draft.responseVisualizer
+              ? pendingResponseVisualizerSelectionRef.current.selection
+              : null
+          }
           onChange={updateResponseVisualizer}
+          onSelectionChange={selection => {
+            responseVisualizerSelectionRef.current = selection
+            if (pendingResponseVisualizerSelectionRef.current?.code === draft.responseVisualizer) {
+              pendingResponseVisualizerSelectionRef.current = null
+            }
+          }}
           onFillTemplate={fillResponseVisualizerTemplate}
         />
       ) : null}
@@ -848,13 +954,17 @@ const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
   value,
   extensions,
   editorRef,
+  externalSelection,
   onChange,
+  onSelectionChange,
   onFillTemplate,
 }: {
   value: string
   extensions: Extension[]
   editorRef: RefObject<CodeEditorHandle | null>
+  externalSelection: CodeEditorSelection | null
   onChange: (value: string) => void
+  onSelectionChange: (selection: CodeEditorSelection) => void
   onFillTemplate: () => void
 }) {
   return (
@@ -903,7 +1013,9 @@ const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
           className="h-full border-x-0 border-b-0 border-t-0"
           placeholder={RESPONSE_VISUALIZER_PLACEHOLDER}
           extensions={extensions}
+          externalSelection={externalSelection}
           onChange={onChange}
+          onSelectionChange={onSelectionChange}
           onBlur={() => undefined}
         />
       </div>
@@ -956,6 +1068,15 @@ function ScriptDocumentationButton({
       {button}
     </Tooltip>
   )
+}
+
+async function formatScriptValueWithSelection(
+  value: string,
+  selection: CodeEditorSelection | null,
+  pendingSelectionRef: { current: PendingScriptSelection | null },
+  label: string
+) {
+  return formatScriptValueForSave(value, selection, pendingSelectionRef, label)
 }
 
 const RESPONSE_VISUALIZER_PLACEHOLDER = `export default function ResponseVisualizer() {

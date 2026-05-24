@@ -26,6 +26,7 @@ export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'js
 
 export type CodeEditorHandle = {
   focusLine: (line: number, column?: number | null) => void
+  setSelection: (selection: CodeEditorSelection) => void
 }
 
 export type CodeEditorPasteParams = {
@@ -632,6 +633,7 @@ export const CodeEditor = memo(function CodeEditor({
   onSelectionChange,
   onBlur,
   initialSelection,
+  externalSelection,
   linePaddingOverride,
   vimMode,
   refreshKey,
@@ -657,10 +659,12 @@ export const CodeEditor = memo(function CodeEditor({
   onSelectionChange?: (selection: CodeEditorSelection) => void
   onBlur?: () => void
   initialSelection?: CodeEditorSelection | null
+  externalSelection?: CodeEditorSelection | null
   linePaddingOverride?: string
   vimMode?: boolean
   refreshKey?: string
 }) {
+  const initialValueRef = useRef(value)
   const editorViewRef = useRef<EditorView | null>(null)
   const vimModeSetting = useSelector(appSettingsStore, state => state.context.settings?.vimMode ?? DEFAULT_VIM_MODE)
   const resolvedVimMode = vimMode ?? vimModeSetting
@@ -686,6 +690,30 @@ export const CodeEditor = memo(function CodeEditor({
     onSelectionChangeRef.current = onSelectionChange
   }, [onSelectionChange])
 
+  useEffect(() => {
+    const view = editorViewRef.current
+    if (!view) {
+      return
+    }
+
+    const currentValue = view.state.doc.toString()
+    if (value === currentValue) {
+      return
+    }
+
+    const currentSelection = view.state.selection.main
+    const nextAnchor = Math.max(
+      0,
+      Math.min(externalSelection?.anchor ?? currentSelection.anchor, value.length)
+    )
+    const nextHead = Math.max(0, Math.min(externalSelection?.head ?? currentSelection.head, value.length))
+
+    view.dispatch({
+      changes: { from: 0, to: currentValue.length, insert: value },
+      selection: { anchor: nextAnchor, head: nextHead },
+    })
+  }, [externalSelection, value])
+
   useImperativeHandle(
     ref,
     () => ({
@@ -705,6 +733,24 @@ export const CodeEditor = memo(function CodeEditor({
           scrollIntoView: true,
         })
         view.focus()
+      },
+      setSelection(selection) {
+        const view = editorViewRef.current
+        if (!view) {
+          return
+        }
+
+        const shouldFocus = view.hasFocus
+        const anchor = Math.max(0, Math.min(selection.anchor, view.state.doc.length))
+        const head = Math.max(0, Math.min(selection.head, view.state.doc.length))
+
+        view.dispatch({
+          selection: { anchor, head },
+          scrollIntoView: true,
+        })
+        if (shouldFocus) {
+          view.focus()
+        }
       },
     }),
     []
@@ -978,7 +1024,7 @@ export const CodeEditor = memo(function CodeEditor({
       )}
     >
       <CodeMirror
-        value={value}
+        value={initialValueRef.current}
         height="100%"
         className="h-full w-full"
         theme="dark"

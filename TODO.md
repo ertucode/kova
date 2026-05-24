@@ -1,4 +1,2 @@
 - ai autocomplete?
 - ai script maker?
-- tailwind
-- autoformat

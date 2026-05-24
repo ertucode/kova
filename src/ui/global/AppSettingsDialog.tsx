@@ -6,6 +6,8 @@ import {
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_COOKIES_ENABLED,
+  DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+  DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_VIM_MODE,
 } from '@common/AppSettings'
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
@@ -23,6 +25,8 @@ export function AppSettingsDialog() {
   const [responseBodyDisplayMode, setResponseBodyDisplayMode] = useState<(typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]>('raw')
   const [compactRequestView, setCompactRequestView] = useState(DEFAULT_COMPACT_REQUEST_VIEW)
   const [vimMode, setVimMode] = useState(DEFAULT_VIM_MODE)
+  const [formatScriptBlocksOnSave, setFormatScriptBlocksOnSave] = useState(DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE)
+  const [scriptBlockPrettierConfig, setScriptBlockPrettierConfig] = useState(DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG)
   const [cookiesEnabled, setCookiesEnabled] = useState(DEFAULT_COOKIES_ENABLED)
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
   const [databaseDrafts, setDatabaseDrafts] = useState<Record<string, { name: string; path: string }>>({})
@@ -39,6 +43,8 @@ export function AppSettingsDialog() {
       setResponseBodyDisplayMode(settings.responseBodyDisplayMode)
       setCompactRequestView(settings.compactRequestView)
       setVimMode(settings.vimMode)
+      setFormatScriptBlocksOnSave(settings.formatScriptBlocksOnSave)
+      setScriptBlockPrettierConfig(settings.scriptBlockPrettierConfig)
       setCookiesEnabled(settings.cookiesEnabled)
     }
   }, [settings])
@@ -59,6 +65,8 @@ export function AppSettingsDialog() {
       responseBodyDisplayMode,
       compactRequestView,
       vimMode,
+      formatScriptBlocksOnSave,
+      scriptBlockPrettierConfig,
       cookiesEnabled,
     })
 
@@ -330,9 +338,21 @@ export function AppSettingsDialog() {
 
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
           <div className="text-sm font-medium text-base-content">Editor behavior</div>
-          <p className="mt-1 text-sm text-base-content/60">Enable Vim keybindings in request and script editors.</p>
+          <p className="mt-1 text-sm text-base-content/60">
+            Control save-time formatting for script blocks and enable Vim keybindings in request and script editors.
+          </p>
 
           <label className="mt-4 inline-flex items-center gap-3">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm rounded-md"
+              checked={formatScriptBlocksOnSave}
+              onChange={event => setFormatScriptBlocksOnSave(event.target.checked)}
+            />
+            <span className="text-sm text-base-content">Format script blocks on save</span>
+          </label>
+
+          <label className="mt-3 inline-flex items-center gap-3">
             <input
               type="checkbox"
               className="checkbox checkbox-sm rounded-md"
@@ -340,6 +360,19 @@ export function AppSettingsDialog() {
               onChange={event => setVimMode(event.target.checked)}
             />
             <span className="text-sm text-base-content">Enable Vim mode</span>
+          </label>
+
+          <label className="mt-4 block">
+            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Prettier Config JSON</div>
+            <p className="mb-3 text-sm text-base-content/60">
+              Applies to script block format-on-save. Use a JSON object such as <code>{'{"semi":false,"singleQuote":true}'}</code>.
+            </p>
+            <textarea
+              className="textarea min-h-36 w-full rounded-xl border-base-content/10 bg-base-100 font-mono text-sm leading-6"
+              value={scriptBlockPrettierConfig}
+              onChange={event => setScriptBlockPrettierConfig(event.target.value)}
+              spellCheck={false}
+            />
           </label>
         </div>
 

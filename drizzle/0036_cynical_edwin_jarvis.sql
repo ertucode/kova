@@ -1,0 +1,1 @@
+ALTER TABLE `app_settings` ADD `script_block_prettier_config` text DEFAULT '{}' NOT NULL;

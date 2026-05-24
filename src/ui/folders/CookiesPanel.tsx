@@ -71,6 +71,8 @@ export function CookiesPanel() {
                     responseBodyDisplayMode: settings.responseBodyDisplayMode,
                     compactRequestView: settings.compactRequestView,
                     vimMode: settings.vimMode,
+                    formatScriptBlocksOnSave: settings.formatScriptBlocksOnSave,
+                    scriptBlockPrettierConfig: settings.scriptBlockPrettierConfig,
                     cookiesEnabled: event.target.checked,
                   })
                 }}

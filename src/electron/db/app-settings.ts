@@ -3,9 +3,12 @@ import {
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_COMPACT_REQUEST_VIEW,
+  DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+  DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
+  parseScriptBlockPrettierConfig,
   type AppSettingsRecord,
   type UpdateAppSettingsInput,
 } from '../../common/AppSettings.js'
@@ -30,13 +33,15 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
   const defaults: AppSettingsRow = {
     id: DEFAULT_APP_SETTINGS_ID,
     warnBeforeRequestAfterSeconds: DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
-      responseBodyDisplayMode: DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
-      compactRequestView: DEFAULT_COMPACT_REQUEST_VIEW,
-      vimMode: DEFAULT_VIM_MODE,
-      cookiesEnabled: DEFAULT_COOKIES_ENABLED,
-      createdAt: now,
-      updatedAt: now,
-    }
+    responseBodyDisplayMode: DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+    compactRequestView: DEFAULT_COMPACT_REQUEST_VIEW,
+    vimMode: DEFAULT_VIM_MODE,
+    formatScriptBlocksOnSave: DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+    scriptBlockPrettierConfig: DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
+    cookiesEnabled: DEFAULT_COOKIES_ENABLED,
+    createdAt: now,
+    updatedAt: now,
+  }
 
   db.insert(appSettings).values(defaults).run()
   return toAppSettingsRecord(defaults)
@@ -59,6 +64,20 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
     return GenericError.Message('Invalid vim mode setting')
   }
 
+  if (typeof input.formatScriptBlocksOnSave !== 'boolean') {
+    return GenericError.Message('Invalid script formatting setting')
+  }
+
+  if (typeof input.scriptBlockPrettierConfig !== 'string') {
+    return GenericError.Message('Invalid Prettier config setting')
+  }
+
+  try {
+    parseScriptBlockPrettierConfig(input.scriptBlockPrettierConfig)
+  } catch (error) {
+    return GenericError.Message(error instanceof Error ? error.message : 'Invalid Prettier config setting')
+  }
+
   if (typeof input.cookiesEnabled !== 'boolean') {
     return GenericError.Message('Invalid cookies setting')
   }
@@ -73,6 +92,8 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
       responseBodyDisplayMode: input.responseBodyDisplayMode,
       compactRequestView: input.compactRequestView,
       vimMode: input.vimMode,
+      formatScriptBlocksOnSave: input.formatScriptBlocksOnSave,
+      scriptBlockPrettierConfig: input.scriptBlockPrettierConfig,
       cookiesEnabled: input.cookiesEnabled,
       createdAt: current.createdAt,
       updatedAt,
@@ -98,6 +119,8 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     responseBodyDisplayMode,
     compactRequestView: value.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
     vimMode: value.vimMode ?? DEFAULT_VIM_MODE,
+    formatScriptBlocksOnSave: value.formatScriptBlocksOnSave ?? DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+    scriptBlockPrettierConfig: value.scriptBlockPrettierConfig ?? DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: value.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,

@@ -4,6 +4,7 @@ import { FileBracesIcon, Trash2Icon } from 'lucide-react'
 import type { SharedScriptRecord, SharedScriptScopeType, SharedScriptTarget } from '@common/SharedScripts'
 import { Typescript } from '@common/Typescript'
 import { getWindowElectron } from '@/getWindowElectron'
+import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import { toast } from '@/lib/components/toast'
 import { ChangesCoordinator } from './changesCoordinator'
 import { CodeEditor } from './CodeEditor'
@@ -18,6 +19,8 @@ import {
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { useScriptPackageArtifacts } from './useScriptPackages'
+import type { PendingScriptSelection } from './scriptFormatOnSave'
+import { formatScriptValueForSave } from './scriptFormatOnSave'
 import { notifySharedScriptsChanged, useScopedSharedScripts } from './useVisibleSharedScripts'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime']
@@ -123,9 +126,27 @@ export function SharedScriptsSection({
 
   async function saveScript(id: string, overrideDraft?: SharedScriptRecord) {
     const entry = entries[id]
-    const draftValue = overrideDraft ?? entry?.current
+    let draftValue = overrideDraft ?? entry?.current
     if (!entry || !draftValue) {
       return
+    }
+
+    if (getFormatScriptBlocksOnSave() && draftValue.code.trim().length > 0) {
+      const pendingSelectionRef: { current: PendingScriptSelection | null } = { current: null }
+      const formattedCode = await formatScriptValueForSave(draftValue.code, entry.selection, pendingSelectionRef, 'Shared script')
+
+      if (pendingSelectionRef.current) {
+        sharedScriptEditorStore.trigger.selectionUpdated({
+          scopeKey,
+          id,
+          selection: pendingSelectionRef.current.selection,
+        })
+      }
+
+      if (formattedCode !== draftValue.code) {
+        draftValue = { ...draftValue, code: formattedCode }
+        sharedScriptEditorStore.trigger.draftUpdated({ scopeKey, id, draft: draftValue })
+      }
     }
 
     sharedScriptEditorStore.trigger.entrySavingStarted({ scopeKey, id, draft: draftValue })
@@ -473,6 +494,7 @@ function SharedScriptDetail({
           onChange={value => onChange({ ...draft, code: value })}
           onSelectionChange={onSelectionChange}
           initialSelection={selection}
+          externalSelection={selection}
           onBlur={() => undefined}
         />
       </div>
