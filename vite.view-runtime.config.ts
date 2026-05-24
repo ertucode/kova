@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: createFrontendPlugins(),
   base: './',
   publicDir: false,
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('development'),
+  },
   build: {
     outDir: 'public/generated/view-runtime',
     emptyOutDir: true,
