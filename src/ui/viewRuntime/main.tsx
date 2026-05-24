@@ -2,7 +2,6 @@ import '../App.css'
 import '../responseVisualizer/responseVisualizer.css'
 import React, { type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import * as RefreshRuntime from 'react-refresh/runtime'
 import ts from 'typescript'
 import { z } from 'zod'
 import { formatXml } from '@common/formatXml'
@@ -19,6 +18,7 @@ import {
   type ViewRuntimePayload,
   type ViewRuntimeScriptResponse,
 } from '../folders/viewRuntimeProtocol'
+import { transformViewRuntimeSource } from './viewRuntimeRefresh'
 
 type RuntimeErrorDetails = {
   compactMessage: string
@@ -34,11 +34,6 @@ type RuntimeShellState = {
   error: RuntimeErrorDetails | null
 }
 
-type RefreshRuntimeWindow = Window & {
-  $RefreshReg$?: (type: unknown, id: string) => void
-  $RefreshSig$?: () => (type: unknown, key?: string, forceReset?: boolean, getCustomHooks?: () => unknown[]) => unknown
-}
-
 const noopCodeEditorOnChange = () => undefined
 
 const rootElement = document.getElementById('root')
@@ -47,7 +42,6 @@ if (!rootElement) {
 }
 
 const root = createRoot(rootElement)
-const refreshWindow = window as RefreshRuntimeWindow
 const pendingCallRequests = new Map<
   string,
   {
@@ -61,10 +55,8 @@ const runtimeShellState: RuntimeShellState = {
   component: null,
   error: null,
 }
+const hotComponentRegistry = new Map<string, { wrapper: RuntimeComponent; current: RuntimeComponent }>()
 
-RefreshRuntime.injectIntoGlobalHook(window)
-refreshWindow.$RefreshReg$ = () => undefined
-refreshWindow.$RefreshSig$ = () => type => type
 renderRuntimeShell()
 
 window.addEventListener('message', event => {
@@ -124,6 +116,7 @@ window.addEventListener('message', event => {
 window.parent.postMessage({ type: VIEW_RUNTIME_READY_EVENT }, '*')
 
 function compileView(source: string, fileName: string) {
+  const transformedSource = transformViewRuntimeSource(source, fileName)
   const result = ts.transpileModule(source, {
     compilerOptions: {
       jsx: ts.JsxEmit.React,
@@ -151,7 +144,23 @@ function compileView(source: string, fileName: string) {
     })
   }
 
-  return result.outputText
+  const transformedResult = ts.transpileModule(transformedSource, {
+    compilerOptions: {
+      jsx: ts.JsxEmit.React,
+      jsxFactory: 'React.createElement',
+      jsxFragmentFactory: 'React.Fragment',
+      target: ts.ScriptTarget.ES2020,
+      module: ts.ModuleKind.CommonJS,
+      inlineSourceMap: true,
+      inlineSources: true,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports: true,
+    },
+    fileName,
+    reportDiagnostics: false,
+  })
+
+  return transformedResult.outputText
 }
 
 async function renderView(source: string, payload: ViewRuntimePayload) {
@@ -167,7 +176,6 @@ async function renderView(source: string, payload: ViewRuntimePayload) {
   runtimeShellState.error = null
 
   renderRuntimeShell()
-  RefreshRuntime.performReactRefresh()
 }
 
 async function runView(code: string, payload: ViewRuntimePayload) {
@@ -214,7 +222,6 @@ async function runView(code: string, payload: ViewRuntimePayload) {
 
   const module = executeRuntimeModule({
     code,
-    moduleId: 'view-runtime:main',
     sourceUrl: 'view-runtime.js',
     globals: {
       React,
@@ -301,7 +308,6 @@ function createSharedScriptModuleLoader(
       const compiled = compileView(script.code, `view-runtime-shared-${script.id}.tsx`)
       const module = executeRuntimeModule({
         code: compiled,
-        moduleId: `view-runtime:shared:${script.id}`,
         sourceUrl: 'view-runtime-shared.js',
         globals: {
           React: globals.React,
@@ -544,7 +550,7 @@ function RuntimeShell({ state }: { state: RuntimeShellState }) {
     <div style={{ position: 'relative', height: '100%' }}>
       {Component ? (
         <RuntimeErrorBoundary source={state.source}>
-          <HotViewHost component={Component} />
+          <Component />
         </RuntimeErrorBoundary>
       ) : (
         <div className="empty">Add a view to render custom JSX and run request flows.</div>
@@ -564,10 +570,6 @@ function RuntimeShell({ state }: { state: RuntimeShellState }) {
       ) : null}
     </div>
   )
-}
-
-function HotViewHost({ component }: { component: RuntimeComponent }) {
-  return component({}) as React.ReactElement | null
 }
 
 type RuntimeErrorBoundaryProps = {
@@ -609,12 +611,10 @@ class RuntimeErrorBoundary extends React.Component<RuntimeErrorBoundaryProps, Ru
 
 function executeRuntimeModule({
   code,
-  moduleId,
   sourceUrl,
   globals,
 }: {
   code: string
-  moduleId: string
   sourceUrl: string
   globals: {
     React: typeof React
@@ -641,92 +641,90 @@ function executeRuntimeModule({
 }) {
   const module = { exports: {} as Record<string, unknown> }
   const exports = module.exports
-  const previousRefreshRegister = refreshWindow.$RefreshReg$
-  const previousRefreshSignature = refreshWindow.$RefreshSig$
+  new Function(
+    'module',
+    'exports',
+    'React',
+    'Fragment',
+    'startTransition',
+    'useDeferredValue',
+    'useEffect',
+    'useEffectEvent',
+    'useId',
+    'useLayoutEffect',
+    'useMemo',
+    'useReducer',
+    'useRef',
+    'useState',
+    'console',
+    'env',
+    'scope',
+    'callRequest',
+    'require',
+    'requireScript',
+    'loadPackage',
+    'crypto',
+    'cookies',
+    'z',
+    'formatXml',
+    'formatJson',
+    'Table',
+    'CodeEditor',
+    '__registerHotComponent',
+    `${code}\n//# sourceURL=${sourceUrl}`
+  )(
+    module,
+    exports,
+    globals.React,
+    globals.Fragment,
+    globals.startTransition,
+    globals.useDeferredValue,
+    globals.useEffect,
+    globals.useEffectEvent,
+    globals.useId,
+    globals.useLayoutEffect,
+    globals.useMemo,
+    globals.useReducer,
+    globals.useRef,
+    globals.useState,
+    console,
+    globals.env,
+    globals.scope,
+    globals.callRequest,
+    globals.requirePackage,
+    globals.requireScript,
+    globals.requirePackage,
+    crypto,
+    globals.cookies,
+    z,
+    formatXml,
+    formatJson,
+    globals.Table,
+    globals.CodeEditor,
+    registerHotComponent
+  )
 
-  refreshWindow.$RefreshReg$ = (type: unknown, id: string) => {
-    RefreshRuntime.register(type, `${moduleId}:${id}`)
-  }
-  refreshWindow.$RefreshSig$ = () => type => type
-
-  try {
-    new Function(
-      'module',
-      'exports',
-      'React',
-      'Fragment',
-      'startTransition',
-      'useDeferredValue',
-      'useEffect',
-      'useEffectEvent',
-      'useId',
-      'useLayoutEffect',
-      'useMemo',
-      'useReducer',
-      'useRef',
-      'useState',
-      'console',
-      'env',
-      'scope',
-      'callRequest',
-      'require',
-      'requireScript',
-      'loadPackage',
-      'crypto',
-      'cookies',
-      'z',
-      'formatXml',
-      'formatJson',
-      'Table',
-      'CodeEditor',
-      `${code}\n//# sourceURL=${sourceUrl}`
-    )(
-      module,
-      exports,
-      globals.React,
-      globals.Fragment,
-      globals.startTransition,
-      globals.useDeferredValue,
-      globals.useEffect,
-      globals.useEffectEvent,
-      globals.useId,
-      globals.useLayoutEffect,
-      globals.useMemo,
-      globals.useReducer,
-      globals.useRef,
-      globals.useState,
-      console,
-      globals.env,
-      globals.scope,
-      globals.callRequest,
-      globals.requirePackage,
-      globals.requireScript,
-      globals.requirePackage,
-      crypto,
-      globals.cookies,
-      z,
-      formatXml,
-      formatJson,
-      globals.Table,
-      globals.CodeEditor
-    )
-
-    registerModuleExports(moduleId, module.exports)
-    return module
-  } finally {
-    refreshWindow.$RefreshReg$ = previousRefreshRegister
-    refreshWindow.$RefreshSig$ = previousRefreshSignature
-  }
+  return module
 }
 
-function registerModuleExports(moduleId: string, exports: Record<string, unknown>) {
-  for (const [key, value] of Object.entries(exports)) {
-    if (key === '__esModule' || !RefreshRuntime.isLikelyComponentType(value)) {
-      continue
-    }
-
-    RefreshRuntime.register(value, `${moduleId}:${key}`)
+function registerHotComponent(id: string, component: RuntimeComponent) {
+  const existing = hotComponentRegistry.get(id)
+  if (existing) {
+    existing.current = component
+    return existing.wrapper
   }
+
+  const record: { wrapper: RuntimeComponent; current: RuntimeComponent } = {
+    current: component,
+    wrapper(props: object) {
+      return record.current(props)
+    },
+  }
+
+  ;(record.wrapper as RuntimeComponent & { displayName?: string }).displayName =
+    component.name || id.split(':').at(-1) || 'HotComponent'
+  hotComponentRegistry.set(id, record)
+  return record.wrapper
 }
 
 function createHeaderApi(initialHeaders: Array<{ key: string; value: string }>) {
