@@ -33,6 +33,7 @@ import { CookiesPanel } from './CookiesPanel'
 import { HistoryPanel } from './RequestExecutionPanels'
 import { SharedScriptsPanel } from './SharedScriptsPanel'
 import { PackagesPanel } from './PackagesPanel'
+import { ViewsPanel } from './ViewsPanel'
 import { TagsPanel } from './TagsPanel'
 import { TagsCoordinator } from './tagsCoordinator'
 import { filterTreeWithDrafts } from './folderExplorerSearch'
@@ -459,6 +460,7 @@ export function FolderExplorer() {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-base-100">
         {sidebarTab === 'requests' ? <FolderExplorerTabs /> : null}
         {sidebarTab === 'requests' ? <DetailsPanel /> : null}
+        {sidebarTab === 'views' ? <ViewsPanel /> : null}
         {sidebarTab === 'scripts' ? <SharedScriptsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
         {sidebarTab === 'tags' ? <TagsPanel /> : null}
@@ -604,6 +606,7 @@ function CreateMenuButton() {
 function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
   const tabs = [
     { id: 'requests', label: 'Requests', icon: FileCode2Icon, disabled: false },
+    { id: 'views', label: 'Views', icon: FileCode2Icon, disabled: false },
     { id: 'environments', label: 'Envs', icon: FlaskConicalIcon, disabled: false },
     { id: 'tags', label: 'Tags', icon: TagIcon, disabled: false },
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },

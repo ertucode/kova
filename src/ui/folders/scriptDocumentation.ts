@@ -1,4 +1,4 @@
-export type ScriptDocumentationPhase = 'pre-request' | 'post-request' | 'response-visualizer'
+export type ScriptDocumentationPhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
 
 export type ScriptDocumentationEntry = {
   label: string
@@ -416,6 +416,60 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Editable scratchpad with CodeEditor',
         code: "export default function Scratchpad() {\n  const initialValue = response?.body.type === 'json'\n    ? JSON.stringify(response.body.data, null, 2)\n    : response?.body.data ?? ''\n  const [value, setValue] = useState(initialValue)\n\n  return (\n    <div style={{ display: 'grid', gap: 12 }}>\n      <CodeEditor\n        value={value}\n        language=\"json\"\n        minHeightClassName=\"min-h-[240px]\"\n        onChange={nextValue => setValue(nextValue)}\n      />\n      <div style={{ fontSize: 12, opacity: 0.7 }}>Chars: {value.length}</div>\n    </div>\n  )\n}",
+      },
+    ],
+  },
+  'view-runtime': {
+    title: 'View Runtime Docs',
+    description:
+      'Views run in a sandboxed iframe as TSX modules and are designed for building multi-request flows with reusable React UI.',
+    notes: [
+      'Write normal module code and export default a component function.',
+      'The runtime includes React hooks, env, scope, console, crypto, clipboard, cookies, z, Table, and CodeEditor.',
+      'Use callRequest to execute saved HTTP requests from the workspace without navigating away from the view pane.',
+      'The runtime does not expose request or response globals. Build your own state around callRequest results.',
+    ],
+    sections: [
+      {
+        title: 'Input',
+        description: 'Your view module reads and updates runtime globals directly.',
+        entries: [
+          { label: "await callRequest(['Auth', 'Refresh Token'])", detail: 'Run another saved HTTP request and receive a script response object.' },
+          { label: 'env.get(name, environmentName?)', detail: 'Read an environment value.' },
+          { label: 'env.set(name, value, environmentName?)', detail: 'Update an environment value from the running view.' },
+          { label: 'scope.get(name)', detail: 'Read a view-scoped value from the current run.' },
+          { label: 'scope.set(name, value)', detail: 'Persist a string value within the current run.' },
+          { label: 'cookies.parse(value)', detail: 'Parse Set-Cookie header values returned from callRequest.' },
+          { label: 'cookies.stringify(cookies)', detail: 'Serialize cookie objects back into a Set-Cookie string.' },
+          { label: 'formatXml(xml)', detail: 'Pretty-print XML strings before rendering them.' },
+          { label: 'formatJson(json, indentation?)', detail: 'Pretty-print JSON strings before rendering them.' },
+          { label: '<Table list={rows} />', detail: 'Render an inferred table from an array of objects.' },
+          { label: '<CodeEditor ... />', detail: 'Render the shared editor component inside the running view.' },
+        ],
+      },
+      {
+        title: 'Module Format',
+        description: 'Views are plain TSX modules with a default export component.',
+        entries: [
+          { label: 'export default function View() { ... }', detail: 'Preferred view shape.' },
+          { label: 'const Helper = (...) => ...', detail: 'Create local helpers and child components freely.' },
+          { label: 'useState / useEffect / useReducer', detail: 'Build richer stateful flows using normal React hooks.' },
+          { label: 'style={{ ... }}', detail: 'Apply inline styles because the sandbox does not inherit app CSS.' },
+        ],
+      },
+    ],
+    examples: [
+      {
+        title: 'Run a request from a button',
+        code: "export default function View() {\n  const [status, setStatus] = useState('idle')\n\n  async function load() {\n    setStatus('loading')\n    const response = await callRequest(['Folder', 'Request Name'])\n    setStatus(response.status + ' ' + response.statusText)\n  }\n\n  return <button onClick={load}>{status}</button>\n}",
+      },
+      {
+        title: 'Display JSON in a table',
+        code: "export default function UsersView() {\n  const [rows, setRows] = useState<unknown[]>([])\n\n  async function load() {\n    const response = await callRequest(['Users', 'List'])\n    if (response.body.type === 'json' && Array.isArray(response.body.data)) {\n      setRows(response.body.data)\n    }\n  }\n\n  useEffect(() => {\n    void load()\n  }, [])\n\n  return <Table list={rows} />\n}",
+      },
+      {
+        title: 'Use remembered flow state',
+        code: "export default function FlowView() {\n  const [token, setToken] = useState(scope.get('token') ?? '')\n\n  async function authenticate() {\n    const response = await callRequest(['Auth', 'Refresh Token'])\n    if (response.body.type === 'json') {\n      const nextToken = typeof response.body.data === 'object' && response.body.data !== null ? Reflect.get(response.body.data, 'token') : null\n      if (typeof nextToken === 'string') {\n        scope.set('token', nextToken)\n        setToken(nextToken)\n      }\n    }\n  }\n\n  return <div>{token || 'No token yet'}</div>\n}",
       },
     ],
   },

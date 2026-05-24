@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState, type RefObject } 
 import { useSelector } from '@xstate/store/react'
 import { FileBracesIcon, Trash2Icon } from 'lucide-react'
 import type { SharedScriptKind, SharedScriptRecord, SharedScriptTarget } from '@common/SharedScripts'
+import { Typescript } from '@common/Typescript'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
 import { ChangesCoordinator } from './changesCoordinator'
@@ -19,7 +20,7 @@ import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { notifySharedScriptsChanged, useScopedSharedScripts, useVisibleSharedScripts } from './useVisibleSharedScripts'
 
-const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer']
+const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime']
 const EMPTY_ENTRIES: Record<string, never> = {}
 
 export function SharedScriptsPanel() {
@@ -400,7 +401,7 @@ function SharedScriptDetail({
   onSave: () => void
 }) {
   const targets = useMemo(() => normalizeSharedScriptTargets(draft.targets), [draft.targets])
-  const isVisualizerOnly = targets.length === 1 && targets[0] === 'response-visualizer'
+  const isVisualizerOnly = targets.length === 1 && (targets[0] === 'response-visualizer' || targets[0] === 'view-runtime')
 
   const autocompleteSharedScripts = useMemo(() => {
     return visibleSharedScripts.filter(item => item.id !== draft.id)
@@ -607,15 +608,18 @@ function formatScriptMeta(script: SharedScriptRecord) {
 }
 
 function formatTargetLabel(target: SharedScriptTarget) {
-  if (target === 'pre-request') {
-    return 'Pre-request'
+  switch (target) {
+    case 'pre-request':
+      return 'Pre-request'
+    case 'post-request':
+      return 'Post-request'
+    case 'response-visualizer':
+      return 'Response visualizer'
+    case 'view-runtime':
+      return 'View runtime'
+    default:
+      return Typescript.assertUnreachable(target)
   }
-
-  if (target === 'post-request') {
-    return 'Post-request'
-  }
-
-  return 'Response visualizer'
 }
 
 function getUntitledLabel(kind: SharedScriptKind) {

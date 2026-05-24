@@ -105,6 +105,13 @@ import {
 } from './PostmanEnvironmentExport.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
+import {
+  type CreateViewInput,
+  type DeleteViewInput,
+  type MoveViewInput,
+  type UpdateViewInput,
+  type ViewRecord,
+} from './Views.js'
 import { type ScriptPromptResponse } from './ScriptPrompt.js'
 import {
   type DatabaseConfigState,
@@ -258,6 +265,11 @@ export type EventResponseMapping = {
   deleteSharedScript: Promise<GenericResult<DeleteSharedScriptResponse>>
   moveSharedScript: Promise<GenericResult<void>>
   listVisibleSharedScripts: Promise<SharedScriptRecord[]>
+  listViews: Promise<ViewRecord[]>
+  createView: Promise<GenericResult<ViewRecord>>
+  updateView: Promise<GenericResult<ViewRecord>>
+  deleteView: Promise<GenericResult<void>>
+  moveView: Promise<GenericResult<void>>
   listTags: Promise<TagRecord[]>
   listTagAssignments: Promise<TagAssignmentRecord[]>
   createTag: Promise<GenericResult<TagRecord>>
@@ -373,6 +385,11 @@ export type EventRequestMapping = {
   deleteSharedScript: DeleteSharedScriptInput
   moveSharedScript: MoveSharedScriptInput
   listVisibleSharedScripts: ListVisibleSharedScriptsInput
+  listViews: void
+  createView: CreateViewInput
+  updateView: UpdateViewInput
+  deleteView: DeleteViewInput
+  moveView: MoveViewInput
   listTags: void
   listTagAssignments: void
   createTag: CreateTagInput
@@ -500,6 +517,11 @@ export type WindowElectron = {
   deleteSharedScript: (input: DeleteSharedScriptInput) => Promise<GenericResult<DeleteSharedScriptResponse>>
   moveSharedScript: (input: MoveSharedScriptInput) => Promise<GenericResult<void>>
   listVisibleSharedScripts: (input: ListVisibleSharedScriptsInput) => Promise<SharedScriptRecord[]>
+  listViews: () => Promise<ViewRecord[]>
+  createView: (input: CreateViewInput) => Promise<GenericResult<ViewRecord>>
+  updateView: (input: UpdateViewInput) => Promise<GenericResult<ViewRecord>>
+  deleteView: (input: DeleteViewInput) => Promise<GenericResult<void>>
+  moveView: (input: MoveViewInput) => Promise<GenericResult<void>>
   listTags: () => Promise<TagRecord[]>
   listTagAssignments: () => Promise<TagAssignmentRecord[]>
   createTag: (input: CreateTagInput) => Promise<GenericResult<TagRecord>>

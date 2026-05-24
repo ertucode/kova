@@ -66,6 +66,7 @@ import {
   moveSharedScript,
   updateSharedScript,
 } from './db/shared-scripts.js'
+import { createView, deleteView, listViews, moveView, updateView } from './db/views.js'
 import { createScriptPackage, deleteScriptPackage, listScriptPackages, toScriptPackageCacheKey, updateScriptPackage } from './db/script-packages.js'
 import {
   createTag,
@@ -606,6 +607,26 @@ app.on('ready', async () => {
 
   ipcHandle('listVisibleSharedScripts', async input => {
     return listVisibleSharedScripts({ folderId: input.folderId, onlyActive: true })
+  })
+
+  ipcHandle('listViews', async () => {
+    return listViews()
+  })
+
+  ipcHandle('createView', async input => {
+    return createView(input)
+  })
+
+  ipcHandle('updateView', async input => {
+    return updateView(input)
+  })
+
+  ipcHandle('deleteView', async input => {
+    return deleteView(input)
+  })
+
+  ipcHandle('moveView', async input => {
+    return moveView(input)
   })
 
   ipcHandle('listScriptPackages', async () => {

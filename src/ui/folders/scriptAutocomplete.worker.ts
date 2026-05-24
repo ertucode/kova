@@ -66,7 +66,18 @@ const blockedKeywordCompletions = new Set([
   'type',
 ])
 
-const preferredSandboxGlobals = new Set(['env', 'scope', 'request', 'response', 'console', 'crypto', 'prompt', 'toast', 'z'])
+const preferredSandboxGlobals = new Set([
+  'env',
+  'scope',
+  'request',
+  'response',
+  'callRequest',
+  'console',
+  'crypto',
+  'prompt',
+  'toast',
+  'z',
+])
 const preferredBuiltinGlobals = new Set(['Date', 'Math', 'JSON', 'Promise', 'Object', 'Array', 'Map', 'Set', 'String', 'Number'])
 const allowedTopLevelScriptDiagnosticCodes = new Set([
   1108,
@@ -245,14 +256,20 @@ function buildRequestPathDeclarations(runtimeContext: ScriptRuntimeContext, requ
 
 function supportsRequestPathDeclarations(runtimeContext: ScriptRuntimeContext) {
   if ('phase' in runtimeContext) {
-    return runtimeContext.phase === 'pre-request' || runtimeContext.phase === 'post-request'
+    return (
+      runtimeContext.phase === 'pre-request' ||
+      runtimeContext.phase === 'post-request' ||
+      runtimeContext.phase === 'view-runtime'
+    )
   }
 
   if ('templatePhase' in runtimeContext) {
     return false
   }
 
-  return runtimeContext.targets.some(target => target === 'pre-request' || target === 'post-request')
+  return runtimeContext.targets.some(
+    target => target === 'pre-request' || target === 'post-request' || target === 'view-runtime'
+  )
 }
 
 function supportsNavigateAndCallRequestDeclarations(runtimeContext: ScriptRuntimeContext) {

@@ -14,7 +14,7 @@ export function ScriptDocumentationDialog({
   mode?: 'full' | 'examples'
 }) {
   const documentation = scriptDocumentationByPhase[phase]
-  const exampleEditorLanguage = phase === 'response-visualizer' ? 'jsx' : 'javascript'
+  const exampleEditorLanguage = phase === 'response-visualizer' || phase === 'view-runtime' ? 'jsx' : 'javascript'
   const title = mode === 'examples' ? `${documentation.title} Examples` : documentation.title
 
   return (

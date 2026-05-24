@@ -27,6 +27,7 @@
   "include": [
     "vite.config.ts",
     "vite.response-visualizer.config.ts",
+    "vite.view-runtime.config.ts",
     "vite.shared.ts"
   ],
   "exclude": [

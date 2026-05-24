@@ -153,6 +153,29 @@ export const scriptPackages = sqliteTable(
   ]
 )
 
+export const views = sqliteTable(
+  'views',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    code: text('code').notNull().default(''),
+    layoutMode: text('layout_mode').notNull().default('horizontal'),
+    splitRatio: integer('split_ratio').notNull().default(50),
+    rememberRequests: integer('remember_requests', { mode: 'boolean' }).notNull().default(false),
+    position: integer('position').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    index('views_deleted_at_idx').on(table.deletedAt),
+    index('views_position_idx').on(table.position),
+    check('views_name_not_empty', sql`length(trim(${table.name})) > 0`),
+    check('views_layout_mode_check', sql`${table.layoutMode} in ('horizontal', 'vertical')`),
+    check('views_split_ratio_check', sql`${table.splitRatio} >= 15 and ${table.splitRatio} <= 85`),
+  ]
+)
+
 export const tags = sqliteTable(
   'tags',
   {

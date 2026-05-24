@@ -1,6 +1,6 @@
 import type { SharedScriptTarget } from '@common/SharedScripts'
 
-export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer'
+export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
 export type ScriptRuntimeContext =
   | { phase: ScriptAutocompletePhase }
   | { templatePhase: 'pre-request' }
@@ -207,7 +207,6 @@ interface ScriptClipboardApi {
 declare const console: ScriptConsoleApi
 declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
-declare const request: ScriptRequestApi
 declare const crypto: ScriptCryptoApi
 declare const clipboard: ScriptClipboardApi
 declare const cookies: ScriptCookieApi
@@ -236,6 +235,10 @@ declare const response: ScriptResponseApi
 `
 
 const postRequestOnlyDeclarations = String.raw`
+`
+
+const requestDeclarations = String.raw`
+declare const request: ScriptRequestApi
 `
 
 const responseVisualizerDeclarations = String.raw`
@@ -350,6 +353,10 @@ export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
   const targets = getContextTargets(context)
   let declarations = sharedDeclarations
 
+  if (targets.every(target => target === 'pre-request' || target === 'post-request' || target === 'response-visualizer')) {
+    declarations = `${declarations}\n${requestDeclarations}`
+  }
+
   if (targets.every(target => target === 'pre-request' || target === 'post-request')) {
     declarations = `${declarations}\n${scriptToastDeclarations}\n${scriptPromptDeclarations}`
   }
@@ -362,7 +369,7 @@ export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
     declarations = `${declarations}\n${postRequestOnlyDeclarations}`
   }
 
-  if (targets.length === 1 && targets[0] === 'response-visualizer') {
+  if (targets.length === 1 && (targets[0] === 'response-visualizer' || targets[0] === 'view-runtime')) {
     declarations = `${declarations}\n${responseVisualizerDeclarations}`
   }
 
@@ -375,7 +382,7 @@ export function getScriptRuntimeTargets(context: ScriptRuntimeContext): SharedSc
 
 export function isScriptRuntimeVisualizerOnly(context: ScriptRuntimeContext) {
   const targets = getContextTargets(context)
-  return targets.length === 1 && targets[0] === 'response-visualizer'
+  return targets.length === 1 && (targets[0] === 'response-visualizer' || targets[0] === 'view-runtime')
 }
 
 function getContextTargets(context: ScriptRuntimeContext): SharedScriptTarget[] {

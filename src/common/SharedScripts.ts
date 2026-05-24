@@ -6,7 +6,7 @@ export type SharedScriptScopeType = (typeof SHARED_SCRIPT_SCOPE_TYPES)[number]
 export const SHARED_SCRIPT_KINDS = ['global', 'module'] as const
 export type SharedScriptKind = (typeof SHARED_SCRIPT_KINDS)[number]
 
-export const SHARED_SCRIPT_TARGETS = ['pre-request', 'post-request', 'response-visualizer'] as const
+export const SHARED_SCRIPT_TARGETS = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime'] as const
 export type SharedScriptTarget = (typeof SHARED_SCRIPT_TARGETS)[number]
 
 export type SharedScriptRecord = {

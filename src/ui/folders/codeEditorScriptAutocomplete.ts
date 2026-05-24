@@ -30,7 +30,9 @@ type ScriptAutocompleteOptions = {
 export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions): Extension {
   const phase: ScriptAutocompletePhase = options.phase ?? (options.includeResponse ? 'post-request' : 'pre-request')
   const runtimeContext = options.targets ? { targets: options.targets } : { phase }
-  const supportsRequestPathAutocomplete = options.targets ? options.targets.includes('post-request') : phase === 'post-request'
+  const supportsRequestPathAutocomplete = options.targets
+    ? options.targets.includes('post-request') || options.targets.includes('view-runtime')
+    : phase === 'post-request' || phase === 'view-runtime'
 
   return [
     codeEditorTabBehaviorExtension(options),

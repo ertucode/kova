@@ -1,0 +1,1063 @@
+import '../App.css'
+import '../responseVisualizer/responseVisualizer.css'
+import React, { type ErrorInfo, type ReactNode } from 'react'
+import { createRoot } from 'react-dom/client'
+import ts from 'typescript'
+import { z } from 'zod'
+import { formatXml } from '@common/formatXml'
+import { formatJson } from '@common/Json5'
+import { parseScriptPackageSpecifier } from '@common/ScriptPackages'
+import { CodeEditor } from '../folders/CodeEditor'
+import {
+  VIEW_RUNTIME_CALL_REQUEST_EVENT,
+  VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT,
+  VIEW_RUNTIME_READY_EVENT,
+  VIEW_RUNTIME_RENDER_EVENT,
+  VIEW_RUNTIME_TRIGGER_RUN_EVENT,
+  type ViewRuntimeCallRequestResultMessage,
+  type ViewRuntimePayload,
+  type ViewRuntimeScriptResponse,
+} from '../folders/viewRuntimeProtocol'
+
+type RuntimeErrorDetails = {
+  compactMessage: string
+  detailedMessage: string
+}
+
+type RuntimeCodeEditorComponent = React.ComponentType<React.ComponentProps<typeof CodeEditor>>
+
+const noopCodeEditorOnChange = () => undefined
+
+const rootElement = document.getElementById('root')
+if (!rootElement) {
+  throw new Error('View runtime root not found')
+}
+
+const root = createRoot(rootElement)
+const pendingCallRequests = new Map<
+  string,
+  {
+    resolve: (response: ReturnType<typeof createScriptResponseApi>) => void
+    reject: (error: Error) => void
+  }
+>()
+let callRequestCounter = 0
+
+window.addEventListener('message', event => {
+  if (event.data?.type === VIEW_RUNTIME_RENDER_EVENT) {
+    const code = typeof event.data.code === 'string' ? event.data.code : ''
+    const payload = event.data.payload as ViewRuntimePayload | undefined
+
+    if (!code.trim()) {
+      renderEmptyState()
+      return
+    }
+
+    try {
+      void renderView(code, payload ?? createEmptyPayload()).catch(error => {
+        renderError(formatRuntimeError(error, code))
+      })
+    } catch (error) {
+      renderError(formatRuntimeError(error, code))
+    }
+    return
+  }
+
+  if (event.data?.type === VIEW_RUNTIME_TRIGGER_RUN_EVENT) {
+    triggerRunner()
+    return
+  }
+
+  if (event.data?.type !== VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT) {
+    return
+  }
+
+  const message = event.data as ViewRuntimeCallRequestResultMessage
+  const pending = pendingCallRequests.get(message.requestId)
+  if (!pending) {
+    return
+  }
+
+  pendingCallRequests.delete(message.requestId)
+  if (message.error) {
+    pending.reject(new Error(message.error))
+    return
+  }
+
+  if (!message.response) {
+    pending.reject(new Error('View runtime callRequest returned no response'))
+    return
+  }
+
+  pending.resolve(createScriptResponseApi(message.response))
+})
+
+window.parent.postMessage({ type: VIEW_RUNTIME_READY_EVENT }, '*')
+
+function compileView(source: string) {
+  const result = ts.transpileModule(source, {
+    compilerOptions: {
+      jsx: ts.JsxEmit.React,
+      jsxFactory: 'React.createElement',
+      jsxFragmentFactory: 'React.Fragment',
+      target: ts.ScriptTarget.ES2020,
+      module: ts.ModuleKind.CommonJS,
+      inlineSourceMap: true,
+      inlineSources: true,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports: true,
+    },
+    fileName: 'view-runtime.tsx',
+    reportDiagnostics: true,
+  })
+
+  const diagnostics = (result.diagnostics ?? [])
+    .filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
+    .map(diagnostic => formatRuntimeDiagnostic(diagnostic, source))
+
+  if (diagnostics.length > 0) {
+    throw createRuntimeError({
+      compactMessage: diagnostics[0]?.compactMessage ?? 'View Runtime Compile Error',
+      detailedMessage: diagnostics.map(diagnostic => diagnostic.detailedMessage).join('\n\n'),
+    })
+  }
+
+  return result.outputText
+}
+
+async function renderView(source: string, payload: ViewRuntimePayload) {
+  const globalScripts = payload.sharedScripts.filter(
+    script => script.isActive && script.kind === 'global' && script.targets.includes('view-runtime')
+  )
+  const combinedSource = [...globalScripts.map(script => script.code), source].filter(Boolean).join('\n\n')
+  const transpiled = compileView(combinedSource)
+  const rendered = await runView(transpiled, payload)
+
+  root.render(<RuntimeErrorBoundary source={source}>{rendered}</RuntimeErrorBoundary>)
+}
+
+async function runView(code: string, payload: ViewRuntimePayload) {
+  const module = { exports: {} as Record<string, unknown> }
+  const exports = module.exports
+  const env = createEnvironmentApi(payload.env)
+  const scope = createScopeApi(payload.scope)
+  const cookies = createCookiesApi()
+  const callRequest = createCallRequestApi()
+  const Table = createTableComponent()
+  const RuntimeCodeEditor = createRuntimeCodeEditor()
+  const {
+    Fragment,
+    startTransition,
+    useDeferredValue,
+    useEffect,
+    useEffectEvent,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+  } = React
+  const requirePackage = createInstalledBrowserPackageLoader(payload.scriptPackages)
+  const requireScript = createSharedScriptModuleLoader(payload, {
+    React,
+    Fragment,
+    startTransition,
+    useDeferredValue,
+    useEffect,
+    useEffectEvent,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+    env,
+    scope,
+    cookies,
+    Table,
+    CodeEditor: RuntimeCodeEditor,
+    callRequest,
+  })
+
+  new Function(
+    'module',
+    'exports',
+    'React',
+    'Fragment',
+    'startTransition',
+    'useDeferredValue',
+    'useEffect',
+    'useEffectEvent',
+    'useId',
+    'useLayoutEffect',
+    'useMemo',
+    'useReducer',
+    'useRef',
+    'useState',
+    'console',
+    'env',
+    'scope',
+    'callRequest',
+    'require',
+    'requireScript',
+    'loadPackage',
+    'crypto',
+    'cookies',
+    'z',
+    'formatXml',
+    'formatJson',
+    'Table',
+    'CodeEditor',
+    `${code}\n//# sourceURL=view-runtime.js`
+  )(
+    module,
+    exports,
+    React,
+    Fragment,
+    startTransition,
+    useDeferredValue,
+    useEffect,
+    useEffectEvent,
+    useId,
+    useLayoutEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+    console,
+    env,
+    scope,
+    callRequest,
+    requirePackage,
+    requireScript,
+    requirePackage,
+    crypto,
+    cookies,
+    z,
+    formatXml,
+    formatJson,
+    Table,
+    RuntimeCodeEditor
+  )
+
+  const component = module.exports.default || exports.default
+  if (typeof component !== 'function') {
+    throw new Error('View runtime must export default a component function.')
+  }
+
+  return React.createElement(component as React.ComponentType)
+}
+
+function createSharedScriptModuleLoader(
+  payload: ViewRuntimePayload,
+  globals: {
+    React: typeof React
+    Fragment: typeof React.Fragment
+    startTransition: typeof React.startTransition
+    useDeferredValue: typeof React.useDeferredValue
+    useEffect: typeof React.useEffect
+    useEffectEvent: typeof React.useEffectEvent
+    useId: typeof React.useId
+    useLayoutEffect: typeof React.useLayoutEffect
+    useMemo: typeof React.useMemo
+    useReducer: typeof React.useReducer
+    useRef: typeof React.useRef
+    useState: typeof React.useState
+    env: ReturnType<typeof createEnvironmentApi>
+    scope: ReturnType<typeof createScopeApi>
+    cookies: ReturnType<typeof createCookiesApi>
+    Table: ReturnType<typeof createTableComponent>
+    CodeEditor: RuntimeCodeEditorComponent
+    callRequest: ReturnType<typeof createCallRequestApi>
+  }
+) {
+  const modulesByName = new Map(
+    payload.sharedScripts
+      .filter(
+        script => script.isActive && script.kind === 'module' && script.targets.includes('view-runtime') && script.name.trim()
+      )
+      .map(script => [script.name, script] as const)
+  )
+  const cache = new Map<string, Record<string, unknown>>()
+  const loading = new Set<string>()
+  const requirePackage = createInstalledBrowserPackageLoader(payload.scriptPackages)
+
+  const loadModule = (name: string): Record<string, unknown> => {
+    const script = modulesByName.get(name)
+    if (!script) {
+      throw new Error(`Shared script module ${name} was not found`)
+    }
+
+    const cached = cache.get(name)
+    if (cached) {
+      return cached
+    }
+
+    if (loading.has(name)) {
+      throw new Error(`Shared script cycle detected while loading ${name}`)
+    }
+
+    loading.add(name)
+    try {
+      const compiled = compileView(script.code)
+      const module = { exports: {} as Record<string, unknown> }
+      const exports = module.exports
+
+      new Function(
+        'module',
+        'exports',
+        'React',
+        'Fragment',
+        'startTransition',
+        'useDeferredValue',
+        'useEffect',
+        'useEffectEvent',
+        'useId',
+        'useLayoutEffect',
+        'useMemo',
+        'useReducer',
+        'useRef',
+        'useState',
+        'console',
+        'env',
+        'scope',
+        'callRequest',
+        'require',
+        'requireScript',
+        'loadPackage',
+        'crypto',
+        'cookies',
+        'z',
+        'formatXml',
+        'formatJson',
+        'Table',
+        'CodeEditor',
+        `${compiled}\n//# sourceURL=view-runtime-shared.js`
+      )(
+        module,
+        exports,
+        globals.React,
+        globals.Fragment,
+        globals.startTransition,
+        globals.useDeferredValue,
+        globals.useEffect,
+        globals.useEffectEvent,
+        globals.useId,
+        globals.useLayoutEffect,
+        globals.useMemo,
+        globals.useReducer,
+        globals.useRef,
+        globals.useState,
+        console,
+        globals.env,
+        globals.scope,
+        globals.callRequest,
+        requirePackage,
+        loadModule,
+        requirePackage,
+        crypto,
+        globals.cookies,
+        z,
+        formatXml,
+        formatJson,
+        globals.Table,
+        globals.CodeEditor
+      )
+
+      const exportedKeys = Object.keys(module.exports).filter(key => key !== '__esModule')
+      if (exportedKeys.length === 0) {
+        throw new Error(`Shared script module ${name} must use explicit exports`)
+      }
+
+      cache.set(name, module.exports)
+      return module.exports
+    } finally {
+      loading.delete(name)
+    }
+  }
+
+  return loadModule
+}
+
+function createInstalledBrowserPackageLoader(scriptPackages: ViewRuntimePayload['scriptPackages']) {
+  const moduleCache = new Map<string, Record<string, unknown>>()
+
+  const loadPackage = (specifier: string) => {
+    const parsedSpecifier = parseScriptPackageSpecifier(specifier)
+    if (!parsedSpecifier) {
+      throw new Error(`Package specifier ${specifier} is invalid`)
+    }
+
+    if (parsedSpecifier.subpath) {
+      throw new Error(`Package subpath imports are not supported in the view runtime yet: ${specifier}`)
+    }
+
+    const matchingPackages = scriptPackages.filter(pkg => pkg.packageName === parsedSpecifier.packageName)
+    if (matchingPackages.length === 0) {
+      throw new Error(`Package ${parsedSpecifier.packageName} was not found`)
+    }
+
+    const selectedPackage = parsedSpecifier.version
+      ? matchingPackages.find(pkg => pkg.packageVersion === parsedSpecifier.version)
+      : matchingPackages.length === 1
+        ? matchingPackages[0]
+        : null
+
+    if (!selectedPackage) {
+      if (!parsedSpecifier.version) {
+        throw new Error(`Multiple ${parsedSpecifier.packageName} versions are configured. Import an exact version.`)
+      }
+
+      throw new Error(`Package ${parsedSpecifier.packageName}@${parsedSpecifier.version} was not found`)
+    }
+
+    const cachedModule = moduleCache.get(selectedPackage.cacheKey)
+    if (cachedModule) {
+      return cachedModule
+    }
+
+    if (!selectedPackage.browserBundleCode) {
+      throw new Error(`Package ${selectedPackage.packageName}@${selectedPackage.packageVersion} is not downloaded`)
+    }
+
+    const module = { exports: {} as Record<string, unknown> }
+    const exports = module.exports
+    new Function('module', 'exports', 'require', `${selectedPackage.browserBundleCode}\n//# sourceURL=${selectedPackage.packageName}.bundle.js`)(
+      module,
+      exports,
+      createExternalRequire(loadPackage)
+    )
+    moduleCache.set(selectedPackage.cacheKey, module.exports)
+    return module.exports
+  }
+
+  return loadPackage
+}
+
+function createExternalRequire(loadPackage: (specifier: string) => unknown) {
+  const reactModule = {
+    ...React,
+    default: React,
+  }
+  const jsxRuntimeModule = {
+    Fragment: React.Fragment,
+    jsx: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
+    jsxs: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
+  }
+
+  return (specifier: string) => {
+    switch (specifier) {
+      case 'react':
+        return reactModule
+      case 'react/jsx-runtime':
+      case 'react/jsx-dev-runtime':
+        return jsxRuntimeModule
+      case 'react-dom':
+        return { default: null }
+      default:
+        return loadPackage(specifier)
+    }
+  }
+}
+
+function createCallRequestApi() {
+  return (path: readonly string[], overrides?: {
+    method?: string
+    url?: string
+    headers?: Record<string, string | undefined>
+    body?: string | undefined
+  }) => {
+    if (!Array.isArray(path) || path.some(segment => typeof segment !== 'string')) {
+      return Promise.reject(new Error('callRequest path must be an array of strings'))
+    }
+
+    const requestId = `view-runtime-request-${++callRequestCounter}`
+
+    return new Promise<ReturnType<typeof createScriptResponseApi>>((resolve, reject) => {
+      pendingCallRequests.set(requestId, { resolve, reject })
+      window.parent.postMessage(
+        {
+          type: VIEW_RUNTIME_CALL_REQUEST_EVENT,
+          requestId,
+          path: [...path],
+          overrides,
+        },
+        '*'
+      )
+    })
+  }
+}
+
+function renderError(error: RuntimeErrorDetails) {
+  root.render(<pre className="error">{`${error.compactMessage}\n\n${error.detailedMessage}`.trim()}</pre>)
+}
+
+function formatRuntimeDiagnostic(diagnostic: ts.Diagnostic, source: string): RuntimeErrorDetails {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+  const location =
+    diagnostic.file && typeof diagnostic.start === 'number'
+      ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
+      : null
+  const line = location ? location.line + 1 : null
+  const column = location ? location.character + 1 : null
+  const sourceLine = line ? (source.split('\n')[line - 1]?.trimEnd() ?? null) : null
+  const compactMessage = line ? `View Runtime:${line} ${message}` : `View Runtime ${message}`
+  const detailedLines = ['Phase: View Runtime']
+
+  if (line !== null) {
+    detailedLines.push(column !== null ? `Location: line ${line}, column ${column}` : `Location: line ${line}`)
+  }
+  if (sourceLine) {
+    detailedLines.push(`Code: ${sourceLine}`)
+  }
+  detailedLines.push(`Error: ${message}`)
+
+  return {
+    compactMessage,
+    detailedMessage: detailedLines.join('\n'),
+  }
+}
+
+function formatRuntimeError(error: unknown, source: string): RuntimeErrorDetails {
+  if (isRuntimeError(error)) {
+    return error.details
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  const stack = error instanceof Error ? (error.stack ?? '') : ''
+  const location = extractRuntimeLocation(stack, source)
+  const compactMessage = location?.line ? `View Runtime:${location.line} ${message}` : `View Runtime ${message}`
+  const detailedLines = ['Phase: View Runtime']
+
+  if (location?.line !== undefined && location.line !== null) {
+    detailedLines.push(
+      location.column !== null ? `Location: line ${location.line}, column ${location.column}` : `Location: line ${location.line}`
+    )
+  }
+  if (location?.sourceLine) {
+    detailedLines.push(`Code: ${location.sourceLine}`)
+  }
+  detailedLines.push(`Error: ${message}`)
+
+  return {
+    compactMessage,
+    detailedMessage: detailedLines.join('\n'),
+  }
+}
+
+function extractRuntimeLocation(stack: string, source: string) {
+  const match = stack.match(/(?:view-runtime\.(?:tsx|js)|<anonymous>):(\d+):(\d+)/)
+  if (!match) {
+    return null
+  }
+
+  const line = Number(match[1])
+  const column = Number(match[2])
+  if (!Number.isFinite(line) || !Number.isFinite(column)) {
+    return null
+  }
+
+  return {
+    line,
+    column,
+    sourceLine: source.split('\n')[line - 1]?.trimEnd() ?? null,
+  }
+}
+
+function createRuntimeError(details: RuntimeErrorDetails) {
+  const error = new Error(details.compactMessage)
+  ;(error as Error & { details: RuntimeErrorDetails }).details = details
+  return error
+}
+
+function isRuntimeError(error: unknown): error is Error & { details: RuntimeErrorDetails } {
+  return typeof error === 'object' && error !== null && 'details' in error
+}
+
+function renderEmptyState() {
+  root.render(<div className="empty">Add a view to render custom JSX and run request flows.</div>)
+}
+
+type RuntimeErrorBoundaryProps = {
+  source: string
+  children: ReactNode
+}
+
+type RuntimeErrorBoundaryState = {
+  error: RuntimeErrorDetails | null
+}
+
+class RuntimeErrorBoundary extends React.Component<RuntimeErrorBoundaryProps, RuntimeErrorBoundaryState> {
+  state: RuntimeErrorBoundaryState = {
+    error: null,
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    const combinedStack = [error.stack, info.componentStack].filter(Boolean).join('\n')
+    error.stack = combinedStack
+    this.setState({
+      error: formatRuntimeError(error, this.props.source),
+    })
+  }
+
+  componentDidUpdate(previousProps: RuntimeErrorBoundaryProps) {
+    if (previousProps.source !== this.props.source && this.state.error) {
+      this.setState({ error: null })
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return <pre className="error">{`${this.state.error.compactMessage}\n\n${this.state.error.detailedMessage}`.trim()}</pre>
+    }
+
+    return this.props.children
+  }
+}
+
+function createHeaderApi(initialHeaders: Array<{ key: string; value: string }>) {
+  let rows = initialHeaders.map(row => ({ ...row }))
+
+  return {
+    get(name: string) {
+      const row = rows.find(item => item.key.trim().toLowerCase() === name.trim().toLowerCase())
+      return row ? row.value : null
+    },
+    set(name: string, value: string) {
+      const normalizedName = name.trim()
+      const index = rows.findIndex(item => item.key.trim().toLowerCase() === normalizedName.toLowerCase())
+      if (index >= 0) {
+        rows[index] = { key: normalizedName, value }
+        return
+      }
+
+      rows.push({ key: normalizedName, value })
+    },
+    delete(name: string) {
+      rows = rows.filter(item => item.key.trim().toLowerCase() !== name.trim().toLowerCase())
+    },
+    has(name: string) {
+      return rows.some(item => item.key.trim().toLowerCase() === name.trim().toLowerCase())
+    },
+    entries() {
+      return rows.map(item => [item.key, item.value] as [string, string])
+    },
+    toObject() {
+      return Object.fromEntries(rows.map(item => [item.key, item.value]))
+    },
+  }
+}
+
+function createScriptResponseApi(response: ViewRuntimeScriptResponse) {
+  const headers = createHeaderApi(parseHeadersToEntries(response.headers))
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+    hasCookies() {
+      return headers.has('set-cookie')
+    },
+    parseCookies() {
+      return headers
+        .entries()
+        .filter(([key]) => key.trim().toLowerCase() === 'set-cookie')
+        .flatMap(([, value]) => splitCombinedSetCookieHeader(value).flatMap(parseSetCookieForScript))
+    },
+    body: response.body,
+  }
+}
+
+function createCookiesApi() {
+  return {
+    parse(value: string) {
+      if (typeof value !== 'string') {
+        throw new Error('cookies.parse requires a string')
+      }
+
+      return splitCombinedSetCookieHeader(value).flatMap(parseSetCookieForScript)
+    },
+    stringify(cookies: Array<ReturnType<typeof parseSetCookieForScript>[number]>) {
+      if (!Array.isArray(cookies)) {
+        throw new Error('cookies.stringify requires an array')
+      }
+
+      return cookies.map(stringifyScriptCookie).join(', ')
+    },
+  }
+}
+
+function splitCombinedSetCookieHeader(value: string) {
+  const parts: string[] = []
+  let start = 0
+  let inExpires = false
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (!inExpires && value.slice(index, index + 8).toLowerCase() === 'expires=') {
+      inExpires = true
+      index += 7
+      continue
+    }
+
+    if (inExpires && value[index] === ';') {
+      inExpires = false
+      continue
+    }
+
+    if (value[index] !== ',' || inExpires) {
+      continue
+    }
+
+    const nextCookieStart = index + 1
+    const nextEqualsIndex = value.indexOf('=', nextCookieStart)
+    if (nextEqualsIndex === -1) {
+      continue
+    }
+
+    const nextToken = value.slice(nextCookieStart, nextEqualsIndex).trim()
+    if (!nextToken || /[\s;,]/u.test(nextToken)) {
+      continue
+    }
+
+    parts.push(value.slice(start, index).trim())
+    start = nextCookieStart
+  }
+
+  const lastPart = value.slice(start).trim()
+  if (lastPart) {
+    parts.push(lastPart)
+  }
+
+  return parts
+}
+
+function parseSetCookieForScript(value: string) {
+  const segments = value
+    .split(';')
+    .map(segment => segment.trim())
+    .filter(Boolean)
+  if (segments.length === 0) {
+    return []
+  }
+
+  const separatorIndex = segments[0].indexOf('=')
+  if (separatorIndex <= 0) {
+    return []
+  }
+
+  const name = segments[0].slice(0, separatorIndex).trim()
+  if (!name || /[\s;=]/u.test(name)) {
+    return []
+  }
+
+  const cookie = {
+    name,
+    value: segments[0].slice(separatorIndex + 1),
+    domain: null as string | null,
+    path: null as string | null,
+    secure: false,
+    httpOnly: false,
+    sameSite: null as 'strict' | 'lax' | 'none' | null,
+    expires: null as string | null,
+    maxAge: null as number | null,
+  }
+
+  for (const attribute of segments.slice(1)) {
+    const attributeSeparatorIndex = attribute.indexOf('=')
+    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex)).trim().toLowerCase()
+    const attributeValue = attributeSeparatorIndex === -1 ? '' : attribute.slice(attributeSeparatorIndex + 1).trim()
+
+    if (attributeName === 'domain') {
+      cookie.domain = attributeValue || null
+    } else if (attributeName === 'path') {
+      cookie.path = attributeValue || null
+    } else if (attributeName === 'secure') {
+      cookie.secure = true
+    } else if (attributeName === 'httponly') {
+      cookie.httpOnly = true
+    } else if (attributeName === 'samesite') {
+      cookie.sameSite = normalizeCookieSameSite(attributeValue)
+    } else if (attributeName === 'expires') {
+      cookie.expires = attributeValue || null
+    } else if (attributeName === 'max-age') {
+      const parsed = Number.parseInt(attributeValue, 10)
+      cookie.maxAge = Number.isFinite(parsed) ? parsed : null
+    }
+  }
+
+  return [cookie]
+}
+
+function stringifyScriptCookie(cookie: ReturnType<typeof parseSetCookieForScript>[number]) {
+  if (typeof cookie !== 'object' || cookie === null) {
+    throw new Error('cookies.stringify expects cookie objects')
+  }
+
+  const name = typeof cookie.name === 'string' ? cookie.name.trim() : ''
+  if (!name || /[\s;=]/u.test(name)) {
+    throw new Error('cookies.stringify encountered a cookie with an invalid name')
+  }
+
+  const parts = [`${name}=${typeof cookie.value === 'string' ? cookie.value : ''}`]
+  if (typeof cookie.domain === 'string' && cookie.domain.trim()) {
+    parts.push(`Domain=${cookie.domain.trim()}`)
+  }
+  if (typeof cookie.path === 'string' && cookie.path.trim()) {
+    parts.push(`Path=${cookie.path.trim()}`)
+  }
+  if (cookie.maxAge !== null && cookie.maxAge !== undefined) {
+    if (!Number.isInteger(cookie.maxAge)) {
+      throw new Error('cookies.stringify encountered a cookie with an invalid maxAge')
+    }
+    parts.push(`Max-Age=${cookie.maxAge}`)
+  }
+  if (typeof cookie.expires === 'string' && cookie.expires.trim()) {
+    parts.push(`Expires=${cookie.expires.trim()}`)
+  }
+  if (cookie.secure) {
+    parts.push('Secure')
+  }
+  if (cookie.httpOnly) {
+    parts.push('HttpOnly')
+  }
+  if (cookie.sameSite) {
+    parts.push(`SameSite=${cookie.sameSite.charAt(0).toUpperCase() + cookie.sameSite.slice(1)}`)
+  }
+
+  return parts.join('; ')
+}
+
+function normalizeCookieSameSite(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'strict' || normalized === 'lax' || normalized === 'none') {
+    return normalized
+  }
+
+  return null
+}
+
+function createEnvironmentApi(snapshot: ViewRuntimePayload['env']) {
+  const environments = snapshot.environments.map(environment => ({ ...environment, values: { ...environment.values } }))
+  let activeValues = { ...snapshot.activeValues }
+  const owners = new Map(Object.entries(snapshot.owners))
+  let defaultEnvironmentId = snapshot.defaultEnvironmentId || environments[0]?.id || null
+
+  const findEnvironmentByName = (environmentName: string) => {
+    const normalizedName = environmentName.trim()
+    return (
+      environments.find(environment => environment.name.trim() === normalizedName) ||
+      environments.find(environment => environment.name.trim().toLowerCase() === normalizedName.toLowerCase()) ||
+      null
+    )
+  }
+
+  return {
+    get(name: string, environmentName?: string) {
+      if (environmentName) {
+        return findEnvironmentByName(environmentName)?.values[name] ?? null
+      }
+
+      return activeValues[name] ?? null
+    },
+    has(name: string, environmentName?: string) {
+      return this.get(name, environmentName) !== null
+    },
+    set(name: string, value: string, environmentName?: string) {
+      const targetEnvironment = environmentName
+        ? findEnvironmentByName(environmentName)
+        : environments.find(environment => environment.id === owners.get(name)) ||
+          environments.find(environment => environment.id === defaultEnvironmentId) ||
+          environments[0] ||
+          null
+
+      if (!targetEnvironment) {
+        throw new Error(
+          environmentName ? 'Environment not found for env.set' : 'No active environment is available for env.set'
+        )
+      }
+
+      targetEnvironment.values[name] = value
+      owners.set(name, targetEnvironment.id)
+      if (!defaultEnvironmentId) {
+        defaultEnvironmentId = targetEnvironment.id
+      }
+      activeValues = { ...activeValues, [name]: value }
+    },
+  }
+}
+
+function createScopeApi(snapshot: Record<string, string>) {
+  const values = new Map(Object.entries(snapshot))
+
+  return {
+    get(name: string) {
+      return values.get(name) ?? null
+    },
+    has(name: string) {
+      return values.has(name)
+    },
+    set(name: string, value: string) {
+      values.set(name, value)
+    },
+  }
+}
+
+function createTableComponent() {
+  return function Table({
+    list,
+    columns,
+    emptyMessage = 'No rows',
+  }: {
+    list: unknown
+    columns?: string[]
+    emptyMessage?: string
+  }) {
+    const rows = Array.isArray(list) ? list.filter(isRecordLike) : []
+    const inferredColumns = rows[0] ? Object.keys(rows[0]) : []
+    const visibleColumns = (columns && columns.length > 0 ? columns : inferredColumns).filter(Boolean)
+
+    if (rows.length === 0 || visibleColumns.length === 0) {
+      return (
+        <div
+          style={{
+            border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
+            background: 'color-mix(in oklab, var(--color-base-200) 45%, transparent)',
+            color: 'color-mix(in oklab, var(--color-base-content) 58%, transparent)',
+            borderRadius: 14,
+            padding: 16,
+            fontSize: 13,
+          }}
+        >
+          {emptyMessage}
+        </div>
+      )
+    }
+
+    return (
+      <div
+        style={{
+          overflow: 'hidden',
+          borderRadius: 16,
+          border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
+          background: 'color-mix(in oklab, var(--color-base-200) 28%, transparent)',
+        }}
+      >
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {visibleColumns.map(column => (
+                  <th
+                    key={column}
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      color: 'color-mix(in oklab, var(--color-base-content) 66%, transparent)',
+                      background: 'color-mix(in oklab, var(--color-base-300) 42%, transparent)',
+                      borderBottom: '1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={String(row.id ?? row.key ?? index)}>
+                  {visibleColumns.map(column => (
+                    <td
+                      key={`${index}-${column}`}
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: 13,
+                        color: 'var(--color-base-content)',
+                        borderBottom:
+                          index === rows.length - 1
+                            ? 'none'
+                            : '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
+                        verticalAlign: 'top',
+                      }}
+                    >
+                      {formatTableValue(row[column])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+}
+
+function createRuntimeCodeEditor(): RuntimeCodeEditorComponent {
+  return function RuntimeCodeEditor({ onChange, ...props }: React.ComponentProps<typeof CodeEditor>) {
+    return <CodeEditor {...props} onChange={onChange ?? noopCodeEditorOnChange} />
+  }
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function formatTableValue(value: unknown) {
+  if (value == null) {
+    return ''
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function parseHeadersToEntries(rawHeaders: string) {
+  return rawHeaders
+    .split('\n')
+    .map(line => {
+      const separatorIndex = line.indexOf(':')
+      if (separatorIndex < 0) {
+        return null
+      }
+
+      return {
+        key: line.slice(0, separatorIndex).trim(),
+        value: line.slice(separatorIndex + 1).trim(),
+      }
+    })
+    .filter((entry): entry is { key: string; value: string } => entry !== null)
+}
+
+function createEmptyPayload(): ViewRuntimePayload {
+  return {
+    env: {
+      activeValues: {},
+      environments: [],
+      defaultEnvironmentId: null,
+      owners: {},
+    },
+    scope: {},
+    sharedScripts: [],
+    scriptPackages: [],
+  }
+}
+
+function triggerRunner() {
+  const runner = document.getElementById('runner')
+  if (!(runner instanceof HTMLElement)) {
+    return
+  }
+
+  runner.click()
+}

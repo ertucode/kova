@@ -12,7 +12,7 @@
     "dev:react": "vite",
     "dev:electron": "npm run transpile:electron && cross-env NODE_ENV=development electron .",
     "build:react": "npm run build:frontend-artifacts && tsc -b && vite build",
-    "build:frontend-artifacts": "node scripts/build-script-autocomplete-worker.mjs && node scripts/build-response-visualizer.mjs",
+    "build:frontend-artifacts": "node scripts/build-script-autocomplete-worker.mjs && node scripts/build-response-visualizer.mjs && node scripts/build-view-runtime.mjs",
     "debugvite": "vite build --debug",
     "check:frontend": "tsc -b",
     "check:backend": "tsc -p ./src/electron/tsconfig.json",
