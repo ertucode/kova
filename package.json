@@ -45,6 +45,7 @@
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-xml": "^6.1.0",
+    "@codemirror/merge": "^6.12.1",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.40.0",
     "@fontsource-variable/geist": "^5.2.8",
@@ -52,6 +53,8 @@
     "@fontsource/ibm-plex-sans": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
+    "@jridgewell/trace-mapping": "^0.3.31",
+    "@opencode-ai/sdk": "^1.15.10",
     "@replit/codemirror-vim": "^6.3.0",
     "@tailwindcss/vite": "^4.1.17",
     "@types/adm-zip": "^0.5.7",
@@ -90,11 +93,10 @@
     "react-use-measure": "^2.1.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.17",
+    "typescript": "~5.9.3",
     "xlsx": "^0.18.5",
     "xstate": "^5.25.0",
-    "zod": "^4.1.12",
-    "typescript": "~5.9.3",
-    "@jridgewell/trace-mapping": "^0.3.31"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

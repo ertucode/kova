@@ -1,16 +1,20 @@
-import type { ScriptAiPhase } from '@common/ScriptAi'
+import type { ScriptAiOwnerType, ScriptAiPhase } from '@common/ScriptAi'
 import { SparklesIcon } from 'lucide-react'
 import { twMerge } from 'tailwind-merge'
 import { Tooltip } from '../components/Tooltip'
 import { openScriptAiReviewDialog } from './ScriptAiReviewDialog'
 
 export function ScriptAiIconButton({
+  ownerType,
+  ownerId,
   phase,
   currentCode,
   onApply,
   className,
   tooltip,
 }: {
+  ownerType: ScriptAiOwnerType
+  ownerId: string
   phase: ScriptAiPhase
   currentCode: string
   onApply: (nextCode: string) => void
@@ -24,9 +28,9 @@ export function ScriptAiIconButton({
       type="button"
       className={twMerge(
         'grid w-12 place-items-center text-base-content/45 transition hover:bg-base-200/70 hover:text-base-content h-full cursor-pointer',
-        className
+      className
       )}
-      onClick={() => openScriptAiReviewDialog({ phase, currentCode, onApply })}
+      onClick={() => openScriptAiReviewDialog({ target: { ownerType, ownerId, phase }, currentCode, onApply })}
       aria-label={isEditing ? 'Update script with AI' : 'Generate script with AI'}
     >
       <SparklesIcon className="size-3.5" />

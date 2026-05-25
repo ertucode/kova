@@ -102,6 +102,14 @@ import {
   createScriptToastBridge,
 } from './script-ui-bridges.js'
 import {
+  abortScriptAiSession,
+  applyScriptAiWorkspace,
+  configureScriptAiBaseDirectory,
+  createScriptAiSession,
+  loadScriptAiWorkspace,
+  sendScriptAiMessage,
+} from './script-ai-sdk.js'
+import {
   configureScriptPackageRegistry,
   deleteDownloadedScriptPackage,
   downloadScriptPackage,
@@ -110,7 +118,6 @@ import {
   suggestScriptPackageVersion,
   suggestTypesScriptPackage,
 } from './script-package-registry.js'
-import { generateScriptWithAi } from './script-ai.js'
 import { listOpenCodeModels } from './opencode-models.js'
 
 // Handle folders/files opened via "open with" or as default app
@@ -293,6 +300,7 @@ app.on('ready', async () => {
   const menu = Menu.buildFromTemplate(menuTemplate)
   Menu.setApplicationMenu(menu)
   configureScriptPackageRegistry(path.join(app.getPath('userData'), 'shared'))
+  configureScriptAiBaseDirectory(path.join(app.getPath('userData'), 'script-ai'))
 
   app.on('web-contents-created', (_event, contents) => {
     // if (contents.getType() === 'webview') return
@@ -770,8 +778,24 @@ app.on('ready', async () => {
     })
   })
 
-  ipcHandle('generateScriptWithAi', async input => {
-    return generateScriptWithAi(input)
+  ipcHandle('loadScriptAiWorkspace', async input => {
+    return loadScriptAiWorkspace(input)
+  })
+
+  ipcHandle('createScriptAiSession', async input => {
+    return createScriptAiSession(input)
+  })
+
+  ipcHandle('sendScriptAiMessage', async input => {
+    return sendScriptAiMessage(input)
+  })
+
+  ipcHandle('applyScriptAiWorkspace', async input => {
+    return applyScriptAiWorkspace(input)
+  })
+
+  ipcHandle('abortScriptAiSession', async input => {
+    return abortScriptAiSession(input)
   })
 
   ipcHandle('listOpenCodeModels', async () => {

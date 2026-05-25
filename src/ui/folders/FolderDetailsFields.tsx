@@ -251,6 +251,8 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           headerActions={
             <>
               <ScriptAiIconButton
+                ownerType="folder"
+                ownerId={selectedFolderId ?? ''}
                 phase="pre-request"
                 currentCode={draft.preRequestScript}
                 onApply={nextCode => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: nextCode })}
@@ -284,6 +286,8 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           headerActions={
             <>
               <ScriptAiIconButton
+                ownerType="folder"
+                ownerId={selectedFolderId ?? ''}
                 phase="post-request"
                 currentCode={draft.postRequestScript}
                 onApply={nextCode => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: nextCode })}

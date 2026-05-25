@@ -54,6 +54,7 @@ export function subscribeToGenericEvents() {
           })
         }
       })()
+    } else if (e.type === 'script-ai-state-updated') {
     } else {
       const _exhaustiveCheck: never = e
       return _exhaustiveCheck

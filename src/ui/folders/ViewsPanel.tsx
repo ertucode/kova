@@ -358,7 +358,11 @@ export function ViewsPanel() {
                 label={selectedDraft.code.trim() ? 'Update with AI' : 'Generate with AI'}
                 onClick={() =>
                   openScriptAiReviewDialog({
-                    phase: 'view-runtime',
+                    target: {
+                      ownerType: 'view',
+                      ownerId: selectedDraft.id,
+                      phase: 'view-runtime',
+                    },
                     currentCode: selectedDraft.code,
                     onApply: nextCode => updateDraft(selectedDraft.id, draft => ({ ...draft, code: nextCode })),
                   })

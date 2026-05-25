@@ -54,7 +54,7 @@ function createFallbackWindowElectron(): WindowElectron {
         }
 
         if (property === 'onTaskEvent' || property === 'onGenericEvent') {
-          return () => undefined
+          return () => () => undefined
         }
 
         if (property === 'onWindowFocus') {

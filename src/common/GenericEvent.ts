@@ -1,4 +1,5 @@
 import type { HttpSseStreamState, WebSocketSessionRecord } from './Requests.js'
+import type { ScriptAiWorkspaceState } from './ScriptAi.js'
 import type { ScriptCallRequestRequest, ScriptMakeRequestRequest } from './ScriptMakeRequest.js'
 import type { ScriptPromptRequest } from './ScriptPrompt.js'
 import type { ScriptToastOptions } from './ScriptToast.js'
@@ -39,4 +40,7 @@ export type GenericEvent = {
 } | {
   type: 'script-call-request'
   request: ScriptCallRequestRequest
+} | {
+  type: 'script-ai-state-updated'
+  state: ScriptAiWorkspaceState
 }

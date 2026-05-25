@@ -104,7 +104,16 @@ import {
   type PickPostmanEnvironmentExportFileResponse,
 } from './PostmanEnvironmentExport.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
-import { type GenerateScriptWithAiInput, type GenerateScriptWithAiResponse, type ListOpenCodeModelsResponse } from './ScriptAi.js'
+import {
+  type AbortScriptAiSessionInput,
+  type ApplyScriptAiWorkspaceInput,
+  type ApplyScriptAiWorkspaceResponse,
+  type CreateScriptAiSessionInput,
+  type ListOpenCodeModelsResponse,
+  type LoadScriptAiWorkspaceInput,
+  type ScriptAiWorkspaceState,
+  type SendScriptAiMessageInput,
+} from './ScriptAi.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
 import {
   type CreateViewInput,
@@ -231,7 +240,11 @@ export type EventResponseMapping = {
   sendRequest: Promise<GenericResult<SendRequestResponse>>
   cancelHttpRequest: Promise<GenericResult<void>>
   generateRequestCode: Promise<GenericResult<GenerateRequestCodeResponse>>
-  generateScriptWithAi: Promise<GenericResult<GenerateScriptWithAiResponse>>
+  loadScriptAiWorkspace: Promise<GenericResult<ScriptAiWorkspaceState>>
+  createScriptAiSession: Promise<GenericResult<ScriptAiWorkspaceState>>
+  sendScriptAiMessage: Promise<GenericResult<ScriptAiWorkspaceState>>
+  applyScriptAiWorkspace: Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
+  abortScriptAiSession: Promise<GenericResult<ScriptAiWorkspaceState>>
   listOpenCodeModels: Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: Promise<GenericResult<void>>
@@ -353,7 +366,11 @@ export type EventRequestMapping = {
   sendRequest: SendRequestInput
   cancelHttpRequest: CancelHttpRequestInput
   generateRequestCode: GenerateRequestCodeInput
-  generateScriptWithAi: GenerateScriptWithAiInput
+  loadScriptAiWorkspace: LoadScriptAiWorkspaceInput
+  createScriptAiSession: CreateScriptAiSessionInput
+  sendScriptAiMessage: SendScriptAiMessageInput
+  applyScriptAiWorkspace: ApplyScriptAiWorkspaceInput
+  abortScriptAiSession: AbortScriptAiSessionInput
   listOpenCodeModels: void
   connectWebSocket: WebSocketConnectInput
   sendWebSocketMessage: WebSocketSendMessageInput
@@ -422,8 +439,8 @@ export type UnsubscribeFunction = () => void
 
 export type WindowElectron = {
   getParallelPreloadPath: () => Promise<string>
-  onTaskEvent: (cb: (e: TaskEvents) => void) => void
-  onGenericEvent: (cb: (e: GenericEvent) => void) => void
+  onTaskEvent: (cb: (e: TaskEvents) => void) => UnsubscribeFunction
+  onGenericEvent: (cb: (e: GenericEvent) => void) => UnsubscribeFunction
   onWindowFocus: (cb: () => void) => UnsubscribeFunction
   abortTask: (taskId: string) => Promise<void>
   openShell: (url: string) => Promise<void>
@@ -487,7 +504,11 @@ export type WindowElectron = {
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
   cancelHttpRequest: (input: CancelHttpRequestInput) => Promise<GenericResult<void>>
   generateRequestCode: (input: GenerateRequestCodeInput) => Promise<GenericResult<GenerateRequestCodeResponse>>
-  generateScriptWithAi: (input: GenerateScriptWithAiInput) => Promise<GenericResult<GenerateScriptWithAiResponse>>
+  loadScriptAiWorkspace: (input: LoadScriptAiWorkspaceInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
+  createScriptAiSession: (input: CreateScriptAiSessionInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
+  sendScriptAiMessage: (input: SendScriptAiMessageInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
+  applyScriptAiWorkspace: (input: ApplyScriptAiWorkspaceInput) => Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
+  abortScriptAiSession: (input: AbortScriptAiSessionInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
   listOpenCodeModels: () => Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>

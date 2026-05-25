@@ -874,6 +874,8 @@ export default function View() {
             headerActions={
               <>
                 <ScriptAiIconButton
+                  ownerType="request"
+                  ownerId={selectedRequestId ?? ''}
                   phase="pre-request"
                   currentCode={draft.preRequestScript}
                   onApply={nextCode => updateRequestDraft({ ...draft, preRequestScript: nextCode }, 'request-pre-script-ai')}
@@ -910,6 +912,8 @@ export default function View() {
             headerActions={
               <>
                 <ScriptAiIconButton
+                  ownerType="request"
+                  ownerId={selectedRequestId ?? ''}
                   phase="post-request"
                   currentCode={draft.postRequestScript}
                   onApply={nextCode => updateRequestDraft({ ...draft, postRequestScript: nextCode }, 'request-post-script-ai')}
@@ -947,6 +951,7 @@ export default function View() {
               pendingResponseVisualizerSelectionRef.current = null
             }
           }}
+          ownerId={selectedRequestId ?? ''}
           onFillTemplate={fillResponseVisualizerTemplate}
         />
       ) : null}
@@ -978,6 +983,7 @@ const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
   externalSelection,
   onChange,
   onSelectionChange,
+  ownerId,
   onFillTemplate,
 }: {
   value: string
@@ -986,6 +992,7 @@ const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
   externalSelection: CodeEditorSelection | null
   onChange: (value: string) => void
   onSelectionChange: (selection: CodeEditorSelection) => void
+  ownerId: string
   onFillTemplate: () => void
 }) {
   return (
@@ -1013,6 +1020,8 @@ const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
             </button>
           </Tooltip>
           <ScriptAiIconButton
+            ownerType="request"
+            ownerId={ownerId}
             phase="response-visualizer"
             currentCode={value}
             onApply={onChange}
