@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
 import type { ListOpenCodeModelsResponse } from '../common/ScriptAi.js'
+import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
 
 const OPENCODE_TIMEOUT_MS = 120_000
 const OPENCODE_WORKDIR = path.join(tmpdir(), 'kova-opencode-script-ai')
@@ -29,11 +30,13 @@ export async function listOpenCodeModels(): Promise<GenericResult<ListOpenCodeMo
 }
 
 async function runOpenCodeModelsCommand() {
+  const spawnConfig = await resolveOpenCodeSpawnConfig()
+
   return await new Promise<string>((resolve, reject) => {
-    const child = spawn('opencode', ['models'], {
+    const child = spawn(spawnConfig.command, ['models'], {
       cwd: OPENCODE_WORKDIR,
       stdio: 'pipe',
-      env: process.env,
+      env: spawnConfig.env,
     })
 
     let stdout = ''

@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
 import type { GenerateScriptWithAiInput, GenerateScriptWithAiResponse, ScriptAiPhase } from '../common/ScriptAi.js'
+import { Typescript } from '../common/Typescript.js'
+import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
 
 const OPENCODE_TIMEOUT_MS = 120_000
 const OPENCODE_WORKDIR = path.join(tmpdir(), 'kova-opencode-script-ai')
@@ -59,6 +61,7 @@ function buildScriptAiPrompt(input: GenerateScriptWithAiInput) {
 
 async function runOpenCodePrompt(prompt: string, model: string | null) {
   await mkdir(OPENCODE_WORKDIR, { recursive: true })
+  const spawnConfig = await resolveOpenCodeSpawnConfig()
 
   return await new Promise<string>((resolve, reject) => {
     const args = ['run', '--dir', OPENCODE_WORKDIR, '--format', 'json']
@@ -67,10 +70,10 @@ async function runOpenCodePrompt(prompt: string, model: string | null) {
     }
     args.push(prompt)
 
-    const child = spawn('opencode', args, {
+    const child = spawn(spawnConfig.command, args, {
       cwd: OPENCODE_WORKDIR,
       stdio: 'pipe',
-      env: process.env,
+      env: spawnConfig.env,
     })
 
     let stdout = ''
@@ -182,6 +185,8 @@ function getPhaseLabel(phase: ScriptAiPhase) {
     case 'view-runtime':
       return 'View runtime'
   }
+
+  return Typescript.assertUnreachable(phase)
 }
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
