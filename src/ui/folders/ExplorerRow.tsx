@@ -31,10 +31,11 @@ import { AssignTagsDialog } from './AssignTagsDialog'
 export function ExplorerRow({
   node,
   depth,
-  forceExpanded,
+  isExpanded,
   canDrag,
   draggedItem,
   dropTarget,
+  onToggleExpanded,
   onDragStart,
   onDragEnd,
   onRowDragOver,
@@ -42,16 +43,16 @@ export function ExplorerRow({
 }: {
   node: TreeNode
   depth: number
-  forceExpanded: boolean
+  isExpanded: (nodeId: string) => boolean
   canDrag: boolean
   draggedItem: Selection | null
   dropTarget: ExplorerDropTarget | null
+  onToggleExpanded: (nodeId: string) => void
   onDragStart: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
   onDragEnd: () => void
   onRowDragOver: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
   onRowDrop: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
 }) {
-  const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
@@ -96,7 +97,7 @@ export function ExplorerRow({
   }, [node.id, node.itemType, tagAssignments, tagItems])
 
   const hasChildren = (node.itemType === 'folder' || node.itemType === 'request') && node.children.length > 0
-  const isExpanded = forceExpanded || expandedIds.includes(node.id)
+  const expanded = isExpanded(node.id)
   const isSelected = selected?.id === node.id && selected.itemType === node.itemType
   const isCreateOpen = createDraft?.parentFolderId === node.id
   const rowKey = toSelectionKey(node)
@@ -143,14 +144,14 @@ export function ExplorerRow({
           onPointerDown={event => {
             event.stopPropagation()
             if ((node.itemType === 'folder' || node.itemType === 'request') && hasChildren) {
-              FolderExplorerCoordinator.toggleExpanded(node.id)
+              onToggleExpanded(node.id)
             }
           }}
-          aria-label={isExpanded ? 'Collapse item' : 'Expand item'}
+          aria-label={expanded ? 'Collapse item' : 'Expand item'}
           disabled={(node.itemType !== 'folder' && node.itemType !== 'request') || !hasChildren}
         >
           {(node.itemType === 'folder' || node.itemType === 'request') && hasChildren ? (
-            isExpanded ? (
+            expanded ? (
               <ChevronDownIcon className="size-4" />
             ) : (
               <ChevronRightIcon className="size-4" />
@@ -239,17 +240,18 @@ export function ExplorerRow({
         />
       ) : null}
 
-      {(node.itemType === 'folder' || node.itemType === 'request') && hasChildren && isExpanded ? (
+      {(node.itemType === 'folder' || node.itemType === 'request') && hasChildren && expanded ? (
         <div>
           {node.children.map(child => (
             <ExplorerRow
               key={toSelectionKey(child)}
               node={child}
               depth={depth + 1}
-              forceExpanded={forceExpanded}
+              isExpanded={isExpanded}
               canDrag={canDrag}
               draggedItem={draggedItem}
               dropTarget={dropTarget}
+              onToggleExpanded={onToggleExpanded}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               onRowDragOver={onRowDragOver}

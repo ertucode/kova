@@ -1,4 +1,1 @@
 - ai autocomplete?
-- ai script maker?
-- folder double click
-- arama collapse

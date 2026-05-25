@@ -69,6 +69,7 @@ export function FolderExplorer() {
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
+  const [searchCollapsedIds, setSearchCollapsedIds] = useState<string[]>([])
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const pendingSearchQueryRef = useRef(searchQuery)
@@ -102,6 +103,7 @@ export function FolderExplorer() {
 
   const { roots, itemMap } = useMemo(() => buildTree(items), [items])
   const normalizedSearch = localSearchQuery.trim().toLowerCase()
+  const isSearchActive = normalizedSearch.length > 0
   const tagNamesBySelection = useMemo(() => {
     const tagNameById = new Map(tagItems.map(item => [item.id, item.name]))
     return Object.fromEntries(
@@ -129,11 +131,51 @@ export function FolderExplorer() {
     ),
     [entries, recentHttpRequestUsageCountByRequestId, recentHttpRequestUsageVersion, roots, normalizedSearch, tagNamesBySelection]
   )
+  const searchAutoExpandedIds = useMemo(
+    () => (isSearchActive ? collectExpandableNodeIds(visibleRoots) : []),
+    [isSearchActive, visibleRoots]
+  )
+  const searchAutoExpandedIdSet = useMemo(() => new Set(searchAutoExpandedIds), [searchAutoExpandedIds])
+  const searchCollapsedIdSet = useMemo(() => new Set(searchCollapsedIds), [searchCollapsedIds])
+  const expandedIdSet = useMemo(() => new Set(expandedIds), [expandedIds])
+
+  const isNodeExpanded = (nodeId: string) => {
+    if (!isSearchActive) {
+      return expandedIdSet.has(nodeId)
+    }
+
+    if (searchCollapsedIdSet.has(nodeId)) {
+      return false
+    }
+
+    return searchAutoExpandedIdSet.has(nodeId) || expandedIdSet.has(nodeId)
+  }
+
   const visibleNodes = useMemo(
-    () => flattenVisibleNodes(visibleRoots, normalizedSearch.length > 0, expandedIds),
-    [expandedIds, normalizedSearch.length, visibleRoots]
+    () => flattenVisibleNodes(visibleRoots, isNodeExpanded),
+    [visibleRoots, isNodeExpanded]
   )
   const canDrag = normalizedSearch.length === 0 && createDraft === null
+
+  useEffect(() => {
+    setSearchCollapsedIds([])
+  }, [normalizedSearch])
+
+  const handleToggleExpanded = (nodeId: string) => {
+    if (!isSearchActive) {
+      FolderExplorerCoordinator.toggleExpanded(nodeId)
+      return
+    }
+
+    setSearchCollapsedIds(current => {
+      const isCurrentlyExpanded = isNodeExpanded(nodeId)
+      if (!isCurrentlyExpanded) {
+        return current.filter(id => id !== nodeId)
+      }
+
+      return current.includes(nodeId) ? current : [...current, nodeId]
+    })
+  }
 
   useEffect(() => {
     if (sidebarTab !== 'requests' || !selectionScrollTarget) {
@@ -426,10 +468,11 @@ export function FolderExplorer() {
                     key={`${node.itemType}:${node.id}`}
                     node={node}
                     depth={0}
-                    forceExpanded={normalizedSearch.length > 0}
+                    isExpanded={isNodeExpanded}
                     canDrag={canDrag}
                     draggedItem={draggedItem}
                     dropTarget={dropTarget}
+                    onToggleExpanded={handleToggleExpanded}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onRowDragOver={handleRowDragOver}
@@ -473,16 +516,13 @@ export function FolderExplorer() {
   )
 }
 
-function flattenVisibleNodes(nodes: TreeNode[], forceExpanded: boolean, expandedIds: string[]) {
+function flattenVisibleNodes(nodes: TreeNode[], isExpanded: (nodeId: string) => boolean) {
   const flattened: TreeNode[] = []
 
   const visit = (node: TreeNode) => {
     flattened.push(node)
 
-    if (
-      (forceExpanded || expandedIds.includes(node.id)) &&
-      (node.itemType === 'folder' || node.itemType === 'request')
-    ) {
+    if (isExpanded(node.id) && (node.itemType === 'folder' || node.itemType === 'request')) {
       node.children.forEach(visit)
     }
   }
@@ -490,6 +530,21 @@ function flattenVisibleNodes(nodes: TreeNode[], forceExpanded: boolean, expanded
   nodes.forEach(visit)
 
   return flattened
+}
+
+function collectExpandableNodeIds(nodes: TreeNode[]) {
+  const ids: string[] = []
+
+  const visit = (node: TreeNode) => {
+    if ((node.itemType === 'folder' || node.itemType === 'request') && node.children.length > 0) {
+      ids.push(node.id)
+      node.children.forEach(visit)
+    }
+  }
+
+  nodes.forEach(visit)
+
+  return ids
 }
 
 function CreateMenuButton() {

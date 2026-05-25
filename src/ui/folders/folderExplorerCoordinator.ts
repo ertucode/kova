@@ -1525,6 +1525,14 @@ function ensureSelectionVisible(selection: Selection) {
     return
   }
 
+  if (selection.itemType === 'folder') {
+    folderExplorerEditorStore.trigger.expandedEnsured({ id: selection.id })
+    const folder = folderById.get(selection.id)
+    expandFolderChain(folder?.parentFolderId ?? null)
+    persistUiState()
+    return
+  }
+
   if (selection.itemType === 'example') {
     const example = items.find(
       (item): item is Extract<ExplorerItem, { itemType: 'example' }> =>
