@@ -8,6 +8,7 @@ import {
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
   DEFAULT_SCRIPT_AI_MODEL,
+  DEFAULT_SCRIPT_AI_SERVER_PORT,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_VIM_MODE,
 } from '@common/AppSettings'
@@ -31,6 +32,7 @@ export function AppSettingsDialog() {
   const [scriptBlockPrettierConfig, setScriptBlockPrettierConfig] = useState(DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG)
   const [cookiesEnabled, setCookiesEnabled] = useState(DEFAULT_COOKIES_ENABLED)
   const [scriptAiModel, setScriptAiModel] = useState<string | null>(DEFAULT_SCRIPT_AI_MODEL)
+  const [scriptAiServerPort, setScriptAiServerPort] = useState('')
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
   const [databaseDrafts, setDatabaseDrafts] = useState<Record<string, { name: string; path: string }>>({})
   const [databaseLoading, setDatabaseLoading] = useState(false)
@@ -51,6 +53,7 @@ export function AppSettingsDialog() {
       setScriptBlockPrettierConfig(settings.scriptBlockPrettierConfig)
       setCookiesEnabled(settings.cookiesEnabled)
       setScriptAiModel(settings.scriptAiModel)
+      setScriptAiServerPort(settings.scriptAiServerPort === null ? '' : String(settings.scriptAiServerPort))
     }
   }, [settings])
 
@@ -61,7 +64,15 @@ export function AppSettingsDialog() {
   const handleSave = async () => {
     const value = Number(warnBeforeRequestAfterSeconds)
     const nextValue = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : Number.NaN
+    const trimmedScriptAiServerPort = scriptAiServerPort.trim()
+    const nextScriptAiServerPort =
+      trimmedScriptAiServerPort === '' ? null : Number.isInteger(Number(trimmedScriptAiServerPort)) ? Number(trimmedScriptAiServerPort) : Number.NaN
+
     if (!Number.isFinite(nextValue)) {
+      return
+    }
+
+    if (nextScriptAiServerPort !== null && !Number.isFinite(nextScriptAiServerPort)) {
       return
     }
 
@@ -74,6 +85,7 @@ export function AppSettingsDialog() {
       scriptBlockPrettierConfig,
       cookiesEnabled,
       scriptAiModel,
+      scriptAiServerPort: nextScriptAiServerPort,
     })
 
     if (success) {
@@ -385,27 +397,47 @@ export function AppSettingsDialog() {
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
           <div className="text-sm font-medium text-base-content">AI script generation</div>
           <p className="mt-1 text-sm text-base-content/60">
-            Choose which OpenCode model should be used by default for script generation and refinement.
+            Choose which OpenCode model should be used by default for script generation and refinement, and which local
+            port Kova should use for the OpenCode server.
           </p>
 
-          <label className="mt-4 block max-w-[420px]">
-            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Default model</div>
-            <select
-              className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
-              value={scriptAiModel ?? ''}
-              onChange={event => setScriptAiModel(event.target.value || null)}
-              disabled={modelsLoading}
-            >
-              <option value="">OpenCode default</option>
-              {openCodeModels.map(model => (
-                <option key={model} value={model}>
-                  {model}
-                </option>
-              ))}
-            </select>
-            {modelsLoading ? <p className="mt-2 text-sm text-base-content/55">Loading available models...</p> : null}
-            {modelsError ? <p className="mt-2 text-sm text-error">{modelsError}</p> : null}
-          </label>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,260px)]">
+            <label className="block max-w-[420px]">
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Default model</div>
+              <select
+                className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
+                value={scriptAiModel ?? ''}
+                onChange={event => setScriptAiModel(event.target.value || null)}
+                disabled={modelsLoading}
+              >
+                <option value="">OpenCode default</option>
+                {openCodeModels.map(model => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+              {modelsLoading ? <p className="mt-2 text-sm text-base-content/55">Loading available models...</p> : null}
+              {modelsError ? <p className="mt-2 text-sm text-error">{modelsError}</p> : null}
+            </label>
+
+            <label className="block max-w-[260px]">
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Server port</div>
+              <input
+                type="number"
+                min={1024}
+                max={65535}
+                step={1}
+                placeholder={String(DEFAULT_SCRIPT_AI_SERVER_PORT)}
+                className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
+                value={scriptAiServerPort}
+                onChange={event => setScriptAiServerPort(event.target.value)}
+              />
+              <p className="mt-2 text-sm text-base-content/55">
+                Leave empty to use Kova&apos;s default port: <code>{DEFAULT_SCRIPT_AI_SERVER_PORT}</code>.
+              </p>
+            </label>
+          </div>
         </div>
 
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">

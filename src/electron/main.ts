@@ -10,6 +10,7 @@ import { TaskManager } from './TaskManager.js'
 import { clearCookies, createCookie, deleteCookie, listCookies, updateCookie } from './db/cookies.js'
 import { closeDatabase, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
 import { getAppSettings, updateAppSettings } from './db/app-settings.js'
+import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
 import { findHttpRequestByPath, listExplorerItems } from './db/explorer.js'
 import { listFolderExplorerTabs, saveFolderExplorerTabs, updateFolderExplorerTab } from './db/folder-explorer-tabs.js'
 import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
@@ -108,6 +109,7 @@ import {
   createScriptAiSession,
   loadScriptAiWorkspace,
   sendScriptAiMessage,
+  shutdownScriptAiServer,
 } from './script-ai-sdk.js'
 import {
   configureScriptPackageRegistry,
@@ -133,6 +135,10 @@ app.on('open-file', (event, path) => {
       initialPath: path,
     })
   }
+})
+
+app.once('will-quit', () => {
+  void shutdownScriptAiServer()
 })
 
 type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev'>
@@ -584,7 +590,20 @@ app.on('ready', async () => {
   })
 
   ipcHandle('updateAppSettings', async input => {
-    return updateAppSettings(input)
+    const previousSettings = await getAppSettings()
+    const result = await updateAppSettings(input)
+    if (!result.success) {
+      return result
+    }
+
+    const previousScriptAiServerPort = previousSettings.scriptAiServerPort ?? DEFAULT_SCRIPT_AI_SERVER_PORT
+    const nextScriptAiServerPort = result.data.scriptAiServerPort ?? DEFAULT_SCRIPT_AI_SERVER_PORT
+
+    if (previousScriptAiServerPort !== nextScriptAiServerPort) {
+      await shutdownScriptAiServer()
+    }
+
+    return result
   })
 
   ipcHandle('deleteEnvironment', async input => {

@@ -7,6 +7,7 @@ export const DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE = true
 export const DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG = '{}'
 export const DEFAULT_COOKIES_ENABLED = true
 export const DEFAULT_SCRIPT_AI_MODEL: string | null = null
+export const DEFAULT_SCRIPT_AI_SERVER_PORT = 46381
 
 export type AppSettingsResponseBodyDisplayMode = (typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]
 
@@ -20,6 +21,7 @@ export type AppSettingsRecord = {
   scriptBlockPrettierConfig: string
   cookiesEnabled: boolean
   scriptAiModel: string | null
+  scriptAiServerPort: number | null
   createdAt: number
   updatedAt: number
 }
@@ -33,6 +35,7 @@ export type UpdateAppSettingsInput = Partial<{
   scriptBlockPrettierConfig: string
   cookiesEnabled: boolean
   scriptAiModel: string | null
+  scriptAiServerPort: number | null
 }>
 
 export function parseScriptBlockPrettierConfig(value: string) {

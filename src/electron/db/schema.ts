@@ -224,6 +224,7 @@ export const appSettings = sqliteTable('app_settings', {
   scriptBlockPrettierConfig: text('script_block_prettier_config').notNull().default('{}'),
   cookiesEnabled: integer('cookies_enabled', { mode: 'boolean' }).notNull().default(true),
   scriptAiModel: text('script_ai_model'),
+  scriptAiServerPort: integer('script_ai_server_port'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })

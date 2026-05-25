@@ -1,0 +1,1 @@
+ALTER TABLE `app_settings` ADD `script_ai_server_port` integer;

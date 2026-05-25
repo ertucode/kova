@@ -41,6 +41,7 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
     scriptBlockPrettierConfig: DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: DEFAULT_COOKIES_ENABLED,
     scriptAiModel: DEFAULT_SCRIPT_AI_MODEL,
+    scriptAiServerPort: null,
     createdAt: now,
     updatedAt: now,
   }
@@ -115,6 +116,14 @@ function validateAppSettingsPatch(input: UpdateAppSettingsInput) {
     return 'Invalid script AI model setting'
   }
 
+  if (
+    input.scriptAiServerPort !== undefined
+    && input.scriptAiServerPort !== null
+    && (!Number.isInteger(input.scriptAiServerPort) || input.scriptAiServerPort < 1024 || input.scriptAiServerPort > 65535)
+  ) {
+    return 'Script AI server port must be an integer between 1024 and 65535'
+  }
+
   return null
 }
 
@@ -155,6 +164,10 @@ function buildAppSettingsUpdatePatch(input: UpdateAppSettingsInput): Partial<App
     patch.scriptAiModel = input.scriptAiModel
   }
 
+  if (input.scriptAiServerPort !== undefined) {
+    patch.scriptAiServerPort = input.scriptAiServerPort
+  }
+
   return patch
 }
 
@@ -185,6 +198,7 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     scriptBlockPrettierConfig: value.scriptBlockPrettierConfig ?? DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: value.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED,
     scriptAiModel: value.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL,
+    scriptAiServerPort: value.scriptAiServerPort ?? null,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }

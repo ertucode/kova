@@ -16,6 +16,7 @@ import {
 } from '@opencode-ai/sdk'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
+import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
 import {
   getScriptAiFileName,
   getScriptAiTargetKey,
@@ -32,6 +33,7 @@ import {
   type SendScriptAiMessageInput,
 } from '../common/ScriptAi.js'
 import { emitGenericEvent } from './generic-events.js'
+import { getAppSettings } from './db/app-settings.js'
 import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
 
 type TargetMeta = {
@@ -54,28 +56,33 @@ type TargetRuntime = {
 }
 
 type ServerRuntime = {
-  server: {
+  baseUrl: string
+  ownedServer: {
     url: string
     close(): void
-  }
+  } | null
   globalClient: OpencodeClient
   clientsByDirectory: Map<string, OpencodeClient>
   eventLoopStarted: boolean
+  eventLoopPromise: Promise<void> | null
+  globalEventAbortController: AbortController
 }
 
-const SCRIPT_AI_SERVER_PORT = 4096
 const SCRIPT_AI_META_FILE_NAME = 'meta.json'
 const targetRuntimes = new Map<string, TargetRuntime>()
 const sessionToTargetKey = new Map<string, string>()
 
 let scriptAiBaseDirectory: string | null = null
 let serverRuntimePromise: Promise<ServerRuntime> | null = null
+let serverStartupAbortController: AbortController | null = null
 
 export function configureScriptAiBaseDirectory(directory: string) {
   scriptAiBaseDirectory = directory
 }
 
-export async function loadScriptAiWorkspace(input: LoadScriptAiWorkspaceInput): Promise<GenericResult<ScriptAiWorkspaceState>> {
+export async function loadScriptAiWorkspace(
+  input: LoadScriptAiWorkspaceInput
+): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
     await writeWorkspaceCode(runtime, input.currentCode)
@@ -86,7 +93,9 @@ export async function loadScriptAiWorkspace(input: LoadScriptAiWorkspaceInput): 
   }
 }
 
-export async function createScriptAiSession(input: CreateScriptAiSessionInput): Promise<GenericResult<ScriptAiWorkspaceState>> {
+export async function createScriptAiSession(
+  input: CreateScriptAiSessionInput
+): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
     await writeWorkspaceCode(runtime, input.currentCode)
@@ -111,7 +120,9 @@ export async function createScriptAiSession(input: CreateScriptAiSessionInput): 
   }
 }
 
-export async function sendScriptAiMessage(input: SendScriptAiMessageInput): Promise<GenericResult<ScriptAiWorkspaceState>> {
+export async function sendScriptAiMessage(
+  input: SendScriptAiMessageInput
+): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
     if (!runtime.knownSessionIds.has(input.sessionId)) {
@@ -141,7 +152,9 @@ export async function sendScriptAiMessage(input: SendScriptAiMessageInput): Prom
   }
 }
 
-export async function applyScriptAiWorkspace(input: ApplyScriptAiWorkspaceInput): Promise<GenericResult<ApplyScriptAiWorkspaceResponse>> {
+export async function applyScriptAiWorkspace(
+  input: ApplyScriptAiWorkspaceInput
+): Promise<GenericResult<ApplyScriptAiWorkspaceResponse>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, '')
     await writeWorkspaceCode(runtime, input.code)
@@ -151,7 +164,9 @@ export async function applyScriptAiWorkspace(input: ApplyScriptAiWorkspaceInput)
   }
 }
 
-export async function abortScriptAiSession(input: AbortScriptAiSessionInput): Promise<GenericResult<ScriptAiWorkspaceState>> {
+export async function abortScriptAiSession(
+  input: AbortScriptAiSessionInput
+): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, '')
     if (!runtime.knownSessionIds.has(input.sessionId)) {
@@ -225,14 +240,24 @@ async function refreshTargetRuntime(runtime: TargetRuntime) {
         .map(async session => {
           const messages = await loadSessionMessages(client, session.id)
           runtime.messagesBySessionId.set(session.id, messages)
-          return [session.id, toSessionSummary(session, statuses[session.id] ?? { type: 'idle' }, messages.length, getLatestErrorMessage(messages))] as const
+          return [
+            session.id,
+            toSessionSummary(
+              session,
+              statuses[session.id] ?? { type: 'idle' },
+              messages.length,
+              getLatestErrorMessage(messages)
+            ),
+          ] as const
         })
     )
   )
 
   const knownSessionIds = new Set(sessions.map(session => session.id))
   runtime.knownSessionIds = knownSessionIds
-  runtime.messagesBySessionId = new Map([...runtime.messagesBySessionId].filter(([sessionId]) => knownSessionIds.has(sessionId)))
+  runtime.messagesBySessionId = new Map(
+    [...runtime.messagesBySessionId].filter(([sessionId]) => knownSessionIds.has(sessionId))
+  )
 
   if (runtime.activeSessionId && !knownSessionIds.has(runtime.activeSessionId)) {
     runtime.activeSessionId = sessions[0]?.id ?? null
@@ -274,13 +299,22 @@ function upsertMessage(runtime: TargetRuntime, sessionId: string, message: Scrip
 function upsertMessagePart(runtime: TargetRuntime, sessionId: string, messageId: string, part: ScriptAiMessagePart) {
   const messages = runtime.messagesBySessionId.get(sessionId)
   if (!messages) {
-    runtime.messagesBySessionId.set(sessionId, [{ id: messageId, role: 'assistant', createdAt: Date.now(), completedAt: null, errorMessage: null, parts: [part] }])
+    runtime.messagesBySessionId.set(sessionId, [
+      { id: messageId, role: 'assistant', createdAt: Date.now(), completedAt: null, errorMessage: null, parts: [part] },
+    ])
     return
   }
 
   const messageIndex = messages.findIndex(message => message.id === messageId)
   if (messageIndex === -1) {
-    messages.push({ id: messageId, role: 'assistant', createdAt: Date.now(), completedAt: null, errorMessage: null, parts: [part] })
+    messages.push({
+      id: messageId,
+      role: 'assistant',
+      createdAt: Date.now(),
+      completedAt: null,
+      errorMessage: null,
+      parts: [part],
+    })
     return
   }
 
@@ -306,30 +340,74 @@ function removeMessagePart(runtime: TargetRuntime, sessionId: string, messageId:
 
 async function getServerRuntime() {
   if (!serverRuntimePromise) {
-    serverRuntimePromise = createServerRuntime()
+    serverRuntimePromise = createServerRuntime().catch(error => {
+      serverRuntimePromise = null
+      throw error
+    })
   }
 
   return await serverRuntimePromise
 }
 
+export async function shutdownScriptAiServer() {
+  serverStartupAbortController?.abort()
+  serverStartupAbortController = null
+
+  if (!serverRuntimePromise) {
+    return
+  }
+
+  try {
+    const runtime = await serverRuntimePromise
+    runtime.globalEventAbortController.abort()
+    await runtime.eventLoopPromise?.catch(() => undefined)
+    runtime.ownedServer?.close()
+  } finally {
+    serverRuntimePromise = null
+  }
+}
+
 async function createServerRuntime(): Promise<ServerRuntime> {
   const spawnConfig = await resolveOpenCodeSpawnConfig()
+  const scriptAiServerPort = await getConfiguredScriptAiServerPort()
   process.env.PATH = spawnConfig.env.PATH
   process.env.OPENCODE_DISABLE_CLAUDE_CODE = 'true'
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = 'true'
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = 'true'
 
-  const server = await createOpencodeServer({
-    hostname: '127.0.0.1',
-    port: SCRIPT_AI_SERVER_PORT,
-    timeout: 10_000,
-  })
+  const startupAbortController = new AbortController()
+  serverStartupAbortController = startupAbortController
+
+  const baseUrl = `http://127.0.0.1:${String(scriptAiServerPort)}`
+  let ownedServer: ServerRuntime['ownedServer'] = null
+
+  try {
+    ownedServer = await createOpencodeServer({
+      hostname: '127.0.0.1',
+      port: scriptAiServerPort,
+      timeout: 10_000,
+      signal: startupAbortController.signal,
+    })
+  } catch (error) {
+    if (!(await tryReuseExistingServer(baseUrl, scriptAiServerPort, error))) {
+      throw error
+    }
+  } finally {
+    if (serverStartupAbortController === startupAbortController) {
+      serverStartupAbortController = null
+    }
+  }
+
+  const resolvedBaseUrl = ownedServer?.url ?? baseUrl
 
   const runtime: ServerRuntime = {
-    server,
-    globalClient: createOpencodeClient({ baseUrl: server.url }),
+    baseUrl: resolvedBaseUrl,
+    ownedServer,
+    globalClient: createOpencodeClient({ baseUrl: resolvedBaseUrl }),
     clientsByDirectory: new Map(),
     eventLoopStarted: false,
+    eventLoopPromise: null,
+    globalEventAbortController: new AbortController(),
   }
 
   startGlobalEventLoop(runtime)
@@ -343,11 +421,21 @@ function startGlobalEventLoop(runtime: ServerRuntime) {
 
   runtime.eventLoopStarted = true
 
-  void (async () => {
-    const events = await runtime.globalClient.global.event()
+  runtime.eventLoopPromise = (async () => {
+    try {
+      const events = await runtime.globalClient.global.event({ signal: runtime.globalEventAbortController.signal })
 
-    for await (const event of events.stream) {
-      await handleGlobalEvent(event)
+      for await (const event of events.stream) {
+        if (runtime.globalEventAbortController.signal.aborted) {
+          return
+        }
+
+        await handleGlobalEvent(event)
+      }
+    } catch (error) {
+      if (!runtime.globalEventAbortController.signal.aborted && !isAbortError(error)) {
+        console.error('Script AI global event loop failed', error)
+      }
     }
   })()
 }
@@ -382,7 +470,10 @@ async function handleGlobalEvent(event: GlobalEvent) {
   } else if (payload.type === 'session.updated' || payload.type === 'session.created') {
     const existingMessageCount = runtime.messagesBySessionId.get(sessionId)?.length ?? 0
     const existingErrorMessage = runtime.sessions.get(sessionId)?.latestErrorMessage ?? null
-    runtime.sessions.set(sessionId, toSessionSummary(payload.properties.info, { type: 'idle' }, existingMessageCount, existingErrorMessage))
+    runtime.sessions.set(
+      sessionId,
+      toSessionSummary(payload.properties.info, { type: 'idle' }, existingMessageCount, existingErrorMessage)
+    )
     runtime.knownSessionIds.add(sessionId)
     sessionToTargetKey.set(sessionId, targetKey)
     await persistMeta(runtime)
@@ -398,10 +489,22 @@ async function handleGlobalEvent(event: GlobalEvent) {
   } else if (payload.type === 'message.updated') {
     const sessionMessages = runtime.messagesBySessionId.get(sessionId) ?? []
     runtime.messagesBySessionId.set(sessionId, sessionMessages)
-    upsertMessage(runtime, sessionId, toScriptAiMessage(payload.properties.info, sessionMessages.find(message => message.id === payload.properties.info.id)?.parts ?? []))
+    upsertMessage(
+      runtime,
+      sessionId,
+      toScriptAiMessage(
+        payload.properties.info,
+        sessionMessages.find(message => message.id === payload.properties.info.id)?.parts ?? []
+      )
+    )
     updateSessionSummaryFromMessages(runtime, sessionId)
   } else if (payload.type === 'message.part.updated') {
-    upsertMessagePart(runtime, sessionId, payload.properties.part.messageID, toScriptAiMessagePart(payload.properties.part))
+    upsertMessagePart(
+      runtime,
+      sessionId,
+      payload.properties.part.messageID,
+      toScriptAiMessagePart(payload.properties.part)
+    )
     updateSessionSummaryFromMessages(runtime, sessionId)
   } else if (payload.type === 'message.part.removed') {
     removeMessagePart(runtime, sessionId, payload.properties.messageID, payload.properties.partID)
@@ -409,7 +512,10 @@ async function handleGlobalEvent(event: GlobalEvent) {
   } else if (payload.type === 'message.removed') {
     const messages = runtime.messagesBySessionId.get(sessionId)
     if (messages) {
-      runtime.messagesBySessionId.set(sessionId, messages.filter(message => message.id !== payload.properties.messageID))
+      runtime.messagesBySessionId.set(
+        sessionId,
+        messages.filter(message => message.id !== payload.properties.messageID)
+      )
       updateSessionSummaryFromMessages(runtime, sessionId)
     }
   } else if (payload.type === 'session.error') {
@@ -450,9 +556,42 @@ async function getClientForDirectory(directory: string) {
     return existingClient
   }
 
-  const client = createOpencodeClient({ baseUrl: runtime.server.url, directory })
+  const client = createOpencodeClient({ baseUrl: runtime.baseUrl, directory })
   runtime.clientsByDirectory.set(directory, client)
   return client
+}
+
+async function tryReuseExistingServer(baseUrl: string, port: number, error: unknown) {
+  if (!isPortInUseServerError(error, port)) {
+    return null
+  }
+
+  try {
+    const response = await fetch(new URL('/global/health', baseUrl), {
+      signal: AbortSignal.timeout(2_000),
+    })
+    if (!response.ok) {
+      return null
+    }
+
+    const health = (await response.json()) as { healthy?: boolean }
+    return health.healthy === true ? baseUrl : null
+  } catch {
+    return null
+  }
+}
+
+function isPortInUseServerError(error: unknown, port: number) {
+  return error instanceof Error && error.message.includes(`Is port ${String(port)} in use?`)
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+async function getConfiguredScriptAiServerPort() {
+  const settings = await getAppSettings()
+  return settings.scriptAiServerPort ?? DEFAULT_SCRIPT_AI_SERVER_PORT
 }
 
 async function readTargetMeta(workspacePath: string, targetKey: string): Promise<TargetMeta> {
@@ -553,7 +692,12 @@ function toWorkspaceState(runtime: TargetRuntime, workspaceCode: string): Script
   }
 }
 
-function toSessionSummary(session: Session, status: SessionStatus, messageCount: number, latestErrorMessage: string | null): ScriptAiSessionSummary {
+function toSessionSummary(
+  session: Session,
+  status: SessionStatus,
+  messageCount: number,
+  latestErrorMessage: string | null
+): ScriptAiSessionSummary {
   return {
     id: session.id,
     title: session.title,
@@ -580,12 +724,15 @@ function getLatestErrorMessage(messages: ScriptAiMessage[]) {
   return [...messages].reverse().find(message => message.errorMessage)?.errorMessage ?? null
 }
 
-function toScriptAiMessage(message: Message | AssistantMessage, parts: ScriptAiMessagePart[] | Part[]): ScriptAiMessage {
+function toScriptAiMessage(
+  message: Message | AssistantMessage,
+  parts: ScriptAiMessagePart[] | Part[]
+): ScriptAiMessage {
   return {
     id: message.id,
     role: message.role,
     createdAt: message.time.created,
-    completedAt: message.role === 'assistant' ? message.time.completed ?? null : null,
+    completedAt: message.role === 'assistant' ? (message.time.completed ?? null) : null,
     errorMessage: message.role === 'assistant' ? getSdkErrorMessage(message.error) : null,
     parts: parts.map(part => ('messageID' in part ? toScriptAiMessagePart(part) : part)),
   }
@@ -715,13 +862,13 @@ function getSdkErrorMessage(error: unknown) {
   }
 
   if (
-    typeof error === 'object'
-    && error !== null
-    && 'data' in error
-    && typeof error.data === 'object'
-    && error.data !== null
-    && 'message' in error.data
-    && typeof error.data.message === 'string'
+    typeof error === 'object' &&
+    error !== null &&
+    'data' in error &&
+    typeof error.data === 'object' &&
+    error.data !== null &&
+    'message' in error.data &&
+    typeof error.data.message === 'string'
   ) {
     return error.data.message
   }
