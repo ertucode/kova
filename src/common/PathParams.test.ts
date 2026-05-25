@@ -66,6 +66,12 @@ describe('PathParams', () => {
     expect(syncSearchParamsWithUrl('https://api.example.com/users?limit=10', 'exchange:hisse\nlimit:10\nnewkey:')).toBe('limit:10')
   })
 
+  it('keeps disabled search param rows when they are removed from the URL', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?limit=10', '//exchange:hisse\nlimit:10\n//newkey:')).toBe(
+      'limit:10\n//exchange:hisse\n//newkey:'
+    )
+  })
+
   it('preserves descriptions when a search param key is renamed in place', () => {
     expect(syncSearchParamsWithUrl('https://api.example.com/users?newkey=10', 'oldkey:10 // Keep this')).toBe(
       'newkey:10 // Keep this'

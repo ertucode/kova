@@ -1,6 +1,4 @@
 - ai autocomplete?
 - ai script maker?
-- search params yine bozuldu!!
-- sse eventler gelirken loading olmamalı (arama)
 - folder double click
 - arama collapse

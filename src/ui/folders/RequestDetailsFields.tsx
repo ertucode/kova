@@ -171,6 +171,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
   const definedPathParamNamesRef = useRef<string[]>([])
   const pathParamRowsRef = useRef(parseKeyValueRows(draft.pathParams))
+  const searchParamsValueRef = useRef(draft.searchParams)
 
   activeEnvironmentNamesRef.current = activeEnvironmentNames
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
@@ -179,6 +180,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   visibleSharedScriptsRef.current = visibleSharedScripts
   scriptPackageArtifactsRef.current = scriptPackageArtifacts
   pathParamRowsRef.current = parseKeyValueRows(draft.pathParams)
+  searchParamsValueRef.current = draft.searchParams
   definedPathParamNamesRef.current = pathParamRowsRef.current.map(row => row.key.trim()).filter(Boolean)
 
   const variableEditorExtensions = useMemo(
@@ -483,13 +485,15 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const updateUrl = useCallback(
     (nextUrl: string) => {
       const latestDraft = draftRef.current
+      const nextSearchParams = syncSearchParamsWithUrl(nextUrl, searchParamsValueRef.current)
+      searchParamsValueRef.current = nextSearchParams
 
       updateRequestDraft(
         {
           ...latestDraft,
           url: nextUrl,
           pathParams: syncPathParamsWithUrl(nextUrl, latestDraft.pathParams),
-          searchParams: syncSearchParamsWithUrl(nextUrl, latestDraft.searchParams),
+          searchParams: nextSearchParams,
         },
         'request-url'
       )
@@ -539,6 +543,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const importUrl = (nextUrl: string) => {
     const importedUrlFields = buildImportedHttpUrlFields(nextUrl, draft.bodyType)
     const { metaTab: nextMetaTab, ...nextUrlFields } = importedUrlFields
+    searchParamsValueRef.current = nextUrlFields.searchParams
 
     updateRequestDraft(
       {
@@ -561,6 +566,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     const parsedCurl = parseCurlRequest(text)
     if (parsedCurl) {
       const shouldShowSearchParams = parsedCurl.bodyType === 'none' && parsedCurl.searchParams.trim() !== ''
+      searchParamsValueRef.current = parsedCurl.searchParams
 
       updateRequestDraft(
         {
@@ -630,6 +636,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const updateSearchParams = useCallback(
     (nextSearchParams: string) => {
       const latestDraft = draftRef.current
+      searchParamsValueRef.current = nextSearchParams
 
       updateRequestDraft(
         {

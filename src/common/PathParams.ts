@@ -118,7 +118,7 @@ export function syncSearchParamsWithUrl(url: string, searchParams: string) {
   const urlRows = extractSearchParamRows(url)
   const existingRows = parseKeyValueRows(searchParams)
   const usedExistingRowIndexes = new Set<number>()
-  const nextRows = urlRows.map((urlRow, index) => {
+  const nextRows: KeyValueRow[] = urlRows.map((urlRow, index) => {
     const matchingIndexByKey = existingRows.findIndex(
       (existingRow, existingIndex) => !usedExistingRowIndexes.has(existingIndex) && existingRow.key.trim() === urlRow.key
     )
@@ -126,7 +126,7 @@ export function syncSearchParamsWithUrl(url: string, searchParams: string) {
     const matchingIndex =
       matchingIndexByKey >= 0
         ? matchingIndexByKey
-        : index < existingRows.length && !usedExistingRowIndexes.has(index)
+        : index < existingRows.length && !usedExistingRowIndexes.has(index) && existingRows[index]?.enabled
           ? index
           : -1
 
@@ -140,9 +140,18 @@ export function syncSearchParamsWithUrl(url: string, searchParams: string) {
       enabled: true,
       key: urlRow.key,
       value: urlRow.value,
+      type: existingRow?.type,
       description: existingRow?.description ?? '',
     } satisfies KeyValueRow
   })
+
+  for (const [existingIndex, existingRow] of existingRows.entries()) {
+    if (usedExistingRowIndexes.has(existingIndex) || existingRow.enabled) {
+      continue
+    }
+
+    nextRows.push(existingRow)
+  }
 
   return stringifyKeyValueRows(nextRows)
 }

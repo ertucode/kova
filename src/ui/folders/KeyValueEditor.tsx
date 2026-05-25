@@ -853,10 +853,28 @@ function getRowCountWithoutTrailingCreateRow(rows: KeyValueRow[]) {
 function buildRows(value: string, currentRows: KeyValueRow[]) {
   const parsedRows = parseKeyValueRows(value)
   const existingRows = currentRows.filter(row => row !== currentRows[currentRows.length - 1])
-  const nextRows = parsedRows.map((row, index) => ({
-    ...row,
-    id: existingRows[index]?.id ?? row.id,
-  }))
+  const usedExistingRowIndexes = new Set<number>()
+  const nextRows = parsedRows.map((row, index) => {
+    const matchingIndexByKey = existingRows.findIndex(
+      (existingRow, existingIndex) => !usedExistingRowIndexes.has(existingIndex) && existingRow.key.trim() === row.key.trim()
+    )
+    const matchingIndex =
+      matchingIndexByKey >= 0
+        ? matchingIndexByKey
+        : index < existingRows.length && !usedExistingRowIndexes.has(index)
+          ? index
+          : -1
+    const existingRow = matchingIndex >= 0 ? existingRows[matchingIndex] : null
+
+    if (matchingIndex >= 0) {
+      usedExistingRowIndexes.add(matchingIndex)
+    }
+
+    return {
+      ...row,
+      id: existingRow?.id ?? row.id,
+    }
+  })
 
   return ensureTrailingEmptyRow(nextRows, getNextTrailingCreateRow(currentRows, nextRows))
 }

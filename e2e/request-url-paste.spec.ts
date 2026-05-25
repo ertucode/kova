@@ -63,8 +63,8 @@ test.describe('request url paste', () => {
     await expect(page.getByTestId('request-search-params-tab-button')).toHaveAttribute('class', /border-b-base-content/)
 
     await expect.poll(async () => getSearchParamRows(page)).toEqual([
-      { key: 'page', value: '2' },
-      { key: 'sort', value: 'desc' },
+      { key: 'page', value: '2', enabled: true },
+      { key: 'sort', value: 'desc', enabled: true },
     ])
 
     await page.keyboard.press('Meta+S')
@@ -74,7 +74,78 @@ test.describe('request url paste', () => {
       searchParams: 'page:2\nsort:desc',
     })
   })
+
+  test('keeps disabled search params visible while syncing url and editor changes', async () => {
+    const requestId = await seedRequestFixture(page)
+
+    await page.reload()
+    await expect(page.getByTestId('request-url-editor')).toBeVisible()
+
+    await openSearchParamsTab(page)
+    await expect.poll(async () => getSearchParamRows(page)).toEqual([{ key: 'stale', value: '1', enabled: true }])
+
+    await setSearchParamEnabled(page, 'stale', false)
+
+    await expect.poll(async () => getSearchParamRows(page)).toEqual([{ key: 'stale', value: '1', enabled: false }])
+    await expect.poll(() => getRequestUrl(page)).toBe('https://api.example.com/orders')
+
+    await setRequestUrl(page, 'https://api.example.com/orders?page=2')
+
+    await expect.poll(async () => getSearchParamRows(page)).toEqual([
+      { key: 'page', value: '2', enabled: true },
+      { key: 'stale', value: '1', enabled: false },
+    ])
+
+    await fillSearchParamValue(page, 'page', '3')
+    await expect.poll(() => getRequestUrl(page)).toBe('https://api.example.com/orders?page=3')
+
+    await page.keyboard.press('Meta+S')
+
+    await expect.poll(() => getPersistedRequest(page, requestId)).toEqual({
+      url: 'https://api.example.com/orders?page=3',
+      searchParams: 'page:3\n//stale:1',
+    })
+  })
 })
+
+async function openSearchParamsTab(page: Page) {
+  await page.getByTestId('request-search-params-tab-button').click()
+  await expect(page.getByTestId('search-params-tab')).toBeVisible()
+}
+
+async function setRequestUrl(page: Page, value: string) {
+  const urlContent = page.locator('[data-testid="request-url-editor"] .cm-content')
+  await urlContent.click()
+  await page.keyboard.press('Meta+A')
+  await page.keyboard.type(value)
+}
+
+async function getRequestUrl(page: Page) {
+  return page.locator('[data-testid="request-url-editor"] .cm-content').textContent()
+}
+
+async function setSearchParamEnabled(page: Page, key: string, enabled: boolean) {
+  const row = getSearchParamRow(page, key)
+  const checkbox = row.locator('input[data-key-value-field="enabled"]')
+  if ((await checkbox.isChecked()) !== enabled) {
+    await checkbox.click()
+  }
+}
+
+async function fillSearchParamValue(page: Page, key: string, value: string) {
+  const row = getSearchParamRow(page, key)
+  const content = row.locator('[data-key-value-field="value"] .cm-content')
+  await content.click()
+  await page.keyboard.press('Meta+A')
+  await page.keyboard.type(value)
+}
+
+function getSearchParamRow(page: Page, key: string) {
+  return page
+    .locator('[data-testid="search-params-tab"] tr[data-key-value-row-id]')
+    .filter({ has: page.locator(`input[data-key-value-field="key"][value="${key}"]`) })
+    .first()
+}
 
 async function writeServerConfig(homeDir: string, dbPath: string) {
   const configDirectory = path.join(homeDir, '.config', 'kova')
@@ -147,10 +218,12 @@ async function getSearchParamRows(page: Page) {
       .map(row => {
         const keyInput = row.querySelector<HTMLInputElement>('input[data-key-value-field="key"]')
         const valueText = row.querySelector('[data-key-value-field="value"] .cm-line')?.textContent?.trim() ?? ''
+        const enabledInput = row.querySelector<HTMLInputElement>('input[data-key-value-field="enabled"]')
 
         return {
           key: keyInput?.value ?? '',
           value: valueText,
+          enabled: enabledInput?.checked ?? true,
         }
       })
       .filter(row => row.key !== '')
