@@ -5,7 +5,7 @@ import { useSelector } from '@xstate/store/react'
 import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, type AppSettingsResponseBodyDisplayMode } from '@common/AppSettings'
 import type { ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
-import { isSseContentType, parseSseEvents } from '@common/Sse'
+import { getSseEventDisplayName, isSseContentType, parseSseEvents } from '@common/Sse'
 import type { HttpSseStreamState, RequestScriptError, SendRequestResponse, SseEventRecord } from '@common/Requests'
 import { formatJson } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -298,7 +298,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
         <ResponseScriptErrors responseError={responseError} errors={scriptErrors} onJumpToError={onJumpToScriptError} />
         <div
           className={`flex min-h-0 flex-1 overflow-hidden transition duration-200 ${
-            isSending ? 'pointer-events-none blur-[1.5px] saturate-50 opacity-60' : ''
+            isSending && !shouldShowSsePanel ? 'pointer-events-none blur-[1.5px] saturate-50 opacity-60' : ''
           }`}
         >
           {shouldShowSsePanel ? (
@@ -1113,7 +1113,26 @@ function SseResponsePanel({
   const statusText = stream?.statusText ?? response?.statusText ?? ''
   const statusTone = getStatusTone(status ?? undefined)
   const [viewMode, setViewMode] = useState<'rows' | 'raw'>('rows')
+  const [filterValue, setFilterValue] = useState('')
   const rawBody = stream?.body ?? response?.body ?? ''
+  const normalizedFilterValue = filterValue.trim().toLowerCase()
+  const filteredEvents = useMemo(() => {
+    if (!normalizedFilterValue) {
+      return events
+    }
+
+    return events.filter(event => {
+      const eventName = getSseEventDisplayName(event).toLowerCase()
+      const eventId = event.id?.toLowerCase() ?? ''
+      const eventData = event.data.toLowerCase()
+
+      return (
+        eventName.includes(normalizedFilterValue) ||
+        eventId.includes(normalizedFilterValue) ||
+        eventData.includes(normalizedFilterValue)
+      )
+    })
+  }, [events, normalizedFilterValue])
   const historyButtonLabel =
     requestHistoryCount === null
       ? 'Loading History...'
@@ -1124,7 +1143,17 @@ function SseResponsePanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-3">
       <div className="flex shrink-0 items-center justify-between gap-3">
-        <div className="text-sm font-medium text-base-content">SSE Events</div>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="text-sm font-medium text-base-content">SSE Events</div>
+          <input
+            type="text"
+            value={filterValue}
+            onChange={event => setFilterValue(event.target.value)}
+            placeholder="Filter events"
+            className="h-9 w-full max-w-[240px] rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content outline-none transition placeholder:text-base-content/30 focus:border-base-content/20"
+            aria-label="Filter SSE events"
+          />
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-base-content/45">
           <button
             type="button"
@@ -1163,7 +1192,7 @@ function SseResponsePanel({
             </button>
           ) : null}
           {headerContentType ? <span>{headerContentType}</span> : null}
-          <span>{events.length} events</span>
+          <span>{filteredEvents.length} / {events.length} events</span>
           {durationMs !== null ? <span>{durationMs} ms</span> : null}
           {status !== null ? (
             <span className={`font-semibold ${statusTone.className}`}>
@@ -1203,8 +1232,14 @@ function SseResponsePanel({
       <div className="mt-3 min-h-0 flex-1 overflow-auto pr-1">
         {viewMode === 'rows' ? (
           <SseTranscript
-            events={events}
-            emptyMessage={stream ? 'Waiting for SSE events.' : 'Response events will appear here.'}
+            events={filteredEvents}
+            emptyMessage={
+              normalizedFilterValue
+                ? 'No SSE events matched the current filter.'
+                : stream
+                  ? 'Waiting for SSE events.'
+                  : 'Response events will appear here.'
+            }
             showTimestamps={Boolean(stream)}
           />
         ) : rawBody ? (
