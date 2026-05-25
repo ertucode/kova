@@ -1,3 +1,4 @@
+import '@tailwindcss/browser'
 import '../App.css'
 import '../responseVisualizer/responseVisualizer.css'
 import React, { type ErrorInfo, type ReactNode } from 'react'
@@ -19,6 +20,7 @@ import {
   type ViewRuntimeScriptResponse,
 } from '../folders/viewRuntimeProtocol'
 import { transformViewRuntimeSource } from './viewRuntimeRefresh'
+import { ensureTailwindRuntimeTheme } from '../tailwindRuntimeTheme'
 
 type RuntimeErrorDetails = {
   compactMessage: string
@@ -40,6 +42,8 @@ const rootElement = document.getElementById('root')
 if (!rootElement) {
   throw new Error('View runtime root not found')
 }
+
+ensureTailwindRuntimeTheme()
 
 const root = createRoot(rootElement)
 const pendingCallRequests = new Map<

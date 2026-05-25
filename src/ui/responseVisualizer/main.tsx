@@ -1,3 +1,4 @@
+import '@tailwindcss/browser'
 import '../App.css'
 import './responseVisualizer.css'
 import React, { type ErrorInfo, type ReactNode } from 'react'
@@ -14,6 +15,7 @@ import { resolveTemplateVariables } from '@common/RequestVariables'
 import { parseScriptPackageSpecifier, type ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import { CodeEditor } from '../folders/CodeEditor'
+import { ensureTailwindRuntimeTheme } from '../tailwindRuntimeTheme'
 
 type VisualizerResponsePayload = {
   status: number
@@ -91,6 +93,9 @@ const rootElement = document.getElementById('root')
 if (!rootElement) {
   throw new Error('Response visualizer root not found')
 }
+
+ensureTailwindRuntimeTheme()
+
 const root = createRoot(rootElement)
 
 window.addEventListener('message', event => {
