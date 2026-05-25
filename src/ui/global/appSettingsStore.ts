@@ -4,11 +4,12 @@ import {
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+  DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
-  type AppSettingsResponseBodyDisplayMode,
   type AppSettingsRecord,
+  type UpdateAppSettingsInput,
 } from '@common/AppSettings'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
@@ -73,15 +74,7 @@ export namespace AppSettingsCoordinator {
     }
   }
 
-  export async function saveSettings(input: {
-    warnBeforeRequestAfterSeconds: number
-    responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
-    compactRequestView: boolean
-    vimMode: boolean
-    formatScriptBlocksOnSave: boolean
-    scriptBlockPrettierConfig: string
-    cookiesEnabled: boolean
-  }) {
+  export async function saveSettings(input: UpdateAppSettingsInput) {
     appSettingsStore.trigger.savingStarted()
 
     const result = await getWindowElectron().updateAppSettings(input)
@@ -96,25 +89,8 @@ export namespace AppSettingsCoordinator {
     return true
   }
 
-  export async function saveResponseBodyDisplayMode(mode: AppSettingsResponseBodyDisplayMode) {
-    const current = appSettingsStore.getSnapshot().context.settings
-    const result = await getWindowElectron().updateAppSettings({
-      warnBeforeRequestAfterSeconds: current?.warnBeforeRequestAfterSeconds ?? DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
-      responseBodyDisplayMode: mode,
-      compactRequestView: current?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW,
-      vimMode: current?.vimMode ?? DEFAULT_VIM_MODE,
-      formatScriptBlocksOnSave: current?.formatScriptBlocksOnSave ?? DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
-      scriptBlockPrettierConfig: current?.scriptBlockPrettierConfig ?? DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
-      cookiesEnabled: current?.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED,
-    })
-
-    if (!result.success) {
-      toast.show(result)
-      return false
-    }
-
-    appSettingsStore.trigger.loaded({ settings: result.data })
-    return true
+  export async function saveResponseBodyDisplayMode(responseBodyDisplayMode: AppSettingsRecord['responseBodyDisplayMode']) {
+    return await saveSettings({ responseBodyDisplayMode })
   }
 }
 
@@ -147,4 +123,8 @@ export function getFormatScriptBlocksOnSave() {
 
 export function getScriptBlockPrettierConfig() {
   return appSettingsStore.getSnapshot().context.settings?.scriptBlockPrettierConfig ?? DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG
+}
+
+export function getScriptAiModel() {
+  return appSettingsStore.getSnapshot().context.settings?.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL
 }

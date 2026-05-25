@@ -109,6 +109,8 @@ electron.contextBridge.exposeInMainWorld('electron', {
   sendRequest: input => ipcInvoke('sendRequest', input),
   cancelHttpRequest: input => ipcInvoke('cancelHttpRequest', input),
   generateRequestCode: input => ipcInvoke('generateRequestCode', input),
+  generateScriptWithAi: input => ipcInvoke('generateScriptWithAi', input),
+  listOpenCodeModels: () => ipcInvoke('listOpenCodeModels', undefined),
   connectWebSocket: input => ipcInvoke('connectWebSocket', input),
   sendWebSocketMessage: input => ipcInvoke('sendWebSocketMessage', input),
   disconnectWebSocket: input => ipcInvoke('disconnectWebSocket', input),

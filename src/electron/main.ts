@@ -110,6 +110,8 @@ import {
   suggestScriptPackageVersion,
   suggestTypesScriptPackage,
 } from './script-package-registry.js'
+import { generateScriptWithAi } from './script-ai.js'
+import { listOpenCodeModels } from './opencode-models.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -766,6 +768,14 @@ app.on('ready', async () => {
       curl: buildCurlCommand(preparedRequest.data),
       fetch: await buildFetchSnippet(preparedRequest.data),
     })
+  })
+
+  ipcHandle('generateScriptWithAi', async input => {
+    return generateScriptWithAi(input)
+  })
+
+  ipcHandle('listOpenCodeModels', async () => {
+    return listOpenCodeModels()
   })
 
   ipcHandle('connectWebSocket', async (input, event) => {

@@ -62,19 +62,7 @@ export function CookiesPanel() {
                 checked={cookiesEnabled}
                 disabled={!settings || settingsSaving}
                 onChange={event => {
-                  if (!settings) {
-                    return
-                  }
-
-                  void AppSettingsCoordinator.saveSettings({
-                    warnBeforeRequestAfterSeconds: settings.warnBeforeRequestAfterSeconds,
-                    responseBodyDisplayMode: settings.responseBodyDisplayMode,
-                    compactRequestView: settings.compactRequestView,
-                    vimMode: settings.vimMode,
-                    formatScriptBlocksOnSave: settings.formatScriptBlocksOnSave,
-                    scriptBlockPrettierConfig: settings.scriptBlockPrettierConfig,
-                    cookiesEnabled: event.target.checked,
-                  })
+                  void AppSettingsCoordinator.saveSettings({ cookiesEnabled: event.target.checked })
                 }}
                 className="checkbox checkbox-primary checkbox-sm"
               />

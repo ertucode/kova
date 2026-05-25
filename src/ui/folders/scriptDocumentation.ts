@@ -1,4 +1,6 @@
-export type ScriptDocumentationPhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
+import type { ScriptAiPhase } from '@common/ScriptAi'
+
+export type ScriptDocumentationPhase = ScriptAiPhase
 
 export type ScriptDocumentationEntry = {
   label: string
@@ -428,6 +430,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'The runtime includes React hooks, env, scope, console, crypto, clipboard, cookies, z, Table, and CodeEditor.',
       'Use callRequest to execute saved HTTP requests from the workspace without navigating away from the view pane.',
       'The runtime does not expose request or response globals. Build your own state around callRequest results.',
+      'Tailwind utility classes can be used in view runtime components, in addition to inline styles.',
     ],
     sections: [
       {
@@ -473,4 +476,27 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       },
     ],
   },
+}
+
+export function buildScriptDocumentationPrompt(phase: ScriptDocumentationPhase) {
+  const documentation = scriptDocumentationByPhase[phase]
+
+  return [
+    `${documentation.title}`,
+    documentation.description,
+    '',
+    'Notes:',
+    ...documentation.notes.map(note => `- ${note}`),
+    '',
+    ...documentation.sections.flatMap(section => [
+      `${section.title}:`,
+      ...(section.description ? [section.description] : []),
+      ...section.entries.map(entry => `- ${entry.label}: ${entry.detail}`),
+      '',
+    ]),
+    'Examples:',
+    ...documentation.examples.flatMap(example => [example.title, example.code, '']),
+  ]
+    .join('\n')
+    .trim()
 }

@@ -5,6 +5,7 @@ import {
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
+  DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
@@ -39,6 +40,7 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
     formatScriptBlocksOnSave: DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
     scriptBlockPrettierConfig: DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: DEFAULT_COOKIES_ENABLED,
+    scriptAiModel: DEFAULT_SCRIPT_AI_MODEL,
     createdAt: now,
     updatedAt: now,
   }
@@ -48,62 +50,122 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
 }
 
 export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<GenericResult<AppSettingsRecord>> {
-  if (!Number.isFinite(input.warnBeforeRequestAfterSeconds) || input.warnBeforeRequestAfterSeconds < 0) {
-    return GenericError.Message('Warn before request timeout must be zero or greater')
-  }
-
-  if (!APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.includes(input.responseBodyDisplayMode)) {
-    return GenericError.Message('Invalid response body display mode')
-  }
-
-  if (typeof input.compactRequestView !== 'boolean') {
-    return GenericError.Message('Invalid compact request view setting')
-  }
-
-  if (typeof input.vimMode !== 'boolean') {
-    return GenericError.Message('Invalid vim mode setting')
-  }
-
-  if (typeof input.formatScriptBlocksOnSave !== 'boolean') {
-    return GenericError.Message('Invalid script formatting setting')
-  }
-
-  if (typeof input.scriptBlockPrettierConfig !== 'string') {
-    return GenericError.Message('Invalid Prettier config setting')
+  const validationError = validateAppSettingsPatch(input)
+  if (validationError) {
+    return GenericError.Message(validationError)
   }
 
   try {
-    parseScriptBlockPrettierConfig(input.scriptBlockPrettierConfig)
-  } catch (error) {
-    return GenericError.Message(error instanceof Error ? error.message : 'Invalid Prettier config setting')
-  }
+    await ensureAppSettingsExists()
 
-  if (typeof input.cookiesEnabled !== 'boolean') {
-    return GenericError.Message('Invalid cookies setting')
-  }
-
-  try {
     const db = getDb()
-    const current = await getAppSettings()
-    const updatedAt = Date.now()
-    const nextRecord: AppSettingsRow = {
-      id: current.id,
-      warnBeforeRequestAfterSeconds: Math.trunc(input.warnBeforeRequestAfterSeconds),
-      responseBodyDisplayMode: input.responseBodyDisplayMode,
-      compactRequestView: input.compactRequestView,
-      vimMode: input.vimMode,
-      formatScriptBlocksOnSave: input.formatScriptBlocksOnSave,
-      scriptBlockPrettierConfig: input.scriptBlockPrettierConfig,
-      cookiesEnabled: input.cookiesEnabled,
-      createdAt: current.createdAt,
-      updatedAt,
-    }
+    const nextPatch = buildAppSettingsUpdatePatch(input)
 
-    db.update(appSettings).set(nextRecord).where(eq(appSettings.id, DEFAULT_APP_SETTINGS_ID)).run()
-    return Result.Success(toAppSettingsRecord(nextRecord))
+    db.update(appSettings).set(nextPatch).where(eq(appSettings.id, DEFAULT_APP_SETTINGS_ID)).run()
+    return Result.Success(await getAppSettings())
   } catch (error) {
     return GenericError.Unknown(error)
   }
+}
+
+function validateAppSettingsPatch(input: UpdateAppSettingsInput) {
+  if (
+    input.warnBeforeRequestAfterSeconds !== undefined
+    && (!Number.isFinite(input.warnBeforeRequestAfterSeconds) || input.warnBeforeRequestAfterSeconds < 0)
+  ) {
+    return 'Warn before request timeout must be zero or greater'
+  }
+
+  if (
+    input.responseBodyDisplayMode !== undefined
+    && !APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.includes(input.responseBodyDisplayMode)
+  ) {
+    return 'Invalid response body display mode'
+  }
+
+  if (input.compactRequestView !== undefined && typeof input.compactRequestView !== 'boolean') {
+    return 'Invalid compact request view setting'
+  }
+
+  if (input.vimMode !== undefined && typeof input.vimMode !== 'boolean') {
+    return 'Invalid vim mode setting'
+  }
+
+  if (input.formatScriptBlocksOnSave !== undefined && typeof input.formatScriptBlocksOnSave !== 'boolean') {
+    return 'Invalid script formatting setting'
+  }
+
+  if (input.scriptBlockPrettierConfig !== undefined) {
+    if (typeof input.scriptBlockPrettierConfig !== 'string') {
+      return 'Invalid Prettier config setting'
+    }
+
+    try {
+      parseScriptBlockPrettierConfig(input.scriptBlockPrettierConfig)
+    } catch (error) {
+      return error instanceof Error ? error.message : 'Invalid Prettier config setting'
+    }
+  }
+
+  if (input.cookiesEnabled !== undefined && typeof input.cookiesEnabled !== 'boolean') {
+    return 'Invalid cookies setting'
+  }
+
+  if (input.scriptAiModel !== undefined && input.scriptAiModel !== null && typeof input.scriptAiModel !== 'string') {
+    return 'Invalid script AI model setting'
+  }
+
+  return null
+}
+
+function buildAppSettingsUpdatePatch(input: UpdateAppSettingsInput): Partial<AppSettingsRow> {
+  const patch: Partial<AppSettingsRow> = {
+    updatedAt: Date.now(),
+  }
+
+  if (input.warnBeforeRequestAfterSeconds !== undefined) {
+    patch.warnBeforeRequestAfterSeconds = Math.trunc(input.warnBeforeRequestAfterSeconds)
+  }
+
+  if (input.responseBodyDisplayMode !== undefined) {
+    patch.responseBodyDisplayMode = input.responseBodyDisplayMode
+  }
+
+  if (input.compactRequestView !== undefined) {
+    patch.compactRequestView = input.compactRequestView
+  }
+
+  if (input.vimMode !== undefined) {
+    patch.vimMode = input.vimMode
+  }
+
+  if (input.formatScriptBlocksOnSave !== undefined) {
+    patch.formatScriptBlocksOnSave = input.formatScriptBlocksOnSave
+  }
+
+  if (input.scriptBlockPrettierConfig !== undefined) {
+    patch.scriptBlockPrettierConfig = input.scriptBlockPrettierConfig
+  }
+
+  if (input.cookiesEnabled !== undefined) {
+    patch.cookiesEnabled = input.cookiesEnabled
+  }
+
+  if (input.scriptAiModel !== undefined) {
+    patch.scriptAiModel = input.scriptAiModel
+  }
+
+  return patch
+}
+
+async function ensureAppSettingsExists() {
+  const db = getDb()
+  const existing = db.select({ id: appSettings.id }).from(appSettings).where(eq(appSettings.id, DEFAULT_APP_SETTINGS_ID)).get()
+  if (existing) {
+    return
+  }
+
+  await getAppSettings()
 }
 
 function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
@@ -122,6 +184,7 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     formatScriptBlocksOnSave: value.formatScriptBlocksOnSave ?? DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
     scriptBlockPrettierConfig: value.scriptBlockPrettierConfig ?? DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: value.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED,
+    scriptAiModel: value.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }

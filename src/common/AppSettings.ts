@@ -6,6 +6,7 @@ export const DEFAULT_VIM_MODE = false
 export const DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE = true
 export const DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG = '{}'
 export const DEFAULT_COOKIES_ENABLED = true
+export const DEFAULT_SCRIPT_AI_MODEL: string | null = null
 
 export type AppSettingsResponseBodyDisplayMode = (typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]
 
@@ -18,11 +19,12 @@ export type AppSettingsRecord = {
   formatScriptBlocksOnSave: boolean
   scriptBlockPrettierConfig: string
   cookiesEnabled: boolean
+  scriptAiModel: string | null
   createdAt: number
   updatedAt: number
 }
 
-export type UpdateAppSettingsInput = {
+export type UpdateAppSettingsInput = Partial<{
   warnBeforeRequestAfterSeconds: number
   responseBodyDisplayMode: AppSettingsResponseBodyDisplayMode
   compactRequestView: boolean
@@ -30,7 +32,8 @@ export type UpdateAppSettingsInput = {
   formatScriptBlocksOnSave: boolean
   scriptBlockPrettierConfig: string
   cookiesEnabled: boolean
-}
+  scriptAiModel: string | null
+}>
 
 export function parseScriptBlockPrettierConfig(value: string) {
   const parsed = JSON.parse(value) as unknown

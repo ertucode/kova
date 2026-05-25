@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { Columns2Icon, InfoIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, Trash2Icon } from 'lucide-react'
+import { Columns2Icon, InfoIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, SparklesIcon, Trash2Icon } from 'lucide-react'
 import type { ExplorerItem, ExplorerRequestItem } from '@common/Explorer'
 import { parseKeyValueRows } from '@common/KeyValueRows'
 import type { ViewLayoutMode, ViewRecord } from '@common/Views'
@@ -18,6 +18,7 @@ import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
+import { openScriptAiReviewDialog } from './ScriptAiReviewDialog'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useViews, notifyViewsChanged } from './useViews'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
@@ -351,6 +352,19 @@ export function ViewsPanel() {
 
               <ToolbarButton label="Documentation" onClick={() => openDocumentation()}>
                 <InfoIcon className="size-4" />
+              </ToolbarButton>
+
+              <ToolbarButton
+                label={selectedDraft.code.trim() ? 'Update with AI' : 'Generate with AI'}
+                onClick={() =>
+                  openScriptAiReviewDialog({
+                    phase: 'view-runtime',
+                    currentCode: selectedDraft.code,
+                    onApply: nextCode => updateDraft(selectedDraft.id, draft => ({ ...draft, code: nextCode })),
+                  })
+                }
+              >
+                <SparklesIcon className="size-4" />
               </ToolbarButton>
 
               <ToolbarButton label="Save" onClick={() => void saveView(selectedDraft.id)} disabled={!selectedEntry?.isDirty || selectedEntry.saving}>

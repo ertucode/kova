@@ -65,6 +65,7 @@ import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import type { PendingScriptSelection } from './scriptFormatOnSave'
 import { formatScriptValueForSave } from './scriptFormatOnSave'
+import { ScriptAiIconButton } from './ScriptAiIconButton'
 import { twMerge } from 'tailwind-merge'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
@@ -870,7 +871,17 @@ export default function View() {
                 ? pendingPreRequestSelectionRef.current.selection
                 : null
             }
-            headerActions={<ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />}
+            headerActions={
+              <>
+                <ScriptAiIconButton
+                  phase="pre-request"
+                  currentCode={draft.preRequestScript}
+                  onApply={nextCode => updateRequestDraft({ ...draft, preRequestScript: nextCode }, 'request-pre-script-ai')}
+                  tooltip="Generate with AI"
+                />
+                <ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />
+              </>
+            }
             onChange={value => updateRequestDraft({ ...draft, preRequestScript: value }, 'request-pre-script')}
             onSelectionChange={selection => {
               preRequestSelectionRef.current = selection
@@ -896,7 +907,17 @@ export default function View() {
                 ? pendingPostRequestSelectionRef.current.selection
                 : null
             }
-            headerActions={<ScriptDocumentationButton phase="post-request" tooltip="Documentation" />}
+            headerActions={
+              <>
+                <ScriptAiIconButton
+                  phase="post-request"
+                  currentCode={draft.postRequestScript}
+                  onApply={nextCode => updateRequestDraft({ ...draft, postRequestScript: nextCode }, 'request-post-script-ai')}
+                  tooltip="Generate with AI"
+                />
+                <ScriptDocumentationButton phase="post-request" tooltip="Documentation" />
+              </>
+            }
             onChange={value => updateRequestDraft({ ...draft, postRequestScript: value }, 'request-post-script')}
             onSelectionChange={selection => {
               postRequestSelectionRef.current = selection
@@ -991,6 +1012,13 @@ const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
               <CopyIcon className="size-4" />
             </button>
           </Tooltip>
+          <ScriptAiIconButton
+            phase="response-visualizer"
+            currentCode={value}
+            onApply={onChange}
+            tooltip="Generate with AI"
+            className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 px-0 backdrop-blur text-base-content/60 hover:border-base-content/20 hover:bg-base-100/90 hover:text-base-content"
+          />
           <ScriptDocumentationButton
             phase="response-visualizer"
             mode="examples"

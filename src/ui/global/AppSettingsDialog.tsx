@@ -7,6 +7,7 @@ import {
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+  DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_VIM_MODE,
 } from '@common/AppSettings'
@@ -17,6 +18,7 @@ import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
 import { dialogActions } from './dialogStore'
 import { AppSettingsCoordinator, appSettingsStore } from './appSettingsStore'
+import { useOpenCodeModels } from './useOpenCodeModels'
 
 export function AppSettingsDialog() {
   const settings = useSelector(appSettingsStore, state => state.context.settings)
@@ -28,6 +30,7 @@ export function AppSettingsDialog() {
   const [formatScriptBlocksOnSave, setFormatScriptBlocksOnSave] = useState(DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE)
   const [scriptBlockPrettierConfig, setScriptBlockPrettierConfig] = useState(DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG)
   const [cookiesEnabled, setCookiesEnabled] = useState(DEFAULT_COOKIES_ENABLED)
+  const [scriptAiModel, setScriptAiModel] = useState<string | null>(DEFAULT_SCRIPT_AI_MODEL)
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
   const [databaseDrafts, setDatabaseDrafts] = useState<Record<string, { name: string; path: string }>>({})
   const [databaseLoading, setDatabaseLoading] = useState(false)
@@ -36,6 +39,7 @@ export function AppSettingsDialog() {
   const [newDatabasePath, setNewDatabasePath] = useState('')
   const [newDatabasePathTouched, setNewDatabasePathTouched] = useState(false)
   const [newDatabaseBasedOnName, setNewDatabaseBasedOnName] = useState('')
+  const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
 
   useEffect(() => {
     if (settings) {
@@ -46,6 +50,7 @@ export function AppSettingsDialog() {
       setFormatScriptBlocksOnSave(settings.formatScriptBlocksOnSave)
       setScriptBlockPrettierConfig(settings.scriptBlockPrettierConfig)
       setCookiesEnabled(settings.cookiesEnabled)
+      setScriptAiModel(settings.scriptAiModel)
     }
   }, [settings])
 
@@ -68,6 +73,7 @@ export function AppSettingsDialog() {
       formatScriptBlocksOnSave,
       scriptBlockPrettierConfig,
       cookiesEnabled,
+      scriptAiModel,
     })
 
     if (success) {
@@ -373,6 +379,32 @@ export function AppSettingsDialog() {
               onChange={event => setScriptBlockPrettierConfig(event.target.value)}
               spellCheck={false}
             />
+          </label>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
+          <div className="text-sm font-medium text-base-content">AI script generation</div>
+          <p className="mt-1 text-sm text-base-content/60">
+            Choose which OpenCode model should be used by default for script generation and refinement.
+          </p>
+
+          <label className="mt-4 block max-w-[420px]">
+            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Default model</div>
+            <select
+              className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
+              value={scriptAiModel ?? ''}
+              onChange={event => setScriptAiModel(event.target.value || null)}
+              disabled={modelsLoading}
+            >
+              <option value="">OpenCode default</option>
+              {openCodeModels.map(model => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
+            {modelsLoading ? <p className="mt-2 text-sm text-base-content/55">Loading available models...</p> : null}
+            {modelsError ? <p className="mt-2 text-sm text-error">{modelsError}</p> : null}
           </label>
         </div>
 

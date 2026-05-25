@@ -29,6 +29,7 @@ import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import type { PendingScriptSelection } from './scriptFormatOnSave'
 import { formatScriptValueForSave } from './scriptFormatOnSave'
+import { ScriptAiIconButton } from './ScriptAiIconButton'
 
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
@@ -247,7 +248,16 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
               ? pendingPreRequestSelectionRef.current.selection
               : null
           }
-          headerActions={<ScriptDocumentationButton phase="pre-request" />}
+          headerActions={
+            <>
+              <ScriptAiIconButton
+                phase="pre-request"
+                currentCode={draft.preRequestScript}
+                onApply={nextCode => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: nextCode })}
+              />
+              <ScriptDocumentationButton phase="pre-request" />
+            </>
+          }
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, preRequestScript: value })}
           onSelectionChange={selection => {
             preRequestSelectionRef.current = selection
@@ -271,7 +281,16 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
               ? pendingPostRequestSelectionRef.current.selection
               : null
           }
-          headerActions={<ScriptDocumentationButton phase="post-request" />}
+          headerActions={
+            <>
+              <ScriptAiIconButton
+                phase="post-request"
+                currentCode={draft.postRequestScript}
+                onApply={nextCode => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: nextCode })}
+              />
+              <ScriptDocumentationButton phase="post-request" />
+            </>
+          }
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, postRequestScript: value })}
           onSelectionChange={selection => {
             postRequestSelectionRef.current = selection

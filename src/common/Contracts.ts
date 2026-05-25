@@ -104,6 +104,7 @@ import {
   type PickPostmanEnvironmentExportFileResponse,
 } from './PostmanEnvironmentExport.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
+import { type GenerateScriptWithAiInput, type GenerateScriptWithAiResponse, type ListOpenCodeModelsResponse } from './ScriptAi.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
 import {
   type CreateViewInput,
@@ -230,6 +231,8 @@ export type EventResponseMapping = {
   sendRequest: Promise<GenericResult<SendRequestResponse>>
   cancelHttpRequest: Promise<GenericResult<void>>
   generateRequestCode: Promise<GenericResult<GenerateRequestCodeResponse>>
+  generateScriptWithAi: Promise<GenericResult<GenerateScriptWithAiResponse>>
+  listOpenCodeModels: Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: Promise<GenericResult<void>>
   disconnectWebSocket: Promise<GenericResult<void>>
@@ -350,6 +353,8 @@ export type EventRequestMapping = {
   sendRequest: SendRequestInput
   cancelHttpRequest: CancelHttpRequestInput
   generateRequestCode: GenerateRequestCodeInput
+  generateScriptWithAi: GenerateScriptWithAiInput
+  listOpenCodeModels: void
   connectWebSocket: WebSocketConnectInput
   sendWebSocketMessage: WebSocketSendMessageInput
   disconnectWebSocket: WebSocketDisconnectInput
@@ -482,6 +487,8 @@ export type WindowElectron = {
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
   cancelHttpRequest: (input: CancelHttpRequestInput) => Promise<GenericResult<void>>
   generateRequestCode: (input: GenerateRequestCodeInput) => Promise<GenericResult<GenerateRequestCodeResponse>>
+  generateScriptWithAi: (input: GenerateScriptWithAiInput) => Promise<GenericResult<GenerateScriptWithAiResponse>>
+  listOpenCodeModels: () => Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>
   disconnectWebSocket: (input: WebSocketDisconnectInput) => Promise<GenericResult<void>>
