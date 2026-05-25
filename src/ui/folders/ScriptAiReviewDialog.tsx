@@ -124,7 +124,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   async function createSessionRequest() {
     const result = await getWindowElectron().createScriptAiSession({
       target,
-      currentCode: proposal,
+      currentCode,
       model: selectedModel || null,
     })
 
@@ -134,6 +134,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
     }
 
     applyWorkspaceState(result.data)
+    setSelectedSessionId(result.data.activeSessionId)
     return result.data.activeSessionId
   }
 
@@ -165,7 +166,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
 
       const result = await getWindowElectron().sendScriptAiMessage({
         target,
-        currentCode: proposal,
+        currentCode,
         sessionId: ensuredSessionId,
         message: prompt.trim(),
         model: selectedModel || null,

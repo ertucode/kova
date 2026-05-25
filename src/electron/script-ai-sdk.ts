@@ -78,6 +78,7 @@ export function configureScriptAiBaseDirectory(directory: string) {
 export async function loadScriptAiWorkspace(input: LoadScriptAiWorkspaceInput): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
+    await writeWorkspaceCode(runtime, input.currentCode)
     await refreshTargetRuntime(runtime)
     return Result.Success(toWorkspaceState(runtime, await readWorkspaceCode(runtime)))
   } catch (error) {
@@ -88,6 +89,7 @@ export async function loadScriptAiWorkspace(input: LoadScriptAiWorkspaceInput): 
 export async function createScriptAiSession(input: CreateScriptAiSessionInput): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
+    await writeWorkspaceCode(runtime, input.currentCode)
     const client = await getClientForDirectory(runtime.workspacePath)
     const title = buildSessionTitle(input.target)
     const sessionResult = await client.session.create({ body: { title } })
