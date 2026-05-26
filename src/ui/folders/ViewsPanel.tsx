@@ -46,6 +46,7 @@ export function ViewsPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedViewId())
   const [entries, setEntries] = useState<Record<string, ViewEditorEntry>>({})
   const [runTriggerVersion, setRunTriggerVersion] = useState(0)
+  const [isResizing, setIsResizing] = useState(false)
   const splitContainerRef = useRef<HTMLDivElement | null>(null)
   const resizeStateRef = useRef<{
     viewId: string
@@ -56,7 +57,9 @@ export function ViewsPanel() {
   } | null>(null)
   const viewEditorRef = useRef<CodeEditorHandle | null>(null)
   const viewSelectionRef = useRef<CodeEditorSelection | null>(null)
-  const pendingSelectionRestoreRef = useRef<{ viewId: string; selection: CodeEditorSelection; code: string } | null>(null)
+  const pendingSelectionRestoreRef = useRef<{ viewId: string; selection: CodeEditorSelection; code: string } | null>(
+    null
+  )
 
   const sharedScriptsRef = useRef(visibleSharedScripts)
   const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
@@ -168,6 +171,7 @@ export function ViewsPanel() {
       }
 
       resizeStateRef.current = null
+      setIsResizing(false)
       document.body.style.cursor = ''
       const draft = entries[resizeState.viewId]?.current
       if (draft) {
@@ -207,7 +211,7 @@ export function ViewsPanel() {
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [selectedId])
 
-  const selectedEntry = selectedId ? entries[selectedId] ?? null : null
+  const selectedEntry = selectedId ? (entries[selectedId] ?? null) : null
   const selectedDraft = selectedEntry?.current ?? null
   const selectedSavedView = selectedEntry?.saved ?? null
 
@@ -347,7 +351,11 @@ export function ViewsPanel() {
                   void saveView(selectedDraft.id, nextDraft)
                 }}
               >
-                {selectedDraft.layoutMode === 'horizontal' ? <Rows3Icon className="size-4" /> : <Columns2Icon className="size-4" />}
+                {selectedDraft.layoutMode === 'horizontal' ? (
+                  <Rows3Icon className="size-4" />
+                ) : (
+                  <Columns2Icon className="size-4" />
+                )}
               </ToolbarButton>
 
               <ToolbarButton label="Documentation" onClick={() => openDocumentation()}>
@@ -371,7 +379,11 @@ export function ViewsPanel() {
                 <SparklesIcon className="size-4" />
               </ToolbarButton>
 
-              <ToolbarButton label="Save" onClick={() => void saveView(selectedDraft.id)} disabled={!selectedEntry?.isDirty || selectedEntry.saving}>
+              <ToolbarButton
+                label="Save"
+                onClick={() => void saveView(selectedDraft.id)}
+                disabled={!selectedEntry?.isDirty || selectedEntry.saving}
+              >
                 <SaveIcon className="size-4" />
               </ToolbarButton>
 
@@ -403,8 +415,8 @@ export function ViewsPanel() {
                   ref={viewEditorRef}
                   value={selectedDraft.code}
                   externalSelection={
-                    pendingSelectionRestoreRef.current?.viewId === selectedDraft.id
-                      && pendingSelectionRestoreRef.current.code === selectedDraft.code
+                    pendingSelectionRestoreRef.current?.viewId === selectedDraft.id &&
+                    pendingSelectionRestoreRef.current.code === selectedDraft.code
                       ? pendingSelectionRestoreRef.current.selection
                       : null
                   }
@@ -420,6 +432,7 @@ export function ViewsPanel() {
                     viewSelectionRef.current = selection
                   }}
                   onBlur={() => undefined}
+                  scale={0.9}
                 />
               </section>
 
@@ -428,7 +441,9 @@ export function ViewsPanel() {
                 aria-label="Resize view split"
                 className={[
                   'shrink-0 border-0 bg-base-content/10 transition hover:bg-primary/45',
-                  selectedDraft.layoutMode === 'horizontal' ? 'h-full w-[3px] cursor-ew-resize' : 'h-[3px] w-full cursor-ns-resize',
+                  selectedDraft.layoutMode === 'horizontal'
+                    ? 'h-full w-[3px] cursor-ew-resize'
+                    : 'h-[3px] w-full cursor-ns-resize',
                 ].join(' ')}
                 onMouseDown={event => {
                   resizeStateRef.current = {
@@ -438,11 +453,12 @@ export function ViewsPanel() {
                     startX: event.clientX,
                     startY: event.clientY,
                   }
+                  setIsResizing(true)
                   document.body.style.cursor = selectedDraft.layoutMode === 'horizontal' ? 'ew-resize' : 'ns-resize'
                 }}
               />
 
-              <section className="min-h-0 min-w-0 flex-1 overflow-hidden">
+              <section className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                 <ViewRuntimePreview
                   viewId={selectedDraft.id}
                   source={selectedSavedView?.code ?? ''}
@@ -453,6 +469,7 @@ export function ViewsPanel() {
                   scriptPackages={scriptPackageArtifacts}
                   requestPaths={requestPaths}
                 />
+                {isResizing ? <div className="absolute inset-0 z-10" aria-hidden /> : null}
               </section>
             </div>
           </>
@@ -579,9 +596,10 @@ export function ViewsPanel() {
           return currentEntries
         }
 
-        const nextCurrent = serializeViewDraft(currentEntry.current) === serializeViewDraft(result.data)
-          ? currentEntry.current
-          : result.data
+        const nextCurrent =
+          serializeViewDraft(currentEntry.current) === serializeViewDraft(result.data)
+            ? currentEntry.current
+            : result.data
 
         return {
           ...currentEntries,
@@ -665,7 +683,9 @@ function ToolbarButton({
 }
 
 function PanelEmptyState({ message }: { message: string }) {
-  return <div className="rounded-2xl border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">{message}</div>
+  return (
+    <div className="border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">{message}</div>
+  )
 }
 
 function buildNewViewName(items: ViewRecord[]) {
@@ -726,10 +746,7 @@ function buildViewRequestPaths(items: ExplorerItem[]) {
   type HttpExplorerRequestItem = ExplorerRequestItem & { requestType: 'http' }
 
   return items
-    .filter(
-      (item): item is HttpExplorerRequestItem =>
-        item.itemType === 'request' && item.requestType === 'http'
-    )
+    .filter((item): item is HttpExplorerRequestItem => item.itemType === 'request' && item.requestType === 'http')
     .map(item => ({
       requestId: item.id,
       path: [...getFolderPathSegments(itemMap, item.parentFolderId ?? null), item.name],

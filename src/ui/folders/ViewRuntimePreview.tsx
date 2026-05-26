@@ -4,10 +4,7 @@ import type { ScriptCallRequestOverrides } from '@common/ScriptMakeRequest'
 import type { ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import { RequestSendCoordinator } from './requestSendCoordinator'
-import {
-  getCachedViewRuntimeRequest,
-  setCachedViewRuntimeRequest,
-} from './viewRuntimeRequestCacheStore'
+import { getCachedViewRuntimeRequest, setCachedViewRuntimeRequest } from './viewRuntimeRequestCacheStore'
 import {
   VIEW_RUNTIME_CALL_REQUEST_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT,
@@ -196,7 +193,7 @@ export function ViewRuntimePreview({
       title="View runtime preview"
       sandbox="allow-scripts"
       src="./generated/view-runtime/view-runtime.html"
-      className="h-full w-full rounded-xl border border-base-content/10 bg-base-100"
+      className="h-full w-full border border-base-content/10 bg-base-100"
     />
   )
 

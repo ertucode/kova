@@ -63,7 +63,10 @@ export function FolderExplorer() {
     requestExecutionStore,
     state => state.context.recentHttpRequestUsageCountByRequestId
   )
-  const recentHttpRequestUsageVersion = useSelector(requestExecutionStore, state => state.context.recentHttpRequestUsageVersion)
+  const recentHttpRequestUsageVersion = useSelector(
+    requestExecutionStore,
+    state => state.context.recentHttpRequestUsageVersion
+  )
   const tagItems = useSelector(tagsStore, state => state.context.items)
   const tagAssignments = useSelector(tagsStore, state => state.context.assignments)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
@@ -121,15 +124,23 @@ export function FolderExplorer() {
     )
   }, [items, tagAssignments, tagItems])
   const visibleRoots = useMemo(
-    () => filterTreeWithDrafts(
+    () =>
+      filterTreeWithDrafts(
+        roots,
+        normalizedSearch,
+        entries,
+        tagNamesBySelection,
+        recentHttpRequestUsageCountByRequestId,
+        recentHttpRequestUsageVersion
+      ),
+    [
+      entries,
+      recentHttpRequestUsageCountByRequestId,
+      recentHttpRequestUsageVersion,
       roots,
       normalizedSearch,
-      entries,
       tagNamesBySelection,
-      recentHttpRequestUsageCountByRequestId,
-      recentHttpRequestUsageVersion
-    ),
-    [entries, recentHttpRequestUsageCountByRequestId, recentHttpRequestUsageVersion, roots, normalizedSearch, tagNamesBySelection]
+    ]
   )
   const searchAutoExpandedIds = useMemo(
     () => (isSearchActive ? collectExpandableNodeIds(visibleRoots) : []),
@@ -151,10 +162,7 @@ export function FolderExplorer() {
     return searchAutoExpandedIdSet.has(nodeId) || expandedIdSet.has(nodeId)
   }
 
-  const visibleNodes = useMemo(
-    () => flattenVisibleNodes(visibleRoots, isNodeExpanded),
-    [visibleRoots, isNodeExpanded]
-  )
+  const visibleNodes = useMemo(() => flattenVisibleNodes(visibleRoots, isNodeExpanded), [visibleRoots, isNodeExpanded])
   const canDrag = normalizedSearch.length === 0 && createDraft === null
 
   useEffect(() => {
@@ -661,8 +669,8 @@ function CreateMenuButton() {
 function SidebarTabs({ sidebarTab }: { sidebarTab: SidebarTab }) {
   const tabs = [
     { id: 'requests', label: 'Requests', icon: FileCode2Icon, disabled: false },
-    { id: 'views', label: 'Views', icon: FileCode2Icon, disabled: false },
     { id: 'environments', label: 'Envs', icon: FlaskConicalIcon, disabled: false },
+    { id: 'views', label: 'Views', icon: FileCode2Icon, disabled: false },
     { id: 'tags', label: 'Tags', icon: TagIcon, disabled: false },
     { id: 'history', label: 'History', icon: Clock3Icon, disabled: false },
     { id: 'changes', label: 'Changes', icon: Undo2Icon, disabled: false },
