@@ -8,6 +8,7 @@ export function Dialog({
   className,
   style,
   footer,
+  bodyClassName,
 }: {
   title?: ReactNode
   children: ReactNode
@@ -15,6 +16,7 @@ export function Dialog({
   className?: string
   style?: React.CSSProperties
   footer?: ReactNode
+  bodyClassName?: string
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
 
@@ -30,7 +32,7 @@ export function Dialog({
     <dialog className="modal" ref={dialogRef} onClose={onClose}>
       <div className={cn('modal-box max-w-[80vw] max-h-[80vh] flex flex-col gap-3', className)} style={style}>
         {title && <h3 className="font-bold text-lg flex-shrink-0">{title}</h3>}
-        <div className={cn('flex-1 min-h-0 overflow-y-auto', footer ? 'pb-8' : '')}>{children}</div>
+        <div className={cn('flex-1 min-h-0 overflow-y-auto', footer ? 'pb-8' : '', bodyClassName)}>{children}</div>
         {footer ? (
           <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-auto flex flex-shrink-0 justify-end gap-3 border-t border-base-content/10 bg-base-100/95 px-6 py-4 backdrop-blur-sm">
             {footer}

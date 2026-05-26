@@ -1,7 +1,13 @@
 import { errorResponseToMessage } from '@common/GenericError'
-import { getScriptAiTargetKey, type ScriptAiMessagePart, type ScriptAiTarget, type ScriptAiPhase, type ScriptAiWorkspaceState } from '@common/ScriptAi'
-import { LoaderCircleIcon, PlusIcon, SparklesIcon, SquareIcon } from 'lucide-react'
-import type { KeyboardEvent } from 'react'
+import {
+  getScriptAiTargetKey,
+  type ScriptAiMessagePart,
+  type ScriptAiTarget,
+  type ScriptAiPhase,
+  type ScriptAiWorkspaceState,
+} from '@common/ScriptAi'
+import { ChevronDownIcon, LoaderCircleIcon, PlusIcon, SparklesIcon, SquareIcon } from 'lucide-react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { Dialog } from '@/lib/components/dialog'
@@ -12,6 +18,7 @@ import { buildScriptDocumentationPrompt, scriptDocumentationByPhase } from './sc
 import { appSettingsStore } from '@/global/appSettingsStore'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
 import { ScriptAiMergeEditor } from './ScriptAiMergeEditor'
+import { clsx } from '@/lib/functions/clsx'
 
 type ScriptAiReviewDialogProps = {
   target: ScriptAiTarget
@@ -19,14 +26,16 @@ type ScriptAiReviewDialogProps = {
   onApply: (nextCode: string) => void
 }
 
-type TranscriptRow = {
-  id: string
-  type: 'divider'
-} | {
-  id: string
-  type: 'part'
-  part: ScriptAiMessagePart
-}
+type TranscriptRow =
+  | {
+      id: string
+      type: 'divider'
+    }
+  | {
+      id: string
+      type: 'part'
+      part: ScriptAiMessagePart
+    }
 
 export function openScriptAiReviewDialog(props: ScriptAiReviewDialogProps) {
   dialogActions.open({ component: ScriptAiReviewDialog, props })
@@ -43,11 +52,15 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>(appDefaultModel ?? '')
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+  const [isDiffDialogOpen, setIsDiffDialogOpen] = useState(false)
+  const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false)
   const transcriptContainerRef = useRef<HTMLDivElement | null>(null)
+  const promptRef = useRef<HTMLTextAreaElement | null>(null)
 
   const documentation = scriptDocumentationByPhase[target.phase]
   const targetKey = getScriptAiTargetKey(target)
-  const editorLanguage = target.phase === 'response-visualizer' || target.phase === 'view-runtime' ? 'jsx' : 'javascript'
+  const editorLanguage =
+    target.phase === 'response-visualizer' || target.phase === 'view-runtime' ? 'jsx' : 'javascript'
   const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
   const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
@@ -108,6 +121,16 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
 
     container.scrollTop = container.scrollHeight
   }, [selectedMessages])
+
+  useEffect(() => {
+    const textarea = promptRef.current
+    if (!textarea) {
+      return
+    }
+
+    textarea.style.height = '0px'
+    textarea.style.height = `${textarea.scrollHeight}px`
+  }, [prompt])
 
   function applyWorkspaceState(nextState: ScriptAiWorkspaceState) {
     setWorkspaceState(nextState)
@@ -229,57 +252,54 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
     <Dialog
       title={`${documentation.title} AI Review`}
       onClose={() => dialogActions.close()}
-      className="max-w-[1800px]"
-      footer={
-        <>
-          <button type="button" className="btn btn-ghost" onClick={() => dialogActions.close()} disabled={isSubmitting}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-primary" onClick={() => void applyProposal()} disabled={isLoading || isSubmitting}>
-            Apply
-          </button>
-        </>
-      }
+      className="max-h-[90vh] max-w-[1800px] overflow-hidden"
+      bodyClassName="overflow-hidden"
     >
-      <div className="flex max-h-[90vh] min-h-[820px] flex-col gap-4">
-        <section className="rounded-2xl border border-base-content/10 bg-base-100/70 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium text-base-content">Chat</div>
-              <p className="mt-1 text-sm leading-6 text-base-content/68">
-                Talk to OpenCode, keep separate sessions for this script target, and review the live file changes below.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" className="btn btn-ghost" onClick={() => void createSession()} disabled={isLoading || isSubmitting}>
-                <PlusIcon className="size-4" />
-                New session
-              </button>
-              {selectedSessionId ? (
-                <button type="button" className="btn btn-ghost" onClick={() => void abortSelectedSession()} disabled={!isSelectedSessionBusy}>
-                  <SquareIcon className="size-4" />
-                  Abort
-                </button>
-              ) : null}
-              <button type="button" className="btn btn-primary" onClick={() => void sendPrompt()} disabled={isLoading || isSubmitting || !prompt.trim()}>
-                {isSubmitting ? <LoaderCircleIcon className="size-4 animate-spin" /> : <SparklesIcon className="size-4" />}
-                Send
-              </button>
-            </div>
+      <div className="flex max-h-[90vh] min-h-[820px] flex-col">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden border border-base-content/10 bg-base-100/70">
+          <div ref={transcriptContainerRef} className="min-h-0 flex-1 overflow-auto px-4 py-3">
+            {selectedSessionId ? (
+              selectedMessages.length ? (
+                <div className="space-y-2 text-xs">
+                  {transcriptRows.map(row =>
+                    row.type === 'divider' ? (
+                      <div key={row.id} className="my-2 border-t border-base-content/10" />
+                    ) : (
+                      <TranscriptPart key={row.id} part={row.part} />
+                    )
+                  )}
+                </div>
+              ) : (
+                <div className="grid h-full place-items-center text-sm text-base-content/52">
+                  No messages yet for this session.
+                </div>
+              )
+            ) : isLoading ? (
+              <div className="grid h-full place-items-center text-sm text-base-content/55">Loading sessions...</div>
+            ) : (
+              <div className="grid h-full place-items-center text-sm text-base-content/52">
+                Select or create a session to see the transcript.
+              </div>
+            )}
           </div>
+        </section>
 
-          <textarea
-            className="textarea min-h-24 w-full rounded-xl border-base-content/10 bg-base-100 font-mono text-sm leading-6"
-            placeholder={`Example: ${getPromptPlaceholder(target.phase)}`}
-            value={prompt}
-            onChange={event => setPrompt(event.target.value)}
-            onKeyDown={handlePromptKeyDown}
-          />
-
-          <label className="mt-3 block max-w-[420px]">
-            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Model</div>
+        <div className="border-x border-b border-base-content/10">
+          <div className="flex flex-wrap border-b border-base-content/10">
+            <FlatButton
+              className="min-w-0 flex-[0_0_auto] justify-between sm:min-w-[220px]"
+              onClick={() => setIsSessionDialogOpen(true)}
+              disabled={isLoading || isSubmitting}
+            >
+              <span className="truncate">{selectedSession?.title ?? 'Current Session Name'}</span>
+              <ChevronDownIcon className="size-4 flex-shrink-0" />
+            </FlatButton>
+            <FlatButton onClick={() => void createSession()} disabled={isLoading || isSubmitting}>
+              <PlusIcon className="size-4" />
+              New Session
+            </FlatButton>
             <select
-              className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
+              className="min-h-12 w-full border-l border-base-content/10 bg-base-100 px-3 py-3 text-sm text-base-content outline-none sm:ml-auto sm:w-[260px]"
               value={selectedModel}
               onChange={event => setSelectedModel(event.target.value)}
               disabled={modelsLoading || isSubmitting}
@@ -291,95 +311,153 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
                 </option>
               ))}
             </select>
-            {modelsLoading ? <p className="mt-2 text-sm text-base-content/55">Loading available models...</p> : null}
-            {modelsError ? <p className="mt-2 text-sm text-error">{modelsError}</p> : null}
-          </label>
+            <FlatButton onClick={() => setIsDiffDialogOpen(true)} disabled={isLoading}>
+              Show diff
+            </FlatButton>
+            <FlatButton onClick={() => void applyProposal()} disabled={isLoading || isSubmitting}>
+              Apply
+            </FlatButton>
+            <FlatButton
+              onClick={() => void (isSelectedSessionBusy ? abortSelectedSession() : sendPrompt())}
+              disabled={isLoading || (isSelectedSessionBusy ? !selectedSessionId : isSubmitting || !prompt.trim())}
+            >
+              {isSelectedSessionBusy ? (
+                <SquareIcon className="size-4" />
+              ) : isSubmitting ? (
+                <LoaderCircleIcon className="size-4 animate-spin" />
+              ) : (
+                <SparklesIcon className="size-4" />
+              )}
+              {isSelectedSessionBusy ? 'Abort' : 'Send'}
+            </FlatButton>
+          </div>
 
-          {errorMessage ? <p className="mt-3 text-sm text-error">{errorMessage}</p> : null}
-        </section>
+          <textarea
+            ref={promptRef}
+            className="min-h-12 w-full resize-none border-0 bg-base-100 px-3 py-3 font-mono text-sm leading-6 text-base-content outline-none placeholder:text-base-content/40"
+            placeholder={`Example: ${getPromptPlaceholder(target.phase)}`}
+            value={prompt}
+            onChange={event => setPrompt(event.target.value)}
+            onKeyDown={handlePromptKeyDown}
+            rows={1}
+          />
 
-        <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/70">
-            <div className="border-b border-base-content/10 px-4 py-3 text-sm font-medium text-base-content">Sessions</div>
-            <div className="min-h-0 flex-1 overflow-auto p-2">
-              {isLoading ? (
-                <div className="grid h-full place-items-center text-sm text-base-content/55">Loading sessions...</div>
-              ) : workspaceState?.sessions.length ? (
-                <div className="space-y-2">
+          {errorMessage || modelsLoading || modelsError ? (
+            <div className="px-3 py-2 text-sm">
+              {errorMessage ? <p className="text-error">{errorMessage}</p> : null}
+              {!errorMessage && modelsLoading ? (
+                <p className="text-base-content/55">Loading available models...</p>
+              ) : null}
+              {!errorMessage && !modelsLoading && modelsError ? <p className="text-error">{modelsError}</p> : null}
+            </div>
+          ) : null}
+        </div>
+
+        {isDiffDialogOpen ? (
+          <Dialog
+            title={`Current script vs workspace script (${workspaceState?.fileName ?? 'script'})`}
+            onClose={() => setIsDiffDialogOpen(false)}
+            className="max-w-[1600px]"
+          >
+            <div className="h-[75vh] min-h-[520px]">
+              <ScriptAiMergeEditor
+                originalValue={currentCode}
+                modifiedValue={proposal}
+                language={editorLanguage}
+                onModifiedChange={setProposal}
+              />
+            </div>
+          </Dialog>
+        ) : null}
+
+        {isSessionDialogOpen ? (
+          <Dialog title="Sessions" onClose={() => setIsSessionDialogOpen(false)} className="max-w-[720px]">
+            <div className="flex min-h-[320px] flex-col border border-base-content/10 bg-base-100/70">
+              {workspaceState?.sessions.length ? (
+                <div className="divide-y divide-base-content/10">
                   {workspaceState.sessions.map(session => (
                     <button
                       key={session.id}
                       type="button"
                       className={[
-                        'w-full rounded-xl border px-3 py-3 text-left transition',
-                        session.id === selectedSessionId
-                          ? 'border-primary/30 bg-primary/8'
-                          : 'border-base-content/10 bg-base-100/60 hover:border-base-content/20 hover:bg-base-100',
+                        'w-full px-4 py-3 text-left transition',
+                        session.id === selectedSessionId ? 'bg-primary/8' : 'hover:bg-base-200/35',
                       ].join(' ')}
-                      onClick={() => setSelectedSessionId(session.id)}
+                      onClick={() => {
+                        setSelectedSessionId(session.id)
+                        setIsSessionDialogOpen(false)
+                      }}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-3">
                         <div className="truncate text-sm font-medium text-base-content">{session.title}</div>
-                        <span className="text-[11px] uppercase tracking-[0.16em] text-base-content/45">{session.status}</span>
+                        <span className="text-[11px] uppercase tracking-[0.16em] text-base-content/45">
+                          {session.status}
+                        </span>
                       </div>
-                      <p className="mt-1 text-xs text-base-content/55">
+                      <div className="mt-1 text-xs text-base-content/55">
                         {session.messageCount} message{session.messageCount === 1 ? '' : 's'}
-                      </p>
-                      {session.latestErrorMessage ? <p className="mt-2 text-xs text-error">{session.latestErrorMessage}</p> : null}
+                      </div>
+                      {session.latestErrorMessage ? (
+                        <div className="mt-2 text-xs text-error">{session.latestErrorMessage}</div>
+                      ) : null}
                     </button>
                   ))}
                 </div>
               ) : (
-                <div className="grid h-full place-items-center rounded-xl border border-dashed border-base-content/12 px-4 text-center text-sm text-base-content/52">
+                <div className="grid flex-1 place-items-center px-4 text-center text-sm text-base-content/52">
                   Start a new session to chat about this script.
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="grid min-h-0 gap-4 xl:grid-rows-[minmax(0,0.6fr)_minmax(0,1.6fr)]">
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/70">
-              <div className="border-b border-base-content/10 px-4 py-3 text-sm font-medium text-base-content">Transcript</div>
-              <div ref={transcriptContainerRef} className="min-h-0 flex-1 overflow-auto px-4 py-3">
-                {selectedSessionId ? (
-                  selectedMessages.length ? (
-                    <div className="space-y-2 text-xs">
-                      {transcriptRows.map(row => (
-                        row.type === 'divider' ? <div key={row.id} className="my-2 border-t border-base-content/10" /> : <TranscriptPart key={row.id} part={row.part} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="grid h-full place-items-center text-sm text-base-content/52">No messages yet for this session.</div>
-                  )
-                ) : (
-                  <div className="grid h-full place-items-center text-sm text-base-content/52">Select or create a session to see the transcript.</div>
-                )}
-              </div>
-            </div>
-
-            <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/70">
-              <div className="border-b border-base-content/10 px-4 py-3 text-sm font-medium text-base-content">
-                Current script vs workspace script ({workspaceState?.fileName ?? 'script'})
-              </div>
-              <div className="min-h-0 flex-1 p-3">
-                <ScriptAiMergeEditor originalValue={currentCode} modifiedValue={proposal} language={editorLanguage} onModifiedChange={setProposal} />
-              </div>
-            </section>
-          </div>
-        </section>
+          </Dialog>
+        ) : null}
       </div>
     </Dialog>
   )
 }
 
+function FlatButton({
+  children,
+  onClick,
+  disabled,
+  className,
+}: {
+  children: ReactNode
+  onClick: () => void
+  disabled?: boolean
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      className={[
+        'flex min-h-12 items-center gap-2 border-l border-base-content/10 px-3 py-3 text-sm text-base-content transition first:border-l-0 disabled:cursor-not-allowed disabled:text-base-content/35',
+        !disabled ? 'hover:bg-base-200/35' : '',
+        className ?? '',
+      ].join(' ')}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  )
+}
+
 function TranscriptPart({ part }: { part: ScriptAiMessagePart }) {
   return (
-    <details className="rounded-xl border border-base-content/10 bg-base-200/20 text-[11px]" open={false}>
-      <summary className="cursor-pointer list-none px-3 py-2 font-medium text-base-content/75">
+    <details className="bg-base-200/20 text-[12px]" open={false}>
+      <summary
+        className={clsx(
+          'cursor-pointer list-none px-2 py-1 font-medium text-base-content',
+          part.type !== 'text' && 'text-base-content/50'
+        )}
+      >
         {getTranscriptPartTitle(part)}
       </summary>
       <div className="border-t border-base-content/8 px-3 py-2">
-        <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/70">{getTranscriptPartContent(part)}</pre>
+        <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/70">
+          {getTranscriptPartContent(part)}
+        </pre>
       </div>
     </details>
   )
@@ -421,9 +499,15 @@ function getTranscriptPartContent(part: ScriptAiMessagePart) {
     case 'reasoning':
       return part.text
     case 'tool':
-      return [part.input ? `Input:\n${part.input}` : null, part.output ? `Output:\n${part.output}` : null, part.errorMessage ? `Error:\n${part.errorMessage}` : null]
-        .filter(Boolean)
-        .join('\n\n') || 'No details yet.'
+      return (
+        [
+          part.input ? `Input:\n${part.input}` : null,
+          part.output ? `Output:\n${part.output}` : null,
+          part.errorMessage ? `Error:\n${part.errorMessage}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n') || 'No details yet.'
+      )
     case 'file':
       return part.path ?? part.filename ?? 'File attachment'
     case 'step-start':

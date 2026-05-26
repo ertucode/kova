@@ -153,7 +153,7 @@ export function ScriptAiMergeEditor({
     view.dispatch({ changes: { from: 0, to: currentValue.length, insert: modifiedValue } })
   }, [modifiedValue])
 
-  return <div ref={containerRef} className="h-full min-h-0 overflow-auto rounded-2xl border border-base-content/10 bg-base-100/70" />
+  return <div ref={containerRef} className="h-full min-h-0 overflow-auto border border-base-content/10 bg-base-100/70" />
 }
 
 function getLanguageExtension(language: CodeEditorLanguage): Extension {
