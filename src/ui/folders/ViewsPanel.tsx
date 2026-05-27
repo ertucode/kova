@@ -262,7 +262,6 @@ export function ViewsPanel() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-base-content">Views</div>
-              <div className="mt-1 text-sm text-base-content/45">Saved React views for multi-request flows.</div>
             </div>
             <button
               type="button"
@@ -318,15 +317,16 @@ export function ViewsPanel() {
           </div>
         ) : (
           <>
-            <header className="flex items-center gap-3 border-b border-base-content/10 px-4 py-3">
+            <header className="flex items-center gap-3 border-b border-base-content/10 pr-4">
               <input
                 value={selectedDraft.name}
                 onChange={event => updateDraft(selectedDraft.id, draft => ({ ...draft, name: event.target.value }))}
                 placeholder="View name"
-                className="min-w-0 flex-1 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2 text-sm text-base-content outline-none transition focus:border-base-content/25"
+                className="min-w-0 flex-1 bg-base-100 px-3 py-2 text-sm text-base-content outline-none transition focus:border-base-content/25"
               />
 
-              <label className="flex items-center gap-2 text-sm text-base-content/65">
+              <label className="flex items-center gap-2 text-xs text-base-content/65">
+                Remember Requests
                 <input
                   type="checkbox"
                   className="checkbox checkbox-sm"
@@ -337,7 +337,6 @@ export function ViewsPanel() {
                     void saveView(selectedDraft.id, nextDraft)
                   }}
                 />
-                Remember Requests
               </label>
 
               <ToolbarButton
@@ -666,7 +665,7 @@ function ToolbarButton({
   const button = (
     <button
       type="button"
-      className="inline-flex h-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 px-3 text-base-content/70 transition hover:border-base-content/20 hover:bg-base-200/70 hover:text-base-content disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-8 items-center justify-center px-0 text-base-content/70 transition disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
