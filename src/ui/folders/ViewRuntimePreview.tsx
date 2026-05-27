@@ -34,24 +34,26 @@ export function ViewRuntimePreview({
   viewId,
   source,
   rememberRequests,
-  runTriggerVersion,
+  runRequestId,
   environments,
   sharedScripts,
   scriptPackages,
   requestPaths,
+  onRunHandled,
 }: {
   viewId: string
   source: string
   rememberRequests: boolean
-  runTriggerVersion: number
+  runRequestId: string | null
   environments: RuntimeEnvironmentSnapshot[]
   sharedScripts: SharedScriptRecord[]
   scriptPackages: ScriptPackageArtifact[]
   requestPaths: RequestPathRecord[]
+  onRunHandled: (requestId: string) => void
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [isIframeReady, setIsIframeReady] = useState(false)
-  const lastHandledRunTriggerVersionRef = useRef(runTriggerVersion)
+  const lastHandledRunRequestIdRef = useRef<string | null>(null)
 
   const payload = useMemo<ViewRuntimePayload>(() => {
     const activeEnvironments = environments
@@ -99,6 +101,7 @@ export function ViewRuntimePreview({
       }
 
       if (event.data?.type === VIEW_RUNTIME_READY_EVENT) {
+        console.debug('[view-runtime-preview] iframe ready', { viewId })
         setIsIframeReady(true)
         return
       }
@@ -163,6 +166,10 @@ export function ViewRuntimePreview({
       return
     }
 
+    console.debug('[view-runtime-preview] post render', {
+      viewId,
+      sourceLength: source.length,
+    })
     iframeRef.current.contentWindow.postMessage(
       {
         type: VIEW_RUNTIME_RENDER_EVENT,
@@ -178,14 +185,19 @@ export function ViewRuntimePreview({
       return
     }
 
-    if (runTriggerVersion === lastHandledRunTriggerVersionRef.current) {
+    if (!runRequestId || runRequestId === lastHandledRunRequestIdRef.current) {
       return
     }
 
-    lastHandledRunTriggerVersionRef.current = runTriggerVersion
+    lastHandledRunRequestIdRef.current = runRequestId
 
+    console.debug('[view-runtime-preview] post run trigger', {
+      viewId,
+      runRequestId,
+    })
     iframeRef.current.contentWindow.postMessage({ type: VIEW_RUNTIME_TRIGGER_RUN_EVENT }, '*')
-  }, [isIframeReady, runTriggerVersion])
+    onRunHandled(runRequestId)
+  }, [isIframeReady, onRunHandled, runRequestId])
 
   return (
     <iframe

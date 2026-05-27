@@ -11,6 +11,7 @@ import { subscribeToTasks } from './global/taskSubscription'
 import { CustomTitleBar } from './components/CustomTitleBar'
 import { FolderExplorer } from './folders/FolderExplorer'
 import { useAppShortcuts } from './appShortcuts'
+import { useViewRunShortcuts } from './folders/useViewRunShortcuts'
 
 subscribeToTasks()
 subscribeToGenericEvents()
@@ -21,6 +22,7 @@ function App() {
   }, [])
 
   useAppShortcuts()
+  useViewRunShortcuts()
 
   return (
     <>

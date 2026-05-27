@@ -60,6 +60,8 @@ const runtimeShellState: RuntimeShellState = {
   error: null,
 }
 const hotComponentRegistry = new Map<string, { wrapper: RuntimeComponent; current: RuntimeComponent }>()
+let hasPendingRunTrigger = false
+let pendingRunFrameId: number | null = null
 
 renderRuntimeShell()
 
@@ -67,11 +69,18 @@ window.addEventListener('message', event => {
   if (event.data?.type === VIEW_RUNTIME_RENDER_EVENT) {
     const code = typeof event.data.code === 'string' ? event.data.code : ''
     const payload = event.data.payload as ViewRuntimePayload | undefined
+    console.debug('[view-runtime] render event', {
+      sourceLength: code.length,
+      hasPayload: Boolean(payload),
+    })
 
     if (!code.trim()) {
       runtimeShellState.source = ''
       runtimeShellState.component = null
       runtimeShellState.error = null
+      hasPendingRunTrigger = false
+      cancelPendingRunFrame()
+      console.debug('[view-runtime] cleared runtime shell')
       renderRuntimeShell()
       return
     }
@@ -89,7 +98,9 @@ window.addEventListener('message', event => {
   }
 
   if (event.data?.type === VIEW_RUNTIME_TRIGGER_RUN_EVENT) {
-    triggerRunner()
+    console.debug('[view-runtime] trigger run event received')
+    hasPendingRunTrigger = true
+    flushPendingRunTrigger()
     return
   }
 
@@ -118,6 +129,7 @@ window.addEventListener('message', event => {
 })
 
 window.parent.postMessage({ type: VIEW_RUNTIME_READY_EVENT }, '*')
+console.debug('[view-runtime] posted ready event')
 
 function compileView(source: string, fileName: string) {
   const transformedSource = transformViewRuntimeSource(source, fileName)
@@ -168,6 +180,10 @@ function compileView(source: string, fileName: string) {
 }
 
 async function renderView(source: string, payload: ViewRuntimePayload) {
+  console.debug('[view-runtime] renderView start', {
+    sourceLength: source.length,
+    sharedScriptCount: payload.sharedScripts.length,
+  })
   const globalScripts = payload.sharedScripts.filter(
     script => script.isActive && script.kind === 'global' && script.targets.includes('view-runtime')
   )
@@ -180,6 +196,8 @@ async function renderView(source: string, payload: ViewRuntimePayload) {
   runtimeShellState.error = null
 
   renderRuntimeShell()
+  console.debug('[view-runtime] renderView complete')
+  flushPendingRunTrigger()
 }
 
 async function runView(code: string, payload: ViewRuntimePayload) {
@@ -1168,11 +1186,50 @@ function createEmptyPayload(): ViewRuntimePayload {
   }
 }
 
-function triggerRunner() {
-  const runner = document.getElementById('runner')
-  if (!(runner instanceof HTMLElement)) {
+function flushPendingRunTrigger() {
+  if (!hasPendingRunTrigger) {
     return
   }
 
+  console.debug('[view-runtime] flush pending run trigger')
+  if (triggerRunner()) {
+    hasPendingRunTrigger = false
+    cancelPendingRunFrame()
+    console.debug('[view-runtime] run trigger delivered')
+    return
+  }
+
+  schedulePendingRunRetry()
+}
+
+function triggerRunner() {
+  const runner = document.getElementById('runner')
+  if (!(runner instanceof HTMLElement)) {
+    console.debug('[view-runtime] runner not found')
+    return false
+  }
+
+  console.debug('[view-runtime] clicking runner')
   runner.click()
+  return true
+}
+
+function schedulePendingRunRetry() {
+  if (pendingRunFrameId !== null) {
+    return
+  }
+
+  pendingRunFrameId = window.requestAnimationFrame(() => {
+    pendingRunFrameId = null
+    flushPendingRunTrigger()
+  })
+}
+
+function cancelPendingRunFrame() {
+  if (pendingRunFrameId === null) {
+    return
+  }
+
+  window.cancelAnimationFrame(pendingRunFrameId)
+  pendingRunFrameId = null
 }

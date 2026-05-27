@@ -52,7 +52,8 @@ function applyCustomShortcut(
   shortcut: DefinedShortcutInput,
   customShortcuts: Record<string, any>,
 ): DefinedShortcutInput {
-  const customCode = customShortcuts[shortcut.label];
+  const customKey = shortcut.command || shortcut.label;
+  const customCode = customShortcuts[customKey];
 
   if (!customCode) {
     return shortcut;

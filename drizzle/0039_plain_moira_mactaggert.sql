@@ -1,0 +1,1 @@
+ALTER TABLE `views` ADD `shortcut_json` text;

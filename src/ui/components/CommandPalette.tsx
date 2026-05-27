@@ -3,26 +3,28 @@ import { Dialog } from '@/lib/components/dialog'
 import { shortcutRegistryAPI } from '@/lib/hooks/shortcutRegistry'
 import { KeyboardIcon, Edit2Icon, XIcon, RotateCcwIcon, AlertTriangleIcon } from 'lucide-react'
 import { Button } from '@/lib/components/button'
-import { ShortcutCode, isSequenceShortcut, useShortcuts } from '@/lib/hooks/useShortcuts'
+import { isSequenceShortcut, useShortcuts } from '@/lib/hooks/useShortcuts'
 import { clsx } from '@/lib/functions/clsx'
 import Fuse from 'fuse.js'
 import { shortcutCustomizationHelpers, shortcutCustomizationStore } from '@/lib/hooks/shortcutCustomization'
 import { useSelector } from '@xstate/store/react'
 import { dialogActions } from '@/global/dialogStore'
 import { Tooltip } from './Tooltip'
+import { ShortcutDisplay } from './ShortcutDisplay'
+import { useShortcutRecorder } from '@/lib/hooks/useShortcutRecorder'
+import { shortcutDisplayValueToString, shortcutKeyString } from '@/lib/hooks/shortcutUtils'
 
 export const CommandPalette = function CommandPalette(_props: {}) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [editingCommand, setEditingCommand] = useState<string | null>(null)
-  const [recordedKeys, setRecordedKeys] = useState<KeyboardEvent | null>(null)
+  const [savingCommand, setSavingCommand] = useState<string | null>(null)
   const [isSearchingByKeymap, setIsSearchingByKeymap] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const customShortcuts = useSelector(shortcutCustomizationStore, state => state.context.customShortcuts)
+  const { recordedShortcut, resetRecordedShortcut } = useShortcutRecorder(editingCommand !== null)
 
-  const shortcuts = useMemo(() => {
-    return shortcutRegistryAPI.getAll()
-  }, [])
+  const shortcuts = shortcutRegistryAPI.getAll()
 
   // Detect duplicate keymaps in O(N) time
   const duplicateCommands = useMemo(() => {
@@ -85,14 +87,7 @@ export const CommandPalette = function CommandPalette(_props: {}) {
             ? { sequence: shortcut.shortcut.sequence }
             : shortcut.shortcut.code
 
-        let keymapStr = ''
-        if (typeof displayShortcut === 'object' && 'sequence' in displayShortcut) {
-          keymapStr = displayShortcut.sequence.join(' ')
-        } else if (Array.isArray(displayShortcut)) {
-          keymapStr = displayShortcut.map(shortcutToString).join(' or ')
-        } else {
-          keymapStr = shortcutToString(displayShortcut)
-        }
+        const keymapStr = shortcutDisplayValueToString(displayShortcut)
 
         return keymapStr.toLowerCase().includes(searchLower)
       })
@@ -169,7 +164,7 @@ export const CommandPalette = function CommandPalette(_props: {}) {
     setSearchQuery('')
     setSelectedIndex(0)
     setEditingCommand(null)
-    setRecordedKeys(null)
+    resetRecordedShortcut()
     // Focus the search input when dialog opens
     setTimeout(() => {
       searchInputRef.current?.focus()
@@ -180,24 +175,6 @@ export const CommandPalette = function CommandPalette(_props: {}) {
     // Reset selected index when search results change
     setSelectedIndex(0)
   }, [searchQuery])
-
-  // Keyboard recording handler for editing shortcuts
-  useEffect(() => {
-    if (!editingCommand) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-
-      // Ignore modifier-only keys
-      if (['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)) return
-
-      setRecordedKeys(e)
-    }
-
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [editingCommand])
 
   // Keyboard capture for keymap search mode
   useEffect(() => {
@@ -237,20 +214,39 @@ export const CommandPalette = function CommandPalette(_props: {}) {
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [isSearchingByKeymap, editingCommand])
 
-  const handleSaveShortcut = (command: string) => {
-    if (!recordedKeys) return
+  const handleSaveShortcut = async (command: string) => {
+    if (!recordedShortcut) return
 
-    const shortcut: ShortcutCode = {
-      code: recordedKeys.code,
-      metaKey: recordedKeys.metaKey || undefined,
-      ctrlKey: recordedKeys.ctrlKey || undefined,
-      altKey: recordedKeys.altKey || undefined,
-      shiftKey: recordedKeys.shiftKey || undefined,
+    const shortcutChangeHandler = shortcutRegistryAPI.getShortcutChangeHandler(command)
+
+    setSavingCommand(command)
+    try {
+      if (shortcutChangeHandler) {
+        await shortcutChangeHandler(command, recordedShortcut)
+      } else {
+        shortcutCustomizationHelpers.setCustomShortcut(command, recordedShortcut)
+      }
+
+      setEditingCommand(null)
+      resetRecordedShortcut()
+    } finally {
+      setSavingCommand(null)
     }
+  }
 
-    shortcutCustomizationHelpers.setCustomShortcut(command, shortcut)
-    setEditingCommand(null)
-    setRecordedKeys(null)
+  const handleResetShortcut = async (command: string) => {
+    const shortcutChangeHandler = shortcutRegistryAPI.getShortcutChangeHandler(command)
+
+    setSavingCommand(command)
+    try {
+      if (shortcutChangeHandler) {
+        await shortcutChangeHandler(command, null)
+      } else {
+        shortcutCustomizationHelpers.removeCustomShortcut(command)
+      }
+    } finally {
+      setSavingCommand(null)
+    }
   }
 
   return (
@@ -315,8 +311,11 @@ export const CommandPalette = function CommandPalette(_props: {}) {
           ) : (
             filteredShortcuts.map((shortcut, index) => {
               const isEditing = editingCommand === shortcut.command
-              const hasCustom = shortcutCustomizationHelpers.hasCustomShortcut(shortcut.command)
+              const hasShortcutChangeHandler = shortcutRegistryAPI.getShortcutChangeHandler(shortcut.command) !== null
+              const hasCustom = !hasShortcutChangeHandler && shortcutCustomizationHelpers.hasCustomShortcut(shortcut.command)
               const isDuplicate = duplicateCommands.has(shortcut.command)
+              const canEditShortcut = !isSequenceShortcut(shortcut.shortcut)
+              const canResetShortcut = hasShortcutChangeHandler || hasCustom
               const displayShortcut = hasCustom
                 ? customShortcuts[shortcut.command]
                 : isSequenceShortcut(shortcut.shortcut)
@@ -351,19 +350,11 @@ export const CommandPalette = function CommandPalette(_props: {}) {
                     {isEditing ? (
                       <div className="flex items-center gap-1 h-6">
                         <kbd className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 border border-blue-200 rounded dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700 whitespace-nowrap leading-none">
-                          {recordedKeys
-                            ? shortcutToString({
-                                code: recordedKeys.code,
-                                metaKey: recordedKeys.metaKey || undefined,
-                                ctrlKey: recordedKeys.ctrlKey || undefined,
-                                altKey: recordedKeys.altKey || undefined,
-                                shiftKey: recordedKeys.shiftKey || undefined,
-                              })
-                            : 'Press a key...'}
+                          {recordedShortcut ? shortcutDisplayValueToString(recordedShortcut) : 'Press a key...'}
                         </kbd>
                         <button
-                          onClick={() => handleSaveShortcut(shortcut.command)}
-                          disabled={!recordedKeys}
+                          onClick={() => void handleSaveShortcut(shortcut.command)}
+                          disabled={!recordedShortcut || savingCommand === shortcut.command}
                           className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors h-6 w-6 flex items-center justify-center"
                           title="Save"
                         >
@@ -380,7 +371,7 @@ export const CommandPalette = function CommandPalette(_props: {}) {
                           onClick={e => {
                             e.stopPropagation()
                             setEditingCommand(null)
-                            setRecordedKeys(null)
+                            resetRecordedShortcut()
                           }}
                           className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 transition-colors h-6 w-6 flex items-center justify-center"
                           title="Cancel"
@@ -390,27 +381,34 @@ export const CommandPalette = function CommandPalette(_props: {}) {
                       </div>
                     ) : (
                       <div className="relative flex items-center gap-2 group h-6">
-                        {hasCustom && (
+                        {canResetShortcut && (
                           <button
                             onClick={e => {
                               e.stopPropagation()
-                              shortcutCustomizationHelpers.removeCustomShortcut(shortcut.command)
+                              void handleResetShortcut(shortcut.command)
                             }}
                             className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded h-6 w-6 flex items-center justify-center"
                             title="Reset to default"
+                            disabled={savingCommand === shortcut.command}
                           >
                             <RotateCcwIcon className="w-3.5 h-3.5 text-gray-500" />
                           </button>
                         )}
                         <div
-                          className="flex items-center gap-2 cursor-pointer h-6"
+                          className={clsx('flex items-center gap-2 h-6', canEditShortcut && 'cursor-pointer')}
                           onClick={e => {
+                            if (!canEditShortcut) {
+                              return
+                            }
+
                             e.stopPropagation()
                             setEditingCommand(shortcut.command)
-                            setRecordedKeys(null)
+                            resetRecordedShortcut()
                           }}
                         >
-                          <Edit2Icon className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500" />
+                          {canEditShortcut ? (
+                            <Edit2Icon className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500" />
+                          ) : null}
                           <div className="flex items-center gap-1 h-6">
                             {/* Show custom shortcut if defined */}
                             {hasCustom && (
@@ -421,30 +419,20 @@ export const CommandPalette = function CommandPalette(_props: {}) {
                                     'text-blue-800 bg-blue-100 border-blue-200 dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700'
                                   )}
                                 >
-                                  {typeof displayShortcut === 'object' && 'sequence' in displayShortcut
-                                    ? displayShortcut.sequence.join(' ')
-                                    : Array.isArray(displayShortcut)
-                                      ? displayShortcut.map(shortcutToString).join(' or ')
-                                      : shortcutToString(displayShortcut)}
+                                  {shortcutDisplayValueToString(displayShortcut)}
                                 </kbd>
                                 <span className="text-xs text-gray-400">→</span>
                               </>
                             )}
                             {/* Show original shortcut */}
-                            <kbd
-                              className={clsx(
-                                'px-2 py-1 text-xs font-semibold border rounded hover:opacity-80',
-                                hasCustom
-                                  ? 'text-gray-500 bg-gray-50 border-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:border-gray-700 line-through'
-                                  : 'text-gray-800 bg-gray-100 border-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600'
-                              )}
-                            >
-                              {isSequenceShortcut(shortcut.defaultShortcut)
-                                ? shortcut.defaultShortcut.sequence.join(' ')
-                                : Array.isArray(shortcut.defaultShortcut.code)
-                                  ? shortcut.defaultShortcut.code.map(shortcutToString).join(' or ')
-                                  : shortcutToString(shortcut.defaultShortcut.code)}
-                            </kbd>
+                            <ShortcutDisplay
+                              shortcut={
+                                isSequenceShortcut(shortcut.defaultShortcut)
+                                  ? { sequence: shortcut.defaultShortcut.sequence }
+                                  : shortcut.defaultShortcut.code
+                              }
+                              className={clsx(hasCustom && 'text-gray-500 bg-gray-50 border-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:border-gray-700 line-through')}
+                            />
                           </div>
                         </div>
                       </div>
@@ -458,24 +446,4 @@ export const CommandPalette = function CommandPalette(_props: {}) {
       </div>
     </Dialog>
   )
-}
-
-function shortcutKeyString(key: string) {
-  if (key === ' ') return 'Space'
-  return key
-}
-
-function shortcutToString(shortcut: ShortcutCode): string {
-  if (typeof shortcut === 'string') {
-    return shortcutKeyString(shortcut)
-  }
-
-  const parts: string[] = []
-  if (shortcut.metaKey) parts.push('⌘')
-  if (shortcut.ctrlKey) parts.push('Ctrl')
-  if (shortcut.altKey) parts.push('Alt')
-  if (shortcut.shiftKey) parts.push('Shift')
-  parts.push(shortcutKeyString(shortcut.code))
-
-  return parts.join('+')
 }

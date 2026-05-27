@@ -12,7 +12,6 @@ import { shortcutCustomizationStore } from './shortcutCustomization'
 export type CommandDefinition = {
   command: string
   label: string
-  customizable?: boolean
 }
 
 export type ShortcutCommand = CommandDefinition & {
@@ -35,6 +34,7 @@ export namespace GlobalShortcuts {
     shortcuts: ShortcutCommand[]
     enabled: boolean
     sequences: SequenceCommand[]
+    onShortcutChange?: (command: string, shortcut: ShortcutCode | null) => void | Promise<void>
   }
 
   type Item = {
@@ -44,6 +44,8 @@ export namespace GlobalShortcuts {
     key: string
     originalShortcuts: ShortcutCommand[]
     originalSequences: SequenceCommand[]
+    registeredCommands: string[]
+    onShortcutChange?: (command: string, shortcut: ShortcutCode | null) => void | Promise<void>
   }
 
   type FlattenedGlobalShortcuts = {
@@ -81,11 +83,6 @@ export namespace GlobalShortcuts {
 
   function applyCustomShortcuts(shortcuts: ShortcutCommand[], customShortcuts: Record<string, any>): ShortcutCommand[] {
     return shortcuts.map(item => {
-      // Skip if not customizable
-      if (item.customizable === false) {
-        return item
-      }
-
       const customKey = customShortcuts[item.command]
       if (!customKey) {
         return item
@@ -100,11 +97,6 @@ export namespace GlobalShortcuts {
 
   function applyCustomSequences(sequences: SequenceCommand[], customShortcuts: Record<string, any>): SequenceCommand[] {
     return sequences.map(item => {
-      // Skip if not customizable
-      if (item.customizable === false) {
-        return item
-      }
-
       const customSeq = customShortcuts[item.command]
       if (!customSeq || typeof customSeq !== 'object' || !('sequence' in customSeq)) {
         return item
@@ -152,6 +144,11 @@ export namespace GlobalShortcuts {
   })
 
   export function create(item: Create) {
+    const existing = shortcutsMap[item.key]
+    if (existing) {
+      unregisterItemCommands(existing)
+    }
+
     const customShortcuts = shortcutCustomizationStore.get().context.customShortcuts
 
     // Apply custom shortcuts if they exist
@@ -168,16 +165,17 @@ export namespace GlobalShortcuts {
       key: item.key,
       originalShortcuts: item.shortcuts,
       originalSequences: item.sequences,
+      registeredCommands: [...item.shortcuts.map(shortcut => shortcut.command), ...item.sequences.map(sequence => sequence.command)],
+      onShortcutChange: item.onShortcutChange,
     }
     shortcutsMap[item.key] = compiled
-
-    if (item.enabled) {
-      compiled.shortcuts.forEach((item, k) => flattened.shortcuts.set(k, item))
-      flattened.sequences.push(...compiled.sequences)
-    }
+    recreateFlattened()
 
     for (const i of item.shortcuts) {
       shortcutRegistryAPI.register(i.command, i.label, convertShortcutCommand(i))
+      if (item.onShortcutChange) {
+        shortcutRegistryAPI.registerShortcutChangeHandler(i.command, item.onShortcutChange)
+      }
     }
 
     for (const i of item.sequences) {
@@ -201,12 +199,18 @@ export namespace GlobalShortcuts {
   export function remove(key: string) {
     const item = shortcutsMap[key]
     if (!item) {
-      console.error(`Global shortcut ${key} not found`)
       return
     }
 
+    unregisterItemCommands(item)
     delete shortcutsMap[key]
     recreateFlattened()
+  }
+
+  function unregisterItemCommands(item: Item) {
+    for (const command of item.registeredCommands) {
+      shortcutRegistryAPI.unregister(command)
+    }
   }
 
   function check(e: KeyboardEvent) {

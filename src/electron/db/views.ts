@@ -6,6 +6,7 @@ import {
   type CreateViewInput,
   type DeleteViewInput,
   type MoveViewInput,
+  type ViewShortcut,
   type UpdateViewInput,
   type ViewLayoutMode,
   type ViewRecord,
@@ -53,6 +54,7 @@ export async function createView(input: CreateViewInput): Promise<GenericResult<
       id: crypto.randomUUID(),
       name,
       code: input.code ?? '',
+      shortcutJson: serializeViewShortcut(input.shortcut ?? null),
       layoutMode,
       splitRatio,
       rememberRequests: input.rememberRequests ?? false,
@@ -97,6 +99,7 @@ export async function updateView(input: UpdateViewInput): Promise<GenericResult<
       .set({
         name,
         code: input.code,
+        shortcutJson: serializeViewShortcut(input.shortcut),
         layoutMode: input.layoutMode,
         splitRatio,
         rememberRequests: input.rememberRequests,
@@ -204,6 +207,7 @@ function toViewRecord(row: ViewRow): ViewRecord {
     id: row.id,
     name: row.name,
     code: row.code,
+    shortcut: parseViewShortcut(row.shortcutJson),
     layoutMode: row.layoutMode as ViewLayoutMode,
     splitRatio: row.splitRatio,
     rememberRequests: row.rememberRequests,
@@ -212,4 +216,80 @@ function toViewRecord(row: ViewRow): ViewRecord {
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
   }
+}
+
+function parseViewShortcut(value: string | null): ViewShortcut | null {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+
+    const shortcut = parsed as Record<string, unknown>
+    if (typeof shortcut.code !== 'string' || shortcut.code.length === 0) {
+      return null
+    }
+
+    if (!isOptionalBoolean(shortcut.metaKey)) {
+      return null
+    }
+
+    if (!isOptionalBoolean(shortcut.shiftKey)) {
+      return null
+    }
+
+    if (!isOptionalBoolean(shortcut.ctrlKey)) {
+      return null
+    }
+
+    if (!isOptionalBoolean(shortcut.altKey)) {
+      return null
+    }
+
+    return {
+      code: shortcut.code,
+      metaKey: shortcut.metaKey,
+      shiftKey: shortcut.shiftKey,
+      ctrlKey: shortcut.ctrlKey,
+      altKey: shortcut.altKey,
+    }
+  } catch {
+    return null
+  }
+}
+
+function serializeViewShortcut(shortcut: ViewShortcut | null): string | null {
+  if (!shortcut) {
+    return null
+  }
+
+  const normalizedShortcut = normalizeViewShortcut(shortcut)
+  if (!normalizedShortcut) {
+    return null
+  }
+
+  return JSON.stringify(normalizedShortcut)
+}
+
+function normalizeViewShortcut(shortcut: ViewShortcut): ViewShortcut | null {
+  const code = shortcut.code.trim()
+  if (!code) {
+    return null
+  }
+
+  return {
+    code,
+    metaKey: shortcut.metaKey || undefined,
+    shiftKey: shortcut.shiftKey || undefined,
+    ctrlKey: shortcut.ctrlKey || undefined,
+    altKey: shortcut.altKey || undefined,
+  }
+}
+
+function isOptionalBoolean(value: unknown): value is boolean | undefined {
+  return value === undefined || typeof value === 'boolean'
 }

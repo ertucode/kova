@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { Columns2Icon, InfoIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, SparklesIcon, Trash2Icon } from 'lucide-react'
+import { Columns2Icon, Edit2Icon, InfoIcon, KeyboardIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, SparklesIcon, Trash2Icon } from 'lucide-react'
 import type { ExplorerItem, ExplorerRequestItem } from '@common/Explorer'
 import { parseKeyValueRows } from '@common/KeyValueRows'
-import type { ViewLayoutMode, ViewRecord } from '@common/Views'
+import type { ViewLayoutMode, ViewRecord, ViewShortcut } from '@common/Views'
 import { getWindowElectron } from '@/getWindowElectron'
 import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import { dialogActions } from '@/global/dialogStore'
+import { Dialog } from '@/lib/components/dialog'
 import { toast } from '@/lib/components/toast'
+import { useShortcutRecorder } from '@/lib/hooks/useShortcutRecorder'
 import { Tooltip } from '../components/Tooltip'
+import { ShortcutDisplay } from '../components/ShortcutDisplay'
 import { CodeEditor, type CodeEditorHandle, type CodeEditorSelection } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
@@ -21,6 +24,7 @@ import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { openScriptAiReviewDialog } from './ScriptAiReviewDialog'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useViews, notifyViewsChanged } from './useViews'
+import { ViewUiHelpers, viewUiStore } from './viewUiStore'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { ViewRuntimePreview } from './ViewRuntimePreview'
 
@@ -31,7 +35,6 @@ type ViewEditorEntry = {
   saving: boolean
 }
 
-const PERSISTED_SELECTED_VIEW_ID_KEY = 'views:selectedId'
 const MIN_VIEW_SPLIT_RATIO = 15
 const MAX_VIEW_SPLIT_RATIO = 85
 
@@ -43,10 +46,10 @@ export function ViewsPanel() {
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const { scripts: visibleSharedScripts } = useVisibleSharedScripts(null)
-  const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedViewId())
   const [entries, setEntries] = useState<Record<string, ViewEditorEntry>>({})
-  const [runTriggerVersion, setRunTriggerVersion] = useState(0)
   const [isResizing, setIsResizing] = useState(false)
+  const selectedId = useSelector(viewUiStore, state => state.context.selectedId)
+  const pendingRunRequest = useSelector(viewUiStore, state => state.context.pendingRunRequest)
   const splitContainerRef = useRef<HTMLDivElement | null>(null)
   const resizeStateRef = useRef<{
     viewId: string
@@ -131,21 +134,21 @@ export function ViewsPanel() {
   }, [items])
 
   useEffect(() => {
+    if (loading) {
+      return
+    }
+
     if (items.length === 0) {
       if (selectedId !== null) {
-        setSelectedId(null)
+        ViewUiHelpers.selectView(null)
       }
       return
     }
 
     if (!selectedId || !items.some(item => item.id === selectedId)) {
-      setSelectedId(items[0]?.id ?? null)
+      ViewUiHelpers.selectView(items[0]?.id ?? null)
     }
   }, [items, selectedId])
-
-  useEffect(() => {
-    persistSelectedViewId(selectedId)
-  }, [selectedId])
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -203,7 +206,7 @@ export function ViewsPanel() {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         event.preventDefault()
         event.stopPropagation()
-        setRunTriggerVersion(version => version + 1)
+        ViewUiHelpers.requestRun(selectedId)
       }
     }
 
@@ -214,6 +217,8 @@ export function ViewsPanel() {
   const selectedEntry = selectedId ? (entries[selectedId] ?? null) : null
   const selectedDraft = selectedEntry?.current ?? null
   const selectedSavedView = selectedEntry?.saved ?? null
+  const selectedRunRequestId =
+    selectedDraft && pendingRunRequest?.viewId === selectedDraft.id ? pendingRunRequest.requestId : null
 
   useEffect(() => {
     const pendingSelectionRestore = pendingSelectionRestoreRef.current
@@ -292,7 +297,7 @@ export function ViewsPanel() {
                       ? 'border-primary/35 bg-primary/8 text-base-content'
                       : 'border-base-content/10 bg-base-100 hover:border-base-content/20 hover:bg-base-200/40',
                   ].join(' ')}
-                  onClick={() => setSelectedId(item.id)}
+                  onClick={() => ViewUiHelpers.selectView(item.id)}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{entry?.current.name || item.name}</div>
@@ -338,6 +343,15 @@ export function ViewsPanel() {
                   }}
                 />
               </label>
+
+              <ViewShortcutEditor
+                shortcut={selectedDraft.shortcut}
+                onChange={shortcut => {
+                  const nextDraft = { ...selectedDraft, shortcut }
+                  updateDraft(selectedDraft.id, () => nextDraft)
+                  void saveView(selectedDraft.id, nextDraft)
+                }}
+              />
 
               <ToolbarButton
                 label={selectedDraft.layoutMode === 'horizontal' ? 'Stacked layout' : 'Side-by-side layout'}
@@ -386,7 +400,7 @@ export function ViewsPanel() {
                 <SaveIcon className="size-4" />
               </ToolbarButton>
 
-              <ToolbarButton label="Run runner" onClick={() => setRunTriggerVersion(version => version + 1)}>
+              <ToolbarButton label="Run runner" onClick={() => ViewUiHelpers.requestRun(selectedDraft.id)}>
                 <PlayIcon className="size-4" />
               </ToolbarButton>
 
@@ -462,11 +476,12 @@ export function ViewsPanel() {
                   viewId={selectedDraft.id}
                   source={selectedSavedView?.code ?? ''}
                   rememberRequests={selectedSavedView?.rememberRequests ?? false}
-                  runTriggerVersion={runTriggerVersion}
+                  runRequestId={selectedRunRequestId}
                   environments={runtimeEnvironments}
                   sharedScripts={runtimeSharedScripts}
                   scriptPackages={scriptPackageArtifacts}
                   requestPaths={requestPaths}
+                  onRunHandled={requestId => ViewUiHelpers.markRunHandled(requestId)}
                 />
                 {isResizing ? <div className="absolute inset-0 z-10" aria-hidden /> : null}
               </section>
@@ -481,6 +496,7 @@ export function ViewsPanel() {
     const result = await getWindowElectron().createView({
       name: buildNewViewName(items),
       code: DEFAULT_VIEW_SOURCE,
+      shortcut: null,
       layoutMode: 'horizontal',
       splitRatio: 50,
       rememberRequests: false,
@@ -492,7 +508,7 @@ export function ViewsPanel() {
 
     notifyViewsChanged()
     await reload()
-    setSelectedId(result.data.id)
+    ViewUiHelpers.selectView(result.data.id)
   }
 
   function updateDraft(viewId: string, updater: (draft: ViewRecord) => ViewRecord) {
@@ -580,6 +596,7 @@ export function ViewsPanel() {
         id: draftToSave.id,
         name: draftToSave.name,
         code: draftToSave.code,
+        shortcut: draftToSave.shortcut,
         layoutMode: draftToSave.layoutMode,
         splitRatio: clampSplitRatio(draftToSave.splitRatio),
         rememberRequests: draftToSave.rememberRequests,
@@ -610,6 +627,7 @@ export function ViewsPanel() {
           },
         }
       })
+      notifyViewsChanged()
     } finally {
       setEntries(currentEntries => {
         const currentEntry = currentEntries[viewId]
@@ -643,7 +661,7 @@ export function ViewsPanel() {
     notifyViewsChanged()
     await reload()
     const nextSelectedId = items.find(item => item.id !== viewId)?.id ?? null
-    setSelectedId(nextSelectedId)
+    ViewUiHelpers.selectView(nextSelectedId)
   }
 
   function openDocumentation() {
@@ -681,6 +699,118 @@ function ToolbarButton({
   )
 }
 
+function ViewShortcutEditor({
+  shortcut,
+  onChange,
+}: {
+  shortcut: ViewShortcut | null
+  onChange: (shortcut: ViewShortcut | null) => void
+}) {
+  return (
+    <div className="relative flex items-center justify-center">
+      <ToolbarButton
+        label="Change shortcut"
+        onClick={() => dialogActions.open({ component: ViewShortcutDialog, props: { shortcut, onChange } })}
+      >
+        <KeyboardIcon className="size-4" />
+      </ToolbarButton>
+
+      {shortcut ? (
+        <ShortcutDisplay
+          shortcut={shortcut}
+          className="pointer-events-none absolute -bottom-2 left-1/2 min-h-0 -translate-x-1/2 border-base-content/10 bg-base-100 px-1 py-0 text-[8px] leading-3 text-base-content/70 shadow-sm dark:border-base-content/10 dark:bg-base-100 dark:text-base-content/70"
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function ViewShortcutDialog({
+  shortcut,
+  onChange,
+}: {
+  shortcut: ViewShortcut | null
+  onChange: (shortcut: ViewShortcut | null) => void
+}) {
+  const [isRecording, setIsRecording] = useState(false)
+  const { recordedShortcut, resetRecordedShortcut } = useShortcutRecorder(isRecording)
+
+  return (
+    <Dialog
+      title="View Shortcut"
+      onClose={dialogActions.close}
+      className="max-w-[420px]"
+      footer={
+        <>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              resetRecordedShortcut()
+              setIsRecording(false)
+              dialogActions.close()
+            }}
+          >
+            Cancel
+          </button>
+          {shortcut ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                onChange(null)
+                resetRecordedShortcut()
+                setIsRecording(false)
+                dialogActions.close()
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!recordedShortcut}
+            onClick={() => {
+              if (!recordedShortcut) {
+                return
+              }
+
+              onChange(recordedShortcut)
+              resetRecordedShortcut()
+              setIsRecording(false)
+              dialogActions.close()
+            }}
+          >
+            Save
+          </button>
+        </>
+      }
+    >
+      <div className="flex items-center justify-center px-1 py-2">
+        <div className="flex items-center gap-2">
+          <ShortcutDisplay
+            shortcut={isRecording ? recordedShortcut : shortcut}
+            placeholder={isRecording ? 'Press a key combination' : 'No shortcut'}
+            className="flex h-9 min-w-[180px] items-center justify-center text-center"
+          />
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-base-200/60 text-base-content/70 transition hover:bg-base-200"
+            onClick={() => {
+              resetRecordedShortcut()
+              setIsRecording(true)
+            }}
+            aria-label="Edit shortcut"
+          >
+            <Edit2Icon className="size-4" />
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  )
+}
+
 function PanelEmptyState({ message }: { message: string }) {
   return (
     <div className="border border-dashed border-base-content/12 px-4 py-4 text-sm text-base-content/45">{message}</div>
@@ -701,6 +831,7 @@ function serializeViewDraft(view: ViewRecord) {
   return JSON.stringify({
     name: view.name,
     code: view.code,
+    shortcut: view.shortcut,
     layoutMode: view.layoutMode,
     splitRatio: clampSplitRatio(view.splitRatio),
     rememberRequests: view.rememberRequests,
@@ -713,27 +844,6 @@ function parseEnvironmentValues(value: string) {
       .filter(row => row.enabled && row.key.trim())
       .map(row => [row.key, row.value])
   )
-}
-
-function loadSelectedViewId() {
-  try {
-    return localStorage.getItem(PERSISTED_SELECTED_VIEW_ID_KEY)
-  } catch {
-    return null
-  }
-}
-
-function persistSelectedViewId(value: string | null) {
-  try {
-    if (value) {
-      localStorage.setItem(PERSISTED_SELECTED_VIEW_ID_KEY, value)
-      return
-    }
-
-    localStorage.removeItem(PERSISTED_SELECTED_VIEW_ID_KEY)
-  } catch {
-    return
-  }
 }
 
 function clampSplitRatio(value: number) {
