@@ -69,10 +69,6 @@ window.addEventListener('message', event => {
   if (event.data?.type === VIEW_RUNTIME_RENDER_EVENT) {
     const code = typeof event.data.code === 'string' ? event.data.code : ''
     const payload = event.data.payload as ViewRuntimePayload | undefined
-    console.debug('[view-runtime] render event', {
-      sourceLength: code.length,
-      hasPayload: Boolean(payload),
-    })
 
     if (!code.trim()) {
       runtimeShellState.source = ''
@@ -80,7 +76,6 @@ window.addEventListener('message', event => {
       runtimeShellState.error = null
       hasPendingRunTrigger = false
       cancelPendingRunFrame()
-      console.debug('[view-runtime] cleared runtime shell')
       renderRuntimeShell()
       return
     }
@@ -98,7 +93,6 @@ window.addEventListener('message', event => {
   }
 
   if (event.data?.type === VIEW_RUNTIME_TRIGGER_RUN_EVENT) {
-    console.debug('[view-runtime] trigger run event received')
     hasPendingRunTrigger = true
     flushPendingRunTrigger()
     return
@@ -129,7 +123,6 @@ window.addEventListener('message', event => {
 })
 
 window.parent.postMessage({ type: VIEW_RUNTIME_READY_EVENT }, '*')
-console.debug('[view-runtime] posted ready event')
 
 function compileView(source: string, fileName: string) {
   const transformedSource = transformViewRuntimeSource(source, fileName)
@@ -180,10 +173,6 @@ function compileView(source: string, fileName: string) {
 }
 
 async function renderView(source: string, payload: ViewRuntimePayload) {
-  console.debug('[view-runtime] renderView start', {
-    sourceLength: source.length,
-    sharedScriptCount: payload.sharedScripts.length,
-  })
   const globalScripts = payload.sharedScripts.filter(
     script => script.isActive && script.kind === 'global' && script.targets.includes('view-runtime')
   )
@@ -196,7 +185,6 @@ async function renderView(source: string, payload: ViewRuntimePayload) {
   runtimeShellState.error = null
 
   renderRuntimeShell()
-  console.debug('[view-runtime] renderView complete')
   flushPendingRunTrigger()
 }
 
@@ -302,7 +290,8 @@ function createSharedScriptModuleLoader(
   const modulesByName = new Map(
     payload.sharedScripts
       .filter(
-        script => script.isActive && script.kind === 'module' && script.targets.includes('view-runtime') && script.name.trim()
+        script =>
+          script.isActive && script.kind === 'module' && script.targets.includes('view-runtime') && script.name.trim()
       )
       .map(script => [script.name, script] as const)
   )
@@ -413,11 +402,12 @@ function createInstalledBrowserPackageLoader(scriptPackages: ViewRuntimePayload[
 
     const module = { exports: {} as Record<string, unknown> }
     const exports = module.exports
-    new Function('module', 'exports', 'require', `${selectedPackage.browserBundleCode}\n//# sourceURL=${selectedPackage.packageName}.bundle.js`)(
-      module,
-      exports,
-      createExternalRequire(loadPackage)
-    )
+    new Function(
+      'module',
+      'exports',
+      'require',
+      `${selectedPackage.browserBundleCode}\n//# sourceURL=${selectedPackage.packageName}.bundle.js`
+    )(module, exports, createExternalRequire(loadPackage))
     moduleCache.set(selectedPackage.cacheKey, module.exports)
     return module.exports
   }
@@ -432,8 +422,10 @@ function createExternalRequire(loadPackage: (specifier: string) => unknown) {
   }
   const jsxRuntimeModule = {
     Fragment: React.Fragment,
-    jsx: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
-    jsxs: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
+    jsx: (type: React.ElementType, props: Record<string, unknown>, key?: string) =>
+      React.createElement(type, { ...props, key }),
+    jsxs: (type: React.ElementType, props: Record<string, unknown>, key?: string) =>
+      React.createElement(type, { ...props, key }),
   }
 
   return (specifier: string) => {
@@ -452,12 +444,15 @@ function createExternalRequire(loadPackage: (specifier: string) => unknown) {
 }
 
 function createCallRequestApi() {
-  return (path: readonly string[], overrides?: {
-    method?: string
-    url?: string
-    headers?: Record<string, string | undefined>
-    body?: string | undefined
-  }) => {
+  return (
+    path: readonly string[],
+    overrides?: {
+      method?: string
+      url?: string
+      headers?: Record<string, string | undefined>
+      body?: string | undefined
+    }
+  ) => {
     if (!Array.isArray(path) || path.some(segment => typeof segment !== 'string')) {
       return Promise.reject(new Error('callRequest path must be an array of strings'))
     }
@@ -522,7 +517,9 @@ function formatRuntimeError(error: unknown, source: string): RuntimeErrorDetails
 
   if (location?.line !== undefined && location.line !== null) {
     detailedLines.push(
-      location.column !== null ? `Location: line ${location.line}, column ${location.column}` : `Location: line ${location.line}`
+      location.column !== null
+        ? `Location: line ${location.line}, column ${location.column}`
+        : `Location: line ${location.line}`
     )
   }
   if (location?.sourceLine) {
@@ -624,7 +621,11 @@ class RuntimeErrorBoundary extends React.Component<RuntimeErrorBoundaryProps, Ru
 
   render() {
     if (this.state.error) {
-      return <pre className="error">{`${this.state.error.compactMessage}\n\n${this.state.error.detailedMessage}`.trim()}</pre>
+      return (
+        <pre className="error">
+          {`${this.state.error.compactMessage}\n\n${this.state.error.detailedMessage}`.trim()}
+        </pre>
+      )
     }
 
     return this.props.children
@@ -897,7 +898,9 @@ function parseSetCookieForScript(value: string) {
 
   for (const attribute of segments.slice(1)) {
     const attributeSeparatorIndex = attribute.indexOf('=')
-    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex)).trim().toLowerCase()
+    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex))
+      .trim()
+      .toLowerCase()
     const attributeValue = attributeSeparatorIndex === -1 ? '' : attribute.slice(attributeSeparatorIndex + 1).trim()
 
     if (attributeName === 'domain') {
