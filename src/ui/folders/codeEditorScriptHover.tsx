@@ -1,5 +1,6 @@
 import { StateEffect, StateField, type Extension, type SelectionRange } from '@codemirror/state'
 import { EditorView, hoverTooltip, keymap, showTooltip, type Tooltip } from '@codemirror/view'
+import { Vim } from '@replit/codemirror-vim'
 import type { SharedScriptTarget } from '@common/SharedScripts'
 import { requestScriptHover } from './scriptAutocompleteClient'
 import type {
@@ -21,6 +22,7 @@ type ScriptHoverOptions = {
 
 const setScriptHoverTooltipEffect = StateEffect.define<Tooltip | null>()
 const scriptHoverControllers = new WeakMap<EditorView, () => boolean>()
+let scriptHoverMappingsInstalled = false
 
 const scriptHoverTooltipField = StateField.define<Tooltip | null>({
   create() {
@@ -42,7 +44,23 @@ const scriptHoverTooltipField = StateField.define<Tooltip | null>({
   provide: field => showTooltip.from(field),
 })
 
+function installScriptHoverVimMappings() {
+  if (scriptHoverMappingsInstalled) return
+  scriptHoverMappingsInstalled = true
+
+  Vim.defineAction('showScriptHoverAction', cm => {
+    const view = cm.cm6
+    if (!view) return
+    showScriptHoverForEditor(view)
+    view.focus()
+  })
+
+  Vim.mapCommand('K', 'action', 'showScriptHoverAction', undefined, { silent: true, context: 'normal' })
+}
+
 export function scriptHoverExtension(options: ScriptHoverOptions): Extension {
+  installScriptHoverVimMappings()
+
   const runtimeContext = options.targets ? { targets: options.targets } : { phase: options.phase ?? 'pre-request' }
 
   const loadHover = async (view: EditorView, position: number) => {
@@ -81,7 +99,10 @@ export function scriptHoverExtension(options: ScriptHoverOptions): Extension {
         const hover = await loadHover(view, pos)
         return hover ? createScriptHoverTooltip(hover) : null
       },
-      { hoverTime: 200 }
+      {
+        hideOnChange: true,
+        hoverTime: 200,
+      }
     ),
     EditorView.domEventHandlers({
       blur(_event, view) {
