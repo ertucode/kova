@@ -15,6 +15,7 @@ import { variableAutocompleteExtension, type VariableAutocompleteItem } from './
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
+import { scriptHoverExtension } from './codeEditorScriptHover'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -160,6 +161,12 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
+      scriptHoverExtension({
+        phase: 'pre-request',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
     ],
     []
   )
@@ -176,6 +183,12 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      scriptHoverExtension({
+        phase: 'post-request',
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,

@@ -15,6 +15,7 @@ import { ShortcutDisplay } from '../components/ShortcutDisplay'
 import { CodeEditor, type CodeEditorHandle, type CodeEditorSelection } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
+import { scriptHoverExtension } from './codeEditorScriptHover'
 import { environmentEditorStore } from './environmentEditorStore'
 import { formatScriptBlockWithCursor } from './formatScriptBlock'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
@@ -252,6 +253,12 @@ export function ViewsPanel() {
         includeResponse: false,
         getEnvironmentNames: () => environmentNamesRef.current,
         getVariableNames: () => variableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => sharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      scriptHoverExtension({
+        phase: 'view-runtime',
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => sharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,

@@ -323,6 +323,78 @@ const editorTheme = EditorView.theme({
     overflow: 'hidden',
     zIndex: '9999',
   },
+  '.cm-script-hover': {
+    maxWidth: '32rem',
+    padding: '0.75rem 0.9rem',
+  },
+  '.cm-script-hover-detail': {
+    margin: '0',
+    color: 'var(--color-base-content)',
+    fontFamily:
+      'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
+    fontSize: '0.78rem',
+    lineHeight: '1.35rem',
+    whiteSpace: 'pre-wrap',
+  },
+  '.cm-script-hover-part-keyword': {
+    color: 'var(--color-primary)',
+  },
+  '.cm-script-hover-part-string': {
+    color: 'var(--color-accent)',
+  },
+  '.cm-script-hover-part-number': {
+    color: 'var(--color-info)',
+  },
+  '.cm-script-hover-part-variable': {
+    color: 'var(--color-base-content)',
+  },
+  '.cm-script-hover-part-property': {
+    color: 'color-mix(in oklab, var(--color-base-content) 92%, var(--color-accent) 8%)',
+  },
+  '.cm-script-hover-part-type': {
+    color: 'var(--color-info)',
+  },
+  '.cm-script-hover-part-punctuation': {
+    color: 'color-mix(in oklab, var(--color-base-content) 68%, transparent)',
+  },
+  '.cm-script-hover-documentation': {
+    marginTop: '0.55rem',
+    color: 'color-mix(in oklab, var(--color-base-content) 74%, transparent)',
+    fontSize: '0.78rem',
+    lineHeight: '1.35rem',
+    whiteSpace: 'pre-wrap',
+  },
+  '.cm-script-hover-paragraph': {
+    margin: '0',
+  },
+  '.cm-script-hover-paragraph + .cm-script-hover-paragraph': {
+    marginTop: '0.45rem',
+  },
+  '.cm-script-hover-tags': {
+    display: 'grid',
+    gap: '0.35rem',
+    marginTop: '0.65rem',
+    paddingTop: '0.65rem',
+    borderTop: '1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent)',
+  },
+  '.cm-script-hover-tag': {
+    display: 'grid',
+    gridTemplateColumns: 'auto minmax(0, 1fr)',
+    gap: '0.5rem',
+    alignItems: 'start',
+  },
+  '.cm-script-hover-tag-label': {
+    color: 'var(--color-primary)',
+    fontFamily:
+      'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
+    fontSize: '0.74rem',
+  },
+  '.cm-script-hover-tag-text': {
+    color: 'color-mix(in oklab, var(--color-base-content) 72%, transparent)',
+    fontSize: '0.78rem',
+    lineHeight: '1.35rem',
+    whiteSpace: 'pre-wrap',
+  },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': {
     maxWidth: '34rem',
     fontFamily: 'inherit',

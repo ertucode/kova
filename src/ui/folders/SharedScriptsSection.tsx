@@ -10,6 +10,7 @@ import { ChangesCoordinator } from './changesCoordinator'
 import { CodeEditor } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
+import { scriptHoverExtension } from './codeEditorScriptHover'
 import {
   getSharedScriptScopeKey,
   isSharedScriptEntryDirty,
@@ -370,6 +371,12 @@ function SharedScriptDetail({
       }),
       scriptAutocompleteExtension({
         includeResponse: false,
+        targets,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => autocompleteSharedScriptsRef.current,
+        getPackages: () => scriptPackagesRef.current,
+      }),
+      scriptHoverExtension({
         targets,
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => autocompleteSharedScriptsRef.current,

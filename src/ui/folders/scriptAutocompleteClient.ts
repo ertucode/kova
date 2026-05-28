@@ -3,6 +3,9 @@ import type {
   ScriptAutocompleteRequest,
   ScriptAutocompletePackage,
   ScriptAutocompleteResponse,
+  ScriptHoverRequest,
+  ScriptHoverResponse,
+  ScriptHoverSuccess,
   ScriptAutocompleteSharedScript,
   ScriptAutocompleteSuccess,
   ScriptDiagnosticsRequest,
@@ -23,6 +26,7 @@ class ScriptAutocompleteClient {
     number,
     { resolve: (value: ScriptDiagnosticsSuccess | null) => void; reject: (reason?: unknown) => void }
   >()
+  private readonly pendingHover = new Map<number, { resolve: (value: ScriptHoverSuccess | null) => void; reject: (reason?: unknown) => void }>()
 
   constructor() {
     this.worker.addEventListener('message', this.handleMessage)
@@ -113,7 +117,50 @@ class ScriptAutocompleteClient {
     })
   }
 
-  private readonly handleMessage = (event: MessageEvent<ScriptAutocompleteResponse | ScriptDiagnosticsResponse>) => {
+  requestHover(input: {
+    phase?: ScriptAutocompletePhase
+    runtimeContext?: ScriptRuntimeContext
+    code: string
+    position: number
+    requestPaths?: string[][]
+    sharedScripts?: ScriptAutocompleteSharedScript[]
+    packages?: ScriptAutocompletePackage[]
+    signal?: AbortSignal
+  }) {
+    const requestId = this.nextRequestId++
+    const payload: ScriptHoverRequest = {
+      type: 'hover',
+      requestId,
+      runtimeContext: input.runtimeContext ?? { phase: input.phase ?? 'pre-request' },
+      code: input.code,
+      position: input.position,
+      requestPaths: input.requestPaths,
+      sharedScripts: input.sharedScripts,
+      packages: input.packages,
+    }
+
+    return new Promise<ScriptHoverSuccess | null>((resolve, reject) => {
+      this.pendingHover.set(requestId, { resolve, reject })
+
+      const onAbort = () => {
+        this.pendingHover.delete(requestId)
+        resolve(null)
+      }
+
+      if (input.signal) {
+        if (input.signal.aborted) {
+          onAbort()
+          return
+        }
+
+        input.signal.addEventListener('abort', onAbort, { once: true })
+      }
+
+      this.worker.postMessage(payload)
+    })
+  }
+
+  private readonly handleMessage = (event: MessageEvent<ScriptAutocompleteResponse | ScriptDiagnosticsResponse | ScriptHoverResponse>) => {
     const result = event.data
     const pendingAutocomplete = this.pendingAutocomplete.get(result.requestId)
     if (pendingAutocomplete) {
@@ -124,6 +171,18 @@ class ScriptAutocompleteClient {
       }
 
       pendingAutocomplete.reject(new Error(!result.success ? result.error : 'Mismatched autocomplete worker response'))
+      return
+    }
+
+    const pendingHover = this.pendingHover.get(result.requestId)
+    if (pendingHover) {
+      this.pendingHover.delete(result.requestId)
+      if (result.success && 'hover' in result) {
+        pendingHover.resolve(result)
+        return
+      }
+
+      pendingHover.reject(new Error(!result.success ? result.error : 'Mismatched hover worker response'))
       return
     }
 
@@ -149,8 +208,12 @@ class ScriptAutocompleteClient {
     for (const pending of this.pendingDiagnostics.values()) {
       pending.reject(error)
     }
+    for (const pending of this.pendingHover.values()) {
+      pending.reject(error)
+    }
     this.pendingAutocomplete.clear()
     this.pendingDiagnostics.clear()
+    this.pendingHover.clear()
   }
 }
 
@@ -181,4 +244,18 @@ export function requestScriptDiagnostics(input: {
 }) {
   client ??= new ScriptAutocompleteClient()
   return client.requestDiagnostics(input)
+}
+
+export function requestScriptHover(input: {
+  phase?: ScriptAutocompletePhase
+  runtimeContext?: ScriptRuntimeContext
+  code: string
+  position: number
+  requestPaths?: string[][]
+  sharedScripts?: ScriptAutocompleteSharedScript[]
+  packages?: ScriptAutocompletePackage[]
+  signal?: AbortSignal
+}) {
+  client ??= new ScriptAutocompleteClient()
+  return client.requestHover(input)
 }

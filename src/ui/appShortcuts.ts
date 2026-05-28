@@ -31,6 +31,15 @@ export const AppShortcuts = {
           },
           label: 'Show keyboard shortcuts',
         },
+        {
+          command: 'file_browser_debugger',
+          code: { code: 'KeyT', ctrlKey: true, metaKey: true },
+          handler: e => {
+            e?.preventDefault()
+            debugger
+          },
+          label: 'Debugger',
+        },
       ],
       sequences: [],
       enabled: true,

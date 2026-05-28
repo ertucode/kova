@@ -48,6 +48,7 @@ import { variableAutocompleteExtension, type VariableAutocompleteItem } from './
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
+import { scriptHoverExtension } from './codeEditorScriptHover'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
@@ -299,6 +300,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
+      scriptHoverExtension({
+        phase: 'pre-request',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
     ],
     []
   )
@@ -315,6 +322,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      scriptHoverExtension({
+        phase: 'post-request',
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
@@ -336,6 +349,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         includeResponse: true,
         getEnvironmentNames: () => activeEnvironmentNamesRef.current,
         getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      scriptHoverExtension({
+        phase: 'response-visualizer',
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,

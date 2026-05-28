@@ -12,6 +12,9 @@ import type {
   ScriptAutocompletePackage,
   ScriptAutocompleteRequest,
   ScriptAutocompleteResponse,
+  ScriptHoverPart,
+  ScriptHoverRequest,
+  ScriptHoverResponse,
   ScriptAutocompleteSharedScript,
   ScriptDiagnosticsRequest,
   ScriptDiagnosticsResponse,
@@ -92,8 +95,17 @@ self.addEventListener('message', event => {
   void handleMessage(event.data)
 })
 
-async function handleMessage(request: ScriptAutocompleteRequest | ScriptDiagnosticsRequest) {
-  const response = request.type === 'autocomplete' ? await complete(request) : await getDiagnostics(request)
+async function handleMessage(request: ScriptAutocompleteRequest | ScriptDiagnosticsRequest | ScriptHoverRequest) {
+  const response = await ((): Promise<ScriptAutocompleteResponse | ScriptDiagnosticsResponse | ScriptHoverResponse> => {
+    switch (request.type) {
+      case 'autocomplete':
+        return complete(request)
+      case 'diagnostics':
+        return getDiagnostics(request)
+      case 'hover':
+        return getHover(request)
+    }
+  })()
   self.postMessage(response)
 }
 
@@ -157,6 +169,44 @@ async function getDiagnostics(request: ScriptDiagnosticsRequest): Promise<Script
         .filter(diagnostic => !diagnostic.file || diagnostic.file.fileName === phaseState.userFileName)
         .filter(diagnostic => !shouldIgnoreDiagnostic(phaseState.runtimeContext, diagnostic))
         .map(diagnostic => toEditorDiagnostic(diagnostic, request.code, phaseState.service, phaseState.userFileName)),
+    }
+  } catch (error) {
+    return {
+      requestId: request.requestId,
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+async function getHover(request: ScriptHoverRequest): Promise<ScriptHoverResponse> {
+  try {
+    const phaseState = await getOrCreatePhaseState(request.runtimeContext)
+
+    updatePhaseSource(phaseState, request.code, request.requestPaths ?? [], request.sharedScripts ?? [], request.packages ?? [])
+
+    const quickInfo = phaseState.service.getQuickInfoAtPosition(phaseState.userFileName, request.position)
+    if (!quickInfo || !quickInfo.textSpan) {
+      return {
+        requestId: request.requestId,
+        success: true,
+        hover: null,
+      }
+    }
+
+    return {
+      requestId: request.requestId,
+      success: true,
+      hover: {
+        from: quickInfo.textSpan.start,
+        to: quickInfo.textSpan.start + quickInfo.textSpan.length,
+        detailParts: toHoverParts(quickInfo.displayParts),
+        documentationParts: toHoverParts(quickInfo.documentation),
+        tags: (quickInfo.tags ?? []).map(tag => ({
+          name: tag.name,
+          textParts: toHoverParts(tag.text),
+        })),
+      },
     }
   } catch (error) {
     return {
@@ -334,6 +384,18 @@ function toEditorDiagnostic(
     column,
     sourceLine,
   }
+}
+
+function toHoverParts(parts: readonly ts.SymbolDisplayPart[] | string | undefined): ScriptHoverPart[] {
+  if (!parts) {
+    return []
+  }
+
+  if (typeof parts === 'string') {
+    return [{ text: parts, kind: 'text' }]
+  }
+
+  return parts.map(part => ({ text: part.text, kind: part.kind }))
 }
 
 function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles: DeclarationFiles): PhaseState {
