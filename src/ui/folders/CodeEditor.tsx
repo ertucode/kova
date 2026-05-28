@@ -3,7 +3,7 @@ import { EditorState, type Extension } from '@codemirror/state'
 import { toggleBlockComment, toggleLineComment } from '@codemirror/commands'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
-import { foldGutter, syntaxTree } from '@codemirror/language'
+import { HighlightStyle, foldGutter, syntaxHighlighting, syntaxTree } from '@codemirror/language'
 import { forEachDiagnostic, lintGutter } from '@codemirror/lint'
 import { json } from '@codemirror/lang-json'
 import { json5 as json5Language } from 'codemirror-json5'
@@ -14,6 +14,7 @@ import { EditorView, keymap, lineNumbers, placeholder as placeholderExtension } 
 import { defaultSettingsTokyoNight, tokyoNight } from '@uiw/codemirror-theme-tokyo-night'
 import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
 import type { SyntaxNode } from '@lezer/common'
+import { tags as highlightTags } from '@lezer/highlight'
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { twMerge } from 'tailwind-merge'
@@ -129,7 +130,17 @@ const tokyoNightColors = {
   invalid: '#ff5370',
   link: '#b4f9f8',
   heading: '#89ddff',
+  tagContent: '#e1e3ec',
 } as const
+const jsxHighlightExtension = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: highlightTags.content, color: tokyoNightColors.tagContent },
+    { tag: highlightTags.angleBracket, color: tokyoNightColors.punctuation },
+    { tag: highlightTags.tagName, color: tokyoNightColors.keyword },
+    { tag: highlightTags.attributeName, color: tokyoNightColors.property },
+    { tag: highlightTags.attributeValue, color: tokyoNightColors.string },
+  ])
+)
 
 const editorTheme = EditorView.theme({
   '&': {
@@ -1013,6 +1024,7 @@ export const CodeEditor = memo(function CodeEditor({
       ...baseSetupExtensions,
       tabSizeExtension,
       tokyoNight,
+      jsxHighlightExtension,
       editorTheme,
       scaledEditorTheme,
       selectionMatchTheme,
