@@ -22,6 +22,7 @@
 - Request history
 - Save example requests/responses
 - Export as curl, fetch. Import from curl
+- opencode integration
 
 ## Niche Features
 

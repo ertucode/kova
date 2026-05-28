@@ -3,7 +3,7 @@ import { EditorState, type Extension } from '@codemirror/state'
 import { toggleBlockComment, toggleLineComment } from '@codemirror/commands'
 import { highlightSelectionMatches } from '@codemirror/search'
 import { javascript } from '@codemirror/lang-javascript'
-import { HighlightStyle, foldGutter, syntaxHighlighting, syntaxTree } from '@codemirror/language'
+import { foldGutter, syntaxTree } from '@codemirror/language'
 import { forEachDiagnostic, lintGutter } from '@codemirror/lint'
 import { json } from '@codemirror/lang-json'
 import { json5 as json5Language } from 'codemirror-json5'
@@ -11,9 +11,9 @@ import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
 import { EditorView, keymap, lineNumbers, placeholder as placeholderExtension } from '@codemirror/view'
+import { defaultSettingsTokyoNight, tokyoNight } from '@uiw/codemirror-theme-tokyo-night'
 import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
 import type { SyntaxNode } from '@lezer/common'
-import { tags } from '@lezer/highlight'
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { twMerge } from 'tailwind-merge'
@@ -108,54 +108,52 @@ const jsxLanguageExtension = javascript({ jsx: true, typescript: true })
 const htmlLanguageExtension = html()
 const cssLanguageExtension = css()
 const xmlLanguageExtension = xml()
-
-const editorHighlightStyle = HighlightStyle.define([
-  { tag: [tags.keyword, tags.modifier], color: 'var(--color-primary)' },
-  { tag: [tags.string, tags.special(tags.string)], color: 'var(--color-accent)' },
-  { tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null], color: 'var(--color-info)' },
-  {
-    tag: [tags.propertyName, tags.attributeName],
-    color: 'color-mix(in oklab, var(--color-base-content) 92%, var(--color-accent) 8%)',
-  },
-  { tag: [tags.variableName, tags.labelName], color: 'var(--color-base-content)' },
-  {
-    tag: [tags.comment],
-    color: 'color-mix(in oklab, var(--color-base-content) 45%, transparent)',
-    fontStyle: 'italic',
-  },
-  {
-    tag: [tags.operator, tags.punctuation, tags.separator],
-    color: 'color-mix(in oklab, var(--color-base-content) 68%, transparent)',
-  },
-  {
-    tag: [tags.brace, tags.squareBracket, tags.paren],
-    color: 'color-mix(in oklab, var(--color-base-content) 76%, transparent)',
-  },
-])
+const tokyoNightColors = {
+  background: defaultSettingsTokyoNight.background ?? '#1a1b26',
+  foreground: '#a9b1d6',
+  caret: defaultSettingsTokyoNight.caret ?? '#c0caf5',
+  selection: defaultSettingsTokyoNight.selection ?? '#515c7e40',
+  selectionMatch: defaultSettingsTokyoNight.selectionMatch ?? '#16161e',
+  gutterBackground: defaultSettingsTokyoNight.gutterBackground ?? '#1a1b26',
+  gutterForeground: '#565f89',
+  lineHighlight: defaultSettingsTokyoNight.lineHighlight ?? '#474b6611',
+  keyword: '#bb9af7',
+  name: '#a9b1d6',
+  property: '#7aa2f7',
+  string: '#9ece6a',
+  number: '#ff9e64',
+  type: '#0db9d7',
+  operator: '#bb9af7',
+  punctuation: '#c0caf5',
+  comment: '#444b6a',
+  invalid: '#ff5370',
+  link: '#b4f9f8',
+  heading: '#89ddff',
+} as const
 
 const editorTheme = EditorView.theme({
   '&': {
     height: '100%',
     fontSize: '0.875rem',
-    backgroundColor: 'transparent !important',
-    color: 'var(--color-base-content)',
+    backgroundColor: `${tokyoNightColors.background} !important`,
+    color: tokyoNightColors.foreground,
   },
   '&.cm-editor': {
     height: '100%',
-    backgroundColor: 'transparent !important',
+    backgroundColor: `${tokyoNightColors.background} !important`,
     overflow: 'visible',
     position: 'relative',
   },
   '&.cm-focused': {
-    outline: '2px solid var(--color-base-content)',
+    outline: `2px solid ${tokyoNightColors.caret}`,
     outlineOffset: '-2px',
   },
   '.cm-scroller, .cm-layer': {
-    backgroundColor: 'transparent !important',
+    backgroundColor: `${tokyoNightColors.background} !important`,
   },
   '.cm-gutters': {
-    backgroundColor: 'transparent !important',
-    borderRight: '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
+    backgroundColor: `${tokyoNightColors.gutterBackground} !important`,
+    borderRight: `1px solid ${defaultSettingsTokyoNight.gutterBorder ?? 'transparent'}`,
     paddingRight: '0',
   },
   '.cm-gutter-lint': {
@@ -195,18 +193,18 @@ const editorTheme = EditorView.theme({
     justifyContent: 'center',
   },
   '.cm-foldPlaceholder': {
-    border: '1px solid color-mix(in oklab, var(--color-base-content) 14%, transparent)',
-    backgroundColor: 'color-mix(in oklab, var(--color-base-200) 84%, transparent)',
-    color: 'color-mix(in oklab, var(--color-base-content) 58%, transparent)',
+    border: `1px solid ${tokyoNightColors.lineHighlight}`,
+    backgroundColor: tokyoNightColors.selectionMatch,
+    color: tokyoNightColors.foreground,
     borderRadius: '999px',
     padding: '0 0.35rem',
   },
   '.cm-gutterElement': {
-    color: 'color-mix(in oklab, var(--color-base-content) 42%, transparent)',
+    color: tokyoNightColors.gutterForeground,
     boxSizing: 'border-box',
   },
   '.cm-foldGutter .cm-gutterElement:hover': {
-    color: 'var(--color-base-content)',
+    color: tokyoNightColors.caret,
   },
   '.cm-tooltipLayer': {
     overflow: 'visible',
@@ -225,30 +223,30 @@ const editorTheme = EditorView.theme({
     fontFamily:
       'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
     lineHeight: '1.5rem',
-    caretColor: 'var(--color-base-content) !important',
+    caretColor: `${tokyoNightColors.caret} !important`,
   },
   '.cm-focused': {
     outline: 'none',
   },
   '.cm-cursor, .cm-dropCursor': {
     borderLeftWidth: '1.5px !important',
-    borderLeftColor: 'var(--color-base-content) !important',
+    borderLeftColor: `${tokyoNightColors.caret} !important`,
   },
   '.cm-fat-cursor': {
-    backgroundColor: 'color-mix(in oklab, var(--color-base-content) 82%, var(--color-primary) 18%) !important',
+    backgroundColor: `${tokyoNightColors.caret} !important`,
   },
   '&:not(.cm-focused) .cm-fat-cursor': {
     background: 'none !important',
-    outline: 'solid 1px color-mix(in oklab, var(--color-base-content) 82%, var(--color-primary) 18%) !important',
+    outline: `solid 1px ${tokyoNightColors.caret} !important`,
     color: 'transparent !important',
   },
   '.cm-placeholder': {
-    color: 'color-mix(in oklab, var(--color-base-content) 34%, transparent)',
+    color: tokyoNightColors.comment,
   },
   '.cm-panels': {
-    backgroundColor: 'var(--color-base-200)',
-    color: 'var(--color-base-content)',
-    borderTop: '1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent)',
+    backgroundColor: tokyoNightColors.background,
+    color: tokyoNightColors.foreground,
+    borderTop: `1px solid ${tokyoNightColors.lineHighlight}`,
   },
   '.cm-search': {
     alignItems: 'center',
@@ -259,37 +257,37 @@ const editorTheme = EditorView.theme({
   },
   '.cm-search label': {
     alignItems: 'center',
-    color: 'color-mix(in oklab, var(--color-base-content) 72%, transparent)',
+    color: tokyoNightColors.foreground,
     display: 'inline-flex',
     fontSize: '0.8rem',
     gap: '0.35rem',
   },
   '.cm-search input[type="checkbox"]': {
-    accentColor: 'var(--color-primary)',
+    accentColor: tokyoNightColors.keyword,
   },
   '.cm-search .cm-textfield': {
     appearance: 'none',
-    backgroundColor: 'var(--color-base-100)',
-    border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
+    backgroundColor: tokyoNightColors.selectionMatch,
+    border: `1px solid ${tokyoNightColors.lineHighlight}`,
     borderRadius: '0.5rem',
-    color: 'var(--color-base-content)',
+    color: tokyoNightColors.name,
     minHeight: '2rem',
     padding: '0.35rem 0.65rem',
   },
   '.cm-search .cm-textfield::placeholder': {
-    color: 'color-mix(in oklab, var(--color-base-content) 34%, transparent)',
+    color: tokyoNightColors.comment,
   },
   '.cm-search .cm-textfield:focus': {
-    borderColor: 'color-mix(in oklab, var(--color-primary) 55%, var(--color-base-content) 12%)',
-    boxShadow: '0 0 0 3px color-mix(in oklab, var(--color-primary) 18%, transparent)',
+    borderColor: tokyoNightColors.property,
+    boxShadow: `0 0 0 3px ${tokyoNightColors.selection}`,
     outline: 'none',
   },
   '.cm-search .cm-button': {
     appearance: 'none',
-    backgroundColor: 'var(--color-base-100)',
-    border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
+    backgroundColor: tokyoNightColors.selectionMatch,
+    border: `1px solid ${tokyoNightColors.lineHighlight}`,
     borderRadius: '0.5rem',
-    color: 'var(--color-base-content)',
+    color: tokyoNightColors.name,
     cursor: 'pointer',
     font: 'inherit',
     minHeight: '2rem',
@@ -297,12 +295,12 @@ const editorTheme = EditorView.theme({
     transition: 'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
   },
   '.cm-search .cm-button:hover': {
-    backgroundColor: 'color-mix(in oklab, var(--color-base-100) 82%, var(--color-primary) 18%)',
-    borderColor: 'color-mix(in oklab, var(--color-primary) 30%, var(--color-base-content) 12%)',
+    backgroundColor: tokyoNightColors.lineHighlight,
+    borderColor: tokyoNightColors.keyword,
   },
   '.cm-search .cm-button:focus-visible': {
-    borderColor: 'color-mix(in oklab, var(--color-primary) 55%, var(--color-base-content) 12%)',
-    boxShadow: '0 0 0 3px color-mix(in oklab, var(--color-primary) 18%, transparent)',
+    borderColor: tokyoNightColors.property,
+    boxShadow: `0 0 0 3px ${tokyoNightColors.selection}`,
     outline: 'none',
   },
   '.cm-search .cm-button[disabled]': {
@@ -310,14 +308,14 @@ const editorTheme = EditorView.theme({
     opacity: '0.5',
   },
   '.cm-search .cm-searchMatch': {
-    color: 'color-mix(in oklab, var(--color-base-content) 58%, transparent)',
+    color: tokyoNightColors.foreground,
     fontSize: '0.8rem',
     marginLeft: '0.25rem',
   },
   '.cm-tooltip': {
-    border: '1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent)',
-    backgroundColor: 'var(--color-base-200)',
-    color: 'var(--color-base-content)',
+    border: `1px solid ${tokyoNightColors.lineHighlight}`,
+    backgroundColor: tokyoNightColors.background,
+    color: tokyoNightColors.foreground,
     pointerEvents: 'auto',
     padding: '0',
     overflow: 'hidden',
@@ -329,7 +327,7 @@ const editorTheme = EditorView.theme({
   },
   '.cm-script-hover-detail': {
     margin: '0',
-    color: 'var(--color-base-content)',
+    color: tokyoNightColors.foreground,
     fontFamily:
       'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
     fontSize: '0.78rem',
@@ -337,29 +335,41 @@ const editorTheme = EditorView.theme({
     whiteSpace: 'pre-wrap',
   },
   '.cm-script-hover-part-keyword': {
-    color: 'var(--color-primary)',
+    color: tokyoNightColors.keyword,
   },
   '.cm-script-hover-part-string': {
-    color: 'var(--color-accent)',
+    color: tokyoNightColors.string,
   },
   '.cm-script-hover-part-number': {
-    color: 'var(--color-info)',
+    color: tokyoNightColors.number,
   },
   '.cm-script-hover-part-variable': {
-    color: 'var(--color-base-content)',
+    color: tokyoNightColors.name,
+  },
+  '.cm-script-hover-part-function': {
+    color: tokyoNightColors.property,
   },
   '.cm-script-hover-part-property': {
-    color: 'color-mix(in oklab, var(--color-base-content) 92%, var(--color-accent) 8%)',
+    color: tokyoNightColors.property,
   },
   '.cm-script-hover-part-type': {
-    color: 'var(--color-info)',
+    color: tokyoNightColors.type,
+  },
+  '.cm-script-hover-part-atom': {
+    color: tokyoNightColors.name,
+  },
+  '.cm-script-hover-part-operator': {
+    color: tokyoNightColors.operator,
+  },
+  '.cm-script-hover-part-separator': {
+    color: tokyoNightColors.punctuation,
   },
   '.cm-script-hover-part-punctuation': {
-    color: 'color-mix(in oklab, var(--color-base-content) 68%, transparent)',
+    color: tokyoNightColors.link,
   },
   '.cm-script-hover-documentation': {
     marginTop: '0.55rem',
-    color: 'color-mix(in oklab, var(--color-base-content) 74%, transparent)',
+    color: tokyoNightColors.foreground,
     fontSize: '0.78rem',
     lineHeight: '1.35rem',
     whiteSpace: 'pre-wrap',
@@ -375,7 +385,7 @@ const editorTheme = EditorView.theme({
     gap: '0.35rem',
     marginTop: '0.65rem',
     paddingTop: '0.65rem',
-    borderTop: '1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent)',
+    borderTop: `1px solid ${tokyoNightColors.lineHighlight}`,
   },
   '.cm-script-hover-tag': {
     display: 'grid',
@@ -384,13 +394,13 @@ const editorTheme = EditorView.theme({
     alignItems: 'start',
   },
   '.cm-script-hover-tag-label': {
-    color: 'var(--color-primary)',
+    color: tokyoNightColors.heading,
     fontFamily:
       'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
     fontSize: '0.74rem',
   },
   '.cm-script-hover-tag-text': {
-    color: 'color-mix(in oklab, var(--color-base-content) 72%, transparent)',
+    color: tokyoNightColors.foreground,
     fontSize: '0.78rem',
     lineHeight: '1.35rem',
     whiteSpace: 'pre-wrap',
@@ -400,15 +410,15 @@ const editorTheme = EditorView.theme({
     fontFamily: 'inherit',
   },
   '.cm-tooltip.cm-tooltip-autocomplete ul li': {
-    borderTop: '1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent)',
+    borderTop: `1px solid ${tokyoNightColors.lineHighlight}`,
     padding: '0.5rem 0.75rem',
   },
   '.cm-tooltip.cm-tooltip-autocomplete ul li:first-child': {
     borderTop: '0',
   },
   '.cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected]': {
-    backgroundColor: 'color-mix(in oklab, var(--color-info) 16%, transparent)',
-    color: 'var(--color-base-content)',
+    backgroundColor: tokyoNightColors.lineHighlight,
+    color: tokyoNightColors.name,
   },
   '.cm-tooltip.cm-tooltip-autocomplete ul li .cm-completionLabel': {
     fontWeight: '600',
@@ -417,26 +427,26 @@ const editorTheme = EditorView.theme({
     display: 'none',
   },
   '.cm-tooltip.cm-tooltip-autocomplete ul li .cm-completionDetail': {
-    color: 'color-mix(in oklab, var(--color-base-content) 58%, transparent)',
+    color: tokyoNightColors.foreground,
     fontStyle: 'normal',
     marginLeft: '0.75rem',
   },
   '.cm-activeLine, .cm-activeLineGutter': {
-    backgroundColor: 'color-mix(in oklab, var(--color-base-content) 5%, transparent)',
+    backgroundColor: tokyoNightColors.lineHighlight,
   },
   '.cm-searchMatch': {
-    backgroundColor: 'color-mix(in oklab, var(--color-warning) 28%, transparent)',
-    borderBottom: '1px solid color-mix(in oklab, var(--color-warning) 62%, transparent)',
+    backgroundColor: tokyoNightColors.selection,
+    borderBottom: `1px solid ${tokyoNightColors.type}`,
   },
   '.cm-searchMatch.cm-searchMatch-selected': {
-    backgroundColor: 'color-mix(in oklab, var(--color-primary) 24%, transparent)',
-    borderBottom: '1px solid color-mix(in oklab, var(--color-primary) 62%, transparent)',
+    backgroundColor: tokyoNightColors.lineHighlight,
+    borderBottom: `1px solid ${tokyoNightColors.keyword}`,
   },
   '.cm-selectionBackground, ::selection': {
-    backgroundColor: 'color-mix(in oklab, currentColor 18%, transparent)',
+    backgroundColor: tokyoNightColors.selection,
   },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'color-mix(in oklab, var(--color-primary) 28%, transparent)',
+    backgroundColor: tokyoNightColors.selection,
   },
 })
 
@@ -558,7 +568,9 @@ function runBlockCommentCommand(view: EditorView) {
     return toggleBlockComment(view)
   }
 
-  const trailingWhitespaceBeforeClose = Number(/\s/.test(commentText.charAt(commentText.length - blockTokens.close.length - 1)))
+  const trailingWhitespaceBeforeClose = Number(
+    /\s/.test(commentText.charAt(commentText.length - blockTokens.close.length - 1))
+  )
   const removedRanges = [
     { from: blockComment.from, to: blockComment.from + blockTokens.open.length },
     {
@@ -774,10 +786,7 @@ export const CodeEditor = memo(function CodeEditor({
     }
 
     const currentSelection = view.state.selection.main
-    const nextAnchor = Math.max(
-      0,
-      Math.min(externalSelection?.anchor ?? currentSelection.anchor, value.length)
-    )
+    const nextAnchor = Math.max(0, Math.min(externalSelection?.anchor ?? currentSelection.anchor, value.length))
     const nextHead = Math.max(0, Math.min(externalSelection?.head ?? currentSelection.head, value.length))
 
     view.dispatch({
@@ -1003,9 +1012,9 @@ export const CodeEditor = memo(function CodeEditor({
       selectionMatchesExtension,
       ...baseSetupExtensions,
       tabSizeExtension,
+      tokyoNight,
       editorTheme,
       scaledEditorTheme,
-      syntaxHighlighting(editorHighlightStyle),
       selectionMatchTheme,
       selectionListenerExtension,
     ]
@@ -1099,7 +1108,7 @@ export const CodeEditor = memo(function CodeEditor({
         value={initialValueRef.current}
         height="100%"
         className="h-full w-full"
-        theme="dark"
+        theme="none"
         basicSetup={false}
         indentWithTab={false}
         extensions={resolvedExtensions}

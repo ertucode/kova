@@ -252,13 +252,18 @@ function getPartClassName(part: ScriptHoverPart) {
 
       return 'cm-script-hover-part cm-script-hover-part-variable'
     case 'propertyName':
+      if (/^[A-Z_$][\w$]*$/.test(part.text)) {
+        return 'cm-script-hover-part cm-script-hover-part-type'
+      }
+
+      return 'cm-script-hover-part cm-script-hover-part-property'
     case 'methodName':
     case 'functionName':
       if (/^[A-Z_$][\w$]*$/.test(part.text)) {
         return 'cm-script-hover-part cm-script-hover-part-type'
       }
 
-      return 'cm-script-hover-part cm-script-hover-part-property'
+      return 'cm-script-hover-part cm-script-hover-part-function'
     case 'interfaceName':
     case 'className':
     case 'aliasName':
@@ -269,14 +274,22 @@ function getPartClassName(part: ScriptHoverPart) {
     case 'namespaceName':
       return 'cm-script-hover-part cm-script-hover-part-type'
     case 'punctuation':
-      return 'cm-script-hover-part cm-script-hover-part-punctuation'
+      return getPunctuationClassName(part.text)
     default:
       return getFallbackPartClassName(part.text)
   }
 }
 
 function getFallbackPartClassName(text: string) {
-  if (/^(string|number|boolean|bigint|symbol|object|unknown|void|undefined|null|never|true|false)$/.test(text)) {
+  if (/^(true|false|null|undefined)$/.test(text)) {
+    return 'cm-script-hover-part cm-script-hover-part-atom'
+  }
+
+  if (/^(string|number|boolean|bigint|symbol|object|unknown|void|never)$/.test(text)) {
+    return 'cm-script-hover-part cm-script-hover-part-type'
+  }
+
+  if (/^(keyof|readonly|unique|infer|is|asserts)$/.test(text)) {
     return 'cm-script-hover-part cm-script-hover-part-keyword'
   }
 
@@ -285,6 +298,18 @@ function getFallbackPartClassName(text: string) {
   }
 
   return 'cm-script-hover-part'
+}
+
+function getPunctuationClassName(text: string) {
+  if (/^(=>|=|:|\||&|\+|-|\*|\/|%|!|\?|~)$/.test(text)) {
+    return 'cm-script-hover-part cm-script-hover-part-operator'
+  }
+
+  if (/^[,.;()\[\]{}]$/.test(text)) {
+    return 'cm-script-hover-part cm-script-hover-part-separator'
+  }
+
+  return 'cm-script-hover-part cm-script-hover-part-punctuation'
 }
 
 function isHoverableScriptPosition(source: string, position: number) {
