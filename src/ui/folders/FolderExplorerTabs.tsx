@@ -127,6 +127,10 @@ export function FolderExplorerTabs() {
     clearDragState()
   }
 
+  const revealTabInExplorer = async (tab: FolderExplorerTabViewModel) => {
+    await revealSelectionInExplorer({ itemType: tab.itemType, id: tab.itemId })
+  }
+
   if (tabsWithState.length === 0) {
     return (
       <div className="flex h-11 items-center border-b border-base-content/10 px-4 text-sm text-base-content/35">
@@ -185,14 +189,7 @@ export function FolderExplorerTabs() {
                   onDoubleClick={async () => {
                     const changed = await FolderExplorerCoordinator.pinTab(tab.id)
                     if (!changed) {
-                      // reveal in explorer
-                      await FolderExplorerCoordinator.selectItem(
-                        { itemType: tab.itemType, id: tab.itemId },
-                        { mode: 'preview' }
-                      )
-                      folderExplorerEditorStore.trigger.selectionScrollRequested({
-                        selection: { itemType: tab.itemType, id: tab.itemId },
-                      })
+                      await revealTabInExplorer(tab)
                     }
                   }}
                   onContextMenu={event => menu.onRightClick(event, tab)}
@@ -258,7 +255,7 @@ export function FolderExplorerTabs() {
 
       {menu.isOpen && menu.item ? (
         <ContextMenu menu={menu}>
-          <ContextMenuList items={getTabMenuItems(menu.item, tabsWithState)} />
+          <ContextMenuList items={getTabMenuItems(menu.item, tabsWithState, revealTabInExplorer)} />
         </ContextMenu>
       ) : null}
     </>
@@ -267,7 +264,8 @@ export function FolderExplorerTabs() {
 
 function getTabMenuItems(
   tab: FolderExplorerTabViewModel,
-  tabs: FolderExplorerTabViewModel[]
+  tabs: FolderExplorerTabViewModel[],
+  revealTabInExplorer: (tab: FolderExplorerTabViewModel) => Promise<void>
 ): ForgivingContextMenuItem[] {
   const hasOtherTabs = tabs.some(currentTab => currentTab.id !== tab.id)
   const hasSavedTabs = tabs.some(currentTab => !currentTab.isDirty)
@@ -336,12 +334,17 @@ function getTabMenuItems(
     {
       view: 'Reveal in Explorer',
       onClick: () => {
-        void FolderExplorerCoordinator.selectItem({ itemType: tab.itemType, id: tab.itemId }, { mode: 'preview' })
+        void revealTabInExplorer(tab)
       },
     }
   )
 
   return items
+}
+
+async function revealSelectionInExplorer(selection: { itemType: 'folder' | 'request' | 'example'; id: string }) {
+  await FolderExplorerCoordinator.selectItem(selection, { mode: 'preview' })
+  folderExplorerEditorStore.trigger.selectionScrollRequested({ selection })
 }
 
 function RequestMethodGlyph({
