@@ -93,6 +93,16 @@ const sharedSections: ScriptDocumentationSection[] = [
     ],
   },
   {
+    title: 'Request Metadata',
+    description: 'Inspect how the current request runtime was started.',
+    entries: [
+      { label: 'requestMetadata.isRetry', detail: 'True when the current execution was triggered by retryRequest from a previous UI send.' },
+      { label: 'requestMetadata.retryCount', detail: 'The number of retry hops that led to this execution.' },
+      { label: 'requestMetadata.currentRuntime', detail: 'The current runtime phase: pre-request, post-request, or template-expression.' },
+      { label: 'requestMetadata.sourceRuntime', detail: 'The source that started this execution, such as request-editor or call-request.' },
+    ],
+  },
+  {
     title: 'Console',
     description: 'Write logs to the request console output.',
     entries: [
@@ -200,6 +210,18 @@ const navigateAndCallRequestSection: ScriptDocumentationSection = {
   ],
 }
 
+const retryRequestSection: ScriptDocumentationSection = {
+  title: 'retryRequest',
+  description: 'Available only in post-request scripts.',
+  entries: [
+    {
+      label: 'retryRequest()',
+      detail:
+        'Stops the current post-request script immediately, completes the current request normally, then asks the frontend to send the same request again with a fresh runtime scope. Only request-editor executions are retried; script-triggered executions such as callRequest do not retry.',
+    },
+  ],
+}
+
 export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, ScriptDocumentation> = {
   'pre-request': {
     title: 'Pre-request Script Docs',
@@ -262,7 +284,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'Environment changes made here are rolled back if the script throws.',
       'Zod is available globally as z.',
     ],
-    sections: [...sharedSections, responseSection, callRequestSection, navigateAndCallRequestSection],
+    sections: [...sharedSections, responseSection, callRequestSection, navigateAndCallRequestSection, retryRequestSection],
     examples: [
       {
         title: 'Persist a token from JSON',
@@ -299,6 +321,11 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Call a request and inspect its response',
         code: "if (response.status === 401) {\n  const refreshResponse = await callRequest(['Auth', 'Refresh Token'])\n  if (refreshResponse.status === 200) {\n    console.info('Token refreshed')\n  }\n}",
+      },
+      {
+        title: 'Retry the same request after refresh',
+        code:
+          "if (!requestMetadata.isRetry && response.status === 401) {\n  const refreshResponse = await callRequest(['Auth', 'Refresh Token'])\n  if (refreshResponse.status === 200) {\n    retryRequest()\n  }\n}",
       },
       {
         title: 'Copy a token from the response',

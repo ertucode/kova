@@ -3,6 +3,7 @@ import type { ScriptAiWorkspaceState } from './ScriptAi.js'
 import type { ScriptCallRequestRequest, ScriptMakeRequestRequest } from './ScriptMakeRequest.js'
 import type { ScriptPromptRequest } from './ScriptPrompt.js'
 import type { ScriptToastOptions } from './ScriptToast.js'
+import type { SendRequestMetadata } from './Requests.js'
 
 export type GenericEvent = {
   type: 'reload-path'
@@ -40,6 +41,10 @@ export type GenericEvent = {
 } | {
   type: 'script-call-request'
   request: ScriptCallRequestRequest
+} | {
+  type: 'script-retry-request'
+  requestId: string
+  requestMetadata: SendRequestMetadata
 } | {
   type: 'script-ai-state-updated'
   state: ScriptAiWorkspaceState

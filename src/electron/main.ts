@@ -786,6 +786,11 @@ app.on('ready', async () => {
       activeEnvironmentIds: input.activeEnvironmentIds,
       saveToHistory: false,
       historyKeepLast: 0,
+      requestMetadata: {
+        sourceRuntime: 'generate-request-code',
+        isRetry: false,
+        retryCount: 0,
+      },
     })
     if (!preparedRequest.success) {
       return preparedRequest

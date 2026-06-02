@@ -2,7 +2,7 @@ import { confirmation } from '@/lib/components/confirmation'
 import { getWarnBeforeRequestAfterSeconds } from '@/global/appSettingsStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { errorResponseToMessage } from '@common/GenericError'
-import type { ScriptResponseBody } from '@common/Requests'
+import type { ScriptResponseBody, SendRequestMetadata } from '@common/Requests'
 import type { ScriptCallRequestOverrides, ScriptCallRequestPayload } from '@common/ScriptMakeRequest'
 import { environmentEditorStore } from './environmentEditorStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
@@ -12,7 +12,7 @@ import { RequestExecutionCoordinator, requestExecutionStore } from './requestExe
 import type { RequestDetailsDraft } from './folderExplorerTypes'
 
 export namespace RequestSendCoordinator {
-  export async function sendSelectedRequest() {
+  export async function sendSelectedRequest(requestMetadata?: SendRequestMetadata) {
     const state = folderExplorerEditorStore.getSnapshot().context
     const selected = state.selected
     if (!selected || selected.itemType !== 'request') {
@@ -62,6 +62,11 @@ export namespace RequestSendCoordinator {
       activeEnvironmentIds: state.activeEnvironmentIds,
       saveToHistory: latestDraft.saveToHistory,
       historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
+      requestMetadata: requestMetadata ?? {
+        sourceRuntime: 'request-editor',
+        isRetry: false,
+        retryCount: 0,
+      },
     })
 
     if (!result.success) {
@@ -86,9 +91,9 @@ export namespace RequestSendCoordinator {
     void RequestExecutionCoordinator.refreshHistory()
   }
 
-  export async function sendRequestById(requestId: string) {
+  export async function sendRequestById(requestId: string, requestMetadata?: SendRequestMetadata) {
     await FolderExplorerCoordinator.selectItem({ itemType: 'request', id: requestId })
-    await sendSelectedRequest()
+    await sendSelectedRequest(requestMetadata)
   }
 
   export async function callRequestById(
@@ -114,6 +119,11 @@ export namespace RequestSendCoordinator {
       saveToHistory: requestDraft.saveToHistory,
       historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
       callRequestOverrides: overrides,
+      requestMetadata: {
+        sourceRuntime: 'call-request',
+        isRetry: false,
+        retryCount: 0,
+      },
     })
 
     if (!result.success) {

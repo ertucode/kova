@@ -109,6 +109,11 @@ export async function connectWebSocket(
         bodyType: 'none',
         rawType: 'text',
       },
+      requestMetadata: {
+        sourceRuntime: 'websocket',
+        isRetry: false,
+        retryCount: 0,
+      },
       environments: activeEnvironments,
       sharedScripts,
       scriptPackages: workspacePackages,

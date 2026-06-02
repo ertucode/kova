@@ -1,7 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HttpAuth } from '../common/Auth.js'
+import { Result } from '../common/Result.js'
+import * as cookieDb from './db/cookies.js'
+import * as genericEvents from './generic-events.js'
+import * as httpRequestRuntime from './http-request-runtime.js'
 import type { PreparedHttpRequest } from './http-request-runtime.js'
-import { applyScriptCallRequestOverrides } from './send-request.js'
+import { applyScriptCallRequestOverrides, sendRequest } from './send-request.js'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('applyScriptCallRequestOverrides', () => {
   it('preserves prepared values when overrides are omitted', () => {
@@ -106,6 +115,113 @@ describe('applyScriptCallRequestOverrides', () => {
       },
     })
   })
+
+  it('emits a frontend retry event when a post-request script calls retryRequest', async () => {
+    const preparedRequest = createPreparedRequest()
+    const postRequestSpy = vi.fn(async (_sources, response) => {
+      expect(response.body).toEqual({ type: 'json', data: { retry: true } })
+      return { scriptErrors: [], retryRequested: true }
+    })
+    preparedRequest.runtime.runPostRequestScripts = postRequestSpy
+
+    const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
+    vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(preparedRequest))
+    vi.spyOn(cookieDb, 'storeResponseCookies').mockResolvedValue(undefined)
+
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ retry: true }), {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await sendRequest({
+      requestId: 'request-1',
+      method: 'POST',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      preRequestScript: '',
+      postRequestScript: '',
+      headers: '',
+      body: 'base-body',
+      bodyType: 'raw',
+      rawType: 'text',
+      activeEnvironmentIds: [],
+      saveToHistory: false,
+      historyKeepLast: 10,
+      requestMetadata: {
+        sourceRuntime: 'request-editor',
+        isRetry: false,
+        retryCount: 0,
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(postRequestSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(emitGenericEventSpy).toHaveBeenCalledWith({
+      type: 'script-retry-request',
+      requestId: 'request-1',
+      requestMetadata: {
+        sourceRuntime: 'request-editor',
+        isRetry: true,
+        retryCount: 1,
+      },
+    })
+  })
+
+  it('does not emit a retry event for script-triggered requests', async () => {
+    const preparedRequest = createPreparedRequest()
+    preparedRequest.runtime.runPostRequestScripts = async () => ({ scriptErrors: [], retryRequested: true })
+
+    const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
+    vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(preparedRequest))
+    vi.spyOn(cookieDb, 'storeResponseCookies').mockResolvedValue(undefined)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('ok', {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
+    )
+
+    const result = await sendRequest({
+      requestId: 'request-1',
+      method: 'POST',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      preRequestScript: '',
+      postRequestScript: '',
+      headers: '',
+      body: 'base-body',
+      bodyType: 'raw',
+      rawType: 'text',
+      activeEnvironmentIds: [],
+      saveToHistory: false,
+      historyKeepLast: 10,
+      requestMetadata: {
+        sourceRuntime: 'call-request',
+        isRetry: false,
+        retryCount: 0,
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(emitGenericEventSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'script-retry-request',
+      })
+    )
+  })
 })
 
 function createPreparedRequest(): PreparedHttpRequest {
@@ -133,7 +249,7 @@ function createPreparedRequest(): PreparedHttpRequest {
       resolveHttpAuthTemplateExpressions: async (auth: HttpAuth) => auth,
       resolveRequestTemplateExpressions: async () => {},
       runPreRequestScripts: async () => [],
-      runPostRequestScripts: async () => [],
+      runPostRequestScripts: async () => ({ scriptErrors: [], retryRequested: false }),
     },
     variables: {},
     method: 'POST' as const,

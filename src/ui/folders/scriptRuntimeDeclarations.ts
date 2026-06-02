@@ -127,6 +127,26 @@ interface ScriptRequestApi {
   headers: ScriptHeaderApi
 }
 
+type ScriptRequestRuntimePhase = 'pre-request' | 'post-request' | 'template-expression'
+
+type ScriptRequestRuntimeSource =
+  | 'request-editor'
+  | 'call-request'
+  | 'navigate-and-call-request'
+  | 'generate-request-code'
+  | 'websocket'
+
+interface ScriptRequestMetadataApi {
+  /** Whether this execution was triggered as a retry of a previous UI request send. */
+  isRetry: boolean
+  /** How many times this request has been retried by the UI. */
+  retryCount: number
+  /** The current runtime phase executing this code. */
+  currentRuntime: ScriptRequestRuntimePhase
+  /** The source that started this request execution. */
+  sourceRuntime: ScriptRequestRuntimeSource
+}
+
 interface ScriptCallRequestOptions {
   /** Override the outbound request method. Omit to keep the prepared method. */
   method?: string
@@ -235,10 +255,12 @@ declare const response: ScriptResponseApi
 `
 
 const postRequestOnlyDeclarations = String.raw`
+declare function retryRequest(): never
 `
 
 const requestDeclarations = String.raw`
 declare const request: ScriptRequestApi
+declare const requestMetadata: ScriptRequestMetadataApi
 `
 
 const responseVisualizerDeclarations = String.raw`

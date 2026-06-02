@@ -16,7 +16,10 @@ import type {
   RequestConsoleEntry,
   RequestConsoleLevel,
   RequestMethod,
+  RequestRuntimePhase,
+  RequestRuntimeSource,
   RequestRawType,
+  SendRequestMetadata,
   ScriptResponseBody,
 } from '../common/Requests.js'
 import type { SharedScriptRecord } from '../common/SharedScripts.js'
@@ -56,6 +59,10 @@ type RuntimeRequestState = {
   rawType: RequestRawType
 }
 
+type RuntimeRequestMetadataState = SendRequestMetadata & {
+  currentRuntime: RequestRuntimePhase
+}
+
 type HeaderApi = {
   get: (name: string) => string | null
   set: (name: string, value: string) => void
@@ -82,6 +89,13 @@ type RequestApi = {
   pathParams: ScriptPathParam[]
   resolveUrl: () => string
   headers: HeaderApi
+}
+
+type RequestMetadataApi = {
+  readonly isRetry: boolean
+  readonly retryCount: number
+  readonly currentRuntime: RequestRuntimePhase
+  readonly sourceRuntime: RequestRuntimeSource
 }
 
 type RuntimeResponseState = {
@@ -120,6 +134,11 @@ type ScriptErrorDetails = {
   line: number | null
   column: number | null
   sourceLine: string | null
+}
+
+export type PostRequestScriptResult = {
+  scriptErrors: RequestScriptError[]
+  retryRequested: boolean
 }
 
 type CompiledRequestScript = {
@@ -167,11 +186,28 @@ export type ScriptRuntime = {
   runPostRequestScripts: (
     sources: ScriptSource[],
     response: RuntimeResponseState
-  ) => Promise<RequestScriptError[]>
+  ) => Promise<PostRequestScriptResult>
+}
+
+type ScriptPhaseResult =
+  | {
+      kind: 'completed'
+      scriptErrors: RequestScriptError[]
+    }
+  | {
+      kind: 'retry-request'
+    }
+
+class RetryRequestSignal extends Error {
+  constructor() {
+    super('retryRequest')
+    this.name = 'RetryRequestSignal'
+  }
 }
 
 export function createRequestScriptRuntime(input: {
   request: RuntimeRequestState
+  requestMetadata?: SendRequestMetadata
   environments: EnvironmentRecord[]
   sharedScripts?: SharedScriptRecord[]
   scriptPackages?: ScriptRuntimePackage[]
@@ -191,6 +227,12 @@ export function createRequestScriptRuntime(input: {
   let pendingEnvironmentIds = new Set<string>()
   const updatedEnvironmentIds = new Set<string>()
   const consoleEntries: RequestConsoleEntry[] = []
+  const runtimeRequestMetadata: RuntimeRequestMetadataState = {
+    sourceRuntime: input.requestMetadata?.sourceRuntime ?? 'request-editor',
+    isRetry: input.requestMetadata?.isRetry ?? false,
+    retryCount: input.requestMetadata?.retryCount ?? 0,
+    currentRuntime: 'pre-request',
+  }
 
   return {
     request: runtimeRequest,
@@ -205,6 +247,7 @@ export function createRequestScriptRuntime(input: {
           sourceName,
           expressionSource,
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
@@ -222,6 +265,7 @@ export function createRequestScriptRuntime(input: {
             sourceName: `${sourceName} ${fieldName}`,
             expressionSource,
             runtimeRequest,
+            runtimeRequestMetadata,
             requestScope,
             response: null,
             environmentContext: createEnvironmentContext(),
@@ -239,6 +283,7 @@ export function createRequestScriptRuntime(input: {
           sourceName: 'Request URL',
           expressionSource,
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
@@ -254,6 +299,7 @@ export function createRequestScriptRuntime(input: {
           sourceName: 'Request Path Params',
           expressionSource,
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
@@ -269,6 +315,7 @@ export function createRequestScriptRuntime(input: {
           sourceName: 'Request Search Params',
           expressionSource,
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
@@ -284,6 +331,7 @@ export function createRequestScriptRuntime(input: {
             sourceName: `Request Auth ${fieldName}`,
             expressionSource,
             runtimeRequest,
+            runtimeRequestMetadata,
             requestScope,
             response: null,
             environmentContext: createEnvironmentContext(),
@@ -300,6 +348,7 @@ export function createRequestScriptRuntime(input: {
           sourceName: 'Request Headers',
           expressionSource,
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
@@ -315,6 +364,7 @@ export function createRequestScriptRuntime(input: {
           sourceName: 'Request Body',
           expressionSource,
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
@@ -328,11 +378,12 @@ export function createRequestScriptRuntime(input: {
     },
     runPreRequestScripts: async sources => {
       const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
-        const scriptErrors = await runScriptPhase({
+      const result = await runScriptPhase({
           phase: 'pre-request',
           sources,
           sharedScripts: input.sharedScripts ?? [],
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: null,
           environmentContext: createEnvironmentContext(),
@@ -343,6 +394,11 @@ export function createRequestScriptRuntime(input: {
           makeRequestBridge: input.makeRequest,
           scriptPackages: input.scriptPackages ?? [],
         })
+      if (result.kind !== 'completed') {
+        throw new Error('retryRequest is only available in post-request scripts')
+      }
+
+      const { scriptErrors } = result
       if (scriptErrors.length > 0) {
         ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
         return scriptErrors
@@ -363,11 +419,12 @@ export function createRequestScriptRuntime(input: {
       const responseHeaders = createResponseHeaderEditor(response.headers)
 
       try {
-        const scriptErrors = await runScriptPhase({
+        const result = await runScriptPhase({
           phase: 'post-request',
           sources,
           sharedScripts: input.sharedScripts ?? [],
           runtimeRequest,
+          runtimeRequestMetadata,
           requestScope,
           response: {
             ...response,
@@ -381,12 +438,13 @@ export function createRequestScriptRuntime(input: {
           makeRequestBridge: input.makeRequest,
           scriptPackages: input.scriptPackages ?? [],
         })
-        if (scriptErrors.length > 0) {
+        if (result.kind === 'completed' && result.scriptErrors.length > 0) {
           ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
-          return scriptErrors
+          return {
+            scriptErrors: result.scriptErrors,
+            retryRequested: false,
+          }
         }
-
-        response.headers = responseHeaders.serialize()
 
         if (pendingEnvironmentIds.size > 0) {
           environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
@@ -396,11 +454,19 @@ export function createRequestScriptRuntime(input: {
           pendingEnvironmentIds = new Set<string>()
         }
 
-        return []
+        response.headers = responseHeaders.serialize()
+
+        return {
+          scriptErrors: result.kind === 'completed' ? result.scriptErrors : [],
+          retryRequested: result.kind === 'retry-request',
+        }
       } catch (error) {
         ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
 
-        return [toScriptErrorDetails(error, 'post-request')]
+        return {
+          scriptErrors: [toScriptErrorDetails(error, 'post-request')],
+          retryRequested: false,
+        }
       }
     },
   }
@@ -522,6 +588,7 @@ async function runScriptPhase(input: {
   sharedScripts: SharedScriptRecord[]
   scriptPackages: ScriptRuntimePackage[]
   runtimeRequest: RuntimeRequestState
+  runtimeRequestMetadata: RuntimeRequestMetadataState
   requestScope: Map<string, string>
   response: RuntimeResponseApiState | null
   environmentContext: EnvironmentContext
@@ -530,7 +597,7 @@ async function runScriptPhase(input: {
   promptBridge?: ScriptPromptBridge
   clipboardBridge?: ScriptClipboardBridge
   makeRequestBridge?: ScriptMakeRequestBridge
-}) {
+}): Promise<ScriptPhaseResult> {
   const headerEditor = createHeaderEditor(input.runtimeRequest)
   const currentSourceName = { value: 'Script' }
   const currentPrompt = { value: createScriptPromptApi(input.promptBridge, createIdleScriptExecutionController()) }
@@ -545,6 +612,7 @@ async function runScriptPhase(input: {
       ...input.environmentContext.getValues(),
       ...Object.fromEntries(input.requestScope.entries()),
     })),
+    requestMetadata: createRequestMetadataApi(input.runtimeRequestMetadata),
     response: input.response ? createResponseApi(input.response) : undefined,
     env: createEnvironmentApi(input.environmentContext),
     scope: createScopeApi(input.requestScope),
@@ -557,6 +625,7 @@ async function runScriptPhase(input: {
     ...(input.phase === 'post-request'
       ? {
           navigateAndCallRequest: createMakeRequestProxy(() => currentMakeRequest.value),
+          retryRequest: createRetryRequestApi(),
         }
       : {}),
     z,
@@ -589,6 +658,7 @@ async function runScriptPhase(input: {
     let compiledScript: CompiledRequestScript | null = null
 
     try {
+      input.runtimeRequestMetadata.currentRuntime = input.phase
       currentSourceName.value = source.name
       currentPrompt.value = createScriptPromptApi(input.promptBridge, executionController)
       currentMakeRequest.value = createScriptMakeRequestApi(input.makeRequestBridge, executionController)
@@ -599,19 +669,36 @@ async function runScriptPhase(input: {
       await executeScriptInContext(compiledScript.code, sharedContext, executionController)
       input.runtimeRequest.headers = headerEditor.serialize()
     } catch (error) {
-      return [buildScriptErrorDetails({
-        phase: input.phase,
-        sourceName: source.name,
-        error,
-        sourceCode: source.script,
-        compiledScript,
-      })]
+      if (isRetryRequestSignal(error)) {
+        return { kind: 'retry-request' }
+      }
+
+      return {
+        kind: 'completed',
+        scriptErrors: [buildScriptErrorDetails({
+          phase: input.phase,
+          sourceName: source.name,
+          error,
+          sourceCode: source.script,
+          compiledScript,
+        })],
+      }
     } finally {
       executionController.cancel()
     }
   }
 
-  return []
+  return { kind: 'completed', scriptErrors: [] }
+}
+
+function createRetryRequestApi() {
+  return function retryRequest(): never {
+    throw new RetryRequestSignal()
+  }
+}
+
+function isRetryRequestSignal(error: unknown): error is RetryRequestSignal {
+  return error instanceof RetryRequestSignal
 }
 
 function createScriptExecutionController(timeoutMs = SCRIPT_TIMEOUT_MS): ScriptExecutionPauseController & {
@@ -1191,10 +1278,28 @@ function createScopeApi(requestScope: Map<string, string>) {
   }
 }
 
+function createRequestMetadataApi(runtimeRequestMetadata: RuntimeRequestMetadataState): RequestMetadataApi {
+  return {
+    get isRetry() {
+      return runtimeRequestMetadata.isRetry
+    },
+    get retryCount() {
+      return runtimeRequestMetadata.retryCount
+    },
+    get currentRuntime() {
+      return runtimeRequestMetadata.currentRuntime
+    },
+    get sourceRuntime() {
+      return runtimeRequestMetadata.sourceRuntime
+    },
+  }
+}
+
 async function evaluateTemplateExpression(input: {
   sourceName: string
   expressionSource: string
   runtimeRequest: RuntimeRequestState
+  runtimeRequestMetadata: RuntimeRequestMetadataState
   requestScope: Map<string, string>
   response: RuntimeResponseApiState | null
   environmentContext: EnvironmentContext
@@ -1212,6 +1317,7 @@ async function evaluateTemplateExpression(input: {
       ...input.environmentContext.getValues(),
       ...Object.fromEntries(input.requestScope.entries()),
     })),
+    requestMetadata: createRequestMetadataApi(input.runtimeRequestMetadata),
     response: input.response ? createResponseApi(input.response) : undefined,
     env: createEnvironmentApi(input.environmentContext),
     scope: createScopeApi(input.requestScope),
@@ -1234,6 +1340,7 @@ async function evaluateTemplateExpression(input: {
   let compiledScript: CompiledRequestScript | null = null
 
   try {
+    input.runtimeRequestMetadata.currentRuntime = 'template-expression'
     compiledScript = compileTemplateExpressionScript(input.expressionSource)
     const result = await resolveTemplateExpressionResult(
       await executeScript(

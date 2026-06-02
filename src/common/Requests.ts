@@ -5,6 +5,16 @@ import type { ScriptCallRequestOverrides } from './ScriptMakeRequest.js'
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
+export type RequestRuntimePhase = 'pre-request' | 'post-request' | 'template-expression'
+
+export type RequestRuntimeSource = 'request-editor' | 'call-request' | 'navigate-and-call-request' | 'generate-request-code' | 'websocket'
+
+export type SendRequestMetadata = {
+  sourceRuntime: RequestRuntimeSource
+  isRetry: boolean
+  retryCount: number
+}
+
 export type RequestType = 'http' | 'websocket'
 
 export type RequestBodyType = 'raw' | 'form-data' | 'x-www-form-urlencoded' | 'none'
@@ -111,6 +121,7 @@ export type SendRequestInput = {
   saveToHistory: boolean
   historyKeepLast: number
   callRequestOverrides?: ScriptCallRequestOverrides
+  requestMetadata?: SendRequestMetadata
 }
 
 export type CancelHttpRequestInput = {

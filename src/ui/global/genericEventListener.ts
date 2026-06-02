@@ -32,7 +32,11 @@ export function subscribeToGenericEvents() {
     } else if (e.type === 'script-make-request') {
       void (async () => {
         try {
-          await RequestSendCoordinator.sendRequestById(e.request.requestId)
+          await RequestSendCoordinator.sendRequestById(e.request.requestId, {
+            sourceRuntime: 'navigate-and-call-request',
+            isRetry: false,
+            retryCount: 0,
+          })
           await getWindowElectron().resolveScriptMakeRequest({ id: e.request.id, error: null })
         } catch (error) {
           await getWindowElectron().resolveScriptMakeRequest({
@@ -54,6 +58,10 @@ export function subscribeToGenericEvents() {
           })
         }
       })()
+    } else if (e.type === 'script-retry-request') {
+      void RequestSendCoordinator.sendRequestById(e.requestId, e.requestMetadata).catch(error => {
+        console.error('script-retry-request failed', error)
+      })
     } else if (e.type === 'script-ai-state-updated') {
     } else {
       const _exhaustiveCheck: never = e

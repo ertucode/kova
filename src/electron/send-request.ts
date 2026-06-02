@@ -139,7 +139,8 @@ export async function sendRequest(
       headers: responseHeaders,
       body: parseScriptResponseBody(bodyText, responseHeaders),
     }
-    const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
+    const postRequestResult = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
+    const scriptErrors = postRequestResult.scriptErrors
     responseHeaders = scriptResponse.headers
 
     const extractedSetCookieValues = getSetCookieHeaderValuesFromEntries(parseResponseHeaderEntries(responseHeaders))
@@ -163,6 +164,14 @@ export async function sendRequest(
       emitGenericEvent({
         type: 'environments-updated',
         environmentIds: updatedEnvironments.map(environment => environment.id),
+      })
+    }
+
+    if (postRequestResult.retryRequested && shouldEmitRetryRequest(input.requestMetadata)) {
+      emitGenericEvent({
+        type: 'script-retry-request',
+        requestId: input.requestId,
+        requestMetadata: buildRetriedRequestMetadata(input.requestMetadata),
       })
     }
 
@@ -336,7 +345,8 @@ async function consumeSseResponse(input: {
       headers: responseHeaders,
       body: parseScriptResponseBody(bodyText, responseHeaders),
     }
-    const scriptErrors = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
+    const postRequestResult = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
+    const scriptErrors = postRequestResult.scriptErrors
     responseHeaders = scriptResponse.headers
 
     await storeResponseCookies({
@@ -349,6 +359,14 @@ async function consumeSseResponse(input: {
       emitGenericEvent({
         type: 'environments-updated',
         environmentIds: updatedEnvironments.map(environment => environment.id),
+      })
+    }
+
+    if (postRequestResult.retryRequested && shouldEmitRetryRequest(input.input.requestMetadata)) {
+      emitGenericEvent({
+        type: 'script-retry-request',
+        requestId: input.input.requestId,
+        requestMetadata: buildRetriedRequestMetadata(input.input.requestMetadata),
       })
     }
 
@@ -683,6 +701,18 @@ async function readResponseBody(response: Response, headers: string) {
 
   const buffer = Buffer.from(await response.arrayBuffer())
   return buffer.toString('base64')
+}
+
+function shouldEmitRetryRequest(requestMetadata: SendRequestInput['requestMetadata']) {
+  return requestMetadata?.sourceRuntime === 'request-editor'
+}
+
+function buildRetriedRequestMetadata(requestMetadata: SendRequestInput['requestMetadata']) {
+  return {
+    sourceRuntime: 'request-editor' as const,
+    isRetry: true,
+    retryCount: (requestMetadata?.retryCount ?? 0) + 1,
+  }
 }
 
 function formatRequestError(error: unknown) {

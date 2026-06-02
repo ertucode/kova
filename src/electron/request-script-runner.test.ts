@@ -5,6 +5,44 @@ import { createRequestScriptRuntime } from './request-script-runner.js'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 describe('createRequestScriptRuntime', () => {
+  it('exposes request metadata to scripts', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      requestMetadata: {
+        sourceRuntime: 'request-editor',
+        isRetry: true,
+        retryCount: 2,
+      },
+      environments: [],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script:
+          "scope.set('isRetry', String(requestMetadata.isRetry))\nscope.set('retryCount', String(requestMetadata.retryCount))\nscope.set('currentRuntime', requestMetadata.currentRuntime)\nscope.set('sourceRuntime', requestMetadata.sourceRuntime)",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getRequestScopeValues()).toEqual({
+      isRetry: 'true',
+      retryCount: '2',
+      currentRuntime: 'pre-request',
+      sourceRuntime: 'request-editor',
+    })
+  })
+
   it('exposes draft url separately from the resolved url', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
@@ -682,7 +720,7 @@ describe('createRequestScriptRuntime', () => {
       }
     )
 
-  expect(postRequestErrors).toEqual([])
+  expect(postRequestErrors).toEqual({ scriptErrors: [], retryRequested: false })
   expect(hiddenToastIds).toEqual(['loading-toast'])
 })
 
@@ -719,7 +757,7 @@ it('allows post-request scripts to mutate response headers', async () => {
     response
   )
 
-  expect(errors).toEqual([])
+  expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
   expect(runtime.getRequestScopeValues().header).toBe('1')
   expect(response.headers).toBe('set-cookie: session=new; Path=/\nx-scripted: 1')
 })
@@ -758,8 +796,50 @@ it('parses and rewrites response cookies from the header helper', async () => {
     response
   )
 
-  expect(errors).toEqual([])
+  expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
   expect(response.headers).toBe('set-cookie: session=keep; Path=/; Secure; SameSite=None')
+})
+
+it('allows post-request scripts to inspect the response and request a retry', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      method: 'POST',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
+  })
+  const response = {
+    status: 401,
+    statusText: 'Unauthorized',
+    headers: 'content-type: application/json',
+    body: { type: 'json', data: { code: 'expired' } } as const,
+  }
+
+  const result = await runtime.runPostRequestScripts(
+    [
+      {
+        name: 'Request: Test',
+        script:
+          "if (response.body.type !== 'json') throw new Error('Expected JSON body')\nscope.set('code', String(Reflect.get(response.body.data, 'code')))\nresponse.headers.set('x-retry', '1')\nretryRequest()",
+      },
+      {
+        name: 'Folder: Should Not Run',
+        script: "scope.set('afterRetry', 'should-not-run')",
+      },
+    ],
+    response
+  )
+
+  expect(result).toEqual({ scriptErrors: [], retryRequested: true })
+  expect(runtime.getRequestScopeValues()).toEqual({ code: 'expired' })
+  expect(response.headers).toBe('content-type: application/json\nx-retry: 1')
 })
 
   it('returns the prompted text value to the script', async () => {
@@ -871,7 +951,7 @@ it('parses and rewrites response cookies from the header helper', async () => {
       }
     )
 
-    expect(errors).toEqual([])
+    expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
     expect(clipboardWrites).toEqual(['secret-token'])
   })
 
@@ -1180,7 +1260,7 @@ it('parses and rewrites response cookies from the header helper', async () => {
       }
     )
 
-    expect(errors).toEqual([])
+    expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
     expect(requestedPaths).toEqual([['Auth', 'Refresh Token']])
   })
 
@@ -1233,7 +1313,7 @@ it('parses and rewrites response cookies from the header helper', async () => {
       }
     )
 
-    expect(errors).toEqual([])
+    expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
     expect(requestedPaths).toEqual([['Auth', 'Refresh Token']])
     expect(requestedOverrides).toEqual([undefined])
   })

@@ -105,6 +105,7 @@ export async function prepareHttpRequest(
       bodyType: input.bodyType,
       rawType: input.rawType,
     },
+    requestMetadata: input.requestMetadata,
     environments: activeEnvironments,
     sharedScripts,
     scriptPackages: workspacePackages,
