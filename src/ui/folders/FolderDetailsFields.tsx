@@ -16,6 +16,7 @@ import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { scriptHoverExtension } from './codeEditorScriptHover'
+import { supermavenGhostCompletionExtension } from './codeEditorSupermaven'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -100,6 +101,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     useVisibleSharedScripts(selectedFolderId)
   const visibleSharedScriptsRef = useRef(visibleSharedScripts)
   const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
+  const selectedFolderIdRef = useRef<string | null>(selectedFolderId)
   const preRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
   const postRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
   const pendingPreRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
@@ -111,6 +113,7 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   variableAutocompleteItemsRef.current = variableAutocompleteItems
   visibleSharedScriptsRef.current = visibleSharedScripts
   scriptPackageArtifactsRef.current = scriptPackageArtifacts
+  selectedFolderIdRef.current = selectedFolderId
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
     () => [
@@ -167,6 +170,10 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => `kova://folders/${selectedFolderIdRef.current ?? 'unknown'}/pre-request.ts`,
+        phase: 'pre-request',
+      }),
     ],
     []
   )
@@ -192,6 +199,10 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => `kova://folders/${selectedFolderIdRef.current ?? 'unknown'}/post-request.ts`,
+        phase: 'post-request',
       }),
     ],
     []

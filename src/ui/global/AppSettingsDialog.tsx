@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { GenericResult } from '@common/GenericError'
 import { errorResponseToMessage } from '@common/GenericError'
+import type { SupermavenStatus } from '@common/Supermaven'
 import { useSelector } from '@xstate/store/react'
 import {
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
@@ -10,6 +11,7 @@ import {
   DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_AI_SERVER_PORT,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
+  DEFAULT_SUPERMAVEN_ENABLED,
   DEFAULT_VIM_MODE,
 } from '@common/AppSettings'
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
@@ -31,8 +33,11 @@ export function AppSettingsDialog() {
   const [formatScriptBlocksOnSave, setFormatScriptBlocksOnSave] = useState(DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE)
   const [scriptBlockPrettierConfig, setScriptBlockPrettierConfig] = useState(DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG)
   const [cookiesEnabled, setCookiesEnabled] = useState(DEFAULT_COOKIES_ENABLED)
+  const [supermavenEnabled, setSupermavenEnabled] = useState(DEFAULT_SUPERMAVEN_ENABLED)
   const [scriptAiModel, setScriptAiModel] = useState<string | null>(DEFAULT_SCRIPT_AI_MODEL)
   const [scriptAiServerPort, setScriptAiServerPort] = useState('')
+  const [supermavenStatus, setSupermavenStatus] = useState<SupermavenStatus | null>(null)
+  const [supermavenStatusLoading, setSupermavenStatusLoading] = useState(false)
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
   const [databaseDrafts, setDatabaseDrafts] = useState<Record<string, { name: string; path: string }>>({})
   const [databaseLoading, setDatabaseLoading] = useState(false)
@@ -52,10 +57,21 @@ export function AppSettingsDialog() {
       setFormatScriptBlocksOnSave(settings.formatScriptBlocksOnSave)
       setScriptBlockPrettierConfig(settings.scriptBlockPrettierConfig)
       setCookiesEnabled(settings.cookiesEnabled)
+      setSupermavenEnabled(settings.supermavenEnabled)
       setScriptAiModel(settings.scriptAiModel)
       setScriptAiServerPort(settings.scriptAiServerPort === null ? '' : String(settings.scriptAiServerPort))
     }
   }, [settings])
+
+  useEffect(() => {
+    if (!supermavenEnabled || !settings?.supermavenEnabled) {
+      setSupermavenStatus(null)
+      setSupermavenStatusLoading(false)
+      return
+    }
+
+    void loadSupermavenStatus()
+  }, [supermavenEnabled])
 
   useEffect(() => {
     void loadDatabaseState()
@@ -84,12 +100,29 @@ export function AppSettingsDialog() {
       formatScriptBlocksOnSave,
       scriptBlockPrettierConfig,
       cookiesEnabled,
+      supermavenEnabled,
       scriptAiModel,
       scriptAiServerPort: nextScriptAiServerPort,
     })
 
     if (success) {
       dialogActions.close()
+    }
+  }
+
+  const loadSupermavenStatus = async () => {
+    setSupermavenStatusLoading(true)
+
+    try {
+      const status = await getWindowElectron().getSupermavenStatus()
+      setSupermavenStatus(status)
+    } catch (error) {
+      setSupermavenStatus({
+        state: 'error',
+        detail: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setSupermavenStatusLoading(false)
     }
   }
 
@@ -395,6 +428,34 @@ export function AppSettingsDialog() {
         </div>
 
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
+          <div className="text-sm font-medium text-base-content">Supermaven</div>
+          <p className="mt-1 text-sm text-base-content/60">
+            Enable Supermaven ghost completions for script editors. Suggestions are requested with <code>Option+L</code>.
+          </p>
+
+          <label className="mt-4 inline-flex items-center gap-3">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm rounded-md"
+              checked={supermavenEnabled}
+              onChange={event => setSupermavenEnabled(event.target.checked)}
+            />
+            <span className="text-sm text-base-content">Enable Supermaven</span>
+          </label>
+
+          {supermavenEnabled ? (
+            <div className="mt-4 rounded-xl border border-base-content/10 bg-base-100 px-4 py-3 text-sm">
+              <div className="font-medium text-base-content">
+                Status: {supermavenStatusLoading ? 'Loading...' : formatSupermavenStatus(supermavenStatus)}
+              </div>
+              {supermavenStatus && supermavenStatus.detail ? (
+                <p className="mt-1 text-base-content/60 break-words">{supermavenStatus.detail}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
           <div className="text-sm font-medium text-base-content">AI script generation</div>
           <p className="mt-1 text-sm text-base-content/60">
             Choose which OpenCode model should be used by default for script generation and refinement, and which local
@@ -622,6 +683,38 @@ export function AppSettingsDialog() {
       </div>
     </Dialog>
   )
+}
+
+function formatSupermavenStatus(status: SupermavenStatus | null) {
+  if (!status) {
+    return 'Unknown'
+  }
+
+  if (status.state === 'disabled') {
+    return 'Disabled'
+  }
+
+  if (status.state === 'starting') {
+    return 'Starting'
+  }
+
+  if (status.state === 'running-free') {
+    return 'Running (Free)'
+  }
+
+  if (status.state === 'running-pro') {
+    return 'Running (Pro)'
+  }
+
+  if (status.state === 'not-installed') {
+    return 'Not Installed'
+  }
+
+  if (status.state === 'not-configured') {
+    return 'Not Configured'
+  }
+
+  return 'Error'
 }
 
 function buildSuggestedDatabasePath(defaultDirectoryPath: string, name: string) {

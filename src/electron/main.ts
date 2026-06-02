@@ -121,6 +121,7 @@ import {
   suggestTypesScriptPackage,
 } from './script-package-registry.js'
 import { listOpenCodeModels } from './opencode-models.js'
+import { supermavenService } from './supermaven-service.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -577,6 +578,10 @@ app.on('ready', async () => {
     return getAppSettings()
   })
 
+  ipcHandle('getSupermavenStatus', async () => {
+    return await supermavenService.getStatus()
+  })
+
   ipcHandle('createEnvironment', async input => {
     return createEnvironment(input)
   })
@@ -603,7 +608,15 @@ app.on('ready', async () => {
       await shutdownScriptAiServer()
     }
 
+    if (previousSettings.supermavenEnabled !== result.data.supermavenEnabled) {
+      supermavenService.setEnabled(result.data.supermavenEnabled)
+    }
+
     return result
+  })
+
+  ipcHandle('requestSupermavenInlineSuggestion', async input => {
+    return await supermavenService.requestInlineSuggestion(input)
   })
 
   ipcHandle('deleteEnvironment', async input => {

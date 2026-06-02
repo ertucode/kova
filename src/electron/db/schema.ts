@@ -224,6 +224,7 @@ export const appSettings = sqliteTable('app_settings', {
   formatScriptBlocksOnSave: integer('format_script_blocks_on_save', { mode: 'boolean' }).notNull().default(true),
   scriptBlockPrettierConfig: text('script_block_prettier_config').notNull().default('{}'),
   cookiesEnabled: integer('cookies_enabled', { mode: 'boolean' }).notNull().default(true),
+  supermavenEnabled: integer('supermaven_enabled', { mode: 'boolean' }).notNull().default(false),
   scriptAiModel: text('script_ai_model'),
   scriptAiServerPort: integer('script_ai_server_port'),
   createdAt: integer('created_at').notNull(),

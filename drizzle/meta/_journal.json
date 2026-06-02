@@ -281,6 +281,13 @@
       "when": 1779904477285,
       "tag": "0039_plain_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1780398754812,
+      "tag": "0040_overconfident_snowbird",
+      "breakpoints": true
     }
   ]
 }

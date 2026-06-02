@@ -1,2 +1,1 @@
 - ai autocomplete?
-- duruma göre retry mekanizması. (check response -> make some request -> fill env -> retry)

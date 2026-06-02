@@ -6,6 +6,7 @@ import {
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
+  DEFAULT_SUPERMAVEN_ENABLED,
   DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
   type AppSettingsRecord,
@@ -119,6 +120,10 @@ export function getCookiesEnabled() {
 
 export function getFormatScriptBlocksOnSave() {
   return appSettingsStore.getSnapshot().context.settings?.formatScriptBlocksOnSave ?? DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE
+}
+
+export function getSupermavenEnabled() {
+  return appSettingsStore.getSnapshot().context.settings?.supermavenEnabled ?? DEFAULT_SUPERMAVEN_ENABLED
 }
 
 export function getScriptBlockPrettierConfig() {

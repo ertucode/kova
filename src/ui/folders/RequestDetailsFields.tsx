@@ -49,6 +49,7 @@ import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { scriptHoverExtension } from './codeEditorScriptHover'
+import { supermavenGhostCompletionExtension } from './codeEditorSupermaven'
 import { pathParamHighlightExtension } from './codeEditorPathParamHighlight'
 import { searchParamHighlightExtension } from './codeEditorSearchParamHighlight'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
@@ -306,6 +307,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => `kova://requests/${selectedRequestIdRef.current ?? 'unknown'}/pre-request.ts`,
+        phase: 'pre-request',
+      }),
     ],
     []
   )
@@ -331,6 +336,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => `kova://requests/${selectedRequestIdRef.current ?? 'unknown'}/post-request.ts`,
+        phase: 'post-request',
       }),
     ],
     []
@@ -358,6 +367,10 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => `kova://requests/${selectedRequestIdRef.current ?? 'unknown'}/response-visualizer.tsx`,
+        phase: 'response-visualizer',
       }),
     ],
     []

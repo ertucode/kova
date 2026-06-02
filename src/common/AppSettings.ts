@@ -6,6 +6,7 @@ export const DEFAULT_VIM_MODE = false
 export const DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE = true
 export const DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG = '{}'
 export const DEFAULT_COOKIES_ENABLED = true
+export const DEFAULT_SUPERMAVEN_ENABLED = false
 export const DEFAULT_SCRIPT_AI_MODEL: string | null = null
 export const DEFAULT_SCRIPT_AI_SERVER_PORT = 46381
 
@@ -20,6 +21,7 @@ export type AppSettingsRecord = {
   formatScriptBlocksOnSave: boolean
   scriptBlockPrettierConfig: string
   cookiesEnabled: boolean
+  supermavenEnabled: boolean
   scriptAiModel: string | null
   scriptAiServerPort: number | null
   createdAt: number
@@ -34,6 +36,7 @@ export type UpdateAppSettingsInput = Partial<{
   formatScriptBlocksOnSave: boolean
   scriptBlockPrettierConfig: string
   cookiesEnabled: boolean
+  supermavenEnabled: boolean
   scriptAiModel: string | null
   scriptAiServerPort: number | null
 }>

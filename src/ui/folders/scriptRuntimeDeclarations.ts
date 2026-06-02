@@ -1,4 +1,4 @@
-import type { SharedScriptTarget } from '@common/SharedScripts'
+import type { SharedScriptTarget } from '../../common/SharedScripts.js'
 
 export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
 export type ScriptRuntimeContext =

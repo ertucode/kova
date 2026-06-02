@@ -174,6 +174,7 @@ import {
   type UpdateScriptPackageInput,
 } from './ScriptPackages.js'
 import { type ScriptRequestBridgeResponse } from './ScriptMakeRequest.js'
+import type { SupermavenInlineSuggestion, SupermavenInlineSuggestionRequest, SupermavenStatus } from './Supermaven.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -230,10 +231,12 @@ export type EventResponseMapping = {
   moveWebSocketExample: Promise<GenericResult<void>>
   listEnvironments: Promise<EnvironmentRecord[]>
   getAppSettings: Promise<AppSettingsRecord>
+  getSupermavenStatus: Promise<SupermavenStatus>
   createEnvironment: Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: Promise<GenericResult<EnvironmentRecord>>
   updateAppSettings: Promise<GenericResult<AppSettingsRecord>>
+  requestSupermavenInlineSuggestion: Promise<GenericResult<SupermavenInlineSuggestion | null>>
   deleteEnvironment: Promise<GenericResult<void>>
   moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
@@ -356,10 +359,12 @@ export type EventRequestMapping = {
   moveWebSocketExample: MoveWebSocketExampleInput
   listEnvironments: void
   getAppSettings: void
+  getSupermavenStatus: void
   createEnvironment: CreateEnvironmentInput
   duplicateEnvironment: DuplicateEnvironmentInput
   updateEnvironment: UpdateEnvironmentInput
   updateAppSettings: UpdateAppSettingsInput
+  requestSupermavenInlineSuggestion: SupermavenInlineSuggestionRequest
   deleteEnvironment: DeleteEnvironmentInput
   moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
@@ -494,10 +499,14 @@ export type WindowElectron = {
   moveWebSocketExample: (input: MoveWebSocketExampleInput) => Promise<GenericResult<void>>
   listEnvironments: () => Promise<EnvironmentRecord[]>
   getAppSettings: () => Promise<AppSettingsRecord>
+  getSupermavenStatus: () => Promise<SupermavenStatus>
   createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: (input: DuplicateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   updateEnvironment: (input: UpdateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   updateAppSettings: (input: UpdateAppSettingsInput) => Promise<GenericResult<AppSettingsRecord>>
+  requestSupermavenInlineSuggestion: (
+    input: SupermavenInlineSuggestionRequest
+  ) => Promise<GenericResult<SupermavenInlineSuggestion | null>>
   deleteEnvironment: (input: DeleteEnvironmentInput) => Promise<GenericResult<void>>
   moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>

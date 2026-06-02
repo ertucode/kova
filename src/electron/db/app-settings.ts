@@ -7,6 +7,7 @@ import {
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
+  DEFAULT_SUPERMAVEN_ENABLED,
   DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
   parseScriptBlockPrettierConfig,
@@ -40,6 +41,7 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
     formatScriptBlocksOnSave: DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
     scriptBlockPrettierConfig: DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: DEFAULT_COOKIES_ENABLED,
+    supermavenEnabled: DEFAULT_SUPERMAVEN_ENABLED,
     scriptAiModel: DEFAULT_SCRIPT_AI_MODEL,
     scriptAiServerPort: null,
     createdAt: now,
@@ -112,6 +114,10 @@ function validateAppSettingsPatch(input: UpdateAppSettingsInput) {
     return 'Invalid cookies setting'
   }
 
+  if (input.supermavenEnabled !== undefined && typeof input.supermavenEnabled !== 'boolean') {
+    return 'Invalid Supermaven setting'
+  }
+
   if (input.scriptAiModel !== undefined && input.scriptAiModel !== null && typeof input.scriptAiModel !== 'string') {
     return 'Invalid script AI model setting'
   }
@@ -160,6 +166,10 @@ function buildAppSettingsUpdatePatch(input: UpdateAppSettingsInput): Partial<App
     patch.cookiesEnabled = input.cookiesEnabled
   }
 
+  if (input.supermavenEnabled !== undefined) {
+    patch.supermavenEnabled = input.supermavenEnabled
+  }
+
   if (input.scriptAiModel !== undefined) {
     patch.scriptAiModel = input.scriptAiModel
   }
@@ -197,6 +207,7 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     formatScriptBlocksOnSave: value.formatScriptBlocksOnSave ?? DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
     scriptBlockPrettierConfig: value.scriptBlockPrettierConfig ?? DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: value.cookiesEnabled ?? DEFAULT_COOKIES_ENABLED,
+    supermavenEnabled: value.supermavenEnabled ?? DEFAULT_SUPERMAVEN_ENABLED,
     scriptAiModel: value.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL,
     scriptAiServerPort: value.scriptAiServerPort ?? null,
     createdAt: value.createdAt,

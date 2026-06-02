@@ -11,6 +11,7 @@ import { CodeEditor } from './CodeEditor'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { scriptHoverExtension } from './codeEditorScriptHover'
+import { supermavenGhostCompletionExtension } from './codeEditorSupermaven'
 import {
   getSharedScriptScopeKey,
   isSharedScriptEntryDirty,
@@ -23,6 +24,7 @@ import { useScriptPackageArtifacts } from './useScriptPackages'
 import type { PendingScriptSelection } from './scriptFormatOnSave'
 import { formatScriptValueForSave } from './scriptFormatOnSave'
 import { notifySharedScriptsChanged, useScopedSharedScripts } from './useVisibleSharedScripts'
+import { buildSharedScriptDocumentPath } from './sharedScriptDocumentPath'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime']
 const EMPTY_ENTRIES: Record<string, never> = {}
@@ -382,8 +384,12 @@ function SharedScriptDetail({
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
         getPackages: () => scriptPackagesRef.current,
       }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => buildSharedScriptDocumentPath(draft.id, isVisualizerOnly),
+        targets,
+      }),
     ],
-    [targets]
+    [draft.id, isVisualizerOnly, targets]
   )
 
   return (

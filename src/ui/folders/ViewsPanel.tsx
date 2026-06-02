@@ -16,6 +16,7 @@ import { CodeEditor, type CodeEditorHandle, type CodeEditorSelection } from './C
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
 import { scriptHoverExtension } from './codeEditorScriptHover'
+import { supermavenGhostCompletionExtension } from './codeEditorSupermaven'
 import { environmentEditorStore } from './environmentEditorStore'
 import { formatScriptBlockWithCursor } from './formatScriptBlock'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
@@ -69,11 +70,16 @@ export function ViewsPanel() {
   const scriptPackageArtifactsRef = useRef(scriptPackageArtifacts)
   const environmentNamesRef = useRef<string[]>([])
   const variableNamesRef = useRef<string[]>([])
+  const selectedViewIdRef = useRef<string | null>(selectedId)
   const entriesRef = useRef<Record<string, ViewEditorEntry>>({})
 
   useEffect(() => {
     entriesRef.current = entries
   }, [entries])
+
+  useEffect(() => {
+    selectedViewIdRef.current = selectedId
+  }, [selectedId])
 
   useEffect(() => {
     sharedScriptsRef.current = visibleSharedScripts
@@ -262,6 +268,10 @@ export function ViewsPanel() {
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => sharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => `kova://views/${selectedViewIdRef.current ?? 'unknown'}/view-runtime.tsx`,
+        phase: 'view-runtime',
       }),
     ],
     []

@@ -29,24 +29,36 @@ const inlineDiagnosticsField = StateField.define({
 })
 
 const inlineDiagnosticsTheme = EditorView.theme({
+  '.cm-inline-script-error-anchor': {
+    display: 'inline-block',
+    width: '0',
+    height: '0',
+    position: 'relative',
+    overflow: 'visible',
+    verticalAlign: 'middle',
+  },
   '.cm-inline-script-error': {
     display: 'inline-flex',
+    position: 'absolute',
+    left: '0.75rem',
+    top: '50%',
+    transform: 'translateY(-50%)',
     maxWidth: 'min(38rem, 55vw)',
-    marginLeft: '0.75rem',
-    padding: '0 0.45rem',
+    padding: '0',
     appearance: 'none',
-    borderRadius: '0.35rem',
-    border: '1px solid color-mix(in oklab, var(--color-error) 22%, transparent)',
-    backgroundColor: 'color-mix(in oklab, var(--color-error) 10%, transparent)',
     color: 'color-mix(in oklab, var(--color-error) 85%, var(--color-base-content) 15%)',
     fontSize: '0.72rem',
     lineHeight: '1.2rem',
-    verticalAlign: 'middle',
+    alignItems: 'center',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     userSelect: 'text',
     cursor: 'copy',
+    zIndex: '1',
+    pointerEvents: 'auto',
+    background: 'transparent',
+    border: '0',
   },
   '.cm-lintRange-error': {
     backgroundColor: 'transparent',
@@ -200,7 +212,7 @@ function buildInlineDiagnosticsDecorations(source: string, diagnostics: readonly
       builder.add(
         lineEnd,
         lineEnd,
-        Decoration.widget({ widget: new InlineScriptDiagnosticWidget(diagnostic.message), side: 1 })
+        Decoration.widget({ widget: new InlineScriptDiagnosticWidget(diagnostic.message), side: -1 })
       )
     }
 
@@ -220,6 +232,8 @@ class InlineScriptDiagnosticWidget extends WidgetType {
   }
 
   override toDOM() {
+    const anchor = document.createElement('span')
+    anchor.className = 'cm-inline-script-error-anchor'
     const element = document.createElement('button')
     element.className = 'cm-inline-script-error'
     element.textContent = this.message
@@ -232,7 +246,8 @@ class InlineScriptDiagnosticWidget extends WidgetType {
         () => toast.show({ severity: 'error', message: 'Failed to copy diagnostic.' })
       )
     })
-    return element
+    anchor.append(element)
+    return anchor
   }
 
   override ignoreEvent() {
