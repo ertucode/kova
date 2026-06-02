@@ -20,6 +20,7 @@ import {
   SearchIcon,
   TagIcon,
   Undo2Icon,
+  XIcon,
 } from 'lucide-react'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { DetailsPanel } from './DetailsPanel'
@@ -444,6 +445,16 @@ export function FolderExplorer() {
                   onChange={event => setLocalSearchQuery(event.target.value)}
                   onKeyDown={handleSearchKeyDown}
                 />
+                {localSearchQuery.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setLocalSearchQuery('')
+                      searchInputRef.current?.focus()
+                    }}
+                  >
+                    <XIcon className="size-4 shrink-0" />
+                  </button>
+                )}
               </label>
             </div>
           </div>
@@ -522,7 +533,8 @@ export function FolderExplorer() {
 function captureSearchSnapshot({ items, roots }: { items: ExplorerItem[]; roots: TreeNode[] }): SearchSnapshot {
   const { entries } = folderExplorerEditorStore.getSnapshot().context
   const { items: tagItems, assignments: tagAssignments } = tagsStore.getSnapshot().context
-  const { recentHttpRequestUsageCountByRequestId, recentHttpRequestUsageVersion } = requestExecutionStore.getSnapshot().context
+  const { recentHttpRequestUsageCountByRequestId, recentHttpRequestUsageVersion } =
+    requestExecutionStore.getSnapshot().context
 
   return {
     roots,
