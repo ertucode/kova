@@ -50,6 +50,16 @@ import { tagsStore } from './tagsStore'
 type DropPlacement = ExplorerDropTarget['placement']
 const TREE_SEARCH_DEBOUNCE_MS = 5
 
+type SearchSnapshot = {
+  roots: TreeNode[]
+  entries: ReturnType<typeof folderExplorerEditorStore.getSnapshot>['context']['entries']
+  tagNamesBySelection: Record<string, string[] | undefined>
+  recentHttpRequestUsageCountByRequestId: Record<string, number | undefined>
+  recentHttpRequestUsageVersion: number
+}
+
+type ExplorerItem = ReturnType<typeof folderExplorerTreeStore.getSnapshot>['context']['items'][number]
+
 export function FolderExplorer() {
   const items = useSelector(folderExplorerTreeStore, state => state.context.items)
   const searchQuery = useSelector(folderExplorerTreeStore, state => state.context.searchQuery)
@@ -58,17 +68,6 @@ export function FolderExplorer() {
   const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const selectionScrollTarget = useSelector(folderExplorerEditorStore, state => state.context.selectionScrollTarget)
-  const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
-  const recentHttpRequestUsageCountByRequestId = useSelector(
-    requestExecutionStore,
-    state => state.context.recentHttpRequestUsageCountByRequestId
-  )
-  const recentHttpRequestUsageVersion = useSelector(
-    requestExecutionStore,
-    state => state.context.recentHttpRequestUsageVersion
-  )
-  const tagItems = useSelector(tagsStore, state => state.context.items)
-  const tagAssignments = useSelector(tagsStore, state => state.context.assignments)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
@@ -78,10 +77,31 @@ export function FolderExplorer() {
   const pendingSearchQueryRef = useRef(searchQuery)
 
   useEffect(() => {
+    void FolderExplorerCoordinator.initialize()
+    void EnvironmentCoordinator.loadEnvironments()
+    void TagsCoordinator.loadTags()
+    void RequestExecutionCoordinator.ensureRecentHttpRequestUsageLoaded()
+  }, [])
+
+  const { roots, itemMap } = useMemo(() => buildTree(items), [items])
+  const latestTreeRef = useRef({ items, roots })
+  const [searchSnapshot, setSearchSnapshot] = useState<SearchSnapshot | null>(() =>
+    searchQuery.trim() ? captureSearchSnapshot({ items, roots }) : null
+  )
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const isSearchActive = normalizedSearch.length > 0
+
+  useEffect(() => {
+    latestTreeRef.current = { items, roots }
+  }, [items, roots])
+
+  useEffect(() => {
     if (searchQuery !== pendingSearchQueryRef.current) {
       setLocalSearchQuery(searchQuery)
       pendingSearchQueryRef.current = searchQuery
     }
+
+    setSearchSnapshot(searchQuery.trim() ? captureSearchSnapshot(latestTreeRef.current) : null)
   }, [searchQuery])
 
   useEffect(() => {
@@ -97,51 +117,25 @@ export function FolderExplorer() {
     return () => window.clearTimeout(timeoutId)
   }, [localSearchQuery, searchQuery])
 
-  useEffect(() => {
-    void FolderExplorerCoordinator.initialize()
-    void EnvironmentCoordinator.loadEnvironments()
-    void TagsCoordinator.loadTags()
-    void RequestExecutionCoordinator.ensureRecentHttpRequestUsageLoaded()
-  }, [])
+  const visibleRoots = useMemo(() => {
+    if (!isSearchActive) {
+      return roots
+    }
 
-  const { roots, itemMap } = useMemo(() => buildTree(items), [items])
-  const normalizedSearch = localSearchQuery.trim().toLowerCase()
-  const isSearchActive = normalizedSearch.length > 0
-  const tagNamesBySelection = useMemo(() => {
-    const tagNameById = new Map(tagItems.map(item => [item.id, item.name]))
-    return Object.fromEntries(
-      items.map(item => {
-        const names =
-          item.itemType === 'folder' || item.itemType === 'request'
-            ? tagAssignments
-                .filter(assignment => assignment.itemType === item.itemType && assignment.itemId === item.id)
-                .map(assignment => tagNameById.get(assignment.tagId))
-                .filter((name): name is string => Boolean(name))
-            : []
+    const snapshot = searchSnapshot
+    if (!snapshot) {
+      return roots
+    }
 
-        return [toSelectionKey(item), names] as const
-      })
-    )
-  }, [items, tagAssignments, tagItems])
-  const visibleRoots = useMemo(
-    () =>
-      filterTreeWithDrafts(
-        roots,
-        normalizedSearch,
-        entries,
-        tagNamesBySelection,
-        recentHttpRequestUsageCountByRequestId,
-        recentHttpRequestUsageVersion
-      ),
-    [
-      entries,
-      recentHttpRequestUsageCountByRequestId,
-      recentHttpRequestUsageVersion,
-      roots,
+    return filterTreeWithDrafts(
+      snapshot.roots,
       normalizedSearch,
-      tagNamesBySelection,
-    ]
-  )
+      snapshot.entries,
+      snapshot.tagNamesBySelection,
+      snapshot.recentHttpRequestUsageCountByRequestId,
+      snapshot.recentHttpRequestUsageVersion
+    )
+  }, [isSearchActive, normalizedSearch, roots, searchSnapshot])
   const searchAutoExpandedIds = useMemo(
     () => (isSearchActive ? collectExpandableNodeIds(visibleRoots) : []),
     [isSearchActive, visibleRoots]
@@ -221,6 +215,7 @@ export function FolderExplorer() {
     }
 
     const tagIndex = Number(event.code.slice('Digit'.length)) - 1
+    const { items: tagItems, assignments: tagAssignments } = tagsStore.getSnapshot().context
     const tag = tagItems[tagIndex]
     if (!tag) {
       return
@@ -521,6 +516,42 @@ export function FolderExplorer() {
         {sidebarTab === 'packages' ? <PackagesPanel /> : null}
       </main>
     </div>
+  )
+}
+
+function captureSearchSnapshot({ items, roots }: { items: ExplorerItem[]; roots: TreeNode[] }): SearchSnapshot {
+  const { entries } = folderExplorerEditorStore.getSnapshot().context
+  const { items: tagItems, assignments: tagAssignments } = tagsStore.getSnapshot().context
+  const { recentHttpRequestUsageCountByRequestId, recentHttpRequestUsageVersion } = requestExecutionStore.getSnapshot().context
+
+  return {
+    roots,
+    entries,
+    tagNamesBySelection: buildTagNamesBySelection(items, tagItems, tagAssignments),
+    recentHttpRequestUsageCountByRequestId,
+    recentHttpRequestUsageVersion,
+  }
+}
+
+function buildTagNamesBySelection(
+  items: ExplorerItem[],
+  tagItems: ReturnType<typeof tagsStore.getSnapshot>['context']['items'],
+  tagAssignments: ReturnType<typeof tagsStore.getSnapshot>['context']['assignments']
+) {
+  const tagNameById = new Map(tagItems.map(item => [item.id, item.name]))
+
+  return Object.fromEntries(
+    items.map(item => {
+      const names =
+        item.itemType === 'folder' || item.itemType === 'request'
+          ? tagAssignments
+              .filter(assignment => assignment.itemType === item.itemType && assignment.itemId === item.id)
+              .map(assignment => tagNameById.get(assignment.tagId))
+              .filter((name): name is string => Boolean(name))
+          : []
+
+      return [toSelectionKey(item), names] as const
+    })
   )
 }
 
