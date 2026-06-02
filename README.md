@@ -23,6 +23,7 @@
 - Save example requests/responses
 - Export as curl, fetch. Import from curl
 - opencode integration
+- Retry request based on some condition.
 
 ## Niche Features
 
@@ -36,3 +37,17 @@
 - Write to the clipboard in the scripts
 - Zod is included in the script runtime for easy validation
 - npm package support
+
+## Sample scripts
+
+```typescript
+// post-request
+if (!request.url.includes('Auth/Token')) {
+  if (response.status === 401) {
+    const updated = await callRequest(['folder', 'request'])
+    if (updated.status === 200) {
+      retryRequest()
+    }
+  }
+}
+```
