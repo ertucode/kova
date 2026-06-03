@@ -36,7 +36,8 @@
 - Colored tags and shortcuts for easily navigating to them (Option+1, Option+2 ...)
 - Write to the clipboard in the scripts
 - Zod is included in the script runtime for easy validation
-- npm package support
+- npm packages
+- Supermaven
 
 ## Sample scripts
 
