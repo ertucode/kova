@@ -37,7 +37,7 @@ import { PackagesPanel } from './PackagesPanel'
 import { ViewsPanel } from './ViewsPanel'
 import { TagsPanel } from './TagsPanel'
 import { TagsCoordinator } from './tagsCoordinator'
-import { filterTreeWithDrafts } from './folderExplorerSearch'
+import { captureFolderTreeSearchSnapshot, filterTreeWithDrafts, type FolderTreeSearchSnapshot } from './folderExplorerSearch'
 import { buildTree, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -51,13 +51,7 @@ import { tagsStore } from './tagsStore'
 type DropPlacement = ExplorerDropTarget['placement']
 const TREE_SEARCH_DEBOUNCE_MS = 5
 
-type SearchSnapshot = {
-  roots: TreeNode[]
-  entries: ReturnType<typeof folderExplorerEditorStore.getSnapshot>['context']['entries']
-  tagNamesBySelection: Record<string, string[] | undefined>
-  recentHttpRequestUsageCountByRequestId: Record<string, number | undefined>
-  recentHttpRequestUsageVersion: number
-}
+type SearchSnapshot = FolderTreeSearchSnapshot
 
 type ExplorerItem = ReturnType<typeof folderExplorerTreeStore.getSnapshot>['context']['items'][number]
 
@@ -536,35 +530,15 @@ function captureSearchSnapshot({ items, roots }: { items: ExplorerItem[]; roots:
   const { recentHttpRequestUsageCountByRequestId, recentHttpRequestUsageVersion } =
     requestExecutionStore.getSnapshot().context
 
-  return {
+  return captureFolderTreeSearchSnapshot({
+    items,
     roots,
     entries,
-    tagNamesBySelection: buildTagNamesBySelection(items, tagItems, tagAssignments),
+    tagItems,
+    tagAssignments,
     recentHttpRequestUsageCountByRequestId,
     recentHttpRequestUsageVersion,
-  }
-}
-
-function buildTagNamesBySelection(
-  items: ExplorerItem[],
-  tagItems: ReturnType<typeof tagsStore.getSnapshot>['context']['items'],
-  tagAssignments: ReturnType<typeof tagsStore.getSnapshot>['context']['assignments']
-) {
-  const tagNameById = new Map(tagItems.map(item => [item.id, item.name]))
-
-  return Object.fromEntries(
-    items.map(item => {
-      const names =
-        item.itemType === 'folder' || item.itemType === 'request'
-          ? tagAssignments
-              .filter(assignment => assignment.itemType === item.itemType && assignment.itemId === item.id)
-              .map(assignment => tagNameById.get(assignment.tagId))
-              .filter((name): name is string => Boolean(name))
-          : []
-
-      return [toSelectionKey(item), names] as const
-    })
-  )
+  })
 }
 
 function flattenVisibleNodes(nodes: TreeNode[], isExpanded: (nodeId: string) => boolean) {

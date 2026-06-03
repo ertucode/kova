@@ -48,6 +48,7 @@ export type PreparedHttpRequest = {
   variables: Record<string, string>
   method: RequestMethod
   url: string
+  resolvedAuth: HttpAuth
   headers: Headers
   resolvedBody: ResolvedRequestBody
   requestBody: {
@@ -216,6 +217,7 @@ export async function prepareHttpRequest(
     variables,
     method: runtime.request.method,
     url,
+    resolvedAuth,
     headers,
     resolvedBody,
     requestBody: buildRuntimeRequestBody(resolvedBody),

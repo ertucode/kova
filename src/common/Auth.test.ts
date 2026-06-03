@@ -39,4 +39,23 @@ describe('Auth', () => {
     expect(normalizeHttpAuth({ type: 'apikey', key: 1 })).toEqual({ type: 'apikey', key: '', value: '', addTo: 'header' })
     expect(normalizeHttpAuth(null)).toEqual({ type: 'inherit' })
   })
+
+  it('preserves token refresh request ids for concrete auth types', () => {
+    expect(normalizeHttpAuth({ type: 'bearer', token: 'abc', tokenRefreshRequestId: 'request-1' })).toEqual({
+      type: 'bearer',
+      token: 'abc',
+      tokenRefreshRequestId: 'request-1',
+    })
+    expect(
+      resolveAuth(
+        { type: 'basic', username: '{{user}}', password: '{{pass}}', tokenRefreshRequestId: 'request-2' },
+        { user: 'ada', pass: 'secret' }
+      )
+    ).toEqual({
+      type: 'basic',
+      username: 'ada',
+      password: 'secret',
+      tokenRefreshRequestId: 'request-2',
+    })
+  })
 })

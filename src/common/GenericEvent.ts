@@ -42,7 +42,7 @@ export type GenericEvent = {
   type: 'script-call-request'
   request: ScriptCallRequestRequest
 } | {
-  type: 'script-retry-request'
+  type: 'retry-request'
   requestId: string
   requestMetadata: SendRequestMetadata
 } | {

@@ -1,4 +1,4 @@
-import { getAuthVariableSources } from '../common/Auth.js'
+import { getAuthVariableSources, getTokenRefreshRequestId } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { extractTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
@@ -22,6 +22,7 @@ import type {
 } from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getSetCookieHeaderValuesFromEntries, storeResponseCookies } from './db/cookies.js'
+import { getRequest } from './db/requests.js'
 import { persistRequestHistory } from './db/request-history.js'
 import { emitGenericEvent } from './generic-events.js'
 import { prepareHttpRequest, type PreparedHttpRequest } from './http-request-runtime.js'
@@ -74,7 +75,7 @@ export async function sendRequest(
     }
 
     const { headers, method, requestBody, url } = overrideResult.data
-    const { postRequestScriptSources, requestName, runtime, variables } = preparedRequest.data
+    const { postRequestScriptSources, requestName, resolvedAuth, runtime, variables } = preparedRequest.data
     if (Object.hasOwn(input.callRequestOverrides ?? {}, 'method')) {
       runtime.request.method = method
     }
@@ -118,9 +119,11 @@ export async function sendRequest(
     if (isSseContentType(getResponseContentType(responseHeaders))) {
       return await consumeSseResponse({
         input,
+        options,
         response,
         responseHeaders,
         requestName,
+        resolvedAuth,
         runtime,
         postRequestScriptSources,
         executedRequest,
@@ -167,13 +170,15 @@ export async function sendRequest(
       })
     }
 
-    if (postRequestResult.retryRequested && shouldEmitRetryRequest(input.requestMetadata)) {
-      emitGenericEvent({
-        type: 'script-retry-request',
-        requestId: input.requestId,
-        requestMetadata: buildRetriedRequestMetadata(input.requestMetadata),
+    const authRetryRequested = postRequestResult.retryRequested
+      ? false
+      : await maybeRetryWithTokenRefresh({
+        input,
+        options,
+        responseStatus: response.status,
+        resolvedAuth,
       })
-    }
+    const shouldRetryRequest = (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.requestMetadata)
 
     const execution: RequestExecutionRecord = {
       itemType: 'http',
@@ -194,6 +199,10 @@ export async function sendRequest(
       } catch (historyError) {
         console.error('persistRequestHistory failed', historyError)
       }
+    }
+
+    if (shouldRetryRequest) {
+      emitRetryRequestEvent(input.requestId, input.requestMetadata)
     }
 
     return Result.Success({
@@ -277,9 +286,18 @@ export function applyScriptCallRequestOverrides(input: {
 
 async function consumeSseResponse(input: {
   input: SendRequestInput
+  options:
+    | {
+        toast?: ScriptToastBridge
+        prompt?: ScriptPromptBridge
+        clipboard?: ScriptClipboardBridge
+        makeRequest?: ScriptMakeRequestBridge
+      }
+    | undefined
   response: Response
   responseHeaders: string
   requestName: string
+  resolvedAuth: PreparedHttpRequest['resolvedAuth']
   runtime: PreparedHttpRequest['runtime']
   postRequestScriptSources: PreparedHttpRequest['postRequestScriptSources']
   executedRequest: ExecutedRequestSnapshot
@@ -362,13 +380,15 @@ async function consumeSseResponse(input: {
       })
     }
 
-    if (postRequestResult.retryRequested && shouldEmitRetryRequest(input.input.requestMetadata)) {
-      emitGenericEvent({
-        type: 'script-retry-request',
-        requestId: input.input.requestId,
-        requestMetadata: buildRetriedRequestMetadata(input.input.requestMetadata),
+    const authRetryRequested = postRequestResult.retryRequested
+      ? false
+      : await maybeRetryWithTokenRefresh({
+        input: input.input,
+        options: input.options,
+        responseStatus: response.status,
+        resolvedAuth: input.resolvedAuth,
       })
-    }
+    const shouldRetryRequest = (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.input.requestMetadata)
 
     const responseSnapshot: ReceivedResponseSnapshot = {
       status: response.status,
@@ -399,6 +419,10 @@ async function consumeSseResponse(input: {
       } catch (historyError) {
         console.error('persistRequestHistory failed', historyError)
       }
+    }
+
+    if (shouldRetryRequest) {
+      emitRetryRequestEvent(input.input.requestId, input.input.requestMetadata)
     }
 
     streamState = {
@@ -705,6 +729,76 @@ async function readResponseBody(response: Response, headers: string) {
 
 function shouldEmitRetryRequest(requestMetadata: SendRequestInput['requestMetadata']) {
   return requestMetadata?.sourceRuntime === 'request-editor'
+}
+
+async function maybeRetryWithTokenRefresh(input: {
+  input: SendRequestInput
+  options:
+    | {
+        toast?: ScriptToastBridge
+        prompt?: ScriptPromptBridge
+        clipboard?: ScriptClipboardBridge
+        makeRequest?: ScriptMakeRequestBridge
+      }
+    | undefined
+  responseStatus: number
+  resolvedAuth: PreparedHttpRequest['resolvedAuth']
+}) {
+  const tokenRefreshRequestId = getTokenRefreshRequestId(input.resolvedAuth)
+  if (
+    input.input.requestMetadata?.sourceRuntime !== 'request-editor' ||
+    (input.input.requestMetadata?.isRetry ?? false) ||
+    input.responseStatus !== 401 && input.responseStatus !== 403 ||
+    !tokenRefreshRequestId ||
+    tokenRefreshRequestId === input.input.requestId
+  ) {
+    return false
+  }
+
+  const tokenRefreshRequestResult = await getRequest({ id: tokenRefreshRequestId })
+  if (!tokenRefreshRequestResult.success) {
+    return false
+  }
+
+  const tokenRefreshRequest = tokenRefreshRequestResult.data
+  const refreshResult = await sendRequest(
+    {
+      requestId: tokenRefreshRequest.id,
+      method: tokenRefreshRequest.method,
+      url: tokenRefreshRequest.url,
+      pathParams: tokenRefreshRequest.pathParams,
+      searchParams: tokenRefreshRequest.searchParams,
+      auth: tokenRefreshRequest.auth,
+      preRequestScript: tokenRefreshRequest.preRequestScript,
+      postRequestScript: tokenRefreshRequest.postRequestScript,
+      headers: tokenRefreshRequest.headers,
+      body: tokenRefreshRequest.body,
+      bodyType: tokenRefreshRequest.bodyType,
+      rawType: tokenRefreshRequest.rawType,
+      activeEnvironmentIds: input.input.activeEnvironmentIds,
+      saveToHistory: tokenRefreshRequest.saveToHistory,
+      historyKeepLast: input.input.historyKeepLast,
+      requestMetadata: {
+        sourceRuntime: 'call-request',
+        isRetry: false,
+        retryCount: 0,
+      },
+    },
+    input.options
+  )
+  if (!refreshResult.success || refreshResult.data.status < 200 || refreshResult.data.status >= 300) {
+    return false
+  }
+
+  return true
+}
+
+function emitRetryRequestEvent(requestId: string, requestMetadata: SendRequestInput['requestMetadata']) {
+  emitGenericEvent({
+    type: 'retry-request',
+    requestId,
+    requestMetadata: buildRetriedRequestMetadata(requestMetadata),
+  })
 }
 
 function buildRetriedRequestMetadata(requestMetadata: SendRequestInput['requestMetadata']) {

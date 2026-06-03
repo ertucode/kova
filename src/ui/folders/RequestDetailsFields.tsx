@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { CopyIcon, InfoIcon, LibraryBigIcon, PencilIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import type { Extension } from '@codemirror/state'
+import type { ExplorerItem } from '@common/Explorer'
 import { getAuthVariableSources } from '@common/Auth'
 import type { RequestMetaTab } from '@common/FolderExplorerTabs'
 import type { RequestScriptError, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
@@ -98,6 +99,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
   const currentRequestSelection = selectedRequestId ? { itemType: 'request' as const, id: selectedRequestId } : null
   const selectedRequestIdRef = useRef<string | null>(selectedRequestId)
+  const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const selectedRequestFolderId = useSelector(folderExplorerTreeStore, state => {
     const request = state.context.items.find(
       (item): item is Extract<(typeof state.context.items)[number], { itemType: 'request' }> =>
@@ -833,6 +835,7 @@ export default function View() {
         <RequestOverviewTab
           body={bodyTab}
           draft={draft}
+          explorerItems={explorerItems}
           updatePathParams={updatePathParams}
           updateRequestDraft={updateRequestDraft}
           variableEditorExtensionsWithBrowserTabFallback={variableEditorExtensionsWithBrowserTabFallback}
@@ -874,6 +877,8 @@ export default function View() {
             showHeader={false}
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
+            explorerItems={explorerItems}
+            showTokenRefreshRequestSelector
           />
         </section>
       ) : null}
@@ -1311,6 +1316,7 @@ function normalizeMetaTabForLayout(tab: RequestMetaTab, compactRequestView: bool
 function RequestOverviewTab({
   body,
   draft,
+  explorerItems,
   updatePathParams,
   updateRequestDraft,
   variableEditorExtensionsWithBrowserTabFallback,
@@ -1318,6 +1324,7 @@ function RequestOverviewTab({
 }: {
   body: ReactNode
   draft: RequestDetailsDraft
+  explorerItems: ExplorerItem[]
   updatePathParams: (nextPathParams: string) => void
   updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
   variableEditorExtensionsWithBrowserTabFallback: Extension[]
@@ -1336,6 +1343,8 @@ function RequestOverviewTab({
           allowInherit
           valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
           valueEditorRefreshKey={variableHighlightRefreshKey}
+          explorerItems={explorerItems}
+          showTokenRefreshRequestSelector
         />
 
         <HeadersEditor

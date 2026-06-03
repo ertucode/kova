@@ -58,9 +58,9 @@ export function subscribeToGenericEvents() {
           })
         }
       })()
-    } else if (e.type === 'script-retry-request') {
+    } else if (e.type === 'retry-request') {
       void RequestSendCoordinator.sendRequestById(e.requestId, e.requestMetadata).catch(error => {
-        console.error('script-retry-request failed', error)
+        console.error('retry-request failed', error)
       })
     } else if (e.type === 'script-ai-state-updated') {
     } else {

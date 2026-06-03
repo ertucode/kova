@@ -1,3 +1,5 @@
+import type { ExplorerItem } from '@common/Explorer'
+import type { TagAssignmentRecord, TagRecord } from '@common/Tags'
 import Fuse from 'fuse.js'
 import type { FuseResult, IFuseOptions } from 'fuse.js'
 import type { DetailsDraft, TreeNode } from './folderExplorerTypes'
@@ -51,6 +53,14 @@ export type FolderTreeSearchManager = {
     requestUsageCountByRequestId?: SearchRequestUsageCounts,
     requestUsageVersion?: number
   ) => TreeNode[]
+}
+
+export type FolderTreeSearchSnapshot = {
+  roots: TreeNode[]
+  entries: SearchDraftEntries
+  tagNamesBySelection: SearchTagNames
+  recentHttpRequestUsageCountByRequestId: SearchRequestUsageCounts
+  recentHttpRequestUsageVersion: number
 }
 
 export function createFolderTreeSearchManager(): FolderTreeSearchManager {
@@ -159,8 +169,44 @@ export function getSearchParts(node: TreeNode, entries?: SearchDraftEntries): st
   return [node.name]
 }
 
+export function captureFolderTreeSearchSnapshot(input: {
+  items: ExplorerItem[]
+  roots: TreeNode[]
+  entries: SearchDraftEntries
+  tagItems: TagRecord[]
+  tagAssignments: TagAssignmentRecord[]
+  recentHttpRequestUsageCountByRequestId: SearchRequestUsageCounts
+  recentHttpRequestUsageVersion: number
+}): FolderTreeSearchSnapshot {
+  return {
+    roots: input.roots,
+    entries: input.entries,
+    tagNamesBySelection: buildTagNamesBySelection(input.items, input.tagItems, input.tagAssignments),
+    recentHttpRequestUsageCountByRequestId: input.recentHttpRequestUsageCountByRequestId,
+    recentHttpRequestUsageVersion: input.recentHttpRequestUsageVersion,
+  }
+}
+
 function toSelectionKey(node: Pick<TreeNode, 'itemType' | 'id'>) {
   return `${node.itemType}:${node.id}`
+}
+
+function buildTagNamesBySelection(items: ExplorerItem[], tagItems: TagRecord[], tagAssignments: TagAssignmentRecord[]) {
+  const tagNameById = new Map(tagItems.map(item => [item.id, item.name]))
+
+  return Object.fromEntries(
+    items.map(item => {
+      const names =
+        item.itemType === 'folder' || item.itemType === 'request'
+          ? tagAssignments
+              .filter(assignment => assignment.itemType === item.itemType && assignment.itemId === item.id)
+              .map(assignment => tagNameById.get(assignment.tagId))
+              .filter((name): name is string => Boolean(name))
+          : []
+
+      return [toSelectionKey(item), names] as const
+    })
+  )
 }
 
 function parseSearchTerms(query: string): SearchTermGroups {

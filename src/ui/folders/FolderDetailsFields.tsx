@@ -35,6 +35,7 @@ import { ScriptAiIconButton } from './ScriptAiIconButton'
 
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
+  const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const selectedFolderId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'folder' ? state.context.selected.id : null
   )
@@ -248,6 +249,8 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           allowInherit
           valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
           valueEditorRefreshKey={variableHighlightRefreshKey}
+          explorerItems={explorerItems}
+          showTokenRefreshRequestSelector
         />
 
         <HeadersEditor

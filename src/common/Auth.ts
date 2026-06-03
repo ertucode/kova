@@ -1,11 +1,14 @@
+import { Typescript } from './Typescript.js'
+
 export type AuthLocation = 'header' | 'query'
+export type TokenRefreshRequestConfig = { tokenRefreshRequestId?: string }
 
 export type HttpAuth =
   | { type: 'inherit' }
   | { type: 'noauth' }
-  | { type: 'bearer'; token: string }
-  | { type: 'apikey'; key: string; value: string; addTo: AuthLocation }
-  | { type: 'basic'; username: string; password: string }
+  | ({ type: 'bearer'; token: string } & TokenRefreshRequestConfig)
+  | ({ type: 'apikey'; key: string; value: string; addTo: AuthLocation } & TokenRefreshRequestConfig)
+  | ({ type: 'basic'; username: string; password: string } & TokenRefreshRequestConfig)
 
 export const AUTH_TYPES = ['inherit', 'noauth', 'bearer', 'apikey', 'basic'] as const
 export const AUTH_TYPES_WITHOUT_INHERIT = ['noauth', 'bearer', 'apikey', 'basic'] as const
@@ -27,19 +30,25 @@ export function normalizeHttpAuth(value: unknown): HttpAuth {
     case 'noauth':
       return { type: candidate.type }
     case 'bearer':
-      return { type: 'bearer', token: typeof candidate.token === 'string' ? candidate.token : '' }
+      return {
+        type: 'bearer',
+        token: typeof candidate.token === 'string' ? candidate.token : '',
+        ...buildTokenRefreshRequestConfig(candidate.tokenRefreshRequestId),
+      }
     case 'apikey':
       return {
         type: 'apikey',
         key: typeof candidate.key === 'string' ? candidate.key : '',
         value: typeof candidate.value === 'string' ? candidate.value : '',
         addTo: candidate.addTo === 'query' ? 'query' : 'header',
+        ...buildTokenRefreshRequestConfig(candidate.tokenRefreshRequestId),
       }
     case 'basic':
       return {
         type: 'basic',
         username: typeof candidate.username === 'string' ? candidate.username : '',
         password: typeof candidate.password === 'string' ? candidate.password : '',
+        ...buildTokenRefreshRequestConfig(candidate.tokenRefreshRequestId),
       }
     default:
       return createDefaultHttpAuth()
@@ -86,7 +95,8 @@ export function getAuthVariableSources(auth: HttpAuth) {
       return [auth.key, auth.value]
     case 'basic':
       return [auth.username, auth.password]
-    default:
+    case 'inherit':
+    case 'noauth':
       return []
   }
 }
@@ -97,20 +107,40 @@ export function resolveAuth(auth: HttpAuth, variables: Record<string, string>) {
     case 'noauth':
       return auth
     case 'bearer':
-      return { type: 'bearer', token: replaceVariables(auth.token, variables) } as const
+      return {
+        type: 'bearer',
+        token: replaceVariables(auth.token, variables),
+        ...buildTokenRefreshRequestConfig(auth.tokenRefreshRequestId),
+      } as const
     case 'apikey':
       return {
         type: 'apikey',
         key: replaceVariables(auth.key, variables),
         value: replaceVariables(auth.value, variables),
         addTo: auth.addTo,
+        ...buildTokenRefreshRequestConfig(auth.tokenRefreshRequestId),
       } as const
     case 'basic':
       return {
         type: 'basic',
         username: replaceVariables(auth.username, variables),
         password: replaceVariables(auth.password, variables),
+        ...buildTokenRefreshRequestConfig(auth.tokenRefreshRequestId),
       } as const
+  }
+}
+
+export function getTokenRefreshRequestId(auth: HttpAuth) {
+  switch (auth.type) {
+    case 'bearer':
+    case 'apikey':
+    case 'basic':
+      return auth.tokenRefreshRequestId ?? null
+    case 'inherit':
+    case 'noauth':
+      return null
+    default:
+      return Typescript.assertUnreachable(auth)
   }
 }
 
@@ -145,6 +175,10 @@ function replaceVariables(value: string, variables: Record<string, string>) {
 
     return variables[variableName.trim()] ?? match
   })
+}
+
+function buildTokenRefreshRequestConfig(value: unknown): TokenRefreshRequestConfig {
+  return typeof value === 'string' ? { tokenRefreshRequestId: value } : {}
 }
 
 function toBase64(value: string) {

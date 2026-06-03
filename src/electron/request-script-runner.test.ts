@@ -842,6 +842,34 @@ it('allows post-request scripts to inspect the response and request a retry', as
   expect(response.headers).toBe('content-type: application/json\nx-retry: 1')
 })
 
+it('preserves token refresher ids when resolving auth template expressions', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      method: 'GET',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
+  })
+
+  await expect(
+    runtime.resolveHttpAuthTemplateExpressions(
+      { type: 'bearer', token: '{{token}}', tokenRefreshRequestId: 'request-refresh' },
+      'Folder Auth: Protected'
+    )
+  ).resolves.toEqual({
+    type: 'bearer',
+    token: '{{token}}',
+    tokenRefreshRequestId: 'request-refresh',
+  })
+})
+
   it('returns the prompted text value to the script', async () => {
     const promptedOptions: Array<Record<string, unknown>> = []
     const runtime = createRequestScriptRuntime({

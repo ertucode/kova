@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react'
 import type { Extension } from '@codemirror/state'
+import { Trash2Icon } from 'lucide-react'
+import type { ExplorerItem } from '@common/Explorer'
 import type { HttpAuth } from '@common/Auth'
 import { AUTH_LOCATIONS, AUTH_TYPES, AUTH_TYPES_WITHOUT_INHERIT } from '@common/Auth'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { CodeEditor } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
+import { ExplorerItemPickerInput } from './ExplorerItemPicker'
 
 export function AuthorizationEditor({
   value,
@@ -13,6 +16,8 @@ export function AuthorizationEditor({
   showHeader = true,
   valueEditorExtensions,
   valueEditorRefreshKey,
+  explorerItems,
+  showTokenRefreshRequestSelector = false,
 }: {
   value: HttpAuth
   onChange: (value: HttpAuth) => void
@@ -20,6 +25,8 @@ export function AuthorizationEditor({
   showHeader?: boolean
   valueEditorExtensions?: Extension[]
   valueEditorRefreshKey?: string
+  explorerItems?: ExplorerItem[]
+  showTokenRefreshRequestSelector?: boolean
 }) {
   const typeOptions = (allowInherit ? AUTH_TYPES : AUTH_TYPES_WITHOUT_INHERIT).map(type => ({
     value: type,
@@ -138,6 +145,39 @@ export function AuthorizationEditor({
               </Field>
             </div>
           ) : null}
+          {showTokenRefreshRequestSelector && explorerItems && value.type !== 'inherit' && value.type !== 'noauth' ? (
+            <div className="mt-3 grid gap-3">
+              <Field label="Token Refresher">
+                <div className="flex gap-2">
+                  <div className="min-w-0 flex-1">
+                    <ExplorerItemPickerInput
+                      items={explorerItems}
+                      selectedKeys={value.tokenRefreshRequestId ? [`request:${value.tokenRefreshRequestId}`] : []}
+                      isMultiple={false}
+                      title="Select Token Refresher"
+                      description="Run this request automatically when a 401 or 403 response is received, then retry the original request if it succeeds with a 200 response."
+                      buttonLabel="Select"
+                      emptySelectionLabel="No request selected"
+                      allowedItemTypes={['request']}
+                      allowedRequestTypes={['http']}
+                      onChange={selectedKeys => onChange(updateTokenRefreshRequestId(value, parseSelectedRequestId(selectedKeys)))}
+                    />
+                  </div>
+                  {value.tokenRefreshRequestId ? (
+                    <button
+                      type="button"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-none border border-base-content/10 bg-base-100/70 text-base-content/60 transition hover:bg-base-200/70 hover:text-base-content"
+                      onClick={() => onChange(updateTokenRefreshRequestId(value, undefined))}
+                      aria-label="Clear token refresher"
+                      title="Clear token refresher"
+                    >
+                      <Trash2Icon className="size-4" />
+                    </button>
+                  ) : null}
+                </div>
+              </Field>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
@@ -158,15 +198,54 @@ function Message({ text }: { text: string }) {
 }
 
 function createAuthByType(type: HttpAuth['type'], current: HttpAuth): HttpAuth {
+  const tokenRefreshRequestId = getTokenRefreshRequestId(current)
+
   switch (type) {
     case 'inherit':
     case 'noauth':
       return { type }
     case 'bearer':
-      return current.type === 'bearer' ? current : { type: 'bearer', token: '' }
+      return current.type === 'bearer' ? current : { type: 'bearer', token: '', tokenRefreshRequestId }
     case 'apikey':
-      return current.type === 'apikey' ? current : { type: 'apikey', key: '', value: '', addTo: 'header' }
+      return current.type === 'apikey'
+        ? current
+        : { type: 'apikey', key: '', value: '', addTo: 'header', tokenRefreshRequestId }
     case 'basic':
-      return current.type === 'basic' ? current : { type: 'basic', username: '', password: '' }
+      return current.type === 'basic' ? current : { type: 'basic', username: '', password: '', tokenRefreshRequestId }
   }
+}
+
+function getTokenRefreshRequestId(auth: HttpAuth) {
+  switch (auth.type) {
+    case 'bearer':
+    case 'apikey':
+    case 'basic':
+      return auth.tokenRefreshRequestId
+    case 'inherit':
+    case 'noauth':
+      return undefined
+  }
+}
+
+function updateTokenRefreshRequestId(auth: HttpAuth, tokenRefreshRequestId: string | undefined): HttpAuth {
+  switch (auth.type) {
+    case 'bearer':
+      return { ...auth, tokenRefreshRequestId }
+    case 'apikey':
+      return { ...auth, tokenRefreshRequestId }
+    case 'basic':
+      return { ...auth, tokenRefreshRequestId }
+    case 'inherit':
+    case 'noauth':
+      return auth
+  }
+}
+
+function parseSelectedRequestId(selectedKeys: string[]) {
+  const selectedKey = selectedKeys[0]
+  if (!selectedKey?.startsWith('request:')) {
+    return undefined
+  }
+
+  return selectedKey.slice('request:'.length) || undefined
 }

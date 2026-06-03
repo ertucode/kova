@@ -1385,13 +1385,18 @@ function resolveHttpAuthExpressions(auth: HttpAuth, resolveValue: (value: string
     case 'noauth':
       return Promise.resolve(auth)
     case 'bearer':
-      return resolveValue(auth.token, 'Token').then(token => ({ type: 'bearer', token }) as const)
+      return resolveValue(auth.token, 'Token').then(token => ({
+        type: 'bearer',
+        token,
+        tokenRefreshRequestId: auth.tokenRefreshRequestId,
+      }) as const)
     case 'apikey':
       return Promise.all([resolveValue(auth.key, 'Key'), resolveValue(auth.value, 'Value')]).then(([key, value]) => ({
         type: 'apikey',
         key,
         value,
         addTo: auth.addTo,
+        tokenRefreshRequestId: auth.tokenRefreshRequestId,
       }) as const)
     case 'basic':
       return Promise.all([resolveValue(auth.username, 'Username'), resolveValue(auth.password, 'Password')]).then(
@@ -1399,6 +1404,7 @@ function resolveHttpAuthExpressions(auth: HttpAuth, resolveValue: (value: string
           type: 'basic',
           username,
           password,
+          tokenRefreshRequestId: auth.tokenRefreshRequestId,
         }) as const
       )
   }
