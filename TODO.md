@@ -1,0 +1,1 @@
+- envleri gezerken birbirlerinin datasını birbirlerine yazıyolar.

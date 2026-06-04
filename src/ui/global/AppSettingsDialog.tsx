@@ -46,6 +46,7 @@ export function AppSettingsDialog() {
   const [newDatabasePath, setNewDatabasePath] = useState('')
   const [newDatabasePathTouched, setNewDatabasePathTouched] = useState(false)
   const [newDatabaseBasedOnName, setNewDatabaseBasedOnName] = useState('')
+  const [newDatabaseSourceFilePath, setNewDatabaseSourceFilePath] = useState('')
   const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
 
   useEffect(() => {
@@ -211,6 +212,7 @@ export function AppSettingsDialog() {
       syncDatabaseState(result.data)
       setNewDatabaseName('')
       setNewDatabaseBasedOnName('')
+      setNewDatabaseSourceFilePath('')
       setNewDatabasePathTouched(false)
       setNewDatabasePath(buildSuggestedDatabasePath(result.data.defaultDirectoryPath, ''))
       toast.show({ severity: 'success', title: successTitle, message: successMessage })
@@ -235,11 +237,32 @@ export function AppSettingsDialog() {
           name: newDatabaseName,
           path: newDatabasePath,
           basedOnName: newDatabaseBasedOnName || undefined,
+          sourceFilePath: newDatabaseSourceFilePath.trim() || undefined,
         }),
       'Database added',
       'The database was added to the list.',
       { reloadOnSuccess: false }
     )
+  }
+
+  const browseSourceDatabaseFile = async () => {
+    const result = await getWindowElectron().pickFilePath({ defaultPath: newDatabaseSourceFilePath || undefined })
+    if (!result.success) {
+      if (errorResponseToMessage(result.error) !== 'File selection was cancelled') {
+        toast.show(result)
+      }
+      return
+    }
+
+    setNewDatabaseBasedOnName('')
+    setNewDatabaseSourceFilePath(result.data.filePath)
+  }
+
+  const openDatabaseLocation = async (filePath: string) => {
+    const result = await getWindowElectron().openFileLocation(filePath)
+    if (!result.success) {
+      toast.show(result)
+    }
   }
 
   const handleSaveDatabase = async (databaseName: string) => {
@@ -306,6 +329,22 @@ export function AppSettingsDialog() {
   const handleNewDatabasePathChange = (value: string) => {
     setNewDatabasePathTouched(true)
     setNewDatabasePath(value)
+  }
+
+  const handleNewDatabaseBasedOnNameChange = (value: string) => {
+    setNewDatabaseBasedOnName(value)
+
+    if (value) {
+      setNewDatabaseSourceFilePath('')
+    }
+  }
+
+  const handleNewDatabaseSourceFilePathChange = (value: string) => {
+    setNewDatabaseSourceFilePath(value)
+
+    if (value.trim()) {
+      setNewDatabaseBasedOnName('')
+    }
   }
 
   return (
@@ -583,6 +622,14 @@ export function AppSettingsDialog() {
                         <td className="text-base-content/60">{formatFileSize(item.sizeBytes)}</td>
                         <td>
                           <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-soft"
+                              onClick={() => void openDatabaseLocation(item.path)}
+                              disabled={databaseActionPending}
+                            >
+                              Open location
+                            </button>
                             {item.isDefault ? (
                               <span className="text-xs text-base-content/45">Default cannot be deleted.</span>
                             ) : (
@@ -621,7 +668,7 @@ export function AppSettingsDialog() {
             </table>
           </div>
 
-          <div className="mt-4 grid gap-3 rounded-xl border border-dashed border-base-content/15 bg-base-100/70 p-4 md:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,1fr)_auto_auto] md:items-end">
+          <div className="mt-4 grid gap-3 rounded-xl border border-dashed border-base-content/15 bg-base-100/70 p-4 md:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
             <label className="block">
               <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Name</div>
               <input
@@ -638,7 +685,7 @@ export function AppSettingsDialog() {
               <select
                 className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
                 value={newDatabaseBasedOnName}
-                onChange={event => setNewDatabaseBasedOnName(event.target.value)}
+                onChange={event => handleNewDatabaseBasedOnNameChange(event.target.value)}
                 disabled={databaseActionPending}
               >
                 <option value="">Empty database</option>
@@ -648,6 +695,28 @@ export function AppSettingsDialog() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label className="block">
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Source file</div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="input h-11 min-w-0 flex-1 rounded-xl border-base-content/10 bg-base-100"
+                  value={newDatabaseSourceFilePath}
+                  onChange={event => handleNewDatabaseSourceFilePathChange(event.target.value)}
+                  disabled={databaseActionPending}
+                  placeholder="Optional external database file"
+                />
+                <button
+                  type="button"
+                  className="btn h-11 btn-soft"
+                  onClick={() => void browseSourceDatabaseFile()}
+                  disabled={databaseActionPending}
+                >
+                  Browse
+                </button>
+              </div>
             </label>
 
             <label className="block">

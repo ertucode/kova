@@ -20,6 +20,7 @@ export type UpsertDatabaseConfigInput = {
   name: string
   path: string
   basedOnName?: string
+  sourceFilePath?: string
 }
 
 export type DeleteDatabaseConfigInput = {

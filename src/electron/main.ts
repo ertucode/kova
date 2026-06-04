@@ -925,11 +925,17 @@ app.on('ready', async () => {
         ? databaseConfig.items.find(item => item.name === input.previousName)
         : null
       const shouldReload = !!existingDatabase && databaseConfig.activeName === input.previousName
+      const sourceDatabaseName = input.basedOnName?.trim()
+      const sourceFilePath = input.sourceFilePath?.trim()
 
-      if (!input.previousName && input.basedOnName) {
-        const sourceDatabase = databaseConfig.items.find(item => item.name === input.basedOnName)
+      if (!input.previousName && sourceDatabaseName && sourceFilePath) {
+        return GenericError.Message('Choose either an existing database or a database file as the source')
+      }
+
+      if (!input.previousName && sourceDatabaseName) {
+        const sourceDatabase = databaseConfig.items.find(item => item.name === sourceDatabaseName)
         if (!sourceDatabase) {
-          return GenericError.Message(`Database ${input.basedOnName} does not exist`)
+          return GenericError.Message(`Database ${sourceDatabaseName} does not exist`)
         }
 
         const targetPath = path.resolve(input.path)
@@ -940,6 +946,20 @@ app.on('ready', async () => {
 
         await mkdir(path.dirname(targetPath), { recursive: true })
         await copyFile(sourcePath, targetPath, fsConstants.COPYFILE_EXCL)
+      } else if (!input.previousName && sourceFilePath) {
+        const targetPath = path.resolve(input.path)
+        const resolvedSourceFilePath = path.resolve(sourceFilePath)
+
+        if (!fsSync.existsSync(resolvedSourceFilePath)) {
+          return GenericError.Message(`Database file ${sourceFilePath} does not exist`)
+        }
+
+        if (targetPath === resolvedSourceFilePath) {
+          return GenericError.Message('The new database path must be different from the source database path')
+        }
+
+        await mkdir(path.dirname(targetPath), { recursive: true })
+        await copyFile(resolvedSourceFilePath, targetPath, fsConstants.COPYFILE_EXCL)
       }
 
       if (existingDatabase && path.resolve(existingDatabase.path) !== path.resolve(input.path)) {
