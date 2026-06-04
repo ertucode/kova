@@ -134,6 +134,7 @@ export namespace FolderExplorerCoordinator {
                 ...tab,
                 itemType: selection.itemType,
                 itemId: selection.id,
+                requestMetaTab: null,
                 isPinned: false,
                 updatedAt: now,
               }

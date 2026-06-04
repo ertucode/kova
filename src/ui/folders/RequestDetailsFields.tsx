@@ -1438,23 +1438,25 @@ function RequestBodyTab({
         ) : null}
 
         {isParamBodyType(draft.bodyType) ? (
-          <KeyValueEditor
-            label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
-            value={draft.body}
-            onChange={value =>
-              updateRequestDraft(
-                {
-                  ...draft,
-                  body: draft.bodyType === 'form-data' ? normalizeFormDataBody(value) : value,
-                },
-                'request-body-params'
-              )
-            }
-            keyPlaceholder="key"
-            valuePlaceholder={draft.bodyType === 'form-data' ? 'value or local file path' : 'value'}
-            rowTypes={draft.bodyType === 'form-data' ? FORM_DATA_ROW_TYPES : undefined}
-            onPickRowValue={draft.bodyType === 'form-data' ? pickFormDataFilePath : undefined}
-          />
+          <div className="min-h-0 flex-1 overflow-auto">
+            <KeyValueEditor
+              label={draft.bodyType === 'form-data' ? 'Form Data' : 'URL Encoded'}
+              value={draft.body}
+              onChange={value =>
+                updateRequestDraft(
+                  {
+                    ...draft,
+                    body: draft.bodyType === 'form-data' ? normalizeFormDataBody(value) : value,
+                  },
+                  'request-body-params'
+                )
+              }
+              keyPlaceholder="key"
+              valuePlaceholder={draft.bodyType === 'form-data' ? 'value or local file path' : 'value'}
+              rowTypes={draft.bodyType === 'form-data' ? FORM_DATA_ROW_TYPES : undefined}
+              onPickRowValue={draft.bodyType === 'form-data' ? pickFormDataFilePath : undefined}
+            />
+          </div>
         ) : null}
 
         {draft.bodyType === 'none' ? (
