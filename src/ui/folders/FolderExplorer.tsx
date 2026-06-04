@@ -43,6 +43,8 @@ import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEdit
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { dialogActions } from '@/global/dialogStore'
+import { OpenApiExportDialog } from './OpenApiExportDialog'
+import { OpenApiImportDialog } from './OpenApiImportDialog'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
@@ -660,10 +662,30 @@ function CreateMenuButton() {
           <li>
             <button
               type="button"
+              onClick={() =>
+                runAction(() => dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'workspace' } }))
+              }
+            >
+              <FileJsonIcon className="size-4" />
+              Export OpenAPI
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
               onClick={() => runAction(() => dialogActions.open({ component: PostmanImportDialog, props: {} }))}
             >
               <FileCode2Icon className="size-4" />
               Import Postman
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => runAction(() => dialogActions.open({ component: OpenApiImportDialog, props: {} }))}
+            >
+              <FileCode2Icon className="size-4" />
+              Import OpenAPI
             </button>
           </li>
           <li>

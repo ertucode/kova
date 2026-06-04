@@ -103,6 +103,21 @@ import {
   type PickPostmanEnvironmentExportFileInput,
   type PickPostmanEnvironmentExportFileResponse,
 } from './PostmanEnvironmentExport.js'
+import {
+  type AnalyzeOpenApiSpecInput,
+  type AnalyzeOpenApiSpecResponse,
+  type ImportOpenApiSpecInput,
+  type ImportOpenApiSpecResponse,
+  type PickOpenApiSpecFileResponse,
+} from './OpenApiImport.js'
+import {
+  type AnalyzeOpenApiSpecExportInput,
+  type AnalyzeOpenApiSpecExportResponse,
+  type ExportOpenApiSpecInput,
+  type ExportOpenApiSpecResponse,
+  type PickOpenApiSpecExportFileInput,
+  type PickOpenApiSpecExportFileResponse,
+} from './OpenApiExport.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
 import {
   type AbortScriptAiSessionInput,
@@ -278,6 +293,12 @@ export type EventResponseMapping = {
   pickPostmanEnvironmentExportFile: Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
   analyzePostmanEnvironmentExport: Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
   exportPostmanEnvironment: Promise<GenericResult<ExportPostmanEnvironmentResponse>>
+  pickOpenApiSpecFile: Promise<GenericResult<PickOpenApiSpecFileResponse>>
+  analyzeOpenApiSpec: Promise<GenericResult<AnalyzeOpenApiSpecResponse>>
+  importOpenApiSpec: Promise<GenericResult<ImportOpenApiSpecResponse>>
+  pickOpenApiSpecExportFile: Promise<GenericResult<PickOpenApiSpecExportFileResponse>>
+  analyzeOpenApiSpecExport: Promise<GenericResult<AnalyzeOpenApiSpecExportResponse>>
+  exportOpenApiSpec: Promise<GenericResult<ExportOpenApiSpecResponse>>
   listSharedScripts: Promise<SharedScriptRecord[]>
   createSharedScript: Promise<GenericResult<SharedScriptRecord>>
   updateSharedScript: Promise<GenericResult<SharedScriptRecord>>
@@ -406,6 +427,12 @@ export type EventRequestMapping = {
   pickPostmanEnvironmentExportFile: PickPostmanEnvironmentExportFileInput
   analyzePostmanEnvironmentExport: AnalyzePostmanEnvironmentExportInput
   exportPostmanEnvironment: ExportPostmanEnvironmentInput
+  pickOpenApiSpecFile: void
+  analyzeOpenApiSpec: AnalyzeOpenApiSpecInput
+  importOpenApiSpec: ImportOpenApiSpecInput
+  pickOpenApiSpecExportFile: PickOpenApiSpecExportFileInput
+  analyzeOpenApiSpecExport: AnalyzeOpenApiSpecExportInput
+  exportOpenApiSpec: ExportOpenApiSpecInput
   listSharedScripts: ListSharedScriptsInput
   createSharedScript: CreateSharedScriptInput
   updateSharedScript: UpdateSharedScriptInput
@@ -548,6 +575,12 @@ export type WindowElectron = {
   pickPostmanEnvironmentExportFile: (input: PickPostmanEnvironmentExportFileInput) => Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
   analyzePostmanEnvironmentExport: (input: AnalyzePostmanEnvironmentExportInput) => Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
   exportPostmanEnvironment: (input: ExportPostmanEnvironmentInput) => Promise<GenericResult<ExportPostmanEnvironmentResponse>>
+  pickOpenApiSpecFile: () => Promise<GenericResult<PickOpenApiSpecFileResponse>>
+  analyzeOpenApiSpec: (input: AnalyzeOpenApiSpecInput) => Promise<GenericResult<AnalyzeOpenApiSpecResponse>>
+  importOpenApiSpec: (input: ImportOpenApiSpecInput) => Promise<GenericResult<ImportOpenApiSpecResponse>>
+  pickOpenApiSpecExportFile: (input: PickOpenApiSpecExportFileInput) => Promise<GenericResult<PickOpenApiSpecExportFileResponse>>
+  analyzeOpenApiSpecExport: (input: AnalyzeOpenApiSpecExportInput) => Promise<GenericResult<AnalyzeOpenApiSpecExportResponse>>
+  exportOpenApiSpec: (input: ExportOpenApiSpecInput) => Promise<GenericResult<ExportOpenApiSpecResponse>>
   listSharedScripts: (input: ListSharedScriptsInput) => Promise<SharedScriptRecord[]>
   createSharedScript: (input: CreateSharedScriptInput) => Promise<GenericResult<SharedScriptRecord>>
   updateSharedScript: (input: UpdateSharedScriptInput) => Promise<GenericResult<SharedScriptRecord>>

@@ -1,0 +1,2 @@
+- url encoded body is not scrollable
+- post request without search params goes to the search params tab even though it has body.

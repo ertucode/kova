@@ -17,6 +17,7 @@ import type { ExplorerItem } from '@common/Explorer'
 import type { RequestType } from '@common/Requests'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { dialogActions } from '@/global/dialogStore'
+import { OpenApiExportDialog } from './OpenApiExportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
 import type { ExplorerDropTarget, Selection, TreeNode } from './folderExplorerTypes'
 import { toSelectionKey } from './folderExplorerUtils'
@@ -588,6 +589,21 @@ function ExplorerMenu({
               </button>
             </li>
           ) : null}
+          {itemType === 'folder' ? (
+            <li>
+              <button
+                type="button"
+                onClick={() =>
+                  runAction(() =>
+                    dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'folder', folderId: itemId } })
+                  )
+                }
+              >
+                <FileJsonIcon className="size-4" />
+                Export OpenAPI
+              </button>
+            </li>
+          ) : null}
           {itemType === 'folder' && onFlattenFolder ? (
             <li>
               <button type="button" onClick={() => runAction(onFlattenFolder)}>
@@ -619,6 +635,24 @@ function ExplorerMenu({
               >
                 <FileJsonIcon className="size-4" />
                 Export Postman
+              </button>
+            </li>
+          ) : null}
+          {itemType === 'request' && requestType === 'http' ? (
+            <li>
+              <button
+                type="button"
+                onClick={() =>
+                  runAction(() =>
+                    dialogActions.open({
+                      component: OpenApiExportDialog,
+                      props: { scope: 'request', requestId: itemId },
+                    })
+                  )
+                }
+              >
+                <FileJsonIcon className="size-4" />
+                Export OpenAPI
               </button>
             </li>
           ) : null}

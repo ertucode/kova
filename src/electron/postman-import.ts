@@ -4,6 +4,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { createDefaultHttpAuth, type HttpAuth } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { stringifyKeyValueRows, type KeyValueRow } from '../common/KeyValueRows.js'
+import { syncUrlWithSearchParams } from '../common/PathParams.js'
 import {
   type AnalyzePostmanCollectionInput,
   type AnalyzePostmanCollectionResponse,
@@ -583,10 +584,12 @@ function normalizeUrl(value: string | PostmanUrl | undefined) {
     normalizedUrl = normalizedUrl.replaceAll(`{{${row.key.trim()}}}`, `:${row.key.trim()}`)
   }
 
+  const serializedSearchParams = stringifyKeyValueRows(searchParams)
+
   return {
-    url: normalizedUrl,
+    url: syncUrlWithSearchParams(normalizedUrl, serializedSearchParams),
     pathParams: stringifyKeyValueRows(pathParams),
-    searchParams: stringifyKeyValueRows(searchParams),
+    searchParams: serializedSearchParams,
   }
 }
 

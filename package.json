@@ -39,6 +39,7 @@
     "fix:sqlite3": "npx electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",

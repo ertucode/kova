@@ -86,6 +86,8 @@ import { analyzePostmanCollection, importPostmanCollection } from './postman-imp
 import { analyzePostmanEnvironment, importPostmanEnvironment } from './postman-environment-import.js'
 import { analyzePostmanCollectionExport, exportPostmanCollection } from './postman-export.js'
 import { analyzePostmanEnvironmentExport, exportPostmanEnvironment } from './postman-environment-export.js'
+import { analyzeOpenApiSpec, importOpenApiSpec } from './openapi-import.js'
+import { analyzeOpenApiSpecExport, exportOpenApiSpec } from './openapi-export.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
 import {
@@ -1087,6 +1089,56 @@ app.on('ready', async () => {
 
   ipcHandle('exportPostmanEnvironment', async input => {
     return exportPostmanEnvironment(input)
+  })
+
+  ipcHandle('pickOpenApiSpecFile', async (_input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [{ name: 'OpenAPI Specs', extensions: ['json', 'yaml', 'yml'] }],
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    return Result.Success({ filePath: result.filePaths[0] })
+  })
+
+  ipcHandle('analyzeOpenApiSpec', async input => {
+    return analyzeOpenApiSpec(input)
+  })
+
+  ipcHandle('importOpenApiSpec', async input => {
+    return importOpenApiSpec(input)
+  })
+
+  ipcHandle('pickOpenApiSpecExportFile', async (input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.SaveDialogOptions = {
+      filters: [{ name: 'OpenAPI Specs', extensions: ['json'] }],
+      defaultPath: input.suggestedFileName,
+    }
+    const result = window
+      ? await dialog.showSaveDialog(window, dialogOptions)
+      : await dialog.showSaveDialog(dialogOptions)
+
+    if (result.canceled || !result.filePath) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    return Result.Success({ filePath: result.filePath })
+  })
+
+  ipcHandle('analyzeOpenApiSpecExport', async input => {
+    return analyzeOpenApiSpecExport(input)
+  })
+
+  ipcHandle('exportOpenApiSpec', async input => {
+    return exportOpenApiSpec(input)
   })
 
   TaskManager.addListener(e => {

@@ -90,6 +90,20 @@ describe('postman import', () => {
     expect(request.searchParams).toBe('page:2\nfilter:active')
   })
 
+  it('syncs query params into the imported url when only query entries are provided', () => {
+    const request = mapRequest({
+      method: 'get',
+      url: {
+        raw: 'https://api.example.com/users/{{userId}}',
+        query: [{ key: 'page', value: '2', description: 'Pagination' }],
+        variable: [{ key: 'userId', value: '42', description: 'User id' }],
+      },
+    })
+
+    expect(request.url).toBe('https://api.example.com/users/:userId?page=2')
+    expect(request.searchParams).toBe('page:2 // Pagination')
+  })
+
   it('maps supported auth types and comments scripts', () => {
     expect(mapAuth({ type: 'apikey', apikey: [{ key: 'key', value: 'Authorization' }, { key: 'value', value: '{{token}}' }] }, true)).toEqual({
       type: 'apikey',

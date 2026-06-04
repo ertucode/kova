@@ -17,7 +17,7 @@
 - Rich extendible script runtime (Prerequest, Postrequest, Response Visualizer, Global, Module)
 - Response visualizer with react runtime
 - Multiple databases For different workspaces
-- Import and export
+- Import and export (postman, openapi, curl)
 - Everything is local
 - Request history
 - Save example requests/responses
