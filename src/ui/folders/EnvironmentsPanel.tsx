@@ -342,6 +342,7 @@ export function EnvironmentsPanel() {
             </div>
 
             <KeyValueEditor
+              key={selectedId}
               label={null}
               value={draft.variables}
               onChange={value => EnvironmentCoordinator.updateDraft(selectedId, { ...draft, variables: value })}
