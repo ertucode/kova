@@ -2,7 +2,11 @@
   "appId": "com.ertucode.kova",
   "productName": "Kova",
   "copyright": "Copyright © 2025 ertucode",
-  "files": ["dist-electron", "dist-react", "assets"],
+  "files": ["dist-electron", "dist-react", "assets", "drizzle"],
+  "asarUnpack": [
+    "node_modules/esbuild/**/*",
+    "node_modules/@esbuild/**/*"
+  ],
   "extraResources": [
     "dist-electron/electron/preload.cjs",
     "dist-electron/electron/preload-parallel.cjs",
