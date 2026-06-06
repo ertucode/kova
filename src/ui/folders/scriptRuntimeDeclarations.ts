@@ -1,10 +1,8 @@
 import type { SharedScriptTarget } from '../../common/SharedScripts.js'
+import type { ScriptAiRuntimeContext } from '../../common/ScriptAi.js'
 
 export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
-export type ScriptRuntimeContext =
-  | { phase: ScriptAutocompletePhase }
-  | { templatePhase: 'pre-request' }
-  | { targets: SharedScriptTarget[] }
+export type ScriptRuntimeContext = ScriptAiRuntimeContext & ({ phase: ScriptAutocompletePhase } | { templatePhase: 'pre-request' } | { targets: SharedScriptTarget[] })
 
 const sharedDeclarations = String.raw`
 type SafeParseSuccess<T> = {

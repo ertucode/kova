@@ -1,9 +1,9 @@
 import { errorResponseToMessage } from '@common/GenericError'
 import {
+  getPrimaryScriptAiPhase,
   getScriptAiTargetKey,
   type ScriptAiMessagePart,
   type ScriptAiTarget,
-  type ScriptAiPhase,
   type ScriptAiWorkspaceState,
 } from '@common/ScriptAi'
 import { ChevronDownIcon, LoaderCircleIcon, PlusIcon, SparklesIcon, SquareIcon } from 'lucide-react'
@@ -14,7 +14,7 @@ import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
-import { buildScriptDocumentationPrompt, scriptDocumentationByPhase } from './scriptDocumentation'
+import { buildScriptDocumentationPromptForTarget, getScriptDocumentationForTarget } from './scriptDocumentation'
 import { appSettingsStore } from '@/global/appSettingsStore'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
 import { ScriptAiMergeEditor } from './ScriptAiMergeEditor'
@@ -57,10 +57,11 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const transcriptContainerRef = useRef<HTMLDivElement | null>(null)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
 
-  const documentation = scriptDocumentationByPhase[target.phase]
+  const documentation = getScriptDocumentationForTarget(target)
   const targetKey = getScriptAiTargetKey(target)
+  const primaryPhase = getPrimaryScriptAiPhase(target.runtimeContext)
   const editorLanguage =
-    target.phase === 'response-visualizer' || target.phase === 'view-runtime' ? 'jsx' : 'javascript'
+    primaryPhase === 'response-visualizer' || primaryPhase === 'view-runtime' ? 'jsx' : 'javascript'
   const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
   const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
@@ -193,7 +194,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
         sessionId: ensuredSessionId,
         message: prompt.trim(),
         model: selectedModel || null,
-        documentation: buildScriptDocumentationPrompt(target.phase),
+        documentation: buildScriptDocumentationPromptForTarget(target),
       })
 
       if (!result.success) {
@@ -335,7 +336,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
           <textarea
             ref={promptRef}
             className="min-h-12 w-full resize-none border-0 bg-base-100 px-3 py-3 font-mono text-sm leading-6 text-base-content outline-none placeholder:text-base-content/40"
-            placeholder={`Example: ${getPromptPlaceholder(target.phase)}`}
+            placeholder={`Example: ${getPromptPlaceholder(primaryPhase)}`}
             value={prompt}
             onChange={event => setPrompt(event.target.value)}
             onKeyDown={handlePromptKeyDown}
@@ -533,7 +534,7 @@ function getFirstLine(value: string) {
   return value.trim().split('\n')[0] ?? ''
 }
 
-function getPromptPlaceholder(phase: ScriptAiPhase) {
+function getPromptPlaceholder(phase: ReturnType<typeof getPrimaryScriptAiPhase>) {
   switch (phase) {
     case 'pre-request':
       return 'Read a token from the active environment, set the Authorization header, and generate a trace id.'

@@ -18,6 +18,7 @@ import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
 import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
 import {
+  getPrimaryScriptAiPhase,
   getScriptAiFileName,
   getScriptAiTargetKey,
   type AbortScriptAiSessionInput,
@@ -194,7 +195,7 @@ async function ensureTargetRuntime(target: ScriptAiTarget, initialCode: string) 
 
   const baseDirectory = getScriptAiBaseDirectory()
   const workspacePath = path.join(baseDirectory, hashTargetKey(targetKey))
-  const fileName = getScriptAiFileName(target.phase)
+  const fileName = getScriptAiFileName(target.runtimeContext)
   const filePath = path.join(workspacePath, fileName)
 
   await mkdir(workspacePath, { recursive: true })
@@ -646,7 +647,7 @@ async function readWorkspaceCode(runtime: TargetRuntime) {
 }
 
 function buildSessionTitle(target: ScriptAiTarget) {
-  return `${target.ownerType}:${target.ownerId} ${target.phase}`
+  return `${target.ownerType}:${target.ownerId} ${getPrimaryScriptAiPhase(target.runtimeContext)}`
 }
 
 function buildSystemPrompt(fileName: string, documentation: string) {

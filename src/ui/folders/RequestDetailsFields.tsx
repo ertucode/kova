@@ -920,7 +920,7 @@ export default function View() {
                 <ScriptAiIconButton
                   ownerType="request"
                   ownerId={selectedRequestId ?? ''}
-                  phase="pre-request"
+                  runtimeContext={{ phase: 'pre-request' }}
                   currentCode={draft.preRequestScript}
                   onApply={nextCode => updateRequestDraft({ ...draft, preRequestScript: nextCode }, 'request-pre-script-ai')}
                   tooltip="Generate with AI"
@@ -958,7 +958,7 @@ export default function View() {
                 <ScriptAiIconButton
                   ownerType="request"
                   ownerId={selectedRequestId ?? ''}
-                  phase="post-request"
+                  runtimeContext={{ phase: 'post-request' }}
                   currentCode={draft.postRequestScript}
                   onApply={nextCode => updateRequestDraft({ ...draft, postRequestScript: nextCode }, 'request-post-script-ai')}
                   tooltip="Generate with AI"
@@ -1066,7 +1066,7 @@ const ResponseVisualizerTab = memo(function ResponseVisualizerTab({
           <ScriptAiIconButton
             ownerType="request"
             ownerId={ownerId}
-            phase="response-visualizer"
+            runtimeContext={{ phase: 'response-visualizer' }}
             currentCode={value}
             onApply={onChange}
             tooltip="Generate with AI"

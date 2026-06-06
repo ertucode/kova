@@ -1,11 +1,18 @@
+import type { SharedScriptTarget } from './SharedScripts.js'
+
 export type ScriptAiPhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
 
-export type ScriptAiOwnerType = 'request' | 'folder' | 'view'
+export type ScriptAiRuntimeContext =
+  | { phase: ScriptAiPhase }
+  | { templatePhase: 'pre-request' }
+  | { targets: SharedScriptTarget[] }
+
+export type ScriptAiOwnerType = 'request' | 'folder' | 'view' | 'shared-script'
 
 export type ScriptAiTarget = {
   ownerType: ScriptAiOwnerType
   ownerId: string
-  phase: ScriptAiPhase
+  runtimeContext: ScriptAiRuntimeContext
 }
 
 export type ScriptAiSessionSummary = {
@@ -128,11 +135,11 @@ export type ListOpenCodeModelsResponse = {
 }
 
 export function getScriptAiTargetKey(target: ScriptAiTarget) {
-  return `${target.ownerType}:${target.ownerId}:${target.phase}`
+  return `${target.ownerType}:${target.ownerId}:${getScriptAiRuntimeContextKey(target.runtimeContext)}`
 }
 
-export function getScriptAiFileName(phase: ScriptAiPhase) {
-  switch (phase) {
+export function getScriptAiFileName(runtimeContext: ScriptAiRuntimeContext) {
+  switch (getPrimaryScriptAiPhase(runtimeContext)) {
     case 'pre-request':
       return 'script.js'
     case 'post-request':
@@ -142,4 +149,61 @@ export function getScriptAiFileName(phase: ScriptAiPhase) {
     case 'view-runtime':
       return 'script.jsx'
   }
+}
+
+export function getPrimaryScriptAiPhase(runtimeContext: ScriptAiRuntimeContext): ScriptAiPhase {
+  if ('phase' in runtimeContext) {
+    return runtimeContext.phase
+  }
+
+  if ('templatePhase' in runtimeContext) {
+    return runtimeContext.templatePhase
+  }
+
+  const targets = normalizeTargets(runtimeContext.targets)
+  if (targets.length === 1) {
+    return targets[0]
+  }
+
+  if (targets.includes('pre-request')) {
+    return 'pre-request'
+  }
+
+  if (targets.includes('post-request')) {
+    return 'post-request'
+  }
+
+  if (targets.includes('response-visualizer')) {
+    return 'response-visualizer'
+  }
+
+  return 'view-runtime'
+}
+
+export function getScriptAiRuntimeContextTargets(runtimeContext: ScriptAiRuntimeContext): SharedScriptTarget[] {
+  if ('phase' in runtimeContext) {
+    return [runtimeContext.phase]
+  }
+
+  if ('templatePhase' in runtimeContext) {
+    return [runtimeContext.templatePhase]
+  }
+
+  return normalizeTargets(runtimeContext.targets)
+}
+
+function getScriptAiRuntimeContextKey(runtimeContext: ScriptAiRuntimeContext) {
+  if ('phase' in runtimeContext) {
+    return `phase:${runtimeContext.phase}`
+  }
+
+  if ('templatePhase' in runtimeContext) {
+    return `template:${runtimeContext.templatePhase}`
+  }
+
+  return `targets:${normalizeTargets(runtimeContext.targets).join(',')}`
+}
+
+function normalizeTargets(targets: SharedScriptTarget[]) {
+  return Array.from(new Set(targets))
 }

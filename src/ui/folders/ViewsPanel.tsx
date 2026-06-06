@@ -395,14 +395,14 @@ export function ViewsPanel() {
               <ToolbarButton
                 label={selectedDraft.code.trim() ? 'Update with AI' : 'Generate with AI'}
                 onClick={() =>
-                  openScriptAiReviewDialog({
-                    target: {
-                      ownerType: 'view',
-                      ownerId: selectedDraft.id,
-                      phase: 'view-runtime',
-                    },
-                    currentCode: selectedDraft.code,
-                    onApply: nextCode => updateDraft(selectedDraft.id, draft => ({ ...draft, code: nextCode })),
+                    openScriptAiReviewDialog({
+                      target: {
+                        ownerType: 'view',
+                        ownerId: selectedDraft.id,
+                        runtimeContext: { phase: 'view-runtime' },
+                      },
+                      currentCode: selectedDraft.code,
+                      onApply: nextCode => updateDraft(selectedDraft.id, draft => ({ ...draft, code: nextCode })),
                   })
                 }
               >

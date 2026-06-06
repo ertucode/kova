@@ -1,4 +1,8 @@
-import type { ScriptAiPhase } from '@common/ScriptAi'
+import {
+  getPrimaryScriptAiPhase,
+  type ScriptAiPhase,
+  type ScriptAiTarget,
+} from '@common/ScriptAi'
 
 export type ScriptDocumentationPhase = ScriptAiPhase
 
@@ -507,6 +511,33 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
 
 export function buildScriptDocumentationPrompt(phase: ScriptDocumentationPhase) {
   const documentation = scriptDocumentationByPhase[phase]
+
+  return [
+    `${documentation.title}`,
+    documentation.description,
+    '',
+    'Notes:',
+    ...documentation.notes.map(note => `- ${note}`),
+    '',
+    ...documentation.sections.flatMap(section => [
+      `${section.title}:`,
+      ...(section.description ? [section.description] : []),
+      ...section.entries.map(entry => `- ${entry.label}: ${entry.detail}`),
+      '',
+    ]),
+    'Examples:',
+    ...documentation.examples.flatMap(example => [example.title, example.code, '']),
+  ]
+    .join('\n')
+    .trim()
+}
+
+export function getScriptDocumentationForTarget(target: ScriptAiTarget): ScriptDocumentation {
+  return scriptDocumentationByPhase[getPrimaryScriptAiPhase(target.runtimeContext)]
+}
+
+export function buildScriptDocumentationPromptForTarget(target: ScriptAiTarget) {
+  const documentation = getScriptDocumentationForTarget(target)
 
   return [
     `${documentation.title}`,

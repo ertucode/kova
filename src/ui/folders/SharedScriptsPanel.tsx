@@ -5,6 +5,7 @@ import type { SharedScriptKind, SharedScriptRecord, SharedScriptTarget } from '@
 import { Typescript } from '@common/Typescript'
 import { getWindowElectron } from '@/getWindowElectron'
 import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
+import { dialogActions } from '@/global/dialogStore'
 import { toast } from '@/lib/components/toast'
 import { ChangesCoordinator } from './changesCoordinator'
 import { CodeEditor } from './CodeEditor'
@@ -25,8 +26,12 @@ import type { PendingScriptSelection } from './scriptFormatOnSave'
 import { formatScriptValueForSave } from './scriptFormatOnSave'
 import { notifySharedScriptsChanged, useScopedSharedScripts, useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { buildSharedScriptDocumentPath } from './sharedScriptDocumentPath'
+import { ScriptAiIconButton } from './ScriptAiIconButton'
+import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
+import { Tooltip } from '../components/Tooltip'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime']
+const ALL_SCRIPT_DOCUMENTATION_PHASES = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime'] as const
 const EMPTY_ENTRIES: Record<string, never> = {}
 
 export function SharedScriptsPanel() {
@@ -568,7 +573,37 @@ function SharedScriptDetail({
         </div>
       </div>
 
-      <div className="flex-1 min-h-[360px] flex flex-col">
+      <div className="relative flex flex-1 min-h-[360px] flex-col">
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          <ScriptAiIconButton
+            ownerType="shared-script"
+            ownerId={draft.id}
+            runtimeContext={{ targets }}
+            currentCode={draft.code}
+            onApply={nextCode => onChange({ ...draft, code: nextCode })}
+            tooltip="Generate with AI"
+            className="h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 px-0 text-base-content/60 backdrop-blur hover:border-base-content/20 hover:bg-base-100/90 hover:text-base-content"
+          />
+          <Tooltip content="Documentation" placement="left">
+            <button
+              type="button"
+              className="inline-flex h-8 w-10 items-center justify-center rounded-lg border border-base-content/10 bg-base-100/90 px-0 text-base-content/60 backdrop-blur transition hover:border-base-content/20 hover:bg-base-100/90 hover:text-base-content"
+              onClick={() =>
+                dialogActions.open({
+                  component: ScriptDocumentationDialog,
+                  props: {
+                    phases: ALL_SCRIPT_DOCUMENTATION_PHASES,
+                    initialPhase: targets.length === 1 ? targets[0] : undefined,
+                  },
+                })
+              }
+              aria-label="Open shared script documentation"
+              title="Documentation"
+            >
+              <FileBracesIcon className="size-4" />
+            </button>
+          </Tooltip>
+        </div>
         <CodeEditor
           value={draft.code}
           language={isVisualizerOnly ? 'jsx' : 'javascript'}

@@ -1,4 +1,5 @@
 import { CopyIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
 import { toast } from '@/lib/components/toast'
@@ -8,13 +9,31 @@ import { scriptDocumentationByPhase, type ScriptDocumentationPhase } from './scr
 
 export function ScriptDocumentationDialog({
   phase,
+  phases,
+  initialPhase,
   mode = 'full',
 }: {
-  phase: ScriptDocumentationPhase
+  phase?: ScriptDocumentationPhase
+  phases?: readonly ScriptDocumentationPhase[]
+  initialPhase?: ScriptDocumentationPhase
   mode?: 'full' | 'examples'
 }) {
-  const documentation = scriptDocumentationByPhase[phase]
-  const exampleEditorLanguage = phase === 'response-visualizer' || phase === 'view-runtime' ? 'jsx' : 'javascript'
+  const availablePhases = useMemo(() => {
+    if (phases?.length) {
+      return [...phases]
+    }
+
+    return phase ? [phase] : []
+  }, [phase, phases])
+  const [selectedPhase, setSelectedPhase] = useState<ScriptDocumentationPhase>(() => {
+    if (initialPhase && availablePhases.includes(initialPhase)) {
+      return initialPhase
+    }
+
+    return availablePhases[0] ?? 'pre-request'
+  })
+  const documentation = scriptDocumentationByPhase[selectedPhase]
+  const exampleEditorLanguage = selectedPhase === 'response-visualizer' || selectedPhase === 'view-runtime' ? 'jsx' : 'javascript'
   const title = mode === 'examples' ? `${documentation.title} Examples` : documentation.title
 
   return (
@@ -28,6 +47,30 @@ export function ScriptDocumentationDialog({
         </button>
       }
     >
+      {availablePhases.length > 1 ? (
+        <div className="mb-4 flex flex-wrap gap-2 border-b border-base-content/10 pb-4">
+          {availablePhases.map(currentPhase => {
+            const isSelected = currentPhase === selectedPhase
+
+            return (
+              <button
+                key={currentPhase}
+                type="button"
+                className={[
+                  'rounded-xl border px-3 py-2 text-sm transition',
+                  isSelected
+                    ? 'border-primary/30 bg-primary/10 text-base-content'
+                    : 'border-base-content/10 bg-base-100 text-base-content/70 hover:border-base-content/20 hover:bg-base-200/70',
+                ].join(' ')}
+                onClick={() => setSelectedPhase(currentPhase)}
+              >
+                {formatDocumentationPhaseLabel(currentPhase)}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       <article className="mx-auto max-w-[760px] text-[15px] leading-7 text-base-content/82 [&_code]:font-mono [&_code]:text-[0.95em] [&_h3]:mt-8 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:tracking-[0.01em] [&_h4]:mt-6 [&_h4]:text-sm [&_h4]:font-semibold [&_li]:marker:text-base-content/35 [&_p]:m-0">
         {mode === 'full' ? (
           <>
@@ -96,6 +139,19 @@ export function ScriptDocumentationDialog({
       </article>
     </Dialog>
   )
+}
+
+function formatDocumentationPhaseLabel(phase: ScriptDocumentationPhase) {
+  switch (phase) {
+    case 'pre-request':
+      return 'Pre-request'
+    case 'post-request':
+      return 'Post-request'
+    case 'response-visualizer':
+      return 'Response visualizer'
+    case 'view-runtime':
+      return 'View runtime'
+  }
 }
 
 async function copyScriptExample(value: string) {
