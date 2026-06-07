@@ -77,7 +77,6 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     appSettingsStore,
     state => state.context.settings?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW
   )
-  const [metaTab, setMetaTab] = useState<RequestMetaTab>('overview')
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const draftRef = useRef(draft)
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
@@ -421,27 +420,25 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const hasPreRequestScript = draft.preRequestScript.trim().length > 0
   const hasPostRequestScript = draft.postRequestScript.trim().length > 0
   const usedVariableNames = useMemo(() => getUsedRequestVariableNames(draft), [draft])
+  const metaTab = useMemo(() => {
+    if (!selectedRequestId) {
+      return compactRequestView ? 'overview' : 'body'
+    }
+
+    if (selectedRequestMetaTab) {
+      return normalizeMetaTabForLayout(selectedRequestMetaTab, compactRequestView)
+    }
+
+    return shouldDefaultToSearchParamsTab(draft) ? 'search-params' : compactRequestView ? 'overview' : 'body'
+  }, [compactRequestView, draft, selectedRequestId, selectedRequestMetaTab])
 
   useEffect(() => {
-    if (!selectedRequestId) {
-      setMetaTab(compactRequestView ? 'overview' : 'body')
+    if (!selectedRequestId || selectedRequestMetaTab) {
       return
     }
 
-    const existingMetaTab = selectedRequestMetaTab
-    if (existingMetaTab) {
-      setMetaTab(normalizeMetaTabForLayout(existingMetaTab, compactRequestView))
-      return
-    }
-
-    const initialMetaTab = shouldDefaultToSearchParamsTab(draft)
-      ? 'search-params'
-      : compactRequestView
-        ? 'overview'
-        : 'body'
-    void FolderExplorerCoordinator.updateSelectedRequestMetaTab(initialMetaTab)
-    setMetaTab(initialMetaTab)
-  }, [compactRequestView, draft, selectedRequestId, selectedRequestMetaTab])
+    void FolderExplorerCoordinator.updateSelectedRequestMetaTab(metaTab)
+  }, [metaTab, selectedRequestId, selectedRequestMetaTab])
 
   const updateMetaTab = useCallback(
     (nextMetaTab: RequestMetaTab) => {
@@ -450,8 +447,6 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       if (selectedRequestId) {
         void FolderExplorerCoordinator.updateSelectedRequestMetaTab(normalizedMetaTab)
       }
-
-      setMetaTab(normalizedMetaTab)
     },
     [compactRequestView, selectedRequestId]
   )
