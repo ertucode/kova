@@ -72,6 +72,7 @@ const blockedKeywordCompletions = new Set([
 const preferredSandboxGlobals = new Set([
   'env',
   'scope',
+  'cache',
   'request',
   'response',
   'callRequest',

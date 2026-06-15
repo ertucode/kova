@@ -177,6 +177,28 @@ export const views = sqliteTable(
   ]
 )
 
+export const viewCacheEntries = sqliteTable(
+  'view_cache_entries',
+  {
+    id: text('id').primaryKey(),
+    viewId: text('view_id').notNull(),
+    key: text('key').notNull(),
+    value: text('value').notNull().default(''),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.viewId],
+      foreignColumns: [views.id],
+      name: 'view_cache_entries_view_id_fkey',
+    }),
+    index('view_cache_entries_view_id_idx').on(table.viewId),
+    uniqueIndex('view_cache_entries_view_key_idx').on(table.viewId, table.key),
+    check('view_cache_entries_key_not_empty', sql`length(trim(${table.key})) > 0`),
+  ]
+)
+
 export const tags = sqliteTable(
   'tags',
   {

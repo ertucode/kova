@@ -6,13 +6,14 @@ import {
   type CreateViewInput,
   type DeleteViewInput,
   type MoveViewInput,
-  type ViewShortcut,
   type UpdateViewInput,
   type ViewLayoutMode,
   type ViewRecord,
+  type ViewShortcut,
 } from '../../common/Views.js'
 import { getDb } from './index.js'
 import { views } from './schema.js'
+import { clearViewCacheEntries } from './view-cache.js'
 
 type ViewRow = typeof views.$inferSelect
 
@@ -123,11 +124,22 @@ export async function deleteView(input: DeleteViewInput): Promise<GenericResult<
   const db = getDb()
 
   try {
-    const result = db
-      .update(views)
-      .set({ deletedAt: Date.now(), updatedAt: Date.now() })
-      .where(and(eq(views.id, input.id), isNull(views.deletedAt)))
-      .run()
+    const result = db.transaction(tx => {
+      const deletedAt = Date.now()
+      const deletionResult = tx
+        .update(views)
+        .set({ deletedAt, updatedAt: deletedAt })
+        .where(and(eq(views.id, input.id), isNull(views.deletedAt)))
+        .run()
+
+      if (deletionResult.changes === 0) {
+        return deletionResult
+      }
+
+      clearViewCacheEntries(input.id, tx)
+      return deletionResult
+    })
+
     if (result.changes === 0) {
       return GenericError.Message('View not found')
     }

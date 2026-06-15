@@ -10,11 +10,14 @@ import { formatJson } from '@common/Json5'
 import { parseScriptPackageSpecifier } from '@common/ScriptPackages'
 import { CodeEditor } from '../folders/CodeEditor'
 import {
+  VIEW_RUNTIME_CACHE_REQUEST_EVENT,
+  VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_READY_EVENT,
   VIEW_RUNTIME_RENDER_EVENT,
   VIEW_RUNTIME_TRIGGER_RUN_EVENT,
+  type ViewRuntimeCacheRequestResultMessage,
   type ViewRuntimeCallRequestResultMessage,
   type ViewRuntimePayload,
   type ViewRuntimeScriptResponse,
@@ -53,7 +56,15 @@ const pendingCallRequests = new Map<
     reject: (error: Error) => void
   }
 >()
+const pendingCacheRequests = new Map<
+  string,
+  {
+    resolve: () => void
+    reject: (error: Error) => void
+  }
+>()
 let callRequestCounter = 0
+let cacheRequestCounter = 0
 const runtimeShellState: RuntimeShellState = {
   source: '',
   component: null,
@@ -95,6 +106,23 @@ window.addEventListener('message', event => {
   if (event.data?.type === VIEW_RUNTIME_TRIGGER_RUN_EVENT) {
     hasPendingRunTrigger = true
     flushPendingRunTrigger()
+    return
+  }
+
+  if (event.data?.type === VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT) {
+    const message = event.data as ViewRuntimeCacheRequestResultMessage
+    const pending = pendingCacheRequests.get(message.requestId)
+    if (!pending) {
+      return
+    }
+
+    pendingCacheRequests.delete(message.requestId)
+    if (message.error) {
+      pending.reject(new Error(message.error))
+      return
+    }
+
+    pending.resolve()
     return
   }
 
@@ -191,6 +219,7 @@ async function renderView(source: string, payload: ViewRuntimePayload) {
 async function runView(code: string, payload: ViewRuntimePayload) {
   const env = createEnvironmentApi(payload.env)
   const scope = createScopeApi(payload.scope)
+  const cache = createViewCacheApi(payload.cache)
   const cookies = createCookiesApi()
   const callRequest = createCallRequestApi()
   const Table = createTableComponent()
@@ -224,6 +253,7 @@ async function runView(code: string, payload: ViewRuntimePayload) {
     useState,
     env,
     scope,
+    cache,
     cookies,
     Table,
     CodeEditor: RuntimeCodeEditor,
@@ -248,6 +278,7 @@ async function runView(code: string, payload: ViewRuntimePayload) {
       useState,
       env,
       scope,
+      cache,
       callRequest,
       requirePackage,
       requireScript,
@@ -281,6 +312,7 @@ function createSharedScriptModuleLoader(
     useState: typeof React.useState
     env: ReturnType<typeof createEnvironmentApi>
     scope: ReturnType<typeof createScopeApi>
+    cache: ReturnType<typeof createViewCacheApi>
     cookies: ReturnType<typeof createCookiesApi>
     Table: ReturnType<typeof createTableComponent>
     CodeEditor: RuntimeCodeEditorComponent
@@ -335,6 +367,7 @@ function createSharedScriptModuleLoader(
           useState: globals.useState,
           env: globals.env,
           scope: globals.scope,
+          cache: globals.cache,
           callRequest: globals.callRequest,
           requirePackage,
           requireScript: loadModule,
@@ -472,6 +505,100 @@ function createCallRequestApi() {
       )
     })
   }
+}
+
+function createViewCacheApi(initialEntries: Record<string, string>) {
+  const entries = new Map(Object.entries(initialEntries))
+  const getItem = async (key: string) => {
+    const normalizedKey = normalizeViewCacheKey(key)
+    return entries.get(normalizedKey) ?? null
+  }
+
+  return {
+    getItem,
+    async getItemWithSchema<T>(key: string, schema: z.ZodType<T>) {
+      const value = await getItem(key)
+      if (value === null) {
+        return null
+      }
+
+      const parsedJsonValue = tryParseViewCacheJson(value)
+      if (parsedJsonValue !== VIEW_CACHE_PARSE_FAILED) {
+        const jsonResult = schema.safeParse(parsedJsonValue)
+        return jsonResult.success ? jsonResult.data : null
+      }
+
+      const rawResult = schema.safeParse(value)
+      return rawResult.success ? rawResult.data : null
+    },
+    async setItem(key: string, value: string) {
+      const normalizedKey = normalizeViewCacheKey(key)
+      if (typeof value !== 'string') {
+        throw new Error('cache.setItem value must be a string')
+      }
+
+      await persistViewCacheMutation({ operation: 'set', key: normalizedKey, value })
+      entries.set(normalizedKey, value)
+    },
+    async getAll() {
+      return Object.fromEntries(entries.entries())
+    },
+    async removeItem(key: string) {
+      const normalizedKey = normalizeViewCacheKey(key)
+      await persistViewCacheMutation({ operation: 'remove', key: normalizedKey })
+      entries.delete(normalizedKey)
+    },
+  }
+}
+
+function persistViewCacheMutation(
+  mutation:
+    | {
+        operation: 'set'
+        key: string
+        value: string
+      }
+    | {
+        operation: 'remove'
+        key: string
+      }
+) {
+  const requestId = `view-runtime-cache-request-${++cacheRequestCounter}`
+
+  return new Promise<void>((resolve, reject) => {
+    pendingCacheRequests.set(requestId, { resolve, reject })
+    window.parent.postMessage(
+      {
+        type: VIEW_RUNTIME_CACHE_REQUEST_EVENT,
+        requestId,
+        ...mutation,
+      },
+      '*'
+    )
+  })
+}
+
+const VIEW_CACHE_PARSE_FAILED = Symbol('view-cache-parse-failed')
+
+function tryParseViewCacheJson(value: string) {
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return VIEW_CACHE_PARSE_FAILED
+  }
+}
+
+function normalizeViewCacheKey(key: string) {
+  if (typeof key !== 'string') {
+    throw new Error('cache key must be a string')
+  }
+
+  const normalizedKey = key.trim()
+  if (!normalizedKey) {
+    throw new Error('cache key is required')
+  }
+
+  return normalizedKey
 }
 
 function renderRuntimeShell() {
@@ -654,6 +781,7 @@ function executeRuntimeModule({
     useState: typeof React.useState
     env: ReturnType<typeof createEnvironmentApi>
     scope: ReturnType<typeof createScopeApi>
+    cache: ReturnType<typeof createViewCacheApi>
     callRequest: ReturnType<typeof createCallRequestApi>
     requirePackage: (specifier: string) => unknown
     requireScript: (specifier: string) => unknown
@@ -682,6 +810,7 @@ function executeRuntimeModule({
     'console',
     'env',
     'scope',
+    'cache',
     'callRequest',
     'require',
     'requireScript',
@@ -713,6 +842,7 @@ function executeRuntimeModule({
     console,
     globals.env,
     globals.scope,
+    globals.cache,
     globals.callRequest,
     globals.requirePackage,
     globals.requireScript,
@@ -1184,6 +1314,7 @@ function createEmptyPayload(): ViewRuntimePayload {
       owners: {},
     },
     scope: {},
+    cache: {},
     sharedScripts: [],
     scriptPackages: [],
   }

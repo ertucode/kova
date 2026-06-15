@@ -68,6 +68,7 @@ import {
   updateSharedScript,
 } from './db/shared-scripts.js'
 import { createView, deleteView, listViews, moveView, updateView } from './db/views.js'
+import { deleteViewCacheEntry, getViewCacheEntry, listViewCacheEntries, setViewCacheEntry } from './db/view-cache.js'
 import { createScriptPackage, deleteScriptPackage, listScriptPackages, toScriptPackageCacheKey, updateScriptPackage } from './db/script-packages.js'
 import {
   createTag,
@@ -671,6 +672,22 @@ app.on('ready', async () => {
 
   ipcHandle('moveView', async input => {
     return moveView(input)
+  })
+
+  ipcHandle('listViewCacheEntries', async input => {
+    return listViewCacheEntries(input)
+  })
+
+  ipcHandle('getViewCacheEntry', async input => {
+    return getViewCacheEntry(input)
+  })
+
+  ipcHandle('setViewCacheEntry', async input => {
+    return setViewCacheEntry(input)
+  })
+
+  ipcHandle('deleteViewCacheEntry', async input => {
+    return deleteViewCacheEntry(input)
   })
 
   ipcHandle('listScriptPackages', async () => {

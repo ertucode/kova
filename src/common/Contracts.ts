@@ -137,6 +137,13 @@ import {
   type UpdateViewInput,
   type ViewRecord,
 } from './Views.js'
+import {
+  type DeleteViewCacheEntryInput,
+  type GetViewCacheEntryInput,
+  type ListViewCacheEntriesInput,
+  type SetViewCacheEntryInput,
+  type ViewCacheEntryRecord,
+} from './ViewCache.js'
 import { type ScriptPromptResponse } from './ScriptPrompt.js'
 import {
   type DatabaseConfigState,
@@ -310,6 +317,10 @@ export type EventResponseMapping = {
   updateView: Promise<GenericResult<ViewRecord>>
   deleteView: Promise<GenericResult<void>>
   moveView: Promise<GenericResult<void>>
+  listViewCacheEntries: Promise<GenericResult<ViewCacheEntryRecord[]>>
+  getViewCacheEntry: Promise<GenericResult<ViewCacheEntryRecord | null>>
+  setViewCacheEntry: Promise<GenericResult<ViewCacheEntryRecord>>
+  deleteViewCacheEntry: Promise<GenericResult<void>>
   listTags: Promise<TagRecord[]>
   listTagAssignments: Promise<TagAssignmentRecord[]>
   createTag: Promise<GenericResult<TagRecord>>
@@ -444,6 +455,10 @@ export type EventRequestMapping = {
   updateView: UpdateViewInput
   deleteView: DeleteViewInput
   moveView: MoveViewInput
+  listViewCacheEntries: ListViewCacheEntriesInput
+  getViewCacheEntry: GetViewCacheEntryInput
+  setViewCacheEntry: SetViewCacheEntryInput
+  deleteViewCacheEntry: DeleteViewCacheEntryInput
   listTags: void
   listTagAssignments: void
   createTag: CreateTagInput
@@ -592,6 +607,10 @@ export type WindowElectron = {
   updateView: (input: UpdateViewInput) => Promise<GenericResult<ViewRecord>>
   deleteView: (input: DeleteViewInput) => Promise<GenericResult<void>>
   moveView: (input: MoveViewInput) => Promise<GenericResult<void>>
+  listViewCacheEntries: (input: ListViewCacheEntriesInput) => Promise<GenericResult<ViewCacheEntryRecord[]>>
+  getViewCacheEntry: (input: GetViewCacheEntryInput) => Promise<GenericResult<ViewCacheEntryRecord | null>>
+  setViewCacheEntry: (input: SetViewCacheEntryInput) => Promise<GenericResult<ViewCacheEntryRecord>>
+  deleteViewCacheEntry: (input: DeleteViewCacheEntryInput) => Promise<GenericResult<void>>
   listTags: () => Promise<TagRecord[]>
   listTagAssignments: () => Promise<TagAssignmentRecord[]>
   createTag: (input: CreateTagInput) => Promise<GenericResult<TagRecord>>

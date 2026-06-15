@@ -59,6 +59,19 @@ interface ScriptRequestScopeApi {
   set(name: string, value: string): void
 }
 
+interface ViewRuntimeCacheApi {
+  /** Read a persisted string value for the current view. */
+  getItem(key: string): Promise<string | null>
+  /** Read persisted data, try JSON first, then validate the raw string, and return null when missing or invalid. */
+  getItemWithSchema<T>(key: string, schema: import('./vendor/zod/index.cjs').ZodType<T>): Promise<T | null>
+  /** Persist a string value for the current view. */
+  setItem(key: string, value: string): Promise<void>
+  /** Return a copied object containing all persisted cache entries for the current view. */
+  getAll(): Promise<Record<string, string>>
+  /** Delete a persisted cache value for the current view. */
+  removeItem(key: string): Promise<void>
+}
+
 interface ScriptHeaderApi {
   /** Read a request header value. */
   get(name: string): string | null
@@ -230,6 +243,12 @@ declare const clipboard: ScriptClipboardApi
 declare const cookies: ScriptCookieApi
 declare const z: typeof import('./vendor/zod/index.cjs').z
 
+declare namespace z {
+  export type infer<T extends import('./vendor/zod/index.cjs').ZodType<unknown>> = import('./vendor/zod/index.cjs').infer<T>
+  export type input<T extends import('./vendor/zod/index.cjs').ZodType<unknown>> = import('./vendor/zod/index.cjs').input<T>
+  export type output<T extends import('./vendor/zod/index.cjs').ZodType<unknown>> = import('./vendor/zod/index.cjs').output<T>
+}
+
 interface ScriptRuntimeInstalledPackageMap {}
 
 declare function loadPackage<TName extends keyof ScriptRuntimeInstalledPackageMap>(
@@ -369,6 +388,10 @@ declare function Table(props: TableProps): ReactElementLike | null
 declare function CodeEditor(props: CodeEditorProps): ReactElementLike | null
 `
 
+const viewRuntimeDeclarations = String.raw`
+declare const cache: ViewRuntimeCacheApi
+`
+
 export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
   const targets = getContextTargets(context)
   let declarations = sharedDeclarations
@@ -391,6 +414,10 @@ export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
 
   if (targets.length === 1 && (targets[0] === 'response-visualizer' || targets[0] === 'view-runtime')) {
     declarations = `${declarations}\n${responseVisualizerDeclarations}`
+  }
+
+  if (targets.length === 1 && targets[0] === 'view-runtime') {
+    declarations = `${declarations}\n${viewRuntimeDeclarations}`
   }
 
   return declarations

@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap } from '@common/EnvironmentVariables'
+import { errorResponseToMessage } from '@common/GenericError'
 import type { ScriptCallRequestOverrides } from '@common/ScriptMakeRequest'
 import type { ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
+import type { ViewCacheEntryRecord } from '@common/ViewCache'
+import { getWindowElectron } from '../getWindowElectron'
 import { RequestSendCoordinator } from './requestSendCoordinator'
 import { getCachedViewRuntimeRequest, setCachedViewRuntimeRequest } from './viewRuntimeRequestCacheStore'
 import {
+  VIEW_RUNTIME_CACHE_REQUEST_EVENT,
+  VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_READY_EVENT,
   VIEW_RUNTIME_RENDER_EVENT,
   VIEW_RUNTIME_TRIGGER_RUN_EVENT,
+  type ViewRuntimeCacheRequestMessage,
   type ViewRuntimeCallRequestMessage,
   type ViewRuntimePayload,
   type ViewRuntimeScriptResponse,
@@ -53,7 +59,34 @@ export function ViewRuntimePreview({
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [isIframeReady, setIsIframeReady] = useState(false)
+  const [isCacheReady, setIsCacheReady] = useState(false)
+  const [cacheSnapshot, setCacheSnapshot] = useState<Record<string, string>>({})
   const lastHandledRunRequestIdRef = useRef<string | null>(null)
+  const cacheLoadIdRef = useRef(0)
+
+  useEffect(() => {
+    const cacheLoadId = cacheLoadIdRef.current + 1
+    cacheLoadIdRef.current = cacheLoadId
+    setIsCacheReady(false)
+    setCacheSnapshot({})
+
+    void (async () => {
+      const result = await getWindowElectron().listViewCacheEntries({ viewId })
+      if (cacheLoadId !== cacheLoadIdRef.current) {
+        return
+      }
+
+      if (!result.success) {
+        console.error('[view-runtime] failed to load cache entries', result.error)
+        setCacheSnapshot({})
+        setIsCacheReady(true)
+        return
+      }
+
+      setCacheSnapshot(toViewCacheSnapshot(result.data))
+      setIsCacheReady(true)
+    })()
+  }, [viewId])
 
   const payload = useMemo<ViewRuntimePayload>(() => {
     const activeEnvironments = environments
@@ -84,10 +117,11 @@ export function ViewRuntimePreview({
         owners,
       },
       scope: {},
+      cache: cacheSnapshot,
       sharedScripts,
       scriptPackages,
     }
-  }, [environments, scriptPackages, sharedScripts])
+  }, [cacheSnapshot, environments, scriptPackages, sharedScripts])
 
   const requestPathKeyToId = useMemo(
     () => new Map(requestPaths.map(record => [JSON.stringify(record.path), record.requestId] as const)),
@@ -106,6 +140,63 @@ export function ViewRuntimePreview({
       }
 
       if (event.data?.type !== VIEW_RUNTIME_CALL_REQUEST_EVENT) {
+        if (event.data?.type !== VIEW_RUNTIME_CACHE_REQUEST_EVENT) {
+          return
+        }
+
+        const request = event.data as ViewRuntimeCacheRequestMessage
+        const cacheSessionId = cacheLoadIdRef.current
+
+        void (async () => {
+          switch (request.operation) {
+            case 'set': {
+              const result = await getWindowElectron().setViewCacheEntry({
+                viewId,
+                key: request.key,
+                value: request.value,
+              })
+
+              if (cacheSessionId !== cacheLoadIdRef.current) {
+                return
+              }
+
+              if (!result.success) {
+                postCacheRequestResult({ requestId: request.requestId, error: errorResponseToMessage(result.error) })
+                return
+              }
+
+              setCacheSnapshot(previous => ({
+                ...previous,
+                [result.data.key]: result.data.value,
+              }))
+              postCacheRequestResult({ requestId: request.requestId, error: null })
+              return
+            }
+            case 'remove': {
+              const result = await getWindowElectron().deleteViewCacheEntry({
+                viewId,
+                key: request.key,
+              })
+
+              if (cacheSessionId !== cacheLoadIdRef.current) {
+                return
+              }
+
+              if (!result.success) {
+                postCacheRequestResult({ requestId: request.requestId, error: errorResponseToMessage(result.error) })
+                return
+              }
+
+              setCacheSnapshot(previous => {
+                const next = { ...previous }
+                delete next[request.key]
+                return next
+              })
+              postCacheRequestResult({ requestId: request.requestId, error: null })
+              return
+            }
+          }
+        })()
         return
       }
 
@@ -161,7 +252,7 @@ export function ViewRuntimePreview({
   }, [rememberRequests, requestPathKeyToId, viewId])
 
   useEffect(() => {
-    if (!isIframeReady || !iframeRef.current?.contentWindow) {
+    if (!isIframeReady || !isCacheReady || !iframeRef.current?.contentWindow) {
       return
     }
 
@@ -173,10 +264,10 @@ export function ViewRuntimePreview({
       },
       '*'
     )
-  }, [isIframeReady, payload, source])
+  }, [isCacheReady, isIframeReady, payload, source])
 
   useEffect(() => {
-    if (!isIframeReady || !iframeRef.current?.contentWindow) {
+    if (!isIframeReady || !isCacheReady || !iframeRef.current?.contentWindow) {
       return
     }
 
@@ -188,7 +279,7 @@ export function ViewRuntimePreview({
 
     iframeRef.current.contentWindow.postMessage({ type: VIEW_RUNTIME_TRIGGER_RUN_EVENT }, '*')
     onRunHandled(runRequestId)
-  }, [isIframeReady, onRunHandled, runRequestId])
+  }, [isCacheReady, isIframeReady, onRunHandled, runRequestId])
 
   return (
     <iframe
@@ -219,6 +310,21 @@ export function ViewRuntimePreview({
       '*'
     )
   }
+
+  function postCacheRequestResult({ requestId, error }: { requestId: string; error: string | null }) {
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT,
+        requestId,
+        error,
+      },
+      '*'
+    )
+  }
+}
+
+function toViewCacheSnapshot(entries: ViewCacheEntryRecord[]) {
+  return Object.fromEntries(entries.map(entry => [entry.key, entry.value]))
 }
 
 function serializeEnvironmentValues(values: Record<string, string>) {

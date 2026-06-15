@@ -458,9 +458,10 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'Views run in a sandboxed iframe as TSX modules and are designed for building multi-request flows with reusable React UI.',
     notes: [
       'Write normal module code and export default a component function.',
-      'The runtime includes React hooks, env, scope, console, crypto, clipboard, cookies, z, Table, and CodeEditor.',
+      'The runtime includes React hooks, env, scope, cache, console, crypto, clipboard, cookies, z, Table, and CodeEditor.',
       'Use callRequest to execute saved HTTP requests from the workspace without navigating away from the view pane.',
       'The runtime does not expose request or response globals. Build your own state around callRequest results.',
+      'cache stores string values per view in the database. Use JSON.stringify and JSON.parse semantics when you want structured data.',
       'Tailwind utility classes can be used in view runtime components, in addition to inline styles.',
     ],
     sections: [
@@ -473,6 +474,14 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
           { label: 'env.set(name, value, environmentName?)', detail: 'Update an environment value from the running view.' },
           { label: 'scope.get(name)', detail: 'Read a view-scoped value from the current run.' },
           { label: 'scope.set(name, value)', detail: 'Persist a string value within the current run.' },
+          { label: 'await cache.getItem(key)', detail: 'Read a persisted string value for the current view, or null when missing.' },
+          {
+            label: 'await cache.getItemWithSchema(key, schema)',
+            detail: 'Read persisted data, try JSON first, then validate the raw string, and return null when missing or invalid.',
+          },
+          { label: 'await cache.setItem(key, value)', detail: 'Persist a string value for the current view.' },
+          { label: 'await cache.getAll()', detail: 'Return a copied object containing all persisted cache entries for the current view.' },
+          { label: 'await cache.removeItem(key)', detail: 'Delete a persisted cache value for the current view.' },
           { label: 'cookies.parse(value)', detail: 'Parse Set-Cookie header values returned from callRequest.' },
           { label: 'cookies.stringify(cookies)', detail: 'Serialize cookie objects back into a Set-Cookie string.' },
           { label: 'formatXml(xml)', detail: 'Pretty-print XML strings before rendering them.' },
@@ -504,6 +513,14 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Use remembered flow state',
         code: "export default function FlowView() {\n  const [token, setToken] = useState(scope.get('token') ?? '')\n\n  async function authenticate() {\n    const response = await callRequest(['Auth', 'Refresh Token'])\n    if (response.body.type === 'json') {\n      const nextToken = typeof response.body.data === 'object' && response.body.data !== null ? Reflect.get(response.body.data, 'token') : null\n      if (typeof nextToken === 'string') {\n        scope.set('token', nextToken)\n        setToken(nextToken)\n      }\n    }\n  }\n\n  return <div>{token || 'No token yet'}</div>\n}",
+      },
+      {
+        title: 'Persist a draft filter per view',
+        code: "export default function FilterView() {\n  const [value, setValue] = useState('')\n\n  useEffect(() => {\n    void (async () => {\n      setValue((await cache.getItem('users.filter')) ?? '')\n    })()\n  }, [])\n\n  async function handleChange(nextValue: string) {\n    setValue(nextValue)\n    await cache.setItem('users.filter', nextValue)\n  }\n\n  return <input value={value} onChange={event => void handleChange(event.target.value)} />\n}",
+      },
+      {
+        title: 'Persist structured data with Zod',
+        code: "const SelectionSchema = z.object({\n  requestId: z.string(),\n  tab: z.enum(['overview', 'details']),\n})\n\nexport default function SelectionView() {\n  const [selection, setSelection] = useState<{ requestId: string; tab: 'overview' | 'details' } | null>(null)\n\n  useEffect(() => {\n    void (async () => {\n      setSelection(await cache.getItemWithSchema('selection', SelectionSchema))\n    })()\n  }, [])\n\n  async function choose(requestId: string) {\n    const nextSelection = { requestId, tab: 'overview' as const }\n    setSelection(nextSelection)\n    await cache.setItem('selection', JSON.stringify(nextSelection))\n  }\n\n  return <button onClick={() => void choose('req_123')}>{selection?.requestId ?? 'Select request'}</button>\n}",
       },
     ],
   },
