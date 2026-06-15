@@ -19,6 +19,7 @@ import { appSettingsStore } from '@/global/appSettingsStore'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
 import { ScriptAiMergeEditor } from './ScriptAiMergeEditor'
 import { clsx } from '@/lib/functions/clsx'
+import { scriptAiReviewStore } from './scriptAiReviewStore'
 
 type ScriptAiReviewDialogProps = {
   target: ScriptAiTarget
@@ -44,7 +45,6 @@ export function openScriptAiReviewDialog(props: ScriptAiReviewDialogProps) {
 export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiReviewDialogProps) {
   const appDefaultModel = useSelector(appSettingsStore, state => state.context.settings?.scriptAiModel ?? null)
   const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
-  const [prompt, setPrompt] = useState('')
   const [proposal, setProposal] = useState(currentCode)
   const [workspaceState, setWorkspaceState] = useState<ScriptAiWorkspaceState | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -54,6 +54,8 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [isDiffDialogOpen, setIsDiffDialogOpen] = useState(false)
   const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false)
+  const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null)
+  const [promptHistoryDraft, setPromptHistoryDraft] = useState('')
   const transcriptContainerRef = useRef<HTMLDivElement | null>(null)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -62,6 +64,9 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const primaryPhase = getPrimaryScriptAiPhase(target.runtimeContext)
   const editorLanguage =
     primaryPhase === 'response-visualizer' || primaryPhase === 'view-runtime' ? 'jsx' : 'javascript'
+  const promptEntry = useSelector(scriptAiReviewStore, state => state.context.entriesByTargetKey[targetKey] ?? null)
+  const prompt = promptEntry?.prompt ?? ''
+  const promptHistory = promptEntry?.promptHistory ?? []
   const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
   const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
@@ -174,17 +179,22 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   }
 
   async function sendPrompt() {
-    if (!prompt.trim()) {
+    const trimmedPrompt = prompt.trim()
+    if (!trimmedPrompt) {
       setErrorMessage('Describe what you want the script to do first.')
       return
     }
 
     setErrorMessage(null)
     setIsSubmitting(true)
+    scriptAiReviewStore.trigger.promptSubmitted({ targetKey, prompt: trimmedPrompt })
+    setPromptHistoryIndex(null)
+    setPromptHistoryDraft('')
 
     try {
       const ensuredSessionId = selectedSessionId ?? (await createSessionRequest())
       if (!ensuredSessionId) {
+        scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: trimmedPrompt })
         return
       }
 
@@ -192,18 +202,18 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
         target,
         currentCode,
         sessionId: ensuredSessionId,
-        message: prompt.trim(),
+        message: trimmedPrompt,
         model: selectedModel || null,
         documentation: buildScriptDocumentationPromptForTarget(target),
       })
 
       if (!result.success) {
         setErrorMessage(errorResponseToMessage(result.error))
+        scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: trimmedPrompt })
         return
       }
 
       applyWorkspaceState(result.data)
-      setPrompt('')
     } finally {
       setIsSubmitting(false)
     }
@@ -224,6 +234,42 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   }
 
   function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'ArrowUp' && isCaretOnFirstLine(event.currentTarget)) {
+      if (!promptHistory.length) {
+        return
+      }
+
+      event.preventDefault()
+      setPromptHistoryIndex(currentIndex => {
+        const nextIndex = currentIndex === null ? promptHistory.length - 1 : Math.max(0, currentIndex - 1)
+        if (currentIndex === null) {
+          setPromptHistoryDraft(prompt)
+        }
+        scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: promptHistory[nextIndex] ?? '' })
+        return nextIndex
+      })
+      return
+    }
+
+    if (event.key === 'ArrowDown' && promptHistoryIndex !== null && isCaretOnLastLine(event.currentTarget)) {
+      event.preventDefault()
+      setPromptHistoryIndex(currentIndex => {
+        if (currentIndex === null) {
+          return null
+        }
+
+        if (currentIndex >= promptHistory.length - 1) {
+          scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: promptHistoryDraft })
+          return null
+        }
+
+        const nextIndex = currentIndex + 1
+        scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: promptHistory[nextIndex] ?? '' })
+        return nextIndex
+      })
+      return
+    }
+
     if (event.key !== 'Enter' || event.shiftKey) {
       return
     }
@@ -338,7 +384,11 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
             className="min-h-12 w-full resize-none border-0 bg-base-100 px-3 py-3 font-mono text-sm leading-6 text-base-content outline-none placeholder:text-base-content/40"
             placeholder={`Example: ${getPromptPlaceholder(primaryPhase)}`}
             value={prompt}
-            onChange={event => setPrompt(event.target.value)}
+            onChange={event => {
+              scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: event.target.value })
+              setPromptHistoryIndex(null)
+              setPromptHistoryDraft(event.target.value)
+            }}
             onKeyDown={handlePromptKeyDown}
             rows={1}
           />
@@ -532,6 +582,14 @@ function getTranscriptPartContent(part: ScriptAiMessagePart) {
 
 function getFirstLine(value: string) {
   return value.trim().split('\n')[0] ?? ''
+}
+
+function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {
+  return !textarea.value.slice(0, textarea.selectionStart).includes('\n')
+}
+
+function isCaretOnLastLine(textarea: HTMLTextAreaElement) {
+  return !textarea.value.slice(textarea.selectionEnd).includes('\n')
 }
 
 function getPromptPlaceholder(phase: ReturnType<typeof getPrimaryScriptAiPhase>) {
