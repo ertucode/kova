@@ -253,10 +253,10 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
     <Dialog
       title={`${documentation.title} AI Review`}
       onClose={() => dialogActions.close()}
-      className="max-h-[90vh] max-w-[1800px] overflow-hidden"
+      className="h-[90vh] max-h-[90vh] max-w-[1800px] overflow-hidden"
       bodyClassName="overflow-hidden"
     >
-      <div className="flex max-h-[90vh] min-h-[820px] flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <section className="flex min-h-0 flex-1 flex-col overflow-hidden border border-base-content/10 bg-base-100/70">
           <div ref={transcriptContainerRef} className="min-h-0 flex-1 overflow-auto px-4 py-3">
             {selectedSessionId ? (
@@ -285,7 +285,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
           </div>
         </section>
 
-        <div className="border-x border-b border-base-content/10">
+        <div className="shrink-0 border-x border-b border-base-content/10">
           <div className="flex flex-wrap border-b border-base-content/10">
             <FlatButton
               className="min-w-0 flex-[0_0_auto] justify-between sm:min-w-[220px]"
