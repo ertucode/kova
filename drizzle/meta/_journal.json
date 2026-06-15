@@ -295,6 +295,20 @@
       "when": 1781565195549,
       "tag": "0041_equal_tiger_shark",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1781566762357,
+      "tag": "0042_worthless_toad_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1781567034484,
+      "tag": "0043_real_lester",
+      "breakpoints": true
     }
   ]
 }

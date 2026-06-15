@@ -31,6 +31,8 @@ export function useViewRunShortcuts() {
           name: view.name,
           code: view.code,
           shortcut,
+          showCodeEditor: view.showCodeEditor,
+          showRuntimePreview: view.showRuntimePreview,
           layoutMode: view.layoutMode,
           splitRatio: view.splitRatio,
           rememberRequests: view.rememberRequests,

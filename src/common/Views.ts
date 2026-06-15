@@ -15,6 +15,8 @@ export type ViewRecord = {
   name: string
   code: string
   shortcut: ViewShortcut | null
+  showCodeEditor: boolean
+  showRuntimePreview: boolean
   layoutMode: ViewLayoutMode
   splitRatio: number
   rememberRequests: boolean
@@ -28,6 +30,8 @@ export type CreateViewInput = {
   name: string
   code?: string
   shortcut?: ViewShortcut | null
+  showCodeEditor?: boolean
+  showRuntimePreview?: boolean
   layoutMode?: ViewLayoutMode
   splitRatio?: number
   rememberRequests?: boolean
@@ -38,6 +42,8 @@ export type UpdateViewInput = {
   name: string
   code: string
   shortcut: ViewShortcut | null
+  showCodeEditor: boolean
+  showRuntimePreview: boolean
   layoutMode: ViewLayoutMode
   splitRatio: number
   rememberRequests: boolean

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { Columns2Icon, Edit2Icon, InfoIcon, KeyboardIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, SparklesIcon, Trash2Icon } from 'lucide-react'
+import { Columns2Icon, Edit2Icon, FileCode2Icon, InfoIcon, KeyboardIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, SparklesIcon, Trash2Icon } from 'lucide-react'
 import type { ExplorerItem, ExplorerRequestItem } from '@common/Explorer'
 import { parseKeyValueRows } from '@common/KeyValueRows'
+import { Typescript } from '@common/Typescript'
 import type { ViewLayoutMode, ViewRecord, ViewShortcut } from '@common/Views'
 import { getWindowElectron } from '@/getWindowElectron'
 import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
@@ -36,6 +37,8 @@ type ViewEditorEntry = {
   isDirty: boolean
   saving: boolean
 }
+
+type ViewLayoutChoice = 'stacked' | 'side-by-side' | 'only-code' | 'only-view'
 
 const MIN_VIEW_SPLIT_RATIO = 15
 const MAX_VIEW_SPLIT_RATIO = 85
@@ -118,19 +121,21 @@ export function ViewsPanel() {
       const nextEntries: Record<string, ViewEditorEntry> = {}
 
       for (const item of items) {
+        const normalizedItem = normalizeViewRecord(item)
         const currentEntry = currentEntries[item.id]
         if (currentEntry?.isDirty) {
           nextEntries[item.id] = {
             ...currentEntry,
-            saved: item,
-            isDirty: serializeViewDraft(currentEntry.current) !== serializeViewDraft(item),
+            saved: normalizedItem,
+            current: normalizeViewRecord(currentEntry.current),
+            isDirty: serializeViewDraft(currentEntry.current) !== serializeViewDraft(normalizedItem),
           }
           continue
         }
 
         nextEntries[item.id] = {
-          saved: item,
-          current: item,
+          saved: normalizedItem,
+          current: normalizedItem,
           isDirty: false,
           saving: currentEntry?.saving ?? false,
         }
@@ -317,9 +322,9 @@ export function ViewsPanel() {
                   onClick={() => ViewUiHelpers.selectView(item.id)}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{entry?.current.name || item.name}</div>
-                    <div className="mt-1 text-xs text-base-content/45">
-                      {entry?.current.layoutMode === 'vertical' ? 'Stacked' : 'Side by side'}
+                     <div className="truncate text-sm font-medium">{entry?.current.name || item.name}</div>
+                     <div className="mt-1 text-xs text-base-content/45">
+                      {getViewLayoutChoiceLabel(getViewLayoutChoice(entry?.current ?? item))}
                       {' · '}
                       {entry?.current.rememberRequests ? 'Remembering requests' : 'Live requests'}
                     </div>
@@ -370,23 +375,14 @@ export function ViewsPanel() {
                 }}
               />
 
-              <ToolbarButton
-                label={selectedDraft.layoutMode === 'horizontal' ? 'Stacked layout' : 'Side-by-side layout'}
-                onClick={() => {
-                  const nextDraft: ViewRecord = {
-                    ...selectedDraft,
-                    layoutMode: selectedDraft.layoutMode === 'horizontal' ? 'vertical' : 'horizontal',
-                  }
+              <ViewLayoutChooser
+                value={getViewLayoutChoice(selectedDraft)}
+                onChange={choice => {
+                  const nextDraft = applyViewLayoutChoice(selectedDraft, choice)
                   updateDraft(selectedDraft.id, () => nextDraft)
                   void saveView(selectedDraft.id, nextDraft)
                 }}
-              >
-                {selectedDraft.layoutMode === 'horizontal' ? (
-                  <Rows3Icon className="size-4" />
-                ) : (
-                  <Columns2Icon className="size-4" />
-                )}
-              </ToolbarButton>
+              />
 
               <ToolbarButton label="Documentation" onClick={() => openDocumentation()}>
                 <InfoIcon className="size-4" />
@@ -433,75 +429,85 @@ export function ViewsPanel() {
                 selectedDraft.layoutMode === 'vertical' ? 'flex-col' : 'flex-row',
               ].join(' ')}
             >
-              <section
-                className="min-h-0 min-w-0 overflow-hidden"
-                style={
-                  selectedDraft.layoutMode === 'horizontal'
-                    ? { width: `${selectedDraft.splitRatio}%` }
-                    : { height: `${selectedDraft.splitRatio}%` }
-                }
-              >
-                <CodeEditor
-                  ref={viewEditorRef}
-                  value={selectedDraft.code}
-                  externalSelection={
-                    pendingSelectionRestoreRef.current?.viewId === selectedDraft.id &&
-                    pendingSelectionRestoreRef.current.code === selectedDraft.code
-                      ? pendingSelectionRestoreRef.current.selection
-                      : null
-                  }
-                  language="jsx"
-                  size="small"
-                  showLineNumbers
-                  minHeightClassName="min-h-0 h-full"
-                  className="h-full border-0"
-                  placeholder={DEFAULT_VIEW_SOURCE}
-                  extensions={viewRuntimeExtensions}
-                  onChange={value => updateDraft(selectedDraft.id, draft => ({ ...draft, code: value }))}
-                  onSelectionChange={selection => {
-                    viewSelectionRef.current = selection
-                  }}
-                  onBlur={() => undefined}
-                  scale={0.9}
-                />
-              </section>
+              {selectedDraft.showCodeEditor ? (
+                <>
+                  <section
+                    className={selectedDraft.showRuntimePreview ? 'min-h-0 min-w-0 overflow-hidden' : 'min-h-0 min-w-0 flex-1 overflow-hidden'}
+                    style={
+                      selectedDraft.showRuntimePreview
+                        ? selectedDraft.layoutMode === 'horizontal'
+                        ? { width: `${selectedDraft.splitRatio}%` }
+                        : { height: `${selectedDraft.splitRatio}%` }
+                        : undefined
+                    }
+                  >
+                    <CodeEditor
+                      ref={viewEditorRef}
+                      value={selectedDraft.code}
+                      externalSelection={
+                        pendingSelectionRestoreRef.current?.viewId === selectedDraft.id &&
+                        pendingSelectionRestoreRef.current.code === selectedDraft.code
+                          ? pendingSelectionRestoreRef.current.selection
+                          : null
+                      }
+                      language="jsx"
+                      size="small"
+                      showLineNumbers
+                      minHeightClassName="min-h-0 h-full"
+                      className="h-full border-0"
+                      placeholder={DEFAULT_VIEW_SOURCE}
+                      extensions={viewRuntimeExtensions}
+                      onChange={value => updateDraft(selectedDraft.id, draft => ({ ...draft, code: value }))}
+                      onSelectionChange={selection => {
+                        viewSelectionRef.current = selection
+                      }}
+                      onBlur={() => undefined}
+                      scale={0.9}
+                    />
+                  </section>
 
-              <button
-                type="button"
-                aria-label="Resize view split"
-                className={[
-                  'shrink-0 border-0 bg-base-content/10 transition hover:bg-primary/45',
-                  selectedDraft.layoutMode === 'horizontal'
-                    ? 'h-full w-[3px] cursor-ew-resize'
-                    : 'h-[3px] w-full cursor-ns-resize',
-                ].join(' ')}
-                onMouseDown={event => {
-                  resizeStateRef.current = {
-                    viewId: selectedDraft.id,
-                    layoutMode: selectedDraft.layoutMode,
-                    startRatio: selectedDraft.splitRatio,
-                    startX: event.clientX,
-                    startY: event.clientY,
-                  }
-                  setIsResizing(true)
-                  document.body.style.cursor = selectedDraft.layoutMode === 'horizontal' ? 'ew-resize' : 'ns-resize'
-                }}
-              />
+                  {selectedDraft.showRuntimePreview ? (
+                    <button
+                      type="button"
+                      aria-label="Resize view split"
+                      className={[
+                        'shrink-0 border-0 bg-base-content/10 transition hover:bg-primary/45',
+                        selectedDraft.layoutMode === 'horizontal'
+                          ? 'h-full w-[3px] cursor-ew-resize'
+                          : 'h-[3px] w-full cursor-ns-resize',
+                      ].join(' ')}
+                      onMouseDown={event => {
+                        resizeStateRef.current = {
+                          viewId: selectedDraft.id,
+                          layoutMode: selectedDraft.layoutMode,
+                          startRatio: selectedDraft.splitRatio,
+                          startX: event.clientX,
+                          startY: event.clientY,
+                        }
+                        setIsResizing(true)
+                        document.body.style.cursor = selectedDraft.layoutMode === 'horizontal' ? 'ew-resize' : 'ns-resize'
+                      }}
+                    />
+                  ) : null}
+                </>
+              ) : null}
 
-              <section className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-                <ViewRuntimePreview
-                  viewId={selectedDraft.id}
-                  source={selectedSavedView?.code ?? ''}
-                  rememberRequests={selectedSavedView?.rememberRequests ?? false}
-                  runRequestId={selectedRunRequestId}
-                  environments={runtimeEnvironments}
-                  sharedScripts={runtimeSharedScripts}
-                  scriptPackages={scriptPackageArtifacts}
-                  requestPaths={requestPaths}
-                  onRunHandled={requestId => ViewUiHelpers.markRunHandled(requestId)}
-                />
-                {isResizing ? <div className="absolute inset-0 z-10" aria-hidden /> : null}
-              </section>
+              {selectedDraft.showRuntimePreview ? (
+                <section className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                  <ViewRuntimePreview
+                    viewId={selectedDraft.id}
+                    source={selectedSavedView?.code ?? ''}
+                    rememberRequests={selectedSavedView?.rememberRequests ?? false}
+                    runRequestId={selectedRunRequestId}
+                    environments={runtimeEnvironments}
+                    sharedScripts={runtimeSharedScripts}
+                    scriptPackages={scriptPackageArtifacts}
+                    requestPaths={requestPaths}
+                    onRunHandled={requestId => ViewUiHelpers.markRunHandled(requestId)}
+                  />
+                  {isResizing ? <div className="absolute inset-0 z-10" aria-hidden /> : null}
+                </section>
+              ) : null}
             </div>
           </>
         )}
@@ -514,6 +520,8 @@ export function ViewsPanel() {
       name: buildNewViewName(items),
       code: DEFAULT_VIEW_SOURCE,
       shortcut: null,
+      showCodeEditor: true,
+      showRuntimePreview: true,
       layoutMode: 'horizontal',
       splitRatio: 50,
       rememberRequests: false,
@@ -614,6 +622,8 @@ export function ViewsPanel() {
         name: draftToSave.name,
         code: draftToSave.code,
         shortcut: draftToSave.shortcut,
+        showCodeEditor: draftToSave.showCodeEditor,
+        showRuntimePreview: draftToSave.showRuntimePreview,
         layoutMode: draftToSave.layoutMode,
         splitRatio: clampSplitRatio(draftToSave.splitRatio),
         rememberRequests: draftToSave.rememberRequests,
@@ -629,15 +639,17 @@ export function ViewsPanel() {
           return currentEntries
         }
 
+        const normalizedResult = normalizeViewRecord(result.data)
+
         const nextCurrent =
-          serializeViewDraft(currentEntry.current) === serializeViewDraft(result.data)
+          serializeViewDraft(currentEntry.current) === serializeViewDraft(normalizedResult)
             ? currentEntry.current
-            : result.data
+            : normalizedResult
 
         return {
           ...currentEntries,
           [viewId]: {
-            saved: result.data,
+            saved: normalizedResult,
             current: nextCurrent,
             isDirty: false,
             saving: false,
@@ -713,6 +725,80 @@ function ToolbarButton({
     <Tooltip content={label} placement="bottom">
       {button}
     </Tooltip>
+  )
+}
+
+function CodeEditorVisibilityIcon({ showCodeEditor }: { showCodeEditor: boolean }) {
+  return (
+    <span className="relative inline-flex size-4 items-center justify-center">
+      <FileCode2Icon className="size-4" />
+      {showCodeEditor ? null : <span className="absolute h-[1.5px] w-5 rotate-[-45deg] rounded-full bg-current" />}
+    </span>
+  )
+}
+
+function ViewLayoutChooser({
+  value,
+  onChange,
+}: {
+  value: ViewLayoutChoice
+  onChange: (value: ViewLayoutChoice) => void
+}) {
+  const options: ReadonlyArray<{ value: ViewLayoutChoice; label: string; icon: ReactNode }> = [
+    { value: 'stacked', label: 'Stacked layout', icon: <Rows3Icon className="size-4" /> },
+    { value: 'side-by-side', label: 'Side-by-side layout', icon: <Columns2Icon className="size-4" /> },
+    { value: 'only-code', label: 'Only code', icon: <CodeEditorVisibilityIcon showCodeEditor /> },
+    { value: 'only-view', label: 'Only view', icon: <PreviewVisibilityIcon showRuntimePreview /> },
+  ]
+
+  const selectedOption = options.find(option => option.value === value)
+  if (!selectedOption) {
+    return null
+  }
+
+  return (
+    <div className="group relative flex items-center justify-center" tabIndex={0}>
+      <button
+        type="button"
+        className="inline-flex h-8 items-center justify-center px-0 text-base-content/70 transition cursor-pointer"
+        aria-label={selectedOption.label}
+      >
+        {selectedOption.icon}
+      </button>
+
+      <div className="pointer-events-none absolute right-0 top-full z-20 w-52 pt-2 opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <div className="rounded-2xl border border-base-content/10 bg-base-100 p-1 shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+          {options.map(option => {
+            const isSelected = option.value === value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={[
+                  'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition',
+                  isSelected
+                    ? 'bg-primary/10 text-base-content'
+                    : 'text-base-content/72 hover:bg-base-200/70 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => onChange(option.value)}
+              >
+                <span className="inline-flex size-4 items-center justify-center">{option.icon}</span>
+                <span>{option.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PreviewVisibilityIcon({ showRuntimePreview }: { showRuntimePreview: boolean }) {
+  return (
+    <span className="relative inline-flex size-4 items-center justify-center">
+      <PlayIcon className="size-4" />
+      {showRuntimePreview ? null : <span className="absolute h-[1.5px] w-5 rotate-[-45deg] rounded-full bg-current" />}
+    </span>
   )
 }
 
@@ -845,14 +931,98 @@ function buildNewViewName(items: ViewRecord[]) {
 }
 
 function serializeViewDraft(view: ViewRecord) {
+  const normalizedView = normalizeViewRecord(view)
   return JSON.stringify({
-    name: view.name,
-    code: view.code,
-    shortcut: view.shortcut,
-    layoutMode: view.layoutMode,
-    splitRatio: clampSplitRatio(view.splitRatio),
-    rememberRequests: view.rememberRequests,
+    name: normalizedView.name,
+    code: normalizedView.code,
+    shortcut: normalizedView.shortcut,
+    showCodeEditor: normalizedView.showCodeEditor,
+    showRuntimePreview: normalizedView.showRuntimePreview,
+    layoutMode: normalizedView.layoutMode,
+    splitRatio: clampSplitRatio(normalizedView.splitRatio),
+    rememberRequests: normalizedView.rememberRequests,
   })
+}
+
+function getViewLayoutChoice(view: Pick<ViewRecord, 'showCodeEditor' | 'showRuntimePreview' | 'layoutMode'>): ViewLayoutChoice {
+  const normalizedVisibility = normalizeViewVisibility(view)
+  if (normalizedVisibility.showCodeEditor && normalizedVisibility.showRuntimePreview) {
+    return view.layoutMode === 'vertical' ? 'stacked' : 'side-by-side'
+  }
+
+  if (normalizedVisibility.showCodeEditor) {
+    return 'only-code'
+  }
+
+  if (normalizedVisibility.showRuntimePreview) {
+    return 'only-view'
+  }
+
+  return 'side-by-side'
+}
+
+function normalizeViewRecord(view: ViewRecord): ViewRecord {
+  return {
+    ...view,
+    ...normalizeViewVisibility(view),
+  }
+}
+
+function normalizeViewVisibility(
+  view: Pick<ViewRecord, 'showCodeEditor' | 'showRuntimePreview'>
+): Pick<ViewRecord, 'showCodeEditor' | 'showRuntimePreview'> {
+  return {
+    showCodeEditor: view.showCodeEditor ?? true,
+    showRuntimePreview: view.showRuntimePreview ?? true,
+  }
+}
+
+function applyViewLayoutChoice(view: ViewRecord, choice: ViewLayoutChoice): ViewRecord {
+  switch (choice) {
+    case 'stacked':
+      return {
+        ...view,
+        showCodeEditor: true,
+        showRuntimePreview: true,
+        layoutMode: 'vertical',
+      }
+    case 'side-by-side':
+      return {
+        ...view,
+        showCodeEditor: true,
+        showRuntimePreview: true,
+        layoutMode: 'horizontal',
+      }
+    case 'only-code':
+      return {
+        ...view,
+        showCodeEditor: true,
+        showRuntimePreview: false,
+      }
+    case 'only-view':
+      return {
+        ...view,
+        showCodeEditor: false,
+        showRuntimePreview: true,
+      }
+    default:
+      return Typescript.assertUnreachable(choice)
+  }
+}
+
+function getViewLayoutChoiceLabel(choice: ViewLayoutChoice) {
+  switch (choice) {
+    case 'stacked':
+      return 'Stacked'
+    case 'side-by-side':
+      return 'Side by side'
+    case 'only-code':
+      return 'Only code'
+    case 'only-view':
+      return 'Only view'
+    default:
+      return Typescript.assertUnreachable(choice)
+  }
 }
 
 function parseEnvironmentValues(value: string) {

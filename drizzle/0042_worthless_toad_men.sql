@@ -1,0 +1,1 @@
+ALTER TABLE `views` ADD `show_code_editor` integer DEFAULT true NOT NULL;

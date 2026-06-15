@@ -1,0 +1,1 @@
+ALTER TABLE `views` ADD `show_runtime_preview` integer DEFAULT true NOT NULL;

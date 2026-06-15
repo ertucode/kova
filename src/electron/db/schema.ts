@@ -160,6 +160,8 @@ export const views = sqliteTable(
     name: text('name').notNull(),
     code: text('code').notNull().default(''),
     shortcutJson: text('shortcut_json'),
+    showCodeEditor: integer('show_code_editor', { mode: 'boolean' }).notNull().default(true),
+    showRuntimePreview: integer('show_runtime_preview', { mode: 'boolean' }).notNull().default(true),
     layoutMode: text('layout_mode').notNull().default('horizontal'),
     splitRatio: integer('split_ratio').notNull().default(50),
     rememberRequests: integer('remember_requests', { mode: 'boolean' }).notNull().default(false),
