@@ -695,7 +695,7 @@ function RuntimeShell({ state }: { state: RuntimeShellState }) {
   return (
     <div style={{ position: 'relative', height: '100%' }}>
       {Component ? (
-        <RuntimeErrorBoundary source={state.source}>
+        <RuntimeErrorBoundary key={state.source} source={state.source}>
           <Component />
         </RuntimeErrorBoundary>
       ) : (

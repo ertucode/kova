@@ -24,7 +24,7 @@ import { scriptAiReviewStore } from './scriptAiReviewStore'
 type ScriptAiReviewDialogProps = {
   target: ScriptAiTarget
   currentCode: string
-  onApply: (nextCode: string) => void
+  onApply: (nextCode: string) => Promise<boolean | void> | boolean | void
 }
 
 type TranscriptRow =
@@ -290,7 +290,11 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
       return
     }
 
-    onApply(result.data.code)
+    const applied = await onApply(result.data.code)
+    if (applied === false) {
+      return
+    }
+
     dialogActions.close()
     toast.show({ severity: 'success', message: 'AI suggestion applied to the script.' })
   }

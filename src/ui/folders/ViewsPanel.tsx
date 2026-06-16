@@ -393,13 +393,17 @@ export function ViewsPanel() {
                 onClick={() =>
                     openScriptAiReviewDialog({
                       target: {
-                        ownerType: 'view',
-                        ownerId: selectedDraft.id,
-                        runtimeContext: { phase: 'view-runtime' },
-                      },
-                      currentCode: selectedDraft.code,
-                      onApply: nextCode => updateDraft(selectedDraft.id, draft => ({ ...draft, code: nextCode })),
-                  })
+                         ownerType: 'view',
+                         ownerId: selectedDraft.id,
+                         runtimeContext: { phase: 'view-runtime' },
+                       },
+                       currentCode: selectedDraft.code,
+                       onApply: async nextCode => {
+                         const nextDraft = { ...selectedDraft, code: nextCode }
+                         updateDraft(selectedDraft.id, () => nextDraft)
+                         return saveView(selectedDraft.id, nextDraft)
+                       },
+                   })
                 }
               >
                 <SparklesIcon className="size-4" />
@@ -559,7 +563,7 @@ export function ViewsPanel() {
     const latestEntry = entriesRef.current[viewId]
     const latestDraft = overrideDraft ?? latestEntry?.current
     if (!latestEntry || !latestDraft) {
-      return
+      return false
     }
 
     let draftToSave = latestDraft
@@ -630,7 +634,7 @@ export function ViewsPanel() {
       })
       if (!result.success) {
         toast.show(result)
-        return
+        return false
       }
 
       setEntries(currentEntries => {
@@ -657,6 +661,7 @@ export function ViewsPanel() {
         }
       })
       notifyViewsChanged()
+      return true
     } finally {
       setEntries(currentEntries => {
         const currentEntry = currentEntries[viewId]

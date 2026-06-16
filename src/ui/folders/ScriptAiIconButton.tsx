@@ -17,7 +17,7 @@ export function ScriptAiIconButton({
   ownerId: string
   runtimeContext: ScriptAiRuntimeContext
   currentCode: string
-  onApply: (nextCode: string) => void
+  onApply: (nextCode: string) => Promise<boolean | void> | boolean | void
   className?: string
   tooltip?: string
 }) {
