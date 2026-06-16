@@ -25,9 +25,12 @@ import {
   type ApplyScriptAiWorkspaceInput,
   type ApplyScriptAiWorkspaceResponse,
   type CreateScriptAiSessionInput,
+  type LoadScriptAiMessagePatchDiffInput,
+  type LoadScriptAiMessagePatchDiffResponse,
   type LoadScriptAiWorkspaceInput,
   type ScriptAiMessage,
   type ScriptAiMessagePart,
+  type ScriptAiMessagePatchDiff,
   type ScriptAiSessionSummary,
   type ScriptAiTarget,
   type ScriptAiWorkspaceState,
@@ -161,6 +164,13 @@ export async function syncScriptAiWorkspace(
     }
 
     const runtime = existingRuntime ?? (await ensureTargetRuntime(input.target, input.code))
+
+    // A runtime restored from persisted metadata knows session IDs before it has fetched
+    // their summaries/messages. Hydrate once here so the dialog sees sessions immediately.
+    if (runtime.sessions.size === 0 && runtime.knownSessionIds.size > 0) {
+      await refreshTargetRuntime(runtime)
+    }
+
     await writeWorkspaceCode(runtime, input.code)
 
     const state = toWorkspaceState(runtime, await readWorkspaceCode(runtime))
@@ -199,6 +209,29 @@ export async function abortScriptAiSession(
     const state = toWorkspaceState(runtime, await readWorkspaceCode(runtime))
     emitScriptAiState(state)
     return Result.Success(state)
+  } catch (error) {
+    return toGenericError(error)
+  }
+}
+
+export async function loadScriptAiMessagePatchDiff(
+  input: LoadScriptAiMessagePatchDiffInput
+): Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>> {
+  try {
+    const runtime = await ensureTargetRuntime(input.target, '')
+    if (!runtime.knownSessionIds.has(input.sessionId)) {
+      return GenericError.Message('This OpenCode session does not belong to the current script target.')
+    }
+
+    const client = await getClientForDirectory(runtime.workspacePath)
+    const diffResult = await client.session.diff({
+      path: { id: input.sessionId },
+      query: { messageID: input.messageId },
+    })
+
+    return Result.Success({
+      diffs: requireSdkData(diffResult.data, 'OpenCode did not return the message patch diff.').map(toScriptAiPatchDiff),
+    })
   } catch (error) {
     return toGenericError(error)
   }
@@ -790,7 +823,7 @@ function toScriptAiMessagePart(part: Part): ScriptAiMessagePart {
     case 'snapshot':
       return { id: part.id, type: 'snapshot' }
     case 'patch':
-      return { id: part.id, type: 'patch' }
+      return { id: part.id, type: 'patch', hash: part.hash, files: part.files }
     case 'agent':
       return { id: part.id, type: 'agent', name: part.name }
     case 'subtask':
@@ -805,6 +838,22 @@ function toScriptAiMessagePart(part: Part): ScriptAiMessagePart {
       return { id: part.id, type: 'retry' }
     case 'compaction':
       return { id: part.id, type: 'compaction' }
+  }
+}
+
+function toScriptAiPatchDiff(diff: {
+  file?: string
+  patch?: string
+  additions: number
+  deletions: number
+  status?: 'added' | 'deleted' | 'modified'
+}): ScriptAiMessagePatchDiff {
+  return {
+    file: diff.file ?? null,
+    patch: diff.patch ?? null,
+    additions: diff.additions,
+    deletions: diff.deletions,
+    status: diff.status ?? null,
   }
 }
 

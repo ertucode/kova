@@ -125,6 +125,8 @@ import {
   type ApplyScriptAiWorkspaceResponse,
   type CreateScriptAiSessionInput,
   type ListOpenCodeModelsResponse,
+  type LoadScriptAiMessagePatchDiffInput,
+  type LoadScriptAiMessagePatchDiffResponse,
   type LoadScriptAiWorkspaceInput,
   type ScriptAiWorkspaceState,
   type SendScriptAiMessageInput,
@@ -273,6 +275,7 @@ export type EventResponseMapping = {
   syncScriptAiWorkspace: Promise<GenericResult<SyncScriptAiWorkspaceResponse>>
   applyScriptAiWorkspace: Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
   abortScriptAiSession: Promise<GenericResult<ScriptAiWorkspaceState>>
+  loadScriptAiMessagePatchDiff: Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>>
   listOpenCodeModels: Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: Promise<GenericResult<void>>
@@ -412,6 +415,7 @@ export type EventRequestMapping = {
   syncScriptAiWorkspace: SyncScriptAiWorkspaceInput
   applyScriptAiWorkspace: ApplyScriptAiWorkspaceInput
   abortScriptAiSession: AbortScriptAiSessionInput
+  loadScriptAiMessagePatchDiff: LoadScriptAiMessagePatchDiffInput
   listOpenCodeModels: void
   connectWebSocket: WebSocketConnectInput
   sendWebSocketMessage: WebSocketSendMessageInput
@@ -565,6 +569,9 @@ export type WindowElectron = {
   syncScriptAiWorkspace: (input: SyncScriptAiWorkspaceInput) => Promise<GenericResult<SyncScriptAiWorkspaceResponse>>
   applyScriptAiWorkspace: (input: ApplyScriptAiWorkspaceInput) => Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
   abortScriptAiSession: (input: AbortScriptAiSessionInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
+  loadScriptAiMessagePatchDiff: (
+    input: LoadScriptAiMessagePatchDiffInput
+  ) => Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>>
   listOpenCodeModels: () => Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>

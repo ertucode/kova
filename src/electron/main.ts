@@ -110,6 +110,7 @@ import {
   applyScriptAiWorkspace,
   configureScriptAiBaseDirectory,
   createScriptAiSession,
+  loadScriptAiMessagePatchDiff,
   loadScriptAiWorkspace,
   sendScriptAiMessage,
   shutdownScriptAiServer,
@@ -857,6 +858,10 @@ app.on('ready', async () => {
 
   ipcHandle('abortScriptAiSession', async input => {
     return abortScriptAiSession(input)
+  })
+
+  ipcHandle('loadScriptAiMessagePatchDiff', async input => {
+    return loadScriptAiMessagePatchDiff(input)
   })
 
   ipcHandle('listOpenCodeModels', async () => {

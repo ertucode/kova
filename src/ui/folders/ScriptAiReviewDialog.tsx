@@ -1,6 +1,7 @@
 import {
   getPrimaryScriptAiPhase,
   getScriptAiTargetKey,
+  type ScriptAiMessagePatchDiff,
   type ScriptAiMessagePart,
   type ScriptAiTarget,
 } from '@common/ScriptAi'
@@ -14,8 +15,9 @@ import { buildScriptDocumentationPromptForTarget, getScriptDocumentationForTarge
 import { appSettingsStore } from '@/global/appSettingsStore'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
 import { ScriptAiMergeEditor } from './ScriptAiMergeEditor'
+import type { CodeEditorLanguage } from './CodeEditor'
 import { clsx } from '@/lib/functions/clsx'
-import { scriptAiReviewStore, ScriptAiReviewCoordinator } from './scriptAiReviewStore'
+import { getPatchDiffKey, scriptAiReviewStore, ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 
 type ScriptAiReviewDialogProps = {
   target: ScriptAiTarget
@@ -31,6 +33,7 @@ type TranscriptRow =
   | {
       id: string
       type: 'part'
+      messageId: string
       part: ScriptAiMessagePart
     }
 
@@ -62,6 +65,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const selectedSessionId = reviewEntry?.selectedSessionId ?? null
   const prompt = reviewEntry?.prompt ?? ''
   const promptHistory = reviewEntry?.promptHistory ?? []
+  const patchDiffsByMessageKey = reviewEntry?.patchDiffsByMessageKey ?? {}
   const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
   const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
@@ -74,7 +78,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
         return []
       }
 
-      return [{ id: `${message.id}-${part.id}`, type: 'part' as const, part }]
+      return [{ id: `${message.id}-${part.id}`, type: 'part' as const, messageId: message.id, part }]
     })
   )
   const isSelectedSessionBusy = selectedSession?.status === 'busy' || selectedSession?.status === 'retry'
@@ -110,6 +114,25 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
     textarea.style.height = '0px'
     textarea.style.height = `${textarea.scrollHeight}px`
   }, [prompt])
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      return
+    }
+
+    for (const message of selectedMessages) {
+      if (!message.parts.some(part => part.type === 'patch')) {
+        continue
+      }
+
+      const patchDiffKey = getPatchDiffKey(selectedSessionId, message.id)
+      if (patchDiffsByMessageKey[patchDiffKey]) {
+        continue
+      }
+
+      void ScriptAiReviewCoordinator.ensureMessagePatchDiff(target, selectedSessionId, message.id)
+    }
+  }, [patchDiffsByMessageKey, selectedMessages, selectedSessionId, target])
 
   async function createSession() {
     await ScriptAiReviewCoordinator.createSession(target)
@@ -191,6 +214,14 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
                   {transcriptRows.map(row =>
                     row.type === 'divider' ? (
                       <div key={row.id} className="my-2 border-t border-base-content/10" />
+                    ) : isApplyPatchToolPart(row.part) ? (
+                      <ApplyPatchToolTranscriptPart key={row.id} part={row.part} />
+                    ) : row.part.type === 'patch' && selectedSessionId ? (
+                      <PatchTranscriptPart
+                        key={row.id}
+                        part={row.part}
+                        patchDiffState={patchDiffsByMessageKey[getPatchDiffKey(selectedSessionId, row.messageId)] ?? null}
+                      />
                     ) : (
                       <TranscriptPart key={row.id} part={row.part} />
                     )
@@ -373,6 +404,88 @@ function FlatButton({
   )
 }
 
+function PatchTranscriptPart({
+  part,
+  patchDiffState,
+}: {
+  part: Extract<ScriptAiMessagePart, { type: 'patch' }>
+  patchDiffState: {
+    isLoading: boolean
+    errorMessage: string | null
+    diffs: ScriptAiMessagePatchDiff[] | null
+  } | null
+}) {
+  const patchTitle = part.files.length === 1 ? 'Patch - 1 file' : `Patch - ${String(part.files.length)} files`
+  const combinedPatch = patchDiffState?.diffs ? getCombinedPatchText(patchDiffState.diffs) : ''
+
+  return (
+    <div className="space-y-2 border border-base-content/8 bg-base-200/20 px-3 py-2 text-[12px]">
+      <div className="font-medium text-base-content">{patchTitle}</div>
+      {part.files.length ? (
+        <div className="whitespace-pre-wrap break-words text-[11px] leading-5 text-base-content/55">
+          {part.files.join('\n')}
+        </div>
+      ) : null}
+      <div className="max-h-80 overflow-auto border border-base-content/8 bg-base-100/70 px-3 py-2">
+        {patchDiffState?.isLoading ? (
+          <div className="text-base-content/55">Loading patch...</div>
+        ) : patchDiffState?.errorMessage ? (
+          <div className="text-error">{patchDiffState.errorMessage}</div>
+        ) : combinedPatch ? (
+          <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/70">{combinedPatch}</pre>
+        ) : (
+          <div className="text-base-content/55">No diff text available for this patch.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ApplyPatchToolTranscriptPart({ part }: { part: Extract<ScriptAiMessagePart, { type: 'tool' }> }) {
+  const patchText = getApplyPatchText(part.input)
+  const operations = patchText ? parseApplyPatchOperations(patchText) : []
+
+  if (operations.length) {
+    return (
+      <div className="space-y-3">
+        {operations.map((operation, index) => (
+          <ApplyPatchOperationView key={`${operation.path}-${String(index)}`} operation={operation} />
+        ))}
+      </div>
+    )
+  }
+
+  if (!patchText) {
+    return null
+  }
+
+  return (
+    <div className="max-h-80 overflow-auto border border-base-content/8 bg-base-100/70 px-3 py-2">
+      <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/70">{patchText}</pre>
+    </div>
+  )
+}
+
+function ApplyPatchOperationView({ operation }: { operation: ParsedApplyPatchOperation }) {
+  if (!operation.originalText && !operation.modifiedText) {
+    return <div className="text-base-content/55">No line diff available.</div>
+  }
+
+  const editorHeight = getDiffEditorHeight(operation.originalText, operation.modifiedText)
+
+  return (
+    <div className="min-h-0 max-h-[28rem] overflow-auto" style={{ height: `${String(editorHeight)}px` }}>
+      <ScriptAiMergeEditor
+        originalValue={operation.originalText}
+        modifiedValue={operation.modifiedText}
+        language={getCodeEditorLanguageForPath(operation.path)}
+        onModifiedChange={() => undefined}
+        readOnlyModified
+      />
+    </div>
+  )
+}
+
 function TranscriptPart({ part }: { part: ScriptAiMessagePart }) {
   return (
     <details className="bg-base-200/20 text-[12px]" open={false}>
@@ -410,7 +523,7 @@ function getTranscriptPartTitle(part: ScriptAiMessagePart) {
     case 'snapshot':
       return 'Snapshot'
     case 'patch':
-      return 'Patch'
+      return part.files.length === 1 ? 'Patch - 1 file' : `Patch - ${String(part.files.length)} files`
     case 'agent':
       return `Agent: ${part.name}`
     case 'subtask':
@@ -447,7 +560,7 @@ function getTranscriptPartContent(part: ScriptAiMessagePart) {
     case 'snapshot':
       return 'Snapshot created.'
     case 'patch':
-      return 'Patch generated.'
+      return part.files.join('\n') || 'Patch generated.'
     case 'agent':
       return part.name
     case 'subtask':
@@ -461,6 +574,205 @@ function getTranscriptPartContent(part: ScriptAiMessagePart) {
 
 function getFirstLine(value: string) {
   return value.trim().split('\n')[0] ?? ''
+}
+
+function getCombinedPatchText(diffs: ScriptAiMessagePatchDiff[]) {
+  return diffs
+    .map(diff => {
+      const heading = [diff.status, diff.file].filter(Boolean).join(' ')
+      return [heading || null, diff.patch].filter(Boolean).join('\n')
+    })
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function isApplyPatchToolPart(part: ScriptAiMessagePart): part is Extract<ScriptAiMessagePart, { type: 'tool' }> {
+  return part.type === 'tool' && part.toolName === 'apply_patch' && Boolean(getApplyPatchText(part.input))
+}
+
+function getApplyPatchText(input: string | null) {
+  if (!input) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(input) as { patchText?: unknown }
+    if (typeof parsed.patchText === 'string' && parsed.patchText.trim()) {
+      return parsed.patchText
+    }
+  } catch {
+    // Fall through to raw string parsing.
+  }
+
+  const patchStartIndex = input.indexOf('*** Begin Patch')
+  if (patchStartIndex >= 0) {
+    return input.slice(patchStartIndex).trim()
+  }
+
+  return input.trim() || null
+}
+
+type ParsedApplyPatchOperation = {
+  type: 'add' | 'update' | 'delete'
+  path: string
+  originalText: string
+  modifiedText: string
+}
+
+function parseApplyPatchOperations(patchText: string): ParsedApplyPatchOperation[] {
+  const lines = patchText.split('\n')
+  const operations: ParsedApplyPatchOperation[] = []
+  let currentOperation: ParsedApplyPatchOperation | null = null
+  let currentOriginalLines: string[] = []
+  let currentModifiedLines: string[] = []
+  let isInHunk = false
+
+  const flushCurrentOperation = () => {
+    if (!currentOperation) {
+      return
+    }
+
+    currentOperation.originalText = trimTrailingEmptyLines(currentOriginalLines).join('\n')
+    currentOperation.modifiedText = trimTrailingEmptyLines(currentModifiedLines).join('\n')
+    operations.push(currentOperation)
+    currentOperation = null
+    currentOriginalLines = []
+    currentModifiedLines = []
+    isInHunk = false
+  }
+
+  for (const line of lines) {
+    if (line.startsWith('*** Add File: ')) {
+      flushCurrentOperation()
+      currentOperation = {
+        type: 'add',
+        path: line.slice('*** Add File: '.length).trim(),
+        originalText: '',
+        modifiedText: '',
+      }
+      continue
+    }
+
+    if (line.startsWith('*** Update File: ')) {
+      flushCurrentOperation()
+      currentOperation = {
+        type: 'update',
+        path: line.slice('*** Update File: '.length).trim(),
+        originalText: '',
+        modifiedText: '',
+      }
+      continue
+    }
+
+    if (line.startsWith('*** Delete File: ')) {
+      flushCurrentOperation()
+      currentOperation = {
+        type: 'delete',
+        path: line.slice('*** Delete File: '.length).trim(),
+        originalText: '',
+        modifiedText: '',
+      }
+      continue
+    }
+
+    if (line.startsWith('*** Move to: ') || line === '*** Begin Patch' || line === '*** End Patch') {
+      continue
+    }
+
+    if (!currentOperation) {
+      continue
+    }
+
+    if (line.startsWith('@@')) {
+      isInHunk = true
+      continue
+    }
+
+    if (currentOperation.type === 'add') {
+      if (line.startsWith('+')) {
+        currentModifiedLines.push(line.slice(1))
+      }
+      continue
+    }
+
+    if (currentOperation.type === 'delete') {
+      continue
+    }
+
+    if (!isInHunk) {
+      continue
+    }
+
+    if (line.startsWith('+')) {
+      currentModifiedLines.push(line.slice(1))
+      continue
+    }
+
+    if (line.startsWith('-')) {
+      currentOriginalLines.push(line.slice(1))
+      continue
+    }
+
+    if (line.startsWith(' ')) {
+      const value = line.slice(1)
+      currentOriginalLines.push(value)
+      currentModifiedLines.push(value)
+      continue
+    }
+  }
+
+  flushCurrentOperation()
+  return operations
+}
+
+function trimTrailingEmptyLines(lines: string[]) {
+  const nextLines = [...lines]
+  while (nextLines.length > 0 && nextLines.at(-1) === '') {
+    nextLines.pop()
+  }
+  return nextLines
+}
+
+function getCodeEditorLanguageForPath(path: string): CodeEditorLanguage {
+  if (path.endsWith('.jsx') || path.endsWith('.tsx')) {
+    return 'jsx'
+  }
+
+  if (path.endsWith('.js') || path.endsWith('.ts') || path.endsWith('.mjs') || path.endsWith('.cjs')) {
+    return 'javascript'
+  }
+
+  if (path.endsWith('.json')) {
+    return 'json'
+  }
+
+  if (path.endsWith('.json5')) {
+    return 'json5'
+  }
+
+  if (path.endsWith('.html')) {
+    return 'html'
+  }
+
+  if (path.endsWith('.css')) {
+    return 'css'
+  }
+
+  if (path.endsWith('.xml') || path.endsWith('.svg')) {
+    return 'xml'
+  }
+
+  return 'plain'
+}
+
+function getDiffEditorHeight(originalText: string, modifiedText: string) {
+  const originalLineCount = Math.max(1, originalText.split('\n').length)
+  const modifiedLineCount = Math.max(1, modifiedText.split('\n').length)
+  const visibleLineCount = Math.min(Math.max(originalLineCount, modifiedLineCount), 22)
+  const lineHeight = 20
+  const verticalPadding = 20
+
+  return visibleLineCount * lineHeight + verticalPadding
 }
 
 function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {

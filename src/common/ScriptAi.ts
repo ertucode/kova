@@ -59,6 +59,8 @@ export type ScriptAiMessagePart = {
 } | {
   id: string
   type: 'patch'
+  hash: string
+  files: string[]
 } | {
   id: string
   type: 'agent'
@@ -138,6 +140,24 @@ export type ApplyScriptAiWorkspaceResponse = {
 export type AbortScriptAiSessionInput = {
   target: ScriptAiTarget
   sessionId: string
+}
+
+export type LoadScriptAiMessagePatchDiffInput = {
+  target: ScriptAiTarget
+  sessionId: string
+  messageId: string
+}
+
+export type ScriptAiMessagePatchDiff = {
+  file: string | null
+  patch: string | null
+  additions: number
+  deletions: number
+  status: 'added' | 'deleted' | 'modified' | null
+}
+
+export type LoadScriptAiMessagePatchDiffResponse = {
+  diffs: ScriptAiMessagePatchDiff[]
 }
 
 export type ListOpenCodeModelsResponse = {

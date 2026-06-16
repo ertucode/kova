@@ -1,9 +1,20 @@
 import { createStore } from '@xstate/store'
 import { errorResponseToMessage } from '@common/GenericError'
-import { getScriptAiTargetKey, type ScriptAiTarget, type ScriptAiWorkspaceState } from '@common/ScriptAi'
+import {
+  getScriptAiTargetKey,
+  type ScriptAiMessagePatchDiff,
+  type ScriptAiTarget,
+  type ScriptAiWorkspaceState,
+} from '@common/ScriptAi'
 import { getWindowElectron } from '@/getWindowElectron'
 
 type OnApply = (nextCode: string) => Promise<boolean | void> | boolean | void
+
+export type ScriptAiMessagePatchDiffState = {
+  isLoading: boolean
+  errorMessage: string | null
+  diffs: ScriptAiMessagePatchDiff[] | null
+}
 
 export type ScriptAiReviewEntry = {
   prompt: string
@@ -19,6 +30,7 @@ export type ScriptAiReviewEntry = {
   lastAutoAppliedCode: string | null
   autoApplyCodeInFlight: string | null
   lastSyncedEditorCode: string | null
+  patchDiffsByMessageKey: Record<string, ScriptAiMessagePatchDiffState>
 }
 
 type ScriptAiReviewContext = {
@@ -246,6 +258,63 @@ export namespace ScriptAiReviewCoordinator {
     ScriptAiReviewCoordinator.applyWorkspaceState(result.data)
   }
 
+  export async function ensureMessagePatchDiff(target: ScriptAiTarget, sessionId: string, messageId: string) {
+    const targetKey = getScriptAiTargetKey(target)
+    const patchDiffKey = getPatchDiffKey(sessionId, messageId)
+    const entry = getEntry(targetKey)
+    if (entry.patchDiffsByMessageKey[patchDiffKey]) {
+      return
+    }
+
+    scriptAiReviewStore.trigger.entryPatched({
+      targetKey,
+      patch: {
+        patchDiffsByMessageKey: {
+          ...entry.patchDiffsByMessageKey,
+          [patchDiffKey]: {
+            isLoading: true,
+            errorMessage: null,
+            diffs: null,
+          },
+        },
+      },
+    })
+
+    const result = await getWindowElectron().loadScriptAiMessagePatchDiff({ target, sessionId, messageId })
+    if (!result.success) {
+      const nextEntry = getEntry(targetKey)
+      scriptAiReviewStore.trigger.entryPatched({
+        targetKey,
+        patch: {
+          patchDiffsByMessageKey: {
+            ...nextEntry.patchDiffsByMessageKey,
+            [patchDiffKey]: {
+              isLoading: false,
+              errorMessage: errorResponseToMessage(result.error),
+              diffs: null,
+            },
+          },
+        },
+      })
+      return
+    }
+
+    const nextEntry = getEntry(targetKey)
+    scriptAiReviewStore.trigger.entryPatched({
+      targetKey,
+      patch: {
+        patchDiffsByMessageKey: {
+          ...nextEntry.patchDiffsByMessageKey,
+          [patchDiffKey]: {
+            isLoading: false,
+            errorMessage: null,
+            diffs: result.data.diffs,
+          },
+        },
+      },
+    })
+  }
+
   export function selectSession(targetKey: string, sessionId: string) {
     scriptAiReviewStore.trigger.entryPatched({
       targetKey,
@@ -358,6 +427,7 @@ function createScriptAiReviewEntry(): ScriptAiReviewEntry {
     lastAutoAppliedCode: null,
     autoApplyCodeInFlight: null,
     lastSyncedEditorCode: null,
+    patchDiffsByMessageKey: {},
   }
 }
 
@@ -463,4 +533,8 @@ async function autoApplyCode(targetKey: string, code: string) {
     })
     return false
   }
+}
+
+export function getPatchDiffKey(sessionId: string, messageId: string) {
+  return `${sessionId}:${messageId}`
 }

@@ -68,11 +68,13 @@ export function ScriptAiMergeEditor({
   modifiedValue,
   language,
   onModifiedChange,
+  readOnlyModified = false,
 }: {
   originalValue: string
   modifiedValue: string
   language: CodeEditorLanguage
   onModifiedChange: (value: string) => void
+  readOnlyModified?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mergeViewRef = useRef<MergeView | null>(null)
@@ -102,6 +104,7 @@ export function ScriptAiMergeEditor({
           mergeTheme,
           lineNumbers(),
           languageExtension,
+          ...(readOnlyModified ? [readOnlyExtension] : []),
           EditorView.updateListener.of(update => {
             if (!update.docChanged) {
               return
@@ -123,7 +126,7 @@ export function ScriptAiMergeEditor({
       mergeView.destroy()
       mergeViewRef.current = null
     }
-  }, [languageExtension])
+  }, [languageExtension, readOnlyModified])
 
   useEffect(() => {
     const view = mergeViewRef.current?.a
