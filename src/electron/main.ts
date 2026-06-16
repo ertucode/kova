@@ -113,6 +113,7 @@ import {
   loadScriptAiWorkspace,
   sendScriptAiMessage,
   shutdownScriptAiServer,
+  syncScriptAiWorkspace,
 } from './script-ai-sdk.js'
 import {
   configureScriptPackageRegistry,
@@ -844,6 +845,10 @@ app.on('ready', async () => {
 
   ipcHandle('sendScriptAiMessage', async input => {
     return sendScriptAiMessage(input)
+  })
+
+  ipcHandle('syncScriptAiWorkspace', async input => {
+    return syncScriptAiWorkspace(input)
   })
 
   ipcHandle('applyScriptAiWorkspace', async input => {

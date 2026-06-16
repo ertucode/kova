@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { Columns2Icon, Edit2Icon, FileCode2Icon, InfoIcon, KeyboardIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, SparklesIcon, Trash2Icon } from 'lucide-react'
+import { Columns2Icon, Edit2Icon, FileCode2Icon, InfoIcon, KeyboardIcon, LoaderCircleIcon, PlayIcon, PlusIcon, Rows3Icon, SaveIcon, SparklesIcon, Trash2Icon } from 'lucide-react'
+import { getScriptAiTargetKey } from '@common/ScriptAi'
 import type { ExplorerItem, ExplorerRequestItem } from '@common/Explorer'
 import { parseKeyValueRows } from '@common/KeyValueRows'
 import { Typescript } from '@common/Typescript'
 import type { ViewLayoutMode, ViewRecord, ViewShortcut } from '@common/Views'
 import { getWindowElectron } from '@/getWindowElectron'
-import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
+import { appSettingsStore, getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import { dialogActions } from '@/global/dialogStore'
 import { Dialog } from '@/lib/components/dialog'
 import { toast } from '@/lib/components/toast'
@@ -25,6 +26,7 @@ import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { buildHttpRequestPaths } from './folderExplorerUtils'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { openScriptAiReviewDialog } from './ScriptAiReviewDialog'
+import { isScriptAiReviewEntryBusy, scriptAiReviewStore, ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useViews, notifyViewsChanged } from './useViews'
 import { ViewUiHelpers, viewUiStore } from './viewUiStore'
@@ -231,6 +233,14 @@ export function ViewsPanel() {
   const selectedSavedView = selectedEntry?.saved ?? null
   const selectedRunRequestId =
     selectedDraft && pendingRunRequest?.viewId === selectedDraft.id ? pendingRunRequest.requestId : null
+  const appDefaultModel = useSelector(appSettingsStore, state => state.context.settings?.scriptAiModel ?? null)
+  const viewScriptAiTargetKey = selectedDraft
+    ? getScriptAiTargetKey({ ownerType: 'view', ownerId: selectedDraft.id, runtimeContext: { phase: 'view-runtime' } })
+    : null
+  const viewScriptAiEntry = useSelector(scriptAiReviewStore, state =>
+    viewScriptAiTargetKey ? (state.context.entriesByTargetKey[viewScriptAiTargetKey] ?? null) : null
+  )
+  const isViewScriptAiBusy = isScriptAiReviewEntryBusy(viewScriptAiEntry)
 
   useEffect(() => {
     const pendingSelectionRestore = pendingSelectionRestoreRef.current
@@ -244,6 +254,27 @@ export function ViewsPanel() {
 
     pendingSelectionRestoreRef.current = null
   }, [selectedDraft?.code, selectedId])
+
+  useEffect(() => {
+    if (!selectedDraft) {
+      return
+    }
+
+    ScriptAiReviewCoordinator.registerTarget({
+      target: {
+        ownerType: 'view',
+        ownerId: selectedDraft.id,
+        runtimeContext: { phase: 'view-runtime' },
+      },
+      currentCode: selectedDraft.code,
+      onApply: async nextCode => {
+        const nextDraft = { ...selectedDraft, code: nextCode }
+        updateDraft(selectedDraft.id, () => nextDraft)
+        return saveView(selectedDraft.id, nextDraft)
+      },
+      defaultModel: appDefaultModel,
+    })
+  }, [appDefaultModel, selectedDraft])
 
   const runtimeSharedScripts = useMemo(
     () => visibleSharedScripts.filter(script => script.targets.includes('view-runtime')),
@@ -403,10 +434,17 @@ export function ViewsPanel() {
                          updateDraft(selectedDraft.id, () => nextDraft)
                          return saveView(selectedDraft.id, nextDraft)
                        },
-                   })
-                }
+                    })
+                 }
               >
-                <SparklesIcon className="size-4" />
+                <span className="relative inline-flex size-4 items-center justify-center">
+                  <SparklesIcon className="size-4" />
+                  {isViewScriptAiBusy ? (
+                    <span className="pointer-events-none absolute -bottom-1 -right-1 rounded-full bg-base-100/90 text-primary shadow-sm">
+                      <LoaderCircleIcon className="size-3 animate-spin" />
+                    </span>
+                  ) : null}
+                </span>
               </ToolbarButton>
 
               <ToolbarButton

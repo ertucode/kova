@@ -118,6 +118,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   loadScriptAiWorkspace: input => ipcInvoke('loadScriptAiWorkspace', input),
   createScriptAiSession: input => ipcInvoke('createScriptAiSession', input),
   sendScriptAiMessage: input => ipcInvoke('sendScriptAiMessage', input),
+  syncScriptAiWorkspace: input => ipcInvoke('syncScriptAiWorkspace', input),
   applyScriptAiWorkspace: input => ipcInvoke('applyScriptAiWorkspace', input),
   abortScriptAiSession: input => ipcInvoke('abortScriptAiSession', input),
   listOpenCodeModels: () => ipcInvoke('listOpenCodeModels', undefined),

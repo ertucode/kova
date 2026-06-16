@@ -116,6 +116,16 @@ export type SendScriptAiMessageInput = {
   documentation: string
 }
 
+export type SyncScriptAiWorkspaceInput = {
+  target: ScriptAiTarget
+  code: string
+}
+
+export type SyncScriptAiWorkspaceResponse = {
+  didSync: boolean
+  workspaceState: ScriptAiWorkspaceState | null
+}
+
 export type ApplyScriptAiWorkspaceInput = {
   target: ScriptAiTarget
   code: string

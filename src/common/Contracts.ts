@@ -128,6 +128,8 @@ import {
   type LoadScriptAiWorkspaceInput,
   type ScriptAiWorkspaceState,
   type SendScriptAiMessageInput,
+  type SyncScriptAiWorkspaceInput,
+  type SyncScriptAiWorkspaceResponse,
 } from './ScriptAi.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
 import {
@@ -268,6 +270,7 @@ export type EventResponseMapping = {
   loadScriptAiWorkspace: Promise<GenericResult<ScriptAiWorkspaceState>>
   createScriptAiSession: Promise<GenericResult<ScriptAiWorkspaceState>>
   sendScriptAiMessage: Promise<GenericResult<ScriptAiWorkspaceState>>
+  syncScriptAiWorkspace: Promise<GenericResult<SyncScriptAiWorkspaceResponse>>
   applyScriptAiWorkspace: Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
   abortScriptAiSession: Promise<GenericResult<ScriptAiWorkspaceState>>
   listOpenCodeModels: Promise<GenericResult<ListOpenCodeModelsResponse>>
@@ -406,6 +409,7 @@ export type EventRequestMapping = {
   loadScriptAiWorkspace: LoadScriptAiWorkspaceInput
   createScriptAiSession: CreateScriptAiSessionInput
   sendScriptAiMessage: SendScriptAiMessageInput
+  syncScriptAiWorkspace: SyncScriptAiWorkspaceInput
   applyScriptAiWorkspace: ApplyScriptAiWorkspaceInput
   abortScriptAiSession: AbortScriptAiSessionInput
   listOpenCodeModels: void
@@ -558,6 +562,7 @@ export type WindowElectron = {
   loadScriptAiWorkspace: (input: LoadScriptAiWorkspaceInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
   createScriptAiSession: (input: CreateScriptAiSessionInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
   sendScriptAiMessage: (input: SendScriptAiMessageInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
+  syncScriptAiWorkspace: (input: SyncScriptAiWorkspaceInput) => Promise<GenericResult<SyncScriptAiWorkspaceResponse>>
   applyScriptAiWorkspace: (input: ApplyScriptAiWorkspaceInput) => Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
   abortScriptAiSession: (input: AbortScriptAiSessionInput) => Promise<GenericResult<ScriptAiWorkspaceState>>
   listOpenCodeModels: () => Promise<GenericResult<ListOpenCodeModelsResponse>>

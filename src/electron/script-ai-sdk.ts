@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import {
   createOpencodeClient,
   createOpencodeServer,
@@ -32,6 +32,8 @@ import {
   type ScriptAiTarget,
   type ScriptAiWorkspaceState,
   type SendScriptAiMessageInput,
+  type SyncScriptAiWorkspaceInput,
+  type SyncScriptAiWorkspaceResponse,
 } from '../common/ScriptAi.js'
 import { emitGenericEvent } from './generic-events.js'
 import { getAppSettings } from './db/app-settings.js'
@@ -86,7 +88,6 @@ export async function loadScriptAiWorkspace(
 ): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
-    await writeWorkspaceCode(runtime, input.currentCode)
     await refreshTargetRuntime(runtime)
     return Result.Success(toWorkspaceState(runtime, await readWorkspaceCode(runtime)))
   } catch (error) {
@@ -99,7 +100,6 @@ export async function createScriptAiSession(
 ): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
-    await writeWorkspaceCode(runtime, input.currentCode)
     const client = await getClientForDirectory(runtime.workspacePath)
     const title = buildSessionTitle(input.target)
     const sessionResult = await client.session.create({ body: { title } })
@@ -129,8 +129,6 @@ export async function sendScriptAiMessage(
     if (!runtime.knownSessionIds.has(input.sessionId)) {
       return GenericError.Message('This OpenCode session does not belong to the current script target.')
     }
-
-    await writeWorkspaceCode(runtime, input.currentCode)
     runtime.activeSessionId = input.sessionId
     await persistMeta(runtime)
 
@@ -148,6 +146,26 @@ export async function sendScriptAiMessage(
     const state = toWorkspaceState(runtime, await readWorkspaceCode(runtime))
     emitScriptAiState(state)
     return Result.Success(state)
+  } catch (error) {
+    return toGenericError(error)
+  }
+}
+
+export async function syncScriptAiWorkspace(
+  input: SyncScriptAiWorkspaceInput
+): Promise<GenericResult<SyncScriptAiWorkspaceResponse>> {
+  try {
+    const existingRuntime = targetRuntimes.get(getScriptAiTargetKey(input.target))
+    if (!existingRuntime && !(await hasPersistedWorkspace(input.target))) {
+      return Result.Success({ didSync: false, workspaceState: null })
+    }
+
+    const runtime = existingRuntime ?? (await ensureTargetRuntime(input.target, input.code))
+    await writeWorkspaceCode(runtime, input.code)
+
+    const state = toWorkspaceState(runtime, await readWorkspaceCode(runtime))
+    emitScriptAiState(state)
+    return Result.Success({ didSync: true, workspaceState: state })
   } catch (error) {
     return toGenericError(error)
   }
@@ -646,6 +664,17 @@ async function readWorkspaceCode(runtime: TargetRuntime) {
   return await readFile(runtime.filePath, 'utf8')
 }
 
+async function hasPersistedWorkspace(target: ScriptAiTarget) {
+  const { filePath } = getWorkspacePaths(target)
+
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function buildSessionTitle(target: ScriptAiTarget) {
   return `${target.ownerType}:${target.ownerId} ${getPrimaryScriptAiPhase(target.runtimeContext)}`
 }
@@ -879,6 +908,19 @@ function getSdkErrorMessage(error: unknown) {
 
 function hashTargetKey(targetKey: string) {
   return createHash('sha1').update(targetKey).digest('hex')
+}
+
+function getWorkspacePaths(target: ScriptAiTarget) {
+  const targetKey = getScriptAiTargetKey(target)
+  const baseDirectory = getScriptAiBaseDirectory()
+  const workspacePath = path.join(baseDirectory, hashTargetKey(targetKey))
+  const fileName = getScriptAiFileName(target.runtimeContext)
+
+  return {
+    targetKey,
+    workspacePath,
+    filePath: path.join(workspacePath, fileName),
+  }
 }
 
 function getScriptAiBaseDirectory() {

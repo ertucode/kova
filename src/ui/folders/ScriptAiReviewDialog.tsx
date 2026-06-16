@@ -1,10 +1,8 @@
-import { errorResponseToMessage } from '@common/GenericError'
 import {
   getPrimaryScriptAiPhase,
   getScriptAiTargetKey,
   type ScriptAiMessagePart,
   type ScriptAiTarget,
-  type ScriptAiWorkspaceState,
 } from '@common/ScriptAi'
 import { ChevronDownIcon, LoaderCircleIcon, PlusIcon, SparklesIcon, SquareIcon } from 'lucide-react'
 import type { KeyboardEvent, ReactNode } from 'react'
@@ -12,14 +10,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
-import { getWindowElectron } from '@/getWindowElectron'
-import { toast } from '@/lib/components/toast'
 import { buildScriptDocumentationPromptForTarget, getScriptDocumentationForTarget } from './scriptDocumentation'
 import { appSettingsStore } from '@/global/appSettingsStore'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
 import { ScriptAiMergeEditor } from './ScriptAiMergeEditor'
 import { clsx } from '@/lib/functions/clsx'
-import { scriptAiReviewStore } from './scriptAiReviewStore'
+import { scriptAiReviewStore, ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 
 type ScriptAiReviewDialogProps = {
   target: ScriptAiTarget
@@ -45,13 +41,6 @@ export function openScriptAiReviewDialog(props: ScriptAiReviewDialogProps) {
 export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiReviewDialogProps) {
   const appDefaultModel = useSelector(appSettingsStore, state => state.context.settings?.scriptAiModel ?? null)
   const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
-  const [proposal, setProposal] = useState(currentCode)
-  const [workspaceState, setWorkspaceState] = useState<ScriptAiWorkspaceState | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState<string>(appDefaultModel ?? '')
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [isDiffDialogOpen, setIsDiffDialogOpen] = useState(false)
   const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false)
   const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null)
@@ -64,9 +53,15 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const primaryPhase = getPrimaryScriptAiPhase(target.runtimeContext)
   const editorLanguage =
     primaryPhase === 'response-visualizer' || primaryPhase === 'view-runtime' ? 'jsx' : 'javascript'
-  const promptEntry = useSelector(scriptAiReviewStore, state => state.context.entriesByTargetKey[targetKey] ?? null)
-  const prompt = promptEntry?.prompt ?? ''
-  const promptHistory = promptEntry?.promptHistory ?? []
+  const reviewEntry = useSelector(scriptAiReviewStore, state => state.context.entriesByTargetKey[targetKey] ?? null)
+  const workspaceState = reviewEntry?.workspaceState ?? null
+  const isLoading = reviewEntry?.isLoading ?? false
+  const isSubmitting = reviewEntry?.isSubmitting ?? false
+  const errorMessage = reviewEntry?.errorMessage ?? null
+  const selectedModel = reviewEntry?.selectedModel ?? appDefaultModel ?? ''
+  const selectedSessionId = reviewEntry?.selectedSessionId ?? null
+  const prompt = reviewEntry?.prompt ?? ''
+  const promptHistory = reviewEntry?.promptHistory ?? []
   const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
   const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
@@ -85,39 +80,17 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const isSelectedSessionBusy = selectedSession?.status === 'busy' || selectedSession?.status === 'retry'
 
   useEffect(() => {
-    let isCancelled = false
-
-    void (async () => {
-      setIsLoading(true)
-      const result = await getWindowElectron().loadScriptAiWorkspace({ target, currentCode })
-
-      if (isCancelled) {
-        return
-      }
-
-      if (!result.success) {
-        setErrorMessage(errorResponseToMessage(result.error))
-        setIsLoading(false)
-        return
-      }
-
-      applyWorkspaceState(result.data)
-      setIsLoading(false)
-    })()
-
-    const unsubscribe = getWindowElectron().onGenericEvent(event => {
-      if (event.type !== 'script-ai-state-updated' || event.state.targetKey !== targetKey) {
-        return
-      }
-
-      applyWorkspaceState(event.state)
+    ScriptAiReviewCoordinator.registerTarget({
+      target,
+      currentCode,
+      onApply,
+      defaultModel: appDefaultModel,
     })
 
-    return () => {
-      isCancelled = true
-      unsubscribe()
+    if (!reviewEntry?.workspaceState && !reviewEntry?.isLoading) {
+      void ScriptAiReviewCoordinator.loadWorkspace(target, currentCode)
     }
-  }, [currentCode, target, targetKey])
+  }, [appDefaultModel, currentCode, onApply, reviewEntry?.isLoading, reviewEntry?.workspaceState, target])
 
   useEffect(() => {
     const container = transcriptContainerRef.current
@@ -138,99 +111,18 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
     textarea.style.height = `${textarea.scrollHeight}px`
   }, [prompt])
 
-  function applyWorkspaceState(nextState: ScriptAiWorkspaceState) {
-    setWorkspaceState(nextState)
-    setProposal(nextState.workspaceCode)
-    setSelectedSessionId(currentSessionId => {
-      if (currentSessionId && nextState.sessions.some(session => session.id === currentSessionId)) {
-        return currentSessionId
-      }
-
-      return nextState.activeSessionId ?? nextState.sessions[0]?.id ?? null
-    })
-  }
-
-  async function createSessionRequest() {
-    const result = await getWindowElectron().createScriptAiSession({
-      target,
-      currentCode,
-      model: selectedModel || null,
-    })
-
-    if (!result.success) {
-      setErrorMessage(errorResponseToMessage(result.error))
-      return null
-    }
-
-    applyWorkspaceState(result.data)
-    setSelectedSessionId(result.data.activeSessionId)
-    return result.data.activeSessionId
-  }
-
   async function createSession() {
-    setErrorMessage(null)
-    setIsSubmitting(true)
-
-    try {
-      await createSessionRequest()
-    } finally {
-      setIsSubmitting(false)
-    }
+    await ScriptAiReviewCoordinator.createSession(target)
   }
 
   async function sendPrompt() {
-    const trimmedPrompt = prompt.trim()
-    if (!trimmedPrompt) {
-      setErrorMessage('Describe what you want the script to do first.')
-      return
-    }
-
-    setErrorMessage(null)
-    setIsSubmitting(true)
-    scriptAiReviewStore.trigger.promptSubmitted({ targetKey, prompt: trimmedPrompt })
     setPromptHistoryIndex(null)
     setPromptHistoryDraft('')
-
-    try {
-      const ensuredSessionId = selectedSessionId ?? (await createSessionRequest())
-      if (!ensuredSessionId) {
-        scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: trimmedPrompt })
-        return
-      }
-
-      const result = await getWindowElectron().sendScriptAiMessage({
-        target,
-        currentCode,
-        sessionId: ensuredSessionId,
-        message: trimmedPrompt,
-        model: selectedModel || null,
-        documentation: buildScriptDocumentationPromptForTarget(target),
-      })
-
-      if (!result.success) {
-        setErrorMessage(errorResponseToMessage(result.error))
-        scriptAiReviewStore.trigger.promptChanged({ targetKey, prompt: trimmedPrompt })
-        return
-      }
-
-      applyWorkspaceState(result.data)
-    } finally {
-      setIsSubmitting(false)
-    }
+    await ScriptAiReviewCoordinator.sendPrompt(target, buildScriptDocumentationPromptForTarget(target))
   }
 
   async function abortSelectedSession() {
-    if (!selectedSessionId) {
-      return
-    }
-
-    const result = await getWindowElectron().abortScriptAiSession({ target, sessionId: selectedSessionId })
-    if (!result.success) {
-      setErrorMessage(errorResponseToMessage(result.error))
-      return
-    }
-
-    applyWorkspaceState(result.data)
+    await ScriptAiReviewCoordinator.abortSelectedSession(target)
   }
 
   function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -281,22 +173,6 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
     }
 
     void sendPrompt()
-  }
-
-  async function applyProposal() {
-    const result = await getWindowElectron().applyScriptAiWorkspace({ target, code: proposal })
-    if (!result.success) {
-      setErrorMessage(errorResponseToMessage(result.error))
-      return
-    }
-
-    const applied = await onApply(result.data.code)
-    if (applied === false) {
-      return
-    }
-
-    dialogActions.close()
-    toast.show({ severity: 'success', message: 'AI suggestion applied to the script.' })
   }
 
   return (
@@ -352,7 +228,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
             <select
               className="min-h-12 w-full border-l border-base-content/10 bg-base-100 px-3 py-3 text-sm text-base-content outline-none sm:ml-auto sm:w-[260px]"
               value={selectedModel}
-              onChange={event => setSelectedModel(event.target.value)}
+              onChange={event => ScriptAiReviewCoordinator.setSelectedModel(targetKey, event.target.value)}
               disabled={modelsLoading || isSubmitting}
             >
               <option value="">{appDefaultModel ? `App default (${appDefaultModel})` : 'OpenCode default'}</option>
@@ -364,9 +240,6 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
             </select>
             <FlatButton onClick={() => setIsDiffDialogOpen(true)} disabled={isLoading}>
               Show diff
-            </FlatButton>
-            <FlatButton onClick={() => void applyProposal()} disabled={isLoading || isSubmitting}>
-              Apply
             </FlatButton>
             <FlatButton
               onClick={() => void (isSelectedSessionBusy ? abortSelectedSession() : sendPrompt())}
@@ -417,9 +290,11 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
             <div className="h-[75vh] min-h-[520px]">
               <ScriptAiMergeEditor
                 originalValue={currentCode}
-                modifiedValue={proposal}
+                modifiedValue={workspaceState?.workspaceCode ?? currentCode}
                 language={editorLanguage}
-                onModifiedChange={setProposal}
+                onModifiedChange={value => {
+                  void ScriptAiReviewCoordinator.updateWorkspaceCode(target, value)
+                }}
               />
             </div>
           </Dialog>
@@ -439,7 +314,7 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
                         session.id === selectedSessionId ? 'bg-primary/8' : 'hover:bg-base-200/35',
                       ].join(' ')}
                       onClick={() => {
-                        setSelectedSessionId(session.id)
+                        ScriptAiReviewCoordinator.selectSession(targetKey, session.id)
                         setIsSessionDialogOpen(false)
                       }}
                     >

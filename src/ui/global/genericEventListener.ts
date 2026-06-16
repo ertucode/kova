@@ -3,6 +3,7 @@ import { getWindowElectron } from '@/getWindowElectron'
 import { CookiesCoordinator } from '@/folders/cookiesCoordinator'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
+import { ScriptAiReviewCoordinator } from '@/folders/scriptAiReviewStore'
 import { toast } from '@/lib/components/toast'
 import { dialogActions } from './dialogStore'
 
@@ -63,6 +64,7 @@ export function subscribeToGenericEvents() {
         console.error('retry-request failed', error)
       })
     } else if (e.type === 'script-ai-state-updated') {
+      ScriptAiReviewCoordinator.applyWorkspaceState(e.state)
     } else {
       const _exhaustiveCheck: never = e
       return _exhaustiveCheck
