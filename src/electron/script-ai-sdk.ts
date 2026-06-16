@@ -49,6 +49,24 @@ type TargetMeta = {
   knownSessionIds: string[]
 }
 
+type RawScriptAiSession = Session & {
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache?: {
+      read: number
+      write: number
+    }
+  }
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+}
+
 type TargetRuntime = {
   target: ScriptAiTarget
   targetKey: string
@@ -761,6 +779,13 @@ function toSessionSummary(
   messageCount: number,
   latestErrorMessage: string | null
 ): ScriptAiSessionSummary {
+  const rawSession = session as RawScriptAiSession
+  const inputTokens = rawSession.tokens?.input ?? 0
+  const outputTokens = rawSession.tokens?.output ?? 0
+  const reasoningTokens = rawSession.tokens?.reasoning ?? 0
+  const cacheReadTokens = rawSession.tokens?.cache?.read ?? 0
+  const cacheWriteTokens = rawSession.tokens?.cache?.write ?? 0
+
   return {
     id: session.id,
     title: session.title,
@@ -769,7 +794,27 @@ function toSessionSummary(
     status: toUiSessionStatus(status),
     messageCount,
     latestErrorMessage,
+    modelId: getSessionModelId(rawSession),
+    spent: typeof rawSession.cost === 'number' ? rawSession.cost : null,
+    tokens: rawSession.tokens
+      ? {
+          input: inputTokens,
+          output: outputTokens,
+          reasoning: reasoningTokens,
+          cacheRead: cacheReadTokens,
+          cacheWrite: cacheWriteTokens,
+          total: inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens,
+        }
+      : null,
   }
+}
+
+function getSessionModelId(session: RawScriptAiSession) {
+  if (!session.model?.providerID || !session.model.id) {
+    return null
+  }
+
+  return `${session.model.providerID}/${session.model.id}`
 }
 
 function toUiSessionStatus(status: SessionStatus): ScriptAiSessionSummary['status'] {

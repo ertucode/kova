@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
-import type { ListOpenCodeModelsResponse } from '../common/ScriptAi.js'
+import type { ListOpenCodeModelsResponse, OpenCodeModelSummary } from '../common/ScriptAi.js'
 import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
 
 const OPENCODE_TIMEOUT_MS = 120_000
@@ -14,10 +14,11 @@ export async function listOpenCodeModels(): Promise<GenericResult<ListOpenCodeMo
   try {
     await mkdir(OPENCODE_WORKDIR, { recursive: true })
     const output = await runOpenCodeModelsCommand()
-    const models = output
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(Boolean)
+    const models = parseVerboseModelsOutput(output)
+
+    if (!models.length) {
+      throw new Error('OpenCode returned no models.')
+    }
 
     return Result.Success({ models })
   } catch (error) {
@@ -33,7 +34,7 @@ async function runOpenCodeModelsCommand() {
   const spawnConfig = await resolveOpenCodeSpawnConfig()
 
   return await new Promise<string>((resolve, reject) => {
-    const child = spawn(spawnConfig.command, ['models'], {
+    const child = spawn(spawnConfig.command, ['models', '--verbose'], {
       cwd: OPENCODE_WORKDIR,
       stdio: 'pipe',
       env: spawnConfig.env,
@@ -92,6 +93,57 @@ async function runOpenCodeModelsCommand() {
       resolve(stdout.trim())
     })
   })
+}
+
+function parseVerboseModelsOutput(output: string): OpenCodeModelSummary[] {
+  const lines = output.split(/\r?\n/)
+  const models: OpenCodeModelSummary[] = []
+  let currentModelId: string | null = null
+  let jsonLines: string[] = []
+  let braceDepth = 0
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) {
+      continue
+    }
+
+    if (braceDepth === 0 && !line.startsWith('{')) {
+      currentModelId = line
+      continue
+    }
+
+    if (!currentModelId) {
+      continue
+    }
+
+    jsonLines.push(rawLine)
+    braceDepth += countCharacter(rawLine, '{')
+    braceDepth -= countCharacter(rawLine, '}')
+
+    if (braceDepth > 0) {
+      continue
+    }
+
+    try {
+      const parsed = JSON.parse(jsonLines.join('\n')) as { limit?: { context?: unknown } }
+      models.push({
+        id: currentModelId,
+        contextWindow: typeof parsed.limit?.context === 'number' ? parsed.limit.context : null,
+      })
+    } catch {
+      // Ignore malformed entries and continue parsing the rest of the output.
+    }
+
+    currentModelId = null
+    jsonLines = []
+  }
+
+  return models
+}
+
+function countCharacter(value: string, character: string) {
+  return [...value].filter(item => item === character).length
 }
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {

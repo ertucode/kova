@@ -1,5 +1,6 @@
 import {
   getPrimaryScriptAiPhase,
+  type ScriptAiSessionSummary,
   getScriptAiTargetKey,
   type ScriptAiMessagePatchDiff,
   type ScriptAiMessagePart,
@@ -43,7 +44,12 @@ export function openScriptAiReviewDialog(props: ScriptAiReviewDialogProps) {
 
 export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiReviewDialogProps) {
   const appDefaultModel = useSelector(appSettingsStore, state => state.context.settings?.scriptAiModel ?? null)
-  const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
+  const {
+    models: openCodeModels,
+    modelInfoById,
+    loading: modelsLoading,
+    error: modelsError,
+  } = useOpenCodeModels()
   const [isDiffDialogOpen, setIsDiffDialogOpen] = useState(false)
   const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false)
   const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null)
@@ -67,6 +73,11 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const promptHistory = reviewEntry?.promptHistory ?? []
   const patchDiffsByMessageKey = reviewEntry?.patchDiffsByMessageKey ?? {}
   const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
+  const selectedSessionContextStats = getSelectedSessionContextStats(
+    selectedSession,
+    selectedModel,
+    modelInfoById
+  )
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
   const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
     message.parts.flatMap<TranscriptRow>(part => {
@@ -220,7 +231,9 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
                       <PatchTranscriptPart
                         key={row.id}
                         part={row.part}
-                        patchDiffState={patchDiffsByMessageKey[getPatchDiffKey(selectedSessionId, row.messageId)] ?? null}
+                        patchDiffState={
+                          patchDiffsByMessageKey[getPatchDiffKey(selectedSessionId, row.messageId)] ?? null
+                        }
                       />
                     ) : (
                       <TranscriptPart key={row.id} part={row.part} />
@@ -252,6 +265,13 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
               <span className="truncate">{selectedSession?.title ?? 'Current Session Name'}</span>
               <ChevronDownIcon className="size-4 flex-shrink-0" />
             </FlatButton>
+            <div className="flex min-h-12 min-w-0 flex-1 items-center border-l border-base-content/10 px-3 py-2 text-xs text-base-content/62 sm:flex-[0_1_auto] sm:whitespace-nowrap">
+              {selectedSessionContextStats ? (
+                <span className="truncate">{selectedSessionContextStats}</span>
+              ) : (
+                <span className="truncate text-base-content/38">No session context yet</span>
+              )}
+            </div>
             <FlatButton onClick={() => void createSession()} disabled={isLoading || isSubmitting}>
               <PlusIcon className="size-4" />
               New Session
@@ -471,10 +491,8 @@ function ApplyPatchOperationView({ operation }: { operation: ParsedApplyPatchOpe
     return <div className="text-base-content/55">No line diff available.</div>
   }
 
-  const editorHeight = getDiffEditorHeight(operation.originalText, operation.modifiedText)
-
   return (
-    <div className="min-h-0 max-h-[28rem] overflow-auto" style={{ height: `${String(editorHeight)}px` }}>
+    <div className="min-h-0 ">
       <ScriptAiMergeEditor
         originalValue={operation.originalText}
         modifiedValue={operation.modifiedText}
@@ -765,22 +783,55 @@ function getCodeEditorLanguageForPath(path: string): CodeEditorLanguage {
   return 'plain'
 }
 
-function getDiffEditorHeight(originalText: string, modifiedText: string) {
-  const originalLineCount = Math.max(1, originalText.split('\n').length)
-  const modifiedLineCount = Math.max(1, modifiedText.split('\n').length)
-  const visibleLineCount = Math.min(Math.max(originalLineCount, modifiedLineCount), 22)
-  const lineHeight = 20
-  const verticalPadding = 20
-
-  return visibleLineCount * lineHeight + verticalPadding
-}
-
 function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {
   return !textarea.value.slice(0, textarea.selectionStart).includes('\n')
 }
 
 function isCaretOnLastLine(textarea: HTMLTextAreaElement) {
   return !textarea.value.slice(textarea.selectionEnd).includes('\n')
+}
+
+function getSelectedSessionContextStats(
+  session: ScriptAiSessionSummary | null,
+  selectedModel: string,
+  modelInfoById: Record<string, { contextWindow: number | null }>
+) {
+  if (!session) {
+    return null
+  }
+
+  const totalTokens = session.tokens?.total ?? null
+  const spent = session.spent
+  const modelId = session.modelId ?? selectedModel
+  const contextWindow = modelId ? (modelInfoById[modelId]?.contextWindow ?? null) : null
+  const parts = [
+    totalTokens !== null
+      ? contextWindow
+        ? `${formatCompactInteger(totalTokens)} / ${formatCompactInteger(contextWindow)} tokens`
+        : `${formatCompactInteger(totalTokens)} tokens`
+      : null,
+    totalTokens !== null && contextWindow ? `${formatPercentage((totalTokens / contextWindow) * 100)} used` : null,
+    spent !== null ? `${formatUsdAmount(spent)} spent` : null,
+  ].filter(Boolean)
+
+  return parts.join(' - ') || null
+}
+
+function formatCompactInteger(value: number) {
+  return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: value >= 1000 ? 1 : 0 }).format(value)
+}
+
+function formatPercentage(value: number) {
+  return `${new Intl.NumberFormat('en', { maximumFractionDigits: value >= 10 ? 0 : 1 }).format(value)}%`
+}
+
+function formatUsdAmount(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: value >= 1 ? 2 : 3,
+    maximumFractionDigits: value >= 1 ? 2 : 3,
+  }).format(value)
 }
 
 function getPromptPlaceholder(phase: ReturnType<typeof getPrimaryScriptAiPhase>) {

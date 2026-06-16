@@ -23,6 +23,16 @@ export type ScriptAiSessionSummary = {
   status: 'idle' | 'busy' | 'retry'
   messageCount: number
   latestErrorMessage: string | null
+  modelId: string | null
+  spent: number | null
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cacheRead: number
+    cacheWrite: number
+    total: number
+  } | null
 }
 
 export type ScriptAiMessagePart = {
@@ -160,8 +170,13 @@ export type LoadScriptAiMessagePatchDiffResponse = {
   diffs: ScriptAiMessagePatchDiff[]
 }
 
+export type OpenCodeModelSummary = {
+  id: string
+  contextWindow: number | null
+}
+
 export type ListOpenCodeModelsResponse = {
-  models: string[]
+  models: OpenCodeModelSummary[]
 }
 
 export function getScriptAiTargetKey(target: ScriptAiTarget) {

@@ -56,8 +56,12 @@ export const scriptAiReviewStore = createStore({
     }),
     workspaceStateReceived: (context, event: { targetKey: string; workspaceState: ScriptAiWorkspaceState }) => {
       const entry = getScriptAiReviewEntry(context, event.targetKey)
+      const didActiveSessionChange =
+        event.workspaceState.activeSessionId !== null && event.workspaceState.activeSessionId !== entry.workspaceState?.activeSessionId
       const nextSelectedSessionId =
-        entry.selectedSessionId && event.workspaceState.sessions.some(session => session.id === entry.selectedSessionId)
+        didActiveSessionChange && event.workspaceState.sessions.some(session => session.id === event.workspaceState.activeSessionId)
+          ? event.workspaceState.activeSessionId
+          : entry.selectedSessionId && event.workspaceState.sessions.some(session => session.id === entry.selectedSessionId)
           ? entry.selectedSessionId
           : event.workspaceState.activeSessionId ?? event.workspaceState.sessions[0]?.id ?? null
 
