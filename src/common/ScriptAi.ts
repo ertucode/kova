@@ -95,6 +95,17 @@ export type ScriptAiMessage = {
   createdAt: number
   completedAt: number | null
   errorMessage: string | null
+  cost: number | null
+  modelId: string | null
+  providerId: string | null
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cacheRead: number
+    cacheWrite: number
+    total: number
+  } | null
   parts: ScriptAiMessagePart[]
 }
 

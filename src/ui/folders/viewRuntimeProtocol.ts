@@ -9,6 +9,7 @@ export const VIEW_RUNTIME_CALL_REQUEST_EVENT = 'kova-view-runtime-call-request'
 export const VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT = 'kova-view-runtime-call-request-result'
 export const VIEW_RUNTIME_CACHE_REQUEST_EVENT = 'kova-view-runtime-cache-request'
 export const VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT = 'kova-view-runtime-cache-request-result'
+export const VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT = 'kova-view-runtime-clipboard-write'
 
 export type ViewRuntimeScriptResponse = {
   status: number
@@ -75,4 +76,9 @@ export type ViewRuntimeCacheRequestResultMessage = {
   type: typeof VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT
   requestId: string
   error: string | null
+}
+
+export type ViewRuntimeClipboardWriteMessage = {
+  type: typeof VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT
+  value: string
 }

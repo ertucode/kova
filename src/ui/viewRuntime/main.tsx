@@ -10,6 +10,7 @@ import { formatJson } from '@common/Json5'
 import { parseScriptPackageSpecifier } from '@common/ScriptPackages'
 import { CodeEditor } from '../folders/CodeEditor'
 import {
+  VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_EVENT,
@@ -24,6 +25,7 @@ import {
 } from '../folders/viewRuntimeProtocol'
 import { transformViewRuntimeSource } from './viewRuntimeRefresh'
 import { ensureTailwindRuntimeTheme } from '../tailwindRuntimeTheme'
+import { createViewRuntimeClipboardApi } from './viewRuntimeClipboard'
 
 type RuntimeErrorDetails = {
   compactMessage: string
@@ -220,6 +222,7 @@ async function runView(code: string, payload: ViewRuntimePayload) {
   const env = createEnvironmentApi(payload.env)
   const scope = createScopeApi(payload.scope)
   const cache = createViewCacheApi(payload.cache)
+  const clipboard = createClipboardApi()
   const cookies = createCookiesApi()
   const callRequest = createCallRequestApi()
   const Table = createTableComponent()
@@ -254,6 +257,7 @@ async function runView(code: string, payload: ViewRuntimePayload) {
     env,
     scope,
     cache,
+    clipboard,
     cookies,
     Table,
     CodeEditor: RuntimeCodeEditor,
@@ -279,6 +283,7 @@ async function runView(code: string, payload: ViewRuntimePayload) {
       env,
       scope,
       cache,
+      clipboard,
       callRequest,
       requirePackage,
       requireScript,
@@ -313,6 +318,7 @@ function createSharedScriptModuleLoader(
     env: ReturnType<typeof createEnvironmentApi>
     scope: ReturnType<typeof createScopeApi>
     cache: ReturnType<typeof createViewCacheApi>
+    clipboard: ReturnType<typeof createClipboardApi>
     cookies: ReturnType<typeof createCookiesApi>
     Table: ReturnType<typeof createTableComponent>
     CodeEditor: RuntimeCodeEditorComponent
@@ -368,6 +374,7 @@ function createSharedScriptModuleLoader(
           env: globals.env,
           scope: globals.scope,
           cache: globals.cache,
+          clipboard: globals.clipboard,
           callRequest: globals.callRequest,
           requirePackage,
           requireScript: loadModule,
@@ -505,6 +512,16 @@ function createCallRequestApi() {
       )
     })
   }
+}
+
+function createClipboardApi() {
+  return createViewRuntimeClipboardApi(message => {
+    if (message.type !== VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT) {
+      return
+    }
+
+    window.parent.postMessage(message, '*')
+  })
 }
 
 function createViewCacheApi(initialEntries: Record<string, string>) {
@@ -782,6 +799,7 @@ function executeRuntimeModule({
     env: ReturnType<typeof createEnvironmentApi>
     scope: ReturnType<typeof createScopeApi>
     cache: ReturnType<typeof createViewCacheApi>
+    clipboard: ReturnType<typeof createClipboardApi>
     callRequest: ReturnType<typeof createCallRequestApi>
     requirePackage: (specifier: string) => unknown
     requireScript: (specifier: string) => unknown
@@ -811,6 +829,7 @@ function executeRuntimeModule({
     'env',
     'scope',
     'cache',
+    'clipboard',
     'callRequest',
     'require',
     'requireScript',
@@ -843,6 +862,7 @@ function executeRuntimeModule({
     globals.env,
     globals.scope,
     globals.cache,
+    globals.clipboard,
     globals.callRequest,
     globals.requirePackage,
     globals.requireScript,

@@ -9,6 +9,7 @@ import { getWindowElectron } from '../getWindowElectron'
 import { RequestSendCoordinator } from './requestSendCoordinator'
 import { getCachedViewRuntimeRequest, setCachedViewRuntimeRequest } from './viewRuntimeRequestCacheStore'
 import {
+  VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_EVENT,
@@ -17,6 +18,7 @@ import {
   VIEW_RUNTIME_RENDER_EVENT,
   VIEW_RUNTIME_TRIGGER_RUN_EVENT,
   type ViewRuntimeCacheRequestMessage,
+  type ViewRuntimeClipboardWriteMessage,
   type ViewRuntimeCallRequestMessage,
   type ViewRuntimePayload,
   type ViewRuntimeScriptResponse,
@@ -136,6 +138,14 @@ export function ViewRuntimePreview({
 
       if (event.data?.type === VIEW_RUNTIME_READY_EVENT) {
         setIsIframeReady(true)
+        return
+      }
+
+      if (event.data?.type === VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT) {
+        const message = event.data as ViewRuntimeClipboardWriteMessage
+        void navigator.clipboard.writeText(message.value).catch(error => {
+          console.error('[view-runtime] failed to write clipboard text', error)
+        })
         return
       }
 

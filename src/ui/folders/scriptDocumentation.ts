@@ -482,6 +482,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
           { label: 'await cache.setItem(key, value)', detail: 'Persist a string value for the current view.' },
           { label: 'await cache.getAll()', detail: 'Return a copied object containing all persisted cache entries for the current view.' },
           { label: 'await cache.removeItem(key)', detail: 'Delete a persisted cache value for the current view.' },
+          { label: 'clipboard.write(value)', detail: 'Write a string value to the system clipboard.' },
           { label: 'cookies.parse(value)', detail: 'Parse Set-Cookie header values returned from callRequest.' },
           { label: 'cookies.stringify(cookies)', detail: 'Serialize cookie objects back into a Set-Cookie string.' },
           { label: 'formatXml(xml)', detail: 'Pretty-print XML strings before rendering them.' },

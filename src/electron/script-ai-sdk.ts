@@ -836,13 +836,41 @@ function toScriptAiMessage(
   message: Message | AssistantMessage,
   parts: ScriptAiMessagePart[] | Part[]
 ): ScriptAiMessage {
+  const usage = message.role === 'assistant' ? getAssistantMessageUsage(message) : null
+
   return {
     id: message.id,
     role: message.role,
     createdAt: message.time.created,
     completedAt: message.role === 'assistant' ? (message.time.completed ?? null) : null,
     errorMessage: message.role === 'assistant' ? getSdkErrorMessage(message.error) : null,
+    cost: usage?.cost ?? null,
+    modelId: usage?.modelId ?? null,
+    providerId: usage?.providerId ?? null,
+    tokens: usage?.tokens ?? null,
     parts: parts.map(part => ('messageID' in part ? toScriptAiMessagePart(part) : part)),
+  }
+}
+
+function getAssistantMessageUsage(message: AssistantMessage) {
+  const inputTokens = message.tokens.input
+  const outputTokens = message.tokens.output
+  const reasoningTokens = message.tokens.reasoning
+  const cacheReadTokens = message.tokens.cache.read
+  const cacheWriteTokens = message.tokens.cache.write
+
+  return {
+    cost: message.cost,
+    modelId: message.modelID,
+    providerId: message.providerID,
+    tokens: {
+      input: inputTokens,
+      output: outputTokens,
+      reasoning: reasoningTokens,
+      cacheRead: cacheReadTokens,
+      cacheWrite: cacheWriteTokens,
+      total: inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens,
+    },
   }
 }
 

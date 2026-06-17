@@ -1,6 +1,6 @@
 import {
   getPrimaryScriptAiPhase,
-  type ScriptAiSessionSummary,
+  type ScriptAiMessage,
   getScriptAiTargetKey,
   type ScriptAiMessagePatchDiff,
   type ScriptAiMessagePart,
@@ -72,13 +72,9 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const prompt = reviewEntry?.prompt ?? ''
   const promptHistory = reviewEntry?.promptHistory ?? []
   const patchDiffsByMessageKey = reviewEntry?.patchDiffsByMessageKey ?? {}
-  const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
-  const selectedSessionContextStats = getSelectedSessionContextStats(
-    selectedSession,
-    selectedModel,
-    modelInfoById
-  )
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
+  const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
+  const selectedSessionContextStats = getSelectedSessionContextStats(selectedMessages, modelInfoById)
   const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
     message.parts.flatMap<TranscriptRow>(part => {
       if (part.type === 'step-start') {
@@ -531,7 +527,7 @@ function getTranscriptPartTitle(part: ScriptAiMessagePart) {
     case 'reasoning':
       return getFirstLine(part.text) || 'Reasoning'
     case 'tool':
-      return [part.title, part.toolName, part.status].filter(Boolean).join(' • ')
+      return getToolTranscriptPartTitle(part)
     case 'file':
       return part.path ?? part.filename ?? 'File attachment'
     case 'step-start':
@@ -550,6 +546,32 @@ function getTranscriptPartTitle(part: ScriptAiMessagePart) {
       return 'Retry'
     case 'compaction':
       return 'Compaction'
+  }
+}
+
+function getToolTranscriptPartTitle(part: Extract<ScriptAiMessagePart, { type: 'tool' }>) {
+  const readRange = part.toolName === 'read' ? getReadToolRangeLabel(part.input) : null
+  return [part.title, part.toolName, readRange, part.status].filter(Boolean).join(' • ')
+}
+
+function getReadToolRangeLabel(input: string | null) {
+  if (!input) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(input) as { offset?: unknown; limit?: unknown }
+    const hasOffset = typeof parsed.offset === 'number' && Number.isFinite(parsed.offset)
+    const hasLimit = typeof parsed.limit === 'number' && Number.isFinite(parsed.limit)
+
+    if (!hasOffset && !hasLimit) {
+      return null
+    }
+
+    const parts = [hasOffset ? `offset ${String(parsed.offset)}` : null, hasLimit ? `limit ${String(parsed.limit)}` : null].filter(Boolean)
+    return parts.join(' • ')
+  } catch {
+    return null
   }
 }
 
@@ -792,17 +814,26 @@ function isCaretOnLastLine(textarea: HTMLTextAreaElement) {
 }
 
 function getSelectedSessionContextStats(
-  session: ScriptAiSessionSummary | null,
-  selectedModel: string,
+  messages: ScriptAiMessage[],
   modelInfoById: Record<string, { contextWindow: number | null }>
 ) {
-  if (!session) {
+  const latestAssistantMessageWithTokens = [...messages].reverse().find(message => {
+    return message.role === 'assistant' && (message.tokens?.total ?? 0) > 0
+  })
+
+  if (!latestAssistantMessageWithTokens) {
     return null
   }
 
-  const totalTokens = session.tokens?.total ?? null
-  const spent = session.spent
-  const modelId = session.modelId ?? selectedModel
+  const totalTokens = latestAssistantMessageWithTokens.tokens?.total ?? null
+  const spent = messages.reduce((totalSpent, message) => {
+    if (message.role !== 'assistant' || message.cost === null) {
+      return totalSpent
+    }
+
+    return totalSpent + message.cost
+  }, 0)
+  const modelId = latestAssistantMessageWithTokens.modelId
   const contextWindow = modelId ? (modelInfoById[modelId]?.contextWindow ?? null) : null
   const parts = [
     totalTokens !== null
@@ -811,7 +842,7 @@ function getSelectedSessionContextStats(
         : `${formatCompactInteger(totalTokens)} tokens`
       : null,
     totalTokens !== null && contextWindow ? `${formatPercentage((totalTokens / contextWindow) * 100)} used` : null,
-    spent !== null ? `${formatUsdAmount(spent)} spent` : null,
+    `${formatUsdAmount(spent)} spent`,
   ].filter(Boolean)
 
   return parts.join(' - ') || null

@@ -348,6 +348,11 @@ export namespace ScriptAiReviewCoordinator {
           return
         }
 
+        // Do not overwrite the Script AI workspace while OpenCode is still editing it.
+        if (isScriptAiReviewEntryBusy(entry)) {
+          return
+        }
+
         const result = await getWindowElectron().syncScriptAiWorkspace({ target, code })
         if (!result.success) {
           return
