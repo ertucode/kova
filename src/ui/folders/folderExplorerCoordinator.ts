@@ -7,6 +7,7 @@ import { errorResponseToMessage } from '@common/GenericError'
 import type { RequestExampleRecord } from '@common/RequestExamples'
 import type { HttpRequestRecord } from '@common/Requests'
 import type { RequestType } from '@common/Requests'
+import { Typescript } from '@common/Typescript'
 import type { WebSocketExampleRecord } from '@common/WebSocketExamples'
 import { getWindowElectron } from '@/getWindowElectron'
 import { confirmation } from '@/lib/components/confirmation'
@@ -36,6 +37,7 @@ import {
 import type { MoveExplorerItemInput } from '@common/Explorer'
 import { ChangesCoordinator } from './changesCoordinator'
 import { formatScriptBlock } from './formatScriptBlock'
+import { ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 
 const loadTokens: Record<string, number> = {}
 const saveTokens: Record<string, number> = {}
@@ -1366,6 +1368,7 @@ async function saveItem(selection: Selection, options?: { skipFormatting?: boole
   })
   patchTreeItem(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord)
   persistUnsavedDrafts()
+  syncScriptAiTargetsForDetailsDraft(selection, serverDraft)
 }
 
 async function maybeFormatDetailsDraftScriptsForSave(draft: DetailsDraft) {
@@ -1403,6 +1406,59 @@ async function maybeFormatScriptBlock(value: string, label: string) {
       message: `${label} was saved without formatting.`,
     })
     return value
+  }
+}
+
+function syncScriptAiTargetsForDetailsDraft(selection: Selection, draft: DetailsDraft) {
+  switch (draft.itemType) {
+    case 'folder':
+      void ScriptAiReviewCoordinator.syncEditorCode(
+        {
+          ownerType: 'folder',
+          ownerId: selection.id,
+          runtimeContext: { phase: 'pre-request' },
+        },
+        draft.preRequestScript
+      )
+      void ScriptAiReviewCoordinator.syncEditorCode(
+        {
+          ownerType: 'folder',
+          ownerId: selection.id,
+          runtimeContext: { phase: 'post-request' },
+        },
+        draft.postRequestScript
+      )
+      return
+    case 'request':
+      void ScriptAiReviewCoordinator.syncEditorCode(
+        {
+          ownerType: 'request',
+          ownerId: selection.id,
+          runtimeContext: { phase: 'pre-request' },
+        },
+        draft.preRequestScript
+      )
+      void ScriptAiReviewCoordinator.syncEditorCode(
+        {
+          ownerType: 'request',
+          ownerId: selection.id,
+          runtimeContext: { phase: 'post-request' },
+        },
+        draft.postRequestScript
+      )
+      void ScriptAiReviewCoordinator.syncEditorCode(
+        {
+          ownerType: 'request',
+          ownerId: selection.id,
+          runtimeContext: { phase: 'response-visualizer' },
+        },
+        draft.responseVisualizer
+      )
+      return
+    case 'example':
+      return
+    default:
+      return Typescript.assertUnreachable(draft)
   }
 }
 

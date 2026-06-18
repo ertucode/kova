@@ -370,7 +370,18 @@ function upsertMessagePart(runtime: TargetRuntime, sessionId: string, messageId:
   const messages = runtime.messagesBySessionId.get(sessionId)
   if (!messages) {
     runtime.messagesBySessionId.set(sessionId, [
-      { id: messageId, role: 'assistant', createdAt: Date.now(), completedAt: null, errorMessage: null, parts: [part] },
+      {
+        id: messageId,
+        role: 'assistant',
+        createdAt: Date.now(),
+        completedAt: null,
+        errorMessage: null,
+        cost: null,
+        modelId: null,
+        providerId: null,
+        tokens: null,
+        parts: [part],
+      },
     ])
     return
   }
@@ -383,6 +394,10 @@ function upsertMessagePart(runtime: TargetRuntime, sessionId: string, messageId:
       createdAt: Date.now(),
       completedAt: null,
       errorMessage: null,
+      cost: null,
+      modelId: null,
+      providerId: null,
+      tokens: null,
       parts: [part],
     })
     return

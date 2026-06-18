@@ -267,10 +267,10 @@ export function ViewsPanel() {
         runtimeContext: { phase: 'view-runtime' },
       },
       currentCode: selectedDraft.code,
-      onApply: async nextCode => {
+      onApply: async (nextCode, options) => {
         const nextDraft = { ...selectedDraft, code: nextCode }
         updateDraft(selectedDraft.id, () => nextDraft)
-        return saveView(selectedDraft.id, nextDraft)
+        return saveView(selectedDraft.id, nextDraft, options)
       },
       defaultModel: appDefaultModel,
     })
@@ -429,11 +429,11 @@ export function ViewsPanel() {
                          runtimeContext: { phase: 'view-runtime' },
                        },
                        currentCode: selectedDraft.code,
-                       onApply: async nextCode => {
-                         const nextDraft = { ...selectedDraft, code: nextCode }
-                         updateDraft(selectedDraft.id, () => nextDraft)
-                         return saveView(selectedDraft.id, nextDraft)
-                       },
+                        onApply: async (nextCode, options) => {
+                          const nextDraft = { ...selectedDraft, code: nextCode }
+                          updateDraft(selectedDraft.id, () => nextDraft)
+                          return saveView(selectedDraft.id, nextDraft, options)
+                        },
                     })
                  }
               >
@@ -597,7 +597,14 @@ export function ViewsPanel() {
     })
   }
 
-  async function saveView(viewId: string, overrideDraft?: ViewRecord) {
+  async function saveView(
+    viewId: string,
+    overrideDraft?: ViewRecord,
+    options?: {
+      skipFormatting?: boolean
+      skipSync?: boolean
+    }
+  ) {
     const latestEntry = entriesRef.current[viewId]
     const latestDraft = overrideDraft ?? latestEntry?.current
     if (!latestEntry || !latestDraft) {
@@ -605,7 +612,7 @@ export function ViewsPanel() {
     }
 
     let draftToSave = latestDraft
-    if (getFormatScriptBlocksOnSave() && latestDraft.code.trim().length > 0) {
+    if (!options?.skipFormatting && getFormatScriptBlocksOnSave() && latestDraft.code.trim().length > 0) {
       try {
         const selection = viewSelectionRef.current
         const cursorOffset = Math.max(0, Math.min(selection?.head ?? 0, latestDraft.code.length))
@@ -675,13 +682,13 @@ export function ViewsPanel() {
         return false
       }
 
+      const normalizedResult = normalizeViewRecord(result.data)
+
       setEntries(currentEntries => {
         const currentEntry = currentEntries[viewId]
         if (!currentEntry) {
           return currentEntries
         }
-
-        const normalizedResult = normalizeViewRecord(result.data)
 
         const nextCurrent =
           serializeViewDraft(currentEntry.current) === serializeViewDraft(normalizedResult)
@@ -699,6 +706,18 @@ export function ViewsPanel() {
         }
       })
       notifyViewsChanged()
+
+      if (!options?.skipSync) {
+        void ScriptAiReviewCoordinator.syncEditorCode(
+          {
+            ownerType: 'view',
+            ownerId: normalizedResult.id,
+            runtimeContext: { phase: 'view-runtime' },
+          },
+          normalizedResult.code
+        )
+      }
+
       return true
     } finally {
       setEntries(currentEntries => {

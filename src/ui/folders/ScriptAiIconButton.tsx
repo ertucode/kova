@@ -21,7 +21,13 @@ export function ScriptAiIconButton({
   ownerId: string
   runtimeContext: ScriptAiRuntimeContext
   currentCode: string
-  onApply: (nextCode: string) => Promise<boolean | void> | boolean | void
+  onApply: (
+    nextCode: string,
+    options?: {
+      skipFormatting?: boolean
+      skipSync?: boolean
+    }
+  ) => Promise<boolean | void> | boolean | void
   className?: string
   tooltip?: string
 }) {

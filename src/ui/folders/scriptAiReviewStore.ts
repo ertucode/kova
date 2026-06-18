@@ -8,7 +8,13 @@ import {
 } from '@common/ScriptAi'
 import { getWindowElectron } from '@/getWindowElectron'
 
-type OnApply = (nextCode: string) => Promise<boolean | void> | boolean | void
+type OnApply = (
+  nextCode: string,
+  options?: {
+    skipFormatting?: boolean
+    skipSync?: boolean
+  }
+) => Promise<boolean | void> | boolean | void
 
 export type ScriptAiMessagePatchDiffState = {
   isLoading: boolean
@@ -121,7 +127,6 @@ export namespace ScriptAiReviewCoordinator {
       },
     })
 
-    void syncEditorCode(input.target, input.currentCode)
   }
 
   export async function loadWorkspace(target: ScriptAiTarget, currentCode: string) {
@@ -354,7 +359,7 @@ export namespace ScriptAiReviewCoordinator {
         }
 
         const result = await getWindowElectron().syncScriptAiWorkspace({ target, code })
-        if (!result.success) {
+        if (!result.success || !result.data.didSync) {
           return
         }
 
@@ -494,6 +499,7 @@ async function autoApplyCode(targetKey: string, code: string) {
       patch: {
         lastAutoAppliedCode: code,
         autoApplyCodeInFlight: null,
+        lastSyncedEditorCode: code,
       },
     })
     return true
@@ -512,7 +518,7 @@ async function autoApplyCode(targetKey: string, code: string) {
   })
 
   try {
-    const applied = await entry.onApply(code)
+    const applied = await entry.onApply(code, { skipFormatting: true, skipSync: true })
     if (applied === false) {
       scriptAiReviewStore.trigger.entryPatched({
         targetKey,
@@ -529,6 +535,7 @@ async function autoApplyCode(targetKey: string, code: string) {
       patch: {
         autoApplyCodeInFlight: null,
         lastAutoAppliedCode: code,
+        lastSyncedEditorCode: code,
       },
     })
     return true

@@ -28,6 +28,7 @@ import { notifySharedScriptsChanged, useScopedSharedScripts } from './useVisible
 import { buildSharedScriptDocumentPath } from './sharedScriptDocumentPath'
 import { ScriptAiIconButton } from './ScriptAiIconButton'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
+import { ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 import { Tooltip } from '../components/Tooltip'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime']
@@ -173,6 +174,15 @@ export function SharedScriptsSection({
         toast.show(result)
         return
       }
+
+      void ScriptAiReviewCoordinator.syncEditorCode(
+        {
+          ownerType: 'shared-script',
+          ownerId: draftValue.id,
+          runtimeContext: { targets: draftValue.targets },
+        },
+        draftValue.code
+      )
 
       await reloadAll()
     } finally {

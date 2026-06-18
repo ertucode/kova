@@ -23,7 +23,13 @@ import { getPatchDiffKey, scriptAiReviewStore, ScriptAiReviewCoordinator } from 
 type ScriptAiReviewDialogProps = {
   target: ScriptAiTarget
   currentCode: string
-  onApply: (nextCode: string) => Promise<boolean | void> | boolean | void
+  onApply: (
+    nextCode: string,
+    options?: {
+      skipFormatting?: boolean
+      skipSync?: boolean
+    }
+  ) => Promise<boolean | void> | boolean | void
 }
 
 type TranscriptRow =
