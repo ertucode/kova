@@ -401,13 +401,8 @@ export namespace FolderExplorerCoordinator {
     }
   }
 
-  export async function duplicateSelectedRequest() {
-    const selection = folderExplorerEditorStore.getSnapshot().context.selected
-    if (!selection || selection.itemType !== 'request') {
-      return
-    }
-
-    const result = await getWindowElectron().duplicateRequest({ id: selection.id })
+  export async function duplicateRequest(requestId: string) {
+    const result = await getWindowElectron().duplicateRequest({ id: requestId })
     if (!result.success) {
       toast.show(result)
       return
@@ -416,6 +411,15 @@ export namespace FolderExplorerCoordinator {
     await loadItems()
     await selectItem({ itemType: 'request', id: result.data.id })
     toast.show({ severity: 'success', title: 'Request duplicated', message: `Created ${result.data.name}.` })
+  }
+
+  export async function duplicateSelectedRequest() {
+    const selection = folderExplorerEditorStore.getSnapshot().context.selected
+    if (!selection || selection.itemType !== 'request') {
+      return
+    }
+
+    await duplicateRequest(selection.id)
   }
 
   export function startCreate(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
 import {
   ChevronDownIcon,
@@ -163,7 +163,7 @@ export function ExplorerRow({
         </button>
 
         <div className="flex min-w-0 flex-1 items-center gap-1 text-left">
-          <div className="w-8 shrink-0 flex items-center justify-center">
+          <div className="flex w-8 shrink-0 items-center justify-center">
             {node.itemType === 'folder' ? (
               <FolderIcon className="size-4 shrink-0 text-base-content/55" />
             ) : node.itemType === 'request' ? (
@@ -175,9 +175,9 @@ export function ExplorerRow({
               <ExampleGlyph exampleType={node.exampleType} />
             )}
           </div>
-           <div className="min-w-0 flex-1 truncate px-1 text-[13px] leading-[1.2] text-base-content">{node.name}</div>
-           <TagDots tags={assignedTags} />
-           {isItemDirty ? (
+          <div className="min-w-0 flex-1 truncate px-1 text-[13px] leading-[1.2] text-base-content">{node.name}</div>
+          <TagDots tags={assignedTags} />
+          {isItemDirty ? (
             <div
               className="size-2 shrink-0 rounded-full bg-warning"
               aria-label="Request has unsaved changes"
@@ -223,9 +223,14 @@ export function ExplorerRow({
           onFlattenFolder={node.itemType === 'folder' ? () => FolderExplorerCoordinator.flattenFolder(node) : undefined}
           onAssignTags={
             node.itemType === 'folder' || node.itemType === 'request'
-              ? () => dialogActions.open({ component: AssignTagsDialog, props: { itemType: node.itemType, itemId: node.id, itemName: node.name } })
+              ? () =>
+                  dialogActions.open({
+                    component: AssignTagsDialog,
+                    props: { itemType: node.itemType, itemId: node.id, itemName: node.name },
+                  })
               : undefined
           }
+          onDuplicateRequest={node.itemType === 'request' ? () => FolderExplorerCoordinator.duplicateRequest(node.id) : undefined}
           onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
         />
       </div>
@@ -337,7 +342,7 @@ export function DraftRow({
   return (
     <div className="py-1" style={{ paddingLeft: depth * 18 }}>
       <div className="flex items-center gap-2 border border-base-content/10 bg-base-100/90 px-2 pr-1">
-        <div className="pl-8 shrink-0 flex items-center justify-center">
+        <div className="flex shrink-0 items-center justify-center pl-8">
           {icon === 'folder' ? (
             <FolderIcon className="size-4 text-base-content/55" />
           ) : icon === 'request' ? (
@@ -386,6 +391,20 @@ export function EmptyState({ title, description }: { title: string; description:
   )
 }
 
+type ExplorerMenuAction = () => void | Promise<void>
+
+type ExplorerMenuEntry =
+  | {
+      type: 'item'
+      icon: ReactNode
+      label: string
+      action: ExplorerMenuAction
+      severity?: 'default' | 'danger'
+    }
+  | {
+      type: 'divider'
+    }
+
 function ExplorerMenu({
   itemId,
   itemType,
@@ -397,6 +416,7 @@ function ExplorerMenu({
   onAddWebSocketRequest,
   onFlattenFolder,
   onAssignTags,
+  onDuplicateRequest,
   onDelete,
 }: {
   itemId: string
@@ -409,6 +429,7 @@ function ExplorerMenu({
   onAddWebSocketRequest?: () => void
   onFlattenFolder?: () => void
   onAssignTags?: () => void
+  onDuplicateRequest?: () => void
   onDelete: () => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -479,7 +500,7 @@ function ExplorerMenu({
     }
   }, [isOpen])
 
-  const runAction = (action: () => void | Promise<void>) => {
+  const runAction = (action: ExplorerMenuAction) => {
     setIsOpen(false)
     void action()
   }
@@ -517,6 +538,90 @@ function ExplorerMenu({
     }
   }
 
+  const items = useMemo(() => {
+    if (itemType === 'folder') {
+      return compactExplorerMenuEntries([
+        onAddFolder ? { type: 'item', icon: <FolderIcon className="size-4" />, label: 'Add Folder', action: onAddFolder } : null,
+        onAddHttpRequest
+          ? { type: 'item', icon: <PlusIcon className="size-4" />, label: 'Add HTTP Request', action: onAddHttpRequest }
+          : null,
+        onAddRequestFromClipboard
+          ? {
+              type: 'item',
+              icon: <CopyIcon className="size-4" />,
+              label: 'Add Request From Clipboard',
+              action: onAddRequestFromClipboard,
+            }
+          : null,
+        onAddWebSocketRequest
+          ? { type: 'item', icon: <PlusIcon className="size-4" />, label: 'Add WebSocket', action: onAddWebSocketRequest }
+          : null,
+        { type: 'divider' },
+        onAssignTags ? { type: 'item', icon: <TagIcon className="size-4" />, label: 'Assign Tags', action: onAssignTags } : null,
+        onFlattenFolder
+          ? { type: 'item', icon: <ChevronDownIcon className="size-4" />, label: 'Flatten Folder', action: onFlattenFolder }
+          : null,
+        { type: 'divider' },
+        {
+          type: 'item',
+          icon: <FileJsonIcon className="size-4" />,
+          label: 'Export Postman',
+          action: () => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } }),
+        },
+        {
+          type: 'item',
+          icon: <FileJsonIcon className="size-4" />,
+          label: 'Export OpenAPI',
+          action: () => dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'folder', folderId: itemId } }),
+        },
+        { type: 'divider' },
+        { type: 'item', icon: <Trash2Icon className="size-4" />, label: 'Delete', action: onDelete, severity: 'danger' },
+      ])
+    }
+
+    return compactExplorerMenuEntries([
+      onDuplicateRequest
+        ? { type: 'item', icon: <CopyIcon className="size-4" />, label: 'Duplicate Request', action: onDuplicateRequest }
+        : null,
+      onAssignTags ? { type: 'item', icon: <TagIcon className="size-4" />, label: 'Assign Tags', action: onAssignTags } : null,
+      { type: 'divider' },
+      requestType === 'http'
+        ? { type: 'item', icon: <CopyIcon className="size-4" />, label: 'Copy as cURL', action: () => copyRequestCode('curl') }
+        : null,
+      requestType === 'http'
+        ? { type: 'item', icon: <FileCode2Icon className="size-4" />, label: 'Copy as fetch', action: () => copyRequestCode('fetch') }
+        : null,
+      {
+        type: 'item',
+        icon: <FileJsonIcon className="size-4" />,
+        label: 'Export Postman',
+        action: () => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'request', requestId: itemId } }),
+      },
+      requestType === 'http'
+        ? {
+            type: 'item',
+            icon: <FileJsonIcon className="size-4" />,
+            label: 'Export OpenAPI',
+            action: () => dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'request', requestId: itemId } }),
+          }
+        : null,
+      { type: 'divider' },
+      { type: 'item', icon: <Trash2Icon className="size-4" />, label: 'Delete', action: onDelete, severity: 'danger' },
+    ])
+  }, [
+    itemId,
+    itemType,
+    onAddFolder,
+    onAddHttpRequest,
+    onAddRequestFromClipboard,
+    onAddWebSocketRequest,
+    onAssignTags,
+    onDelete,
+    onDuplicateRequest,
+    onFlattenFolder,
+    requestType,
+  ])
+
   return (
     <div ref={containerRef} className="relative flex shrink-0 items-center">
       <button
@@ -537,149 +642,57 @@ function ExplorerMenu({
         <ul
           ref={menuRef}
           className={[
-            'menu absolute z-20 w-44 border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]',
+            'menu absolute z-20 w-64 border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]',
             menuPlacement.vertical === 'down' ? 'top-full mt-1' : 'bottom-full mb-1',
             menuPlacement.horizontal === 'right' ? 'right-0' : 'left-0',
           ].join(' ')}
         >
-          {itemType === 'folder' && onAddFolder ? (
-            <li>
-              <button type="button" onClick={() => runAction(onAddFolder)}>
-                <FolderIcon className="size-4" />
-                Add Folder
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'folder' && onAddHttpRequest ? (
-            <li>
-              <button type="button" onClick={() => runAction(onAddHttpRequest)}>
-                <PlusIcon className="size-4" />
-                Add HTTP Request
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'folder' && onAddRequestFromClipboard ? (
-            <li>
-              <button type="button" onClick={() => runAction(onAddRequestFromClipboard)}>
-                <CopyIcon className="size-4" />
-                Add Request From Clipboard
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'folder' && onAddWebSocketRequest ? (
-            <li>
-              <button type="button" onClick={() => runAction(onAddWebSocketRequest)}>
-                <PlusIcon className="size-4" />
-                Add WebSocket
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'folder' ? (
-            <li>
-              <button
-                type="button"
-                onClick={() =>
-                  runAction(() =>
-                    dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } })
-                  )
-                }
-              >
-                <FileJsonIcon className="size-4" />
-                Export Postman
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'folder' ? (
-            <li>
-              <button
-                type="button"
-                onClick={() =>
-                  runAction(() =>
-                    dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'folder', folderId: itemId } })
-                  )
-                }
-              >
-                <FileJsonIcon className="size-4" />
-                Export OpenAPI
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'folder' && onFlattenFolder ? (
-            <li>
-              <button type="button" onClick={() => runAction(onFlattenFolder)}>
-                <ChevronDownIcon className="size-4" />
-                Flatten Folder
-              </button>
-            </li>
-          ) : null}
-          {onAssignTags ? (
-            <li>
-              <button type="button" onClick={() => runAction(onAssignTags)}>
-                <TagIcon className="size-4" />
-                Assign Tags
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'request' ? (
-            <li>
-              <button
-                type="button"
-                onClick={() =>
-                  runAction(() =>
-                    dialogActions.open({
-                      component: PostmanExportDialog,
-                      props: { scope: 'request', requestId: itemId },
-                    })
-                  )
-                }
-              >
-                <FileJsonIcon className="size-4" />
-                Export Postman
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'request' && requestType === 'http' ? (
-            <li>
-              <button
-                type="button"
-                onClick={() =>
-                  runAction(() =>
-                    dialogActions.open({
-                      component: OpenApiExportDialog,
-                      props: { scope: 'request', requestId: itemId },
-                    })
-                  )
-                }
-              >
-                <FileJsonIcon className="size-4" />
-                Export OpenAPI
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'request' && requestType === 'http' ? (
-            <li>
-              <button type="button" onClick={() => runAction(() => copyRequestCode('curl'))}>
-                <CopyIcon className="size-4" />
-                Copy as cURL
-              </button>
-            </li>
-          ) : null}
-          {itemType === 'request' && requestType === 'http' ? (
-            <li>
-              <button type="button" onClick={() => runAction(() => copyRequestCode('fetch'))}>
-                <FileCode2Icon className="size-4" />
-                Copy as fetch
-              </button>
-            </li>
-          ) : null}
-          <li>
-            <button type="button" onClick={() => runAction(onDelete)} className="text-error hover:text-error">
-              <Trash2Icon className="size-4" />
-              Delete
-            </button>
-          </li>
+          <ExplorerMenuItems items={items} onAction={runAction} />
         </ul>
       ) : null}
     </div>
   )
+}
+
+function compactExplorerMenuEntries(entries: Array<ExplorerMenuEntry | null>): ExplorerMenuEntry[] {
+  const compacted: ExplorerMenuEntry[] = []
+
+  for (const entry of entries) {
+    if (!entry) {
+      continue
+    }
+
+    if (entry.type === 'divider' && (compacted.length === 0 || compacted[compacted.length - 1]?.type === 'divider')) {
+      continue
+    }
+
+    compacted.push(entry)
+  }
+
+  while (compacted[compacted.length - 1]?.type === 'divider') {
+    compacted.pop()
+  }
+
+  return compacted
+}
+
+function ExplorerMenuItems({ items, onAction }: { items: ExplorerMenuEntry[]; onAction: (action: ExplorerMenuAction) => void }) {
+  return items.map((item, index) => {
+    if (item.type === 'divider') {
+      return <li key={`divider-${index}`} className="my-1 border-t border-base-content/10" aria-hidden="true" />
+    }
+
+    return (
+      <li key={item.label}>
+        <button
+          type="button"
+          onClick={() => onAction(item.action)}
+          className={item.severity === 'danger' ? 'text-error hover:text-error' : undefined}
+        >
+          {item.icon}
+          {item.label}
+        </button>
+      </li>
+    )
+  })
 }
