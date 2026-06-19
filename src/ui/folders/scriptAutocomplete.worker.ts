@@ -1,7 +1,6 @@
 import ts from 'typescript'
 import { type ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 import type {
-  ScriptAutocompleteOption,
   ScriptAutocompleteRequest,
   ScriptAutocompleteResponse,
   ScriptHoverPart,
@@ -19,44 +18,7 @@ import {
   type ScriptRuntimePhaseState as PhaseState,
   updateScriptRuntimePhaseSource,
 } from './scriptRuntimeDiagnostics'
-
-const blockedKeywordCompletions = new Set([
-  'abstract',
-  'any',
-  'as',
-  'asserts',
-  'declare',
-  'enum',
-  'implements',
-  'infer',
-  'interface',
-  'is',
-  'keyof',
-  'module',
-  'namespace',
-  'override',
-  'private',
-  'protected',
-  'public',
-  'readonly',
-  'satisfies',
-  'type',
-])
-
-const preferredSandboxGlobals = new Set([
-  'env',
-  'scope',
-  'cache',
-  'request',
-  'response',
-  'callRequest',
-  'console',
-  'crypto',
-  'prompt',
-  'toast',
-  'z',
-])
-const preferredBuiltinGlobals = new Set(['Date', 'Math', 'JSON', 'Promise', 'Object', 'Array', 'Map', 'Set', 'String', 'Number'])
+import { toScriptAutocompleteResult } from './scriptAutocompleteCompletions'
 
 let declarationFilesPromise: Promise<DeclarationFiles> | null = null
 const phaseStateManager = createScriptRuntimePhaseStateManager(loadDeclarationFiles)
@@ -101,18 +63,20 @@ async function complete(request: ScriptAutocompleteRequest): Promise<ScriptAutoc
       }
     }
 
-    const entries = completions.entries.filter(isAllowedEntry)
-    const replacementFrom = completions.optionalReplacementSpan ? completions.optionalReplacementSpan.start : request.position
-    const query = request.code.slice(replacementFrom, request.position)
+    const result = toScriptAutocompleteResult(
+      phaseState.service,
+      phaseState.userFileName,
+      request.position,
+      request.code,
+      completions
+    )
 
     return {
       requestId: request.requestId,
       success: true,
-      from: replacementFrom,
-      to: completions.optionalReplacementSpan ? completions.optionalReplacementSpan.start + completions.optionalReplacementSpan.length : request.position,
-      options: entries.slice(0, 200).map((entry, index) =>
-        toOption(phaseState.service, phaseState.userFileName, request.position, entry, index, query)
-      ),
+      from: result.from,
+      to: result.to,
+      options: result.options,
     }
   } catch (error) {
     return {
@@ -222,115 +186,4 @@ async function loadDeclarationPayload(): Promise<DeclarationPayload> {
   }
 
   return (await response.json()) as DeclarationPayload
-}
-
-function isAllowedEntry(entry: ts.CompletionEntry) {
-  if (entry.kind === ts.ScriptElementKind.keyword && blockedKeywordCompletions.has(entry.name)) {
-    return false
-  }
-
-  return true
-}
-
-function toOption(
-  service: ts.LanguageService,
-  fileName: string,
-  position: number,
-  entry: ts.CompletionEntry,
-  index: number,
-  query: string
-): ScriptAutocompleteOption {
-  const details = service.getCompletionEntryDetails(fileName, position, entry.name, {}, entry.source, {}, entry.data)
-  const display = ts.displayPartsToString(details?.displayParts ?? [])
-  const documentation = ts.displayPartsToString(details?.documentation ?? [])
-  const baseBoost = Math.max(-40, 40 - index)
-
-  return {
-    label: entry.name,
-    type: mapCompletionKind(entry.kind),
-    detail: display || entry.kind,
-    info: documentation || undefined,
-    applyText: entry.insertText && !entry.isSnippet ? entry.insertText : undefined,
-    boost: clampBoost(baseBoost + scoreEntry(entry, query)),
-  }
-}
-
-function scoreEntry(entry: ts.CompletionEntry, query: string) {
-  const normalizedQuery = query.trim().toLowerCase()
-  const normalizedName = entry.name.toLowerCase()
-  let score = 0
-
-  if (isLocalValueEntry(entry)) {
-    score += 35
-  }
-
-  if (preferredSandboxGlobals.has(entry.name)) {
-    score += normalizedQuery === '' ? 70 : 40
-  } else if (preferredBuiltinGlobals.has(entry.name)) {
-    score += normalizedQuery === '' ? 20 : 10
-  } else if (normalizedQuery === '' && isGenericGlobalEntry(entry)) {
-    score -= 15
-  }
-
-  if (normalizedQuery !== '') {
-    if (normalizedName === normalizedQuery) {
-      score += 80
-    } else if (normalizedName.startsWith(normalizedQuery)) {
-      score += 45
-    } else if (normalizedName.includes(normalizedQuery)) {
-      score += 10
-    } else {
-      score -= 25
-    }
-  }
-
-  return score
-}
-
-function isLocalValueEntry(entry: ts.CompletionEntry) {
-  return (
-    entry.kind === ts.ScriptElementKind.localVariableElement ||
-    entry.kind === ts.ScriptElementKind.variableElement ||
-    entry.kind === ts.ScriptElementKind.parameterElement ||
-    entry.kind === ts.ScriptElementKind.localFunctionElement
-  )
-}
-
-function isGenericGlobalEntry(entry: ts.CompletionEntry) {
-  return entry.source === undefined && !isLocalValueEntry(entry)
-}
-
-function clampBoost(value: number) {
-  return Math.max(-99, Math.min(99, value))
-}
-
-function mapCompletionKind(kind: ts.ScriptElementKind): ScriptAutocompleteOption['type'] {
-  switch (kind) {
-    case ts.ScriptElementKind.keyword:
-      return 'keyword'
-    case ts.ScriptElementKind.primitiveType:
-    case ts.ScriptElementKind.localClassElement:
-    case ts.ScriptElementKind.typeElement:
-    case ts.ScriptElementKind.classElement:
-      return 'type'
-    case ts.ScriptElementKind.memberFunctionElement:
-    case ts.ScriptElementKind.functionElement:
-    case ts.ScriptElementKind.constructSignatureElement:
-      return 'function'
-    case ts.ScriptElementKind.variableElement:
-    case ts.ScriptElementKind.localVariableElement:
-    case ts.ScriptElementKind.parameterElement:
-      return 'variable'
-    case ts.ScriptElementKind.memberGetAccessorElement:
-    case ts.ScriptElementKind.memberSetAccessorElement:
-    case ts.ScriptElementKind.memberVariableElement:
-    case ts.ScriptElementKind.memberAccessorVariableElement:
-      return 'property'
-    case ts.ScriptElementKind.enumElement:
-      return 'constant'
-    case ts.ScriptElementKind.interfaceElement:
-      return 'interface'
-    default:
-      return 'text'
-  }
 }

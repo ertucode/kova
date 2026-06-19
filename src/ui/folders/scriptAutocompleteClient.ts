@@ -33,6 +33,12 @@ class ScriptAutocompleteClient {
     this.worker.addEventListener('error', this.handleError)
   }
 
+  dispose() {
+    this.worker.removeEventListener('message', this.handleMessage)
+    this.worker.removeEventListener('error', this.handleError)
+    this.worker.terminate()
+  }
+
   request(input: {
     phase?: ScriptAutocompletePhase
     runtimeContext?: ScriptRuntimeContext
@@ -219,6 +225,16 @@ class ScriptAutocompleteClient {
 
 let client: ScriptAutocompleteClient | null = null
 
+function getClient() {
+  client ??= new ScriptAutocompleteClient()
+  return client
+}
+
+function resetClient() {
+  client?.dispose()
+  client = null
+}
+
 export function requestScriptAutocomplete(input: {
   phase?: ScriptAutocompletePhase
   runtimeContext?: ScriptRuntimeContext
@@ -229,8 +245,7 @@ export function requestScriptAutocomplete(input: {
   packages?: ScriptAutocompletePackage[]
   signal?: AbortSignal
 }) {
-  client ??= new ScriptAutocompleteClient()
-  return client.request(input)
+  return requestWithRetry(currentClient => currentClient.request(input))
 }
 
 export function requestScriptDiagnostics(input: {
@@ -242,8 +257,7 @@ export function requestScriptDiagnostics(input: {
   packages?: ScriptAutocompletePackage[]
   signal?: AbortSignal
 }) {
-  client ??= new ScriptAutocompleteClient()
-  return client.requestDiagnostics(input)
+  return requestWithRetry(currentClient => currentClient.requestDiagnostics(input))
 }
 
 export function requestScriptHover(input: {
@@ -256,6 +270,15 @@ export function requestScriptHover(input: {
   packages?: ScriptAutocompletePackage[]
   signal?: AbortSignal
 }) {
-  client ??= new ScriptAutocompleteClient()
-  return client.requestHover(input)
+  return requestWithRetry(currentClient => currentClient.requestHover(input))
+}
+
+async function requestWithRetry<T>(request: (client: ScriptAutocompleteClient) => Promise<T>) {
+  try {
+    return await request(getClient())
+  } catch (error) {
+    console.warn('[script-autocomplete] request failed, resetting worker and retrying once', error)
+    resetClient()
+    return await request(getClient())
+  }
 }

@@ -26,11 +26,13 @@ export type ScriptRuntimePackage = Pick<
 
 export type ScriptRuntimeDeclarationPayload = {
   rootLibFile: string
+  visualizerRootLibFile: string
   files: Record<string, string>
 }
 
 export type ScriptRuntimeDeclarationFiles = {
   rootLibFile: string
+  visualizerRootLibFile: string
   files: Map<string, string>
 }
 
@@ -87,6 +89,7 @@ export function createScriptRuntimePhaseStateManager(loadDeclarationFiles: () =>
 export function createScriptRuntimeDeclarationFiles(payload: ScriptRuntimeDeclarationPayload): ScriptRuntimeDeclarationFiles {
   return {
     rootLibFile: payload.rootLibFile,
+    visualizerRootLibFile: payload.visualizerRootLibFile,
     files: new Map(Object.entries(payload.files)),
   }
 }
@@ -285,10 +288,13 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
   const key = getScriptRuntimeContextKey(runtimeContext)
   const userFileName = isScriptRuntimeVisualizerOnly(runtimeContext) ? `${key}.script.tsx` : `${key}.script.ts`
   const declarationFileName = `${key}.runtime.d.ts`
+  const rootLibFile = isScriptRuntimeVisualizerOnly(runtimeContext)
+    ? declarationFiles.visualizerRootLibFile
+    : declarationFiles.rootLibFile
   const files = new Map(declarationFiles.files)
   files.set(declarationFileName, `${getScriptRuntimeDeclarations(runtimeContext)}\n/// <reference lib=\"esnext.iterator\" />\n`)
   files.set(userFileName, '')
-  const rootFileNames = new Set(files.keys())
+  const rootFileNames = new Set([declarationFileName, userFileName])
 
   const versions = new Map<string, number>()
   for (const fileName of files.keys()) {
@@ -300,7 +306,7 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
       target: ts.ScriptTarget.ES2023,
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.Bundler,
-      lib: [declarationFiles.rootLibFile],
+      lib: [rootLibFile],
       strict: true,
       noImplicitAny: false,
       allowJs: true,
@@ -331,7 +337,7 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
       return ts.ScriptKind.TS
     },
     getCurrentDirectory: () => '',
-    getDefaultLibFileName: () => declarationFiles.rootLibFile,
+    getDefaultLibFileName: () => rootLibFile,
     fileExists: fileName => files.has(fileName),
     readFile: fileName => files.get(fileName),
     readDirectory: () => [],
