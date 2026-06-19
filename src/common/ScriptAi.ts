@@ -15,6 +15,15 @@ export type ScriptAiTarget = {
   runtimeContext: ScriptAiRuntimeContext
 }
 
+export type ScriptRuntimeDiagnostic = {
+  from: number
+  to: number
+  message: string
+  line: number | null
+  column: number | null
+  sourceLine: string | null
+}
+
 export type ScriptAiSessionSummary = {
   id: string
   title: string
@@ -179,6 +188,14 @@ export type ScriptAiMessagePatchDiff = {
 
 export type LoadScriptAiMessagePatchDiffResponse = {
   diffs: ScriptAiMessagePatchDiff[]
+}
+
+export type GetScriptAiDiagnosticsInput = {
+  target: ScriptAiTarget
+}
+
+export type GetScriptAiDiagnosticsResponse = {
+  diagnostics: ScriptRuntimeDiagnostic[]
 }
 
 export type OpenCodeModelSummary = {

@@ -36,6 +36,12 @@ export async function listSharedScripts(input: ListSharedScriptsInput): Promise<
     .map(toSharedScriptRecord)
 }
 
+export async function getSharedScript(id: string): Promise<SharedScriptRecord | null> {
+  const db = getDb()
+  const row = db.select().from(sharedScripts).where(and(eq(sharedScripts.id, id), isNull(sharedScripts.deletedAt))).get()
+  return row ? toSharedScriptRecord(row) : null
+}
+
 export async function createSharedScript(input: CreateSharedScriptInput): Promise<GenericResult<SharedScriptRecord>> {
   const db = getDb()
   const validationError = validateSharedScriptInput(input)

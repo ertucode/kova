@@ -40,6 +40,7 @@ import {
 } from '../common/ScriptAi.js'
 import { emitGenericEvent } from './generic-events.js'
 import { getAppSettings } from './db/app-settings.js'
+import { requireScriptAiDiagnosticsBridge } from './script-ai-diagnostics.js'
 import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
 
 type TargetMeta = {
@@ -158,7 +159,7 @@ export async function sendScriptAiMessage(
       path: { id: input.sessionId },
       body: {
         model: parseSelectedModel(input.model),
-        system: buildSystemPrompt(runtime.fileName, input.documentation),
+        system: buildSystemPrompt(input.target, runtime.fileName, input.documentation),
         parts: [{ type: 'text', text: input.message }],
       },
     })
@@ -208,6 +209,17 @@ export async function applyScriptAiWorkspace(
     return Result.Success({ code: input.code })
   } catch (error) {
     return toGenericError(error)
+  }
+}
+
+export async function getScriptAiWorkspaceSnapshot(target: ScriptAiTarget) {
+  const runtime = await ensureTargetRuntime(target, '')
+
+  return {
+    workspacePath: runtime.workspacePath,
+    filePath: runtime.filePath,
+    fileName: runtime.fileName,
+    workspaceCode: await readWorkspaceCode(runtime),
   }
 }
 
@@ -745,7 +757,10 @@ function buildSessionTitle(target: ScriptAiTarget) {
   return `${target.ownerType}:${target.ownerId} ${getPrimaryScriptAiPhase(target.runtimeContext)}`
 }
 
-function buildSystemPrompt(fileName: string, documentation: string) {
+function buildSystemPrompt(target: ScriptAiTarget, fileName: string, documentation: string) {
+  const diagnosticsBridge = requireScriptAiDiagnosticsBridge()
+  const diagnosticsTargetJson = JSON.stringify(target)
+
   return [
     `You are editing exactly one runtime script file named ${fileName}.`,
     `Only update ${fileName}.`,
@@ -754,6 +769,14 @@ function buildSystemPrompt(fileName: string, documentation: string) {
     'The source of truth is the script file in the workspace.',
     'Use the existing file contents as the starting point for edits.',
     'When you finish, ensure the script file contains the complete final script source.',
+    'Do not pass script source or code to diagnostics.',
+    'Use the Kova runtime diagnostics bridge with target metadata only.',
+    'After each edit pass and before any final response, call the diagnostics bridge exactly like this:',
+    `curl -fsS -X POST ${JSON.stringify(`${diagnosticsBridge.url}/script-ai/diagnostics`)} -H ${JSON.stringify(`Authorization: Bearer ${diagnosticsBridge.token}`)} -H ${JSON.stringify('Content-Type: application/json')} --data ${JSON.stringify(JSON.stringify({ target }))}`,
+    `The target metadata JSON is: ${diagnosticsTargetJson}`,
+    'If the diagnostics call fails, stop immediately and wait for further instructions.',
+    'If the diagnostics response contains any errors in diagnostics, stop immediately and wait for further instructions.',
+    'Do not attempt to fix diagnostics errors in the same turn after running the diagnostics bridge.',
     '',
     'Runtime documentation:',
     documentation.trim(),

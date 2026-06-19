@@ -116,6 +116,8 @@ import {
   shutdownScriptAiServer,
   syncScriptAiWorkspace,
 } from './script-ai-sdk.js'
+import { configureScriptAiDiagnosticsBridge, getScriptAiDiagnostics } from './script-ai-diagnostics.js'
+import { startScriptAiDiagnosticsBridge } from './script-ai-diagnostics-bridge.js'
 import {
   configureScriptPackageRegistry,
   deleteDownloadedScriptPackage,
@@ -130,6 +132,7 @@ import { supermavenService } from './supermaven-service.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
+let scriptAiDiagnosticsBridge: Awaited<ReturnType<typeof startScriptAiDiagnosticsBridge>> | null = null
 
 app.on('open-file', (event, path) => {
   event.preventDefault()
@@ -144,6 +147,9 @@ app.on('open-file', (event, path) => {
 })
 
 app.once('will-quit', () => {
+  void scriptAiDiagnosticsBridge?.close().catch(error => {
+    console.error('Failed to close Script AI diagnostics bridge', error)
+  })
   void shutdownScriptAiServer()
 })
 
@@ -330,6 +336,20 @@ app.on('ready', async () => {
     await syncConfiguredDatabase()
   } catch (error) {
     console.error('Failed to initialize database', error)
+  }
+
+  try {
+    scriptAiDiagnosticsBridge = await startScriptAiDiagnosticsBridge({
+      async getDiagnostics(input) {
+        return await getScriptAiDiagnostics(input)
+      },
+    })
+    configureScriptAiDiagnosticsBridge({
+      url: scriptAiDiagnosticsBridge.url,
+      token: scriptAiDiagnosticsBridge.token,
+    })
+  } catch (error) {
+    console.error('Failed to start Script AI diagnostics bridge', error)
   }
 
   // Use pending path from open-file event if available, otherwise check argv

@@ -1,16 +1,12 @@
 import type { Completion } from '@codemirror/autocomplete'
 import type { SharedScriptRecord } from '@common/SharedScripts'
-import type { ScriptPackageArtifact, ScriptPackageDownloadStatus } from '@common/ScriptPackages'
+import type { ScriptRuntimeDiagnostic } from '@common/ScriptAi'
 import type { ScriptRuntimeContext } from './scriptRuntimeDeclarations'
+import type { ScriptRuntimePackage } from './scriptRuntimeDiagnostics'
 
 export type ScriptAutocompleteSharedScript = Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>
 
-export type ScriptAutocompletePackage = Pick<
-  ScriptPackageArtifact,
-  'cacheKey' | 'packageName' | 'packageVersion' | 'typesPackageName' | 'typesPackageVersion' | 'typeFiles'
-> & {
-  downloadStatus: ScriptPackageDownloadStatus
-}
+export type ScriptAutocompletePackage = ScriptRuntimePackage
 
 type ScriptRequestBase = {
   requestId: number
@@ -60,14 +56,7 @@ export type ScriptAutocompleteFailure = {
 
 export type ScriptAutocompleteResponse = ScriptAutocompleteSuccess | ScriptAutocompleteFailure
 
-export type ScriptEditorDiagnostic = {
-  from: number
-  to: number
-  message: string
-  line: number | null
-  column: number | null
-  sourceLine: string | null
-}
+export type ScriptEditorDiagnostic = ScriptRuntimeDiagnostic
 
 export type ScriptDiagnosticsSuccess = {
   requestId: number

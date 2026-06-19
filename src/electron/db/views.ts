@@ -34,6 +34,12 @@ export async function listViews(): Promise<ViewRecord[]> {
     .map(toViewRecord)
 }
 
+export async function getView(id: string): Promise<ViewRecord | null> {
+  const db = getDb()
+  const row = db.select().from(views).where(and(eq(views.id, id), isNull(views.deletedAt))).get()
+  return row ? toViewRecord(row) : null
+}
+
 export async function createView(input: CreateViewInput): Promise<GenericResult<ViewRecord>> {
   const db = getDb()
   const name = input.name.trim()
