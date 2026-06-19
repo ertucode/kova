@@ -43,6 +43,46 @@ describe('script runtime DOM completions', () => {
     expect(diagnostics).toEqual([])
   })
 
+  it('accepts intrinsic JSX elements in view-runtime diagnostics', async () => {
+    const diagnostics = await getDiagnostics(
+      { phase: 'view-runtime' },
+      ['export default function View() {', '  return <div>Hello</div>', '}'].join('\n')
+    )
+
+    expect(diagnostics).toEqual([])
+  })
+
+  it('accepts intrinsic JSX props in view-runtime diagnostics', async () => {
+    const diagnostics = await getDiagnostics(
+      { phase: 'view-runtime' },
+      ['export default function View() {', '  return <div className="hello">Hello</div>', '}'].join('\n')
+    )
+
+    expect(diagnostics).toEqual([])
+  })
+
+  it('shows concrete hover info for intrinsic JSX elements', async () => {
+    const code = ['export default function View() {', '  return <div>Hello</div>', '}'].join('\n')
+    const hoverText = await getQuickInfoDisplayText({ phase: 'view-runtime' }, code, code.indexOf('div') + 1)
+
+    expect(hoverText).not.toContain('IntrinsicElements[string]')
+    expect(hoverText).toContain('HTMLDivElement')
+  })
+
+  it('offers intrinsic JSX props in view-runtime completions', async () => {
+    const code = ['export default function View() {', '  return <div cl', '}'].join('\n')
+    const completionLabels = await getCompletionLabelsAt({ phase: 'view-runtime' }, code, code.length - 1)
+
+    expect(completionLabels).toContain('className')
+  })
+
+  it('offers intrinsic event props in view-runtime completions', async () => {
+    const code = ['export default function View() {', '  return <button on', '}'].join('\n')
+    const completionLabels = await getCompletionLabelsAt({ phase: 'view-runtime' }, code, code.length - 1)
+
+    expect(completionLabels).toContain('onClick')
+  })
+
   it('does not offer HTMLInputElement in pre-request completions', async () => {
     const completionLabels = await getCompletionLabels({ phase: 'pre-request' }, 'type Value = HTMLInputElement')
 
@@ -51,14 +91,29 @@ describe('script runtime DOM completions', () => {
 })
 
 async function getCompletionLabels(runtimeContext: { phase: 'view-runtime' | 'pre-request' }, code: string) {
+  return await getCompletionLabelsAt(runtimeContext, code, code.length)
+}
+
+async function getCompletionLabelsAt(runtimeContext: { phase: 'view-runtime' | 'pre-request' }, code: string, position: number) {
   const phaseState = await createPhaseState(runtimeContext, code)
-  const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, code.length, {
+  const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, position, {
     includeCompletionsForModuleExports: false,
     includeCompletionsWithInsertText: true,
     includeCompletionsWithSnippetText: true,
   })
 
   return completions?.entries.map(entry => entry.name) ?? []
+}
+
+async function getQuickInfoDisplayText(
+  runtimeContext: { phase: 'view-runtime' | 'pre-request' },
+  code: string,
+  position: number
+) {
+  const phaseState = await createPhaseState(runtimeContext, code)
+  const quickInfo = phaseState.service.getQuickInfoAtPosition(phaseState.userFileName, position)
+
+  return ts.displayPartsToString(quickInfo?.displayParts ?? [])
 }
 
 async function getDiagnostics(runtimeContext: { phase: 'view-runtime' | 'pre-request' }, code: string) {

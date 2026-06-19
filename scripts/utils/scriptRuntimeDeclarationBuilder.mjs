@@ -3,31 +3,13 @@ import { promises as fs } from 'node:fs'
 
 const rootLibFile = 'lib.es2023.d.ts'
 const visualizerRootLibFile = 'lib.visualizer-runtime.d.ts'
-const reactJsxTypesFile = 'react-jsx-runtime.d.ts'
-const reactJsxTypes = String.raw`
-declare namespace JSX {
-  interface Element {}
-  interface ElementClass {}
-  interface IntrinsicAttributes {
-    key?: unknown
-  }
-  interface ElementAttributesProperty {
-    props: {}
-  }
-  interface ElementChildrenAttribute {
-    children: {}
-  }
-  interface IntrinsicElements {
-    [elementName: string]: Record<string, unknown>
-  }
-}
-
-declare module 'react/jsx-runtime' {
-  export const Fragment: unique symbol
-  export function jsx(type: unknown, props: unknown, key?: unknown): JSX.Element
-  export function jsxs(type: unknown, props: unknown, key?: unknown): JSX.Element
-}
-`
+const reactTypeFiles = [
+  ['vendor/react/global.d.ts', 'node_modules/@types/react/global.d.ts'],
+  ['vendor/react/index.d.ts', 'node_modules/@types/react/index.d.ts'],
+  ['vendor/react/jsx-runtime.d.ts', 'node_modules/@types/react/jsx-runtime.d.ts'],
+  ['vendor/react/jsx-dev-runtime.d.ts', 'node_modules/@types/react/jsx-dev-runtime.d.ts'],
+  ['vendor/csstype/index.d.ts', 'node_modules/csstype/index.d.ts'],
+]
 const typeScriptLibFiles = [
   'lib.decorators.d.ts',
   'lib.decorators.legacy.d.ts',
@@ -120,7 +102,7 @@ async function buildDeclarationFiles(rootDir) {
     Object.assign(files, await collectZodDeclarations(rootDir, entry))
   }
 
-  files[reactJsxTypesFile] = reactJsxTypes
+  Object.assign(files, await collectReactDeclarations(rootDir))
   files[visualizerRootLibFile] = String.raw`/// <reference no-default-lib="true" />
 /// <reference lib="es2023" />
 /// <reference lib="dom" />
@@ -128,6 +110,21 @@ async function buildDeclarationFiles(rootDir) {
 `
 
   return files
+}
+
+async function collectReactDeclarations(rootDir) {
+  const declarations = {}
+
+  for (const [virtualPath, sourcePath] of reactTypeFiles) {
+    const content = await fs.readFile(path.join(rootDir, sourcePath), 'utf8')
+    declarations[virtualPath] = sanitizeReactDeclarationContent(content)
+  }
+
+  return declarations
+}
+
+function sanitizeReactDeclarationContent(content) {
+  return content.replace(/^\s*export\s+as\s+namespace\s+[A-Za-z_$][\w$]*\s*;?\s*$/gm, '')
 }
 
 async function collectZodDeclarations(rootDir, entry) {

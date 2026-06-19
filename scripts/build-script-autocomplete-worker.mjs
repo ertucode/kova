@@ -19,11 +19,14 @@ const inputHash = await computeInputHash(rootDir, [
   'tsconfig.app.json',
   'scripts/build-cache.mjs',
   'scripts/build-script-autocomplete-worker.mjs',
+  'scripts/utils/scriptRuntimeDeclarationBuilder.mjs',
   'src/common/SharedScripts.ts',
   'src/common/ScriptPackages.ts',
+  'src/ui/folders/scriptAutocompleteCompletions.ts',
   'src/ui/folders/scriptAutocomplete.worker.ts',
   'src/ui/folders/scriptAutocompleteTypes.ts',
   'src/ui/folders/scriptRuntimeDeclarations.ts',
+  'src/ui/folders/scriptRuntimeDiagnostics.ts',
 ])
 const cachedBuild = await readCache(rootDir, cacheName)
 if (

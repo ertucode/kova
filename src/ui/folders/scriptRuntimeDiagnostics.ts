@@ -51,6 +51,19 @@ export type ScriptRuntimePhaseState = {
 }
 
 const allowedTopLevelScriptDiagnosticCodes = new Set([1108, 1375])
+const reactTypeModuleFileNames = {
+  react: 'vendor/react/index.d.ts',
+  reactJsxRuntime: 'vendor/react/jsx-runtime.d.ts',
+  reactJsxDevRuntime: 'vendor/react/jsx-dev-runtime.d.ts',
+  csstype: 'vendor/csstype/index.d.ts',
+} as const
+const builtInReactTypeFileNames = new Set<string>([
+  reactTypeModuleFileNames.react,
+  reactTypeModuleFileNames.reactJsxRuntime,
+  reactTypeModuleFileNames.reactJsxDevRuntime,
+  reactTypeModuleFileNames.csstype,
+  'vendor/react/global.d.ts',
+])
 
 export function createScriptRuntimePhaseStateManager(loadDeclarationFiles: () => Promise<ScriptRuntimeDeclarationFiles>) {
   const phaseStates = new Map<string, ScriptRuntimePhaseState>()
@@ -139,14 +152,12 @@ export function updateScriptRuntimePhaseSource(
 
   phaseState.files.set(
     phaseState.declarationFileName,
-    [
+    buildPhaseDeclarations(phaseState.runtimeContext, [
       getScriptRuntimeDeclarations(phaseState.runtimeContext),
       buildRequestPathDeclarations(phaseState.runtimeContext, input.requestPaths),
       buildRequireScriptDeclarations(sharedScriptFiles.modules),
       buildLoadPackageDeclarations(input.packages),
-      '/// <reference lib="esnext.iterator" />',
-      '',
-    ].join('\n')
+    ])
   )
   phaseState.versions.set(
     phaseState.declarationFileName,
@@ -286,13 +297,17 @@ function toRuntimeDiagnostic(
 
 function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles: ScriptRuntimeDeclarationFiles): ScriptRuntimePhaseState {
   const key = getScriptRuntimeContextKey(runtimeContext)
-  const userFileName = isScriptRuntimeVisualizerOnly(runtimeContext) ? `${key}.script.tsx` : `${key}.script.ts`
+  const isVisualizerOnly = isScriptRuntimeVisualizerOnly(runtimeContext)
+  const userFileName = isVisualizerOnly ? `${key}.script.tsx` : `${key}.script.ts`
   const declarationFileName = `${key}.runtime.d.ts`
-  const rootLibFile = isScriptRuntimeVisualizerOnly(runtimeContext)
-    ? declarationFiles.visualizerRootLibFile
-    : declarationFiles.rootLibFile
+  const rootLibFile = isVisualizerOnly ? declarationFiles.visualizerRootLibFile : declarationFiles.rootLibFile
   const files = new Map(declarationFiles.files)
-  files.set(declarationFileName, `${getScriptRuntimeDeclarations(runtimeContext)}\n/// <reference lib=\"esnext.iterator\" />\n`)
+  if (!isVisualizerOnly) {
+    for (const fileName of builtInReactTypeFileNames) {
+      files.delete(fileName)
+    }
+  }
+  files.set(declarationFileName, buildPhaseDeclarations(runtimeContext, [getScriptRuntimeDeclarations(runtimeContext)]))
   files.set(userFileName, '')
   const rootFileNames = new Set([declarationFileName, userFileName])
 
@@ -369,6 +384,17 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
   return phaseState
 }
 
+function buildPhaseDeclarations(runtimeContext: ScriptRuntimeContext, sections: string[]) {
+  return [
+    isScriptRuntimeVisualizerOnly(runtimeContext) ? '/// <reference path="./vendor/react/jsx-runtime.d.ts" />' : '',
+    ...sections,
+    '/// <reference lib="esnext.iterator" />',
+    '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScripts: ScriptRuntimeSharedScript[]) {
   const extension = isScriptRuntimeVisualizerOnly(runtimeContext) ? 'tsx' : 'ts'
   const files: Array<{ fileName: string; content: string }> = []
@@ -443,6 +469,15 @@ function resolvePackageAwareModuleName(
   const parsedSpecifier = parseScriptPackageSpecifier(moduleName)
   const matchingPackages = parsedSpecifier ? packages.filter(pkg => pkg.packageName === parsedSpecifier.packageName) : []
 
+  const builtInReactTypeFileName = getBuiltInReactTypeFileName(moduleName)
+  if (builtInReactTypeFileName) {
+    return {
+      resolvedFileName: builtInReactTypeFileName,
+      extension: ts.Extension.Dts,
+      isExternalLibraryImport: true,
+    }
+  }
+
   const resolvedPackage =
     parsedSpecifier && parsedSpecifier.version
       ? matchingPackages.find(pkg => pkg.packageVersion === parsedSpecifier.version)
@@ -471,6 +506,21 @@ function resolvePackageAwareModuleName(
   const internalModuleName = `${parsedSpecifier.packageName}${parsedSpecifier.subpath}`
   const syntheticContainingFile = `/__script_packages__/${resolvedPackage.cacheKey}/index.ts`
   return ts.resolveModuleName(internalModuleName, syntheticContainingFile, compilerOptions, moduleResolutionHost).resolvedModule
+}
+
+function getBuiltInReactTypeFileName(moduleName: string) {
+  switch (moduleName) {
+    case 'react':
+      return reactTypeModuleFileNames.react
+    case 'react/jsx-runtime':
+      return reactTypeModuleFileNames.reactJsxRuntime
+    case 'react/jsx-dev-runtime':
+      return reactTypeModuleFileNames.reactJsxDevRuntime
+    case 'csstype':
+      return reactTypeModuleFileNames.csstype
+    default:
+      return null
+  }
 }
 
 function toVirtualPackageFileName(cacheKey: string, relativePath: string) {
