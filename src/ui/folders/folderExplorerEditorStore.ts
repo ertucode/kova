@@ -141,6 +141,7 @@ export type EditorEntry = {
 
 type FolderExplorerEditorContext = {
   selected: Selection | null
+  pendingSelection: Selection | null
   selectionScrollTarget: Selection | null
   tabs: FolderExplorerTabRecord[]
   activeTabId: string | null
@@ -175,6 +176,7 @@ const initialEntries = Object.fromEntries(
 export const folderExplorerEditorStore = createStore({
   context: {
     selected: persistedUiState.selected,
+    pendingSelection: null,
     selectionScrollTarget: null,
     tabs: [],
     activeTabId: null,
@@ -189,6 +191,10 @@ export const folderExplorerEditorStore = createStore({
       ...context,
       selected: event.selection,
     }),
+    pendingSelectionChanged: (context, event: { selection: Selection | null }) => ({
+      ...context,
+      pendingSelection: event.selection,
+    }),
     selectionScrollRequested: (context, event: { selection: Selection }) => ({
       ...context,
       selectionScrollTarget: event.selection,
@@ -197,6 +203,7 @@ export const folderExplorerEditorStore = createStore({
       ...context,
       tabs: event.tabs,
       activeTabId: event.activeTabId,
+      pendingSelection: null,
       selected: getSelectionFromTabs(event.tabs, event.activeTabId),
     }),
     expandedToggled: (context, event: { id: string }) => ({
@@ -392,9 +399,13 @@ export const folderExplorerEditorStore = createStore({
       })
 
       const shouldClearSelected = context.selected ? event.keys.includes(toSelectionKey(context.selected)) : false
+      const shouldClearPending = context.pendingSelection
+        ? event.keys.includes(toSelectionKey(context.pendingSelection))
+        : false
       return {
         ...context,
         entries: nextEntries,
+        pendingSelection: shouldClearPending ? null : context.pendingSelection,
         selected: shouldClearSelected ? null : context.selected,
       }
     },

@@ -56,6 +56,7 @@ export function ExplorerRow({
 }) {
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const isItemDirty = useSelector(folderExplorerEditorStore, state => {
     const entry = state.context.entries[`${node.itemType}:${node.id}`]
@@ -99,7 +100,8 @@ export function ExplorerRow({
 
   const hasChildren = (node.itemType === 'folder' || node.itemType === 'request') && node.children.length > 0
   const expanded = isExpanded(node.id)
-  const isSelected = selected?.id === node.id && selected.itemType === node.itemType
+  const visibleSelection = pendingSelection ?? selected
+  const isSelected = visibleSelection?.id === node.id && visibleSelection.itemType === node.itemType
   const isCreateOpen = createDraft?.parentFolderId === node.id
   const rowKey = toSelectionKey(node)
   const isDragged = draggedItem?.id === node.id && draggedItem.itemType === node.itemType

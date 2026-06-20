@@ -14,6 +14,7 @@ import { folderExplorerEditorStore, type EditorEntry } from './folderExplorerEdi
 
 export function DetailsPanel() {
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
   const entry = useSelector(folderExplorerEditorStore, state => {
     const currentSelected = state.context.selected
     return currentSelected ? (state.context.entries[toSelectionKey(currentSelected)] ?? null) : null
@@ -23,6 +24,11 @@ export function DetailsPanel() {
   const draft = entry?.current ?? null
   const lastDraftRef = useRef<typeof draft>(null)
   const lastDraftKeyRef = useRef<string | null>(null)
+  const isPendingSelectionChange = Boolean(
+    selected &&
+      pendingSelection &&
+      (pendingSelection.itemType !== selected.itemType || pendingSelection.id !== selected.id)
+  )
 
   if (draft && !entry?.loading && selectedKey) {
     lastDraftRef.current = draft
@@ -74,6 +80,7 @@ export function DetailsPanel() {
   }
 
   const renderSelected = selected ?? displayDraft!
+  const renderSelectionKey = selectedKey ?? lastDraftKeyRef.current ?? 'details-panel'
 
   const updateDisplayedDraftName = (name: string) => {
     if (!selected) {
@@ -110,6 +117,7 @@ export function DetailsPanel() {
                         ? 'Request name'
                         : 'Example name'
                   }
+                  readOnly={isPendingSelectionChange}
                   onChange={event => updateDisplayedDraftName(event.target.value)}
                   onBlur={() => undefined}
                 />
@@ -124,19 +132,21 @@ export function DetailsPanel() {
           </div>
         </div>
 
-        {renderDraft.itemType === 'folder' ? (
-          <FolderDetailsFields draft={renderDraft} />
-        ) : renderDraft.itemType === 'request' ? (
-          renderDraft.requestType === 'websocket' ? (
-            <WebSocketRequestDetailsFields draft={renderDraft} />
+        <div key={renderSelectionKey} className={isPendingSelectionChange ? 'pointer-events-none' : ''}>
+          {renderDraft.itemType === 'folder' ? (
+            <FolderDetailsFields draft={renderDraft} />
+          ) : renderDraft.itemType === 'request' ? (
+            renderDraft.requestType === 'websocket' ? (
+              <WebSocketRequestDetailsFields draft={renderDraft} />
+            ) : (
+              <RequestDetailsFields draft={renderDraft} />
+            )
+          ) : renderDraft.exampleType === 'websocket' ? (
+            <WebSocketExampleDetailsFields draft={renderDraft} />
           ) : (
-            <RequestDetailsFields draft={renderDraft} />
-          )
-        ) : renderDraft.exampleType === 'websocket' ? (
-          <WebSocketExampleDetailsFields draft={renderDraft} />
-        ) : (
-          <RequestExampleDetailsFields draft={renderDraft} />
-        )}
+            <RequestExampleDetailsFields draft={renderDraft} />
+          )}
+        </div>
       </div>
     </div>
   )

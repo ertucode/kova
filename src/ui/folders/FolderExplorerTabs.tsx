@@ -36,6 +36,7 @@ type FolderExplorerTabViewModel = {
 export function FolderExplorerTabs() {
   const tabs = useSelector(folderExplorerEditorStore, state => state.context.tabs)
   const activeTabId = useSelector(folderExplorerEditorStore, state => state.context.activeTabId)
+  const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
   const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
   const items = useSelector(folderExplorerTreeStore, state => state.context.items)
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
@@ -163,7 +164,9 @@ export function FolderExplorerTabs() {
         }}
       >
         {tabsWithState.map((tab, index) => {
-          const isActive = tab.id === activeTabId
+          const isPendingSelectionActive =
+            pendingSelection?.itemType === tab.itemType && pendingSelection.id === tab.itemId
+          const isActive = isPendingSelectionActive || tab.id === activeTabId
           const showDropBefore = dropIndex === index
           const showDropAfter = dropIndex === tabsWithState.length && index === tabsWithState.length - 1
 

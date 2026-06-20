@@ -108,9 +108,19 @@ export namespace FolderExplorerCoordinator {
 
     const mode = options?.mode ?? 'pin'
     const state = folderExplorerEditorStore.getSnapshot().context
+    const shouldLoadBeforeSelecting = !hasLoadedEntry(selection)
 
     const existingTab = state.tabs.find(tab => tab.itemType === selection.itemType && tab.itemId === selection.id)
     if (existingTab) {
+      if (shouldLoadBeforeSelecting) {
+        folderExplorerEditorStore.trigger.pendingSelectionChanged({ selection })
+        const didLoad = await ensureItemLoaded(selection)
+        if (!didLoad) {
+          folderExplorerEditorStore.trigger.pendingSelectionChanged({ selection: null })
+          return
+        }
+      }
+
       const nextTabs = state.tabs.map(tab =>
         tab.id === existingTab.id && mode === 'pin' && !tab.isPinned
           ? { ...tab, isPinned: true, updatedAt: Date.now() }
@@ -125,6 +135,15 @@ export namespace FolderExplorerCoordinator {
     if (previewTab && (previewTab.itemType !== selection.itemType || previewTab.itemId !== selection.id)) {
       const canClosePreviewTab = await confirmTabCanClose(previewTab.id)
       if (!canClosePreviewTab) {
+        return
+      }
+    }
+
+    if (shouldLoadBeforeSelecting) {
+      folderExplorerEditorStore.trigger.pendingSelectionChanged({ selection })
+      const didLoad = await ensureItemLoaded(selection)
+      if (!didLoad) {
+        folderExplorerEditorStore.trigger.pendingSelectionChanged({ selection: null })
         return
       }
     }
@@ -263,6 +282,12 @@ export namespace FolderExplorerCoordinator {
 
   export function updateSelectedDraft(draft: DetailsDraft | null) {
     if (!draft) return
+
+    const selected = getActiveSelectionForDraftUpdates()
+    if (!selected) {
+      return
+    }
+
     folderExplorerEditorStore.trigger.selectedDraftUpdated({ draft })
     void pinActivePreviewTabIfDirty()
     persistUnsavedDrafts()
@@ -275,10 +300,8 @@ export namespace FolderExplorerCoordinator {
 
     void debugLabel
 
-    const currentSelection = folderExplorerEditorStore.getSnapshot().context.selected
-    const matchesCurrentSelection = currentSelection
-      ? currentSelection.itemType === selection.itemType && currentSelection.id === selection.id
-      : false
+    const currentSelection = getActiveSelectionForDraftUpdates()
+    const matchesCurrentSelection = selectionsMatch(currentSelection, selection)
 
     if (!matchesCurrentSelection) {
       return false
@@ -317,18 +340,44 @@ export namespace FolderExplorerCoordinator {
   export function updateDraft(selection: Selection, draft: DetailsDraft | null) {
     if (!draft) return
 
+    const currentSelection = getActiveSelectionForDraftUpdates()
+    if (currentSelection && !selectionsMatch(currentSelection, selection)) {
+      return
+    }
+
     folderExplorerEditorStore.trigger.entryDraftUpdated({
       key: toSelectionKey(selection),
       draft,
     })
 
-    const currentSelection = folderExplorerEditorStore.getSnapshot().context.selected
-    if (currentSelection?.itemType === selection.itemType && currentSelection.id === selection.id) {
+    const selectedNow = folderExplorerEditorStore.getSnapshot().context.selected
+    if (selectedNow?.itemType === selection.itemType && selectedNow.id === selection.id) {
       void pinActivePreviewTabIfDirty()
     }
 
     persistUnsavedDrafts()
   }
+
+function getActiveSelectionForDraftUpdates() {
+  const { selected, pendingSelection } = folderExplorerEditorStore.getSnapshot().context
+  if (!selected) {
+    return null
+  }
+
+  if (pendingSelection && !selectionsMatch(selected, pendingSelection)) {
+    return null
+  }
+
+  return selected
+}
+
+function selectionsMatch(left: Selection | null, right: Selection | null) {
+  if (!left || !right) {
+    return left === right
+  }
+
+  return left.itemType === right.itemType && left.id === right.id
+}
 
   export async function updateRequestResponseBodyViewPreference(
     selection: Selection,
@@ -1220,12 +1269,18 @@ async function persistTabsState(tabs: FolderExplorerTabRecord[], activeTabId: st
   }
 }
 
-async function ensureItemLoaded(selection: Selection) {
+function hasLoadedEntry(selection: Selection) {
   const { entries } = folderExplorerEditorStore.getSnapshot().context
   const entry = entries[toSelectionKey(selection)]
-  if (!entry?.base) {
-    await loadItem(selection)
+  return Boolean(entry?.base)
+}
+
+async function ensureItemLoaded(selection: Selection) {
+  if (hasLoadedEntry(selection)) {
+    return true
   }
+
+  return loadItem(selection)
 }
 
 async function loadItem(selection: Selection) {
@@ -1243,12 +1298,14 @@ async function loadItem(selection: Selection) {
           ? await getWindowElectron().getWebSocketExample({ id: selection.id })
           : await getWindowElectron().getRequestExample({ id: selection.id })
 
-  if (loadTokens[key] !== token) return
+  if (loadTokens[key] !== token) {
+    return false
+  }
 
   if (!result.success) {
     folderExplorerEditorStore.trigger.entryLoadFailed({ key, error: errorResponseToMessage(result.error) })
     toast.show(result)
-    return
+    return false
   }
 
   const serverDraft = toServerDraft(
@@ -1265,6 +1322,7 @@ async function loadItem(selection: Selection) {
   folderExplorerEditorStore.trigger.entryLoaded({ key, base: serverDraft, current })
   patchTreeItem(selection, result.data as FolderRecord | HttpRequestRecord | RequestExampleRecord | WebSocketExampleRecord)
   persistUnsavedDrafts()
+  return true
 }
 
 async function saveItem(selection: Selection, options?: { skipFormatting?: boolean }) {
