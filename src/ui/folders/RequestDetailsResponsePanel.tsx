@@ -287,7 +287,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
         title="Resize response panel"
       />
 
-      <div className="relative flex h-[calc(100%-2px)] min-h-0 flex-col overflow-hidden">
+      <div className="relative flex h-[calc(100%-3px)] min-h-0 flex-col overflow-hidden">
         {isSending ? (
           <>
             <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px overflow-hidden bg-base-content/8">

@@ -784,7 +784,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
           title="Resize response panel"
         />
 
-        <div className="h-[calc(100%-2px)] overflow-auto">
+        <div className="h-[calc(100%-3px)] overflow-auto">
           <DetailsSectionHeader
             title={
               <div className="flex items-center gap-3">

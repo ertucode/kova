@@ -132,7 +132,13 @@ export function DetailsPanel() {
           </div>
         </div>
 
-        <div key={renderSelectionKey} className={isPendingSelectionChange ? 'pointer-events-none' : ''}>
+        <div
+          key={renderSelectionKey}
+          className={[
+            'flex min-h-0 flex-1 flex-col',
+            isPendingSelectionChange ? 'pointer-events-none' : '',
+          ].join(' ')}
+        >
           {renderDraft.itemType === 'folder' ? (
             <FolderDetailsFields draft={renderDraft} />
           ) : renderDraft.itemType === 'request' ? (
