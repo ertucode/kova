@@ -1,1 +1,2 @@
-- Remember request açıkken daha çok belli olsun? veya başka yere gidince remember kapansın. veya istek atınca titresin.
+- Search params duplice edilmiş bi param deaktif edince tamamen yokoldu
+- Deactive edince aşağı kaydı

@@ -118,24 +118,19 @@ export function syncSearchParamsWithUrl(url: string, searchParams: string) {
   const urlRows = extractSearchParamRows(url)
   const existingRows = parseKeyValueRows(searchParams)
   const usedExistingRowIndexes = new Set<number>()
-  const nextRows: KeyValueRow[] = urlRows.map((urlRow, index) => {
-    const matchingIndexByKey = existingRows.findIndex(
-      (existingRow, existingIndex) => !usedExistingRowIndexes.has(existingIndex) && existingRow.key.trim() === urlRow.key
-    )
+  const matchedRowsByExistingIndex = new Map<number, KeyValueRow>()
+  const appendedRows: KeyValueRow[] = []
 
+  urlRows.forEach((urlRow, index) => {
+    const matchingIndexByKey = findExistingSearchParamMatchIndex(existingRows, usedExistingRowIndexes, urlRow.key)
     const matchingIndex =
       matchingIndexByKey >= 0
         ? matchingIndexByKey
         : index < existingRows.length && !usedExistingRowIndexes.has(index) && existingRows[index]?.enabled
           ? index
           : -1
-
     const existingRow = matchingIndex >= 0 ? existingRows[matchingIndex] : null
-    if (matchingIndex >= 0) {
-      usedExistingRowIndexes.add(matchingIndex)
-    }
-
-    return {
+    const nextRow = {
       id: existingRow?.id ?? `search-param-${index}`,
       enabled: true,
       key: urlRow.key,
@@ -143,16 +138,31 @@ export function syncSearchParamsWithUrl(url: string, searchParams: string) {
       type: existingRow?.type,
       description: existingRow?.description ?? '',
     } satisfies KeyValueRow
-  })
 
-  for (const [existingIndex, existingRow] of existingRows.entries()) {
-    if (usedExistingRowIndexes.has(existingIndex) || existingRow.enabled) {
-      continue
+    if (matchingIndex >= 0) {
+      usedExistingRowIndexes.add(matchingIndex)
+      matchedRowsByExistingIndex.set(matchingIndex, nextRow)
+      return
     }
 
-    nextRows.push(existingRow)
-  }
+    appendedRows.push(nextRow)
+  })
 
+  const nextRows: KeyValueRow[] = []
+
+  existingRows.forEach((existingRow, existingIndex) => {
+    const matchedRow = matchedRowsByExistingIndex.get(existingIndex)
+    if (matchedRow) {
+      nextRows.push(matchedRow)
+      return
+    }
+
+    if (!existingRow.enabled) {
+      nextRows.push(existingRow)
+    }
+  })
+
+  nextRows.push(...appendedRows)
   return stringifyKeyValueRows(nextRows)
 }
 
@@ -218,6 +228,26 @@ function buildQueryString(rows: KeyValueRow[]) {
     .filter(row => row.enabled && row.key.trim())
     .map(row => `${encodeURIComponent(row.key.trim())}=${encodeURIComponent(row.value)}`)
     .join('&')
+}
+
+function findExistingSearchParamMatchIndex(existingRows: KeyValueRow[], usedIndexes: Set<number>, key: string) {
+  let firstDisabledMatchIndex = -1
+
+  for (const [index, existingRow] of existingRows.entries()) {
+    if (usedIndexes.has(index) || existingRow.key.trim() !== key) {
+      continue
+    }
+
+    if (existingRow.enabled) {
+      return index
+    }
+
+    if (firstDisabledMatchIndex < 0) {
+      firstDisabledMatchIndex = index
+    }
+  }
+
+  return firstDisabledMatchIndex
 }
 
 function decodeQueryValue(value: string) {

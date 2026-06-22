@@ -68,7 +68,19 @@ describe('PathParams', () => {
 
   it('keeps disabled search param rows when they are removed from the URL', () => {
     expect(syncSearchParamsWithUrl('https://api.example.com/users?limit=10', '//exchange:hisse\nlimit:10\n//newkey:')).toBe(
-      'limit:10\n//exchange:hisse\n//newkey:'
+      '//exchange:hisse\nlimit:10\n//newkey:'
+    )
+  })
+
+  it('keeps a disabled duplicate search param row without removing the enabled duplicate', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?tag=second', '//tag:first\ntag:second')).toBe(
+      '//tag:first\ntag:second'
+    )
+  })
+
+  it('keeps disabled search param rows in place instead of moving them to the end', () => {
+    expect(syncSearchParamsWithUrl('https://api.example.com/users?limit=10&sort=desc', 'limit:10\n//exchange:hisse\nsort:desc')).toBe(
+      'limit:10\n//exchange:hisse\nsort:desc'
     )
   })
 
