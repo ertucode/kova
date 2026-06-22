@@ -47,6 +47,7 @@ export function ViewRuntimePreview({
   sharedScripts,
   scriptPackages,
   requestPaths,
+  onRememberRequestsActivity,
   onRunHandled,
 }: {
   viewId: string
@@ -57,6 +58,7 @@ export function ViewRuntimePreview({
   sharedScripts: SharedScriptRecord[]
   scriptPackages: ScriptPackageArtifact[]
   requestPaths: RequestPathRecord[]
+  onRememberRequestsActivity: () => void
   onRunHandled: (requestId: string) => void
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -215,6 +217,10 @@ export function ViewRuntimePreview({
       const requestId = requestPathKeyToId.get(requestPathKey)
 
       void (async () => {
+        if (rememberRequests) {
+          onRememberRequestsActivity()
+        }
+
         if (!requestId) {
           postCallRequestResult({
             requestId: request.requestId,
@@ -259,7 +265,7 @@ export function ViewRuntimePreview({
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [rememberRequests, requestPathKeyToId, viewId])
+  }, [onRememberRequestsActivity, rememberRequests, requestPathKeyToId, viewId])
 
   useEffect(() => {
     if (!isIframeReady || !isCacheReady || !iframeRef.current?.contentWindow) {

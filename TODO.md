@@ -1,0 +1,1 @@
+- Remember request açıkken daha çok belli olsun? veya başka yere gidince remember kapansın. veya istek atınca titresin.

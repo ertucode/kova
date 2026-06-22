@@ -58,6 +58,8 @@ export function ViewsPanel() {
   const selectedId = useSelector(viewUiStore, state => state.context.selectedId)
   const pendingRunRequest = useSelector(viewUiStore, state => state.context.pendingRunRequest)
   const splitContainerRef = useRef<HTMLDivElement | null>(null)
+  const rememberRequestsLabelRef = useRef<HTMLSpanElement | null>(null)
+  const rememberRequestsCheckboxRef = useRef<HTMLInputElement | null>(null)
   const resizeStateRef = useRef<{
     viewId: string
     layoutMode: ViewLayoutMode
@@ -384,8 +386,9 @@ export function ViewsPanel() {
               />
 
               <label className="flex items-center gap-2 text-xs text-base-content/65">
-                Remember Requests
+                <span ref={rememberRequestsLabelRef}>Remember Requests</span>
                 <input
+                  ref={rememberRequestsCheckboxRef}
                   type="checkbox"
                   className="checkbox checkbox-sm"
                   checked={selectedDraft.rememberRequests}
@@ -545,6 +548,7 @@ export function ViewsPanel() {
                     sharedScripts={runtimeSharedScripts}
                     scriptPackages={scriptPackageArtifacts}
                     requestPaths={requestPaths}
+                    onRememberRequestsActivity={triggerRememberRequestsActivity}
                     onRunHandled={requestId => ViewUiHelpers.markRunHandled(requestId)}
                   />
                   {isResizing ? <div className="absolute inset-0 z-10" aria-hidden /> : null}
@@ -758,6 +762,44 @@ export function ViewsPanel() {
   function openDocumentation() {
     dialogActions.open({ component: ScriptDocumentationDialog, props: { phase: 'view-runtime' } })
   }
+
+  function triggerRememberRequestsActivity() {
+    shakeRememberRequestsControl(rememberRequestsLabelRef.current)
+    shakeRememberRequestsControl(rememberRequestsCheckboxRef.current)
+  }
+}
+
+function shakeRememberRequestsControl(element: HTMLElement | null) {
+  if (!element) {
+    return
+  }
+
+  const baseColor = getComputedStyle(element).color
+  const flashColor = 'rgb(250, 204, 21)'
+
+  const keyframes: Keyframe[] =
+    element instanceof HTMLInputElement
+      ? [
+          { transform: 'translateX(0)', boxShadow: '0 0 0 0 rgba(250, 204, 21, 0)', filter: 'brightness(1)' },
+          { transform: 'translateX(-2px)', boxShadow: '0 0 0 4px rgba(250, 204, 21, 0.22)', filter: 'brightness(1.16)' },
+          { transform: 'translateX(2px)', boxShadow: '0 0 0 5px rgba(250, 204, 21, 0.3)', filter: 'brightness(1.22)' },
+          { transform: 'translateX(-1px)', boxShadow: '0 0 0 3px rgba(250, 204, 21, 0.18)', filter: 'brightness(1.12)' },
+          { transform: 'translateX(1px)', boxShadow: '0 0 0 2px rgba(250, 204, 21, 0.1)', filter: 'brightness(1.06)' },
+          { transform: 'translateX(0)', boxShadow: '0 0 0 0 rgba(250, 204, 21, 0)', filter: 'brightness(1)' },
+        ]
+      : [
+          { transform: 'translateX(0)', color: baseColor, textShadow: '0 0 0 rgba(0, 0, 0, 0)' },
+          { transform: 'translateX(-2px)', color: flashColor, textShadow: '0 0 10px rgba(250, 204, 21, 0.35)' },
+          { transform: 'translateX(2px)', color: flashColor, textShadow: '0 0 14px rgba(250, 204, 21, 0.48)' },
+          { transform: 'translateX(-1px)', color: flashColor, textShadow: '0 0 8px rgba(250, 204, 21, 0.28)' },
+          { transform: 'translateX(1px)', color: flashColor, textShadow: '0 0 4px rgba(250, 204, 21, 0.18)' },
+          { transform: 'translateX(0)', color: baseColor, textShadow: '0 0 0 rgba(0, 0, 0, 0)' },
+        ]
+
+  element.animate(keyframes, {
+    duration: 1000,
+    easing: 'ease-in-out',
+  })
 }
 
 function ToolbarButton({
