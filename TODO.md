@@ -1,2 +1,0 @@
-- Search params duplice edilmiş bi param deaktif edince tamamen yokoldu
-- Deactive edince aşağı kaydı

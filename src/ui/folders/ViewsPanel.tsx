@@ -335,7 +335,7 @@ export function ViewsPanel() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-3">
-          {loading ? <PanelEmptyState message="Loading views..." /> : null}
+          {loading && items.length === 0 ? <PanelEmptyState message="Loading views..." /> : null}
           {!loading && items.length === 0 ? <PanelEmptyState message="Create a view to start building flows." /> : null}
 
           <div className="space-y-2">
@@ -742,6 +742,10 @@ export function ViewsPanel() {
   }
 
   async function deleteView(viewId: string) {
+    const deletedViewIndex = items.findIndex(item => item.id === viewId)
+    const previousViewId = deletedViewIndex > 0 ? items[deletedViewIndex - 1]?.id ?? null : null
+    const nextViewId = deletedViewIndex >= 0 ? items[deletedViewIndex + 1]?.id ?? null : null
+
     const result = await getWindowElectron().deleteView({ id: viewId })
     if (!result.success) {
       toast.show(result)
@@ -755,7 +759,7 @@ export function ViewsPanel() {
     })
     notifyViewsChanged()
     await reload()
-    const nextSelectedId = items.find(item => item.id !== viewId)?.id ?? null
+    const nextSelectedId = previousViewId ?? nextViewId
     ViewUiHelpers.selectView(nextSelectedId)
   }
 
