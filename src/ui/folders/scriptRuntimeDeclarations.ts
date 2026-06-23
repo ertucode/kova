@@ -412,7 +412,7 @@ export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
     declarations = `${declarations}\n${postRequestOnlyDeclarations}`
   }
 
-  if (targets.length === 1 && (targets[0] === 'response-visualizer' || targets[0] === 'view-runtime')) {
+  if (supportsVisualRuntimeDeclarations(targets)) {
     declarations = `${declarations}\n${responseVisualizerDeclarations}`
   }
 
@@ -429,7 +429,7 @@ export function getScriptRuntimeTargets(context: ScriptRuntimeContext): SharedSc
 
 export function isScriptRuntimeVisualizerOnly(context: ScriptRuntimeContext) {
   const targets = getContextTargets(context)
-  return targets.length === 1 && (targets[0] === 'response-visualizer' || targets[0] === 'view-runtime')
+  return supportsVisualRuntimeDeclarations(targets)
 }
 
 function getContextTargets(context: ScriptRuntimeContext): SharedScriptTarget[] {
@@ -446,4 +446,8 @@ function getContextTargets(context: ScriptRuntimeContext): SharedScriptTarget[] 
 
 function normalizeTargets(targets: SharedScriptTarget[]) {
   return Array.from(new Set(targets))
+}
+
+function supportsVisualRuntimeDeclarations(targets: SharedScriptTarget[]) {
+  return targets.length > 0 && targets.every(target => target === 'response-visualizer' || target === 'view-runtime')
 }

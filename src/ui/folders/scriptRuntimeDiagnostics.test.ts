@@ -88,13 +88,29 @@ describe('script runtime DOM completions', () => {
 
     expect(completionLabels).not.toContain('HTMLInputElement')
   })
+
+  it('accepts useMemo for shared scripts checked against both visual runtimes', async () => {
+    const diagnostics = await getDiagnostics(
+      { targets: ['response-visualizer', 'view-runtime'] },
+      ['export function readValue(value: string) {', '  return useMemo(() => value.length, [value])', '}'].join('\n')
+    )
+
+    expect(diagnostics).toEqual([])
+  })
 })
 
-async function getCompletionLabels(runtimeContext: { phase: 'view-runtime' | 'pre-request' }, code: string) {
+async function getCompletionLabels(
+  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  code: string
+) {
   return await getCompletionLabelsAt(runtimeContext, code, code.length)
 }
 
-async function getCompletionLabelsAt(runtimeContext: { phase: 'view-runtime' | 'pre-request' }, code: string, position: number) {
+async function getCompletionLabelsAt(
+  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  code: string,
+  position: number
+) {
   const phaseState = await createPhaseState(runtimeContext, code)
   const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, position, {
     includeCompletionsForModuleExports: false,
@@ -106,7 +122,7 @@ async function getCompletionLabelsAt(runtimeContext: { phase: 'view-runtime' | '
 }
 
 async function getQuickInfoDisplayText(
-  runtimeContext: { phase: 'view-runtime' | 'pre-request' },
+  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
   code: string,
   position: number
 ) {
@@ -116,14 +132,20 @@ async function getQuickInfoDisplayText(
   return ts.displayPartsToString(quickInfo?.displayParts ?? [])
 }
 
-async function getDiagnostics(runtimeContext: { phase: 'view-runtime' | 'pre-request' }, code: string) {
+async function getDiagnostics(
+  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  code: string
+) {
   const phaseState = await createPhaseState(runtimeContext, code)
   return phaseState.service
     .getSemanticDiagnostics(phaseState.userFileName)
     .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
 }
 
-async function createPhaseState(runtimeContext: { phase: 'view-runtime' | 'pre-request' }, code: string) {
+async function createPhaseState(
+  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  code: string
+) {
   const declarationFiles = await declarationFilesPromise
   const phaseStateManager = createScriptRuntimePhaseStateManager(async () => declarationFiles)
   const phaseState = await phaseStateManager.getOrCreatePhaseState(runtimeContext)
