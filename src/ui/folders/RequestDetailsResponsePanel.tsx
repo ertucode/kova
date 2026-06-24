@@ -458,6 +458,7 @@ type ResponseBodyContentState =
   | {
       kind: 'table'
       rows: Array<Record<string, unknown>>
+      itemCount: number
       accessor: string
       placeholder: string
       fallbackBody: string
@@ -660,6 +661,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
       return {
         kind: 'table',
         rows: tableResolution.rows,
+        itemCount: tableResolution.rows.length,
         accessor: responseTableAccessor,
         placeholder: tableResolution.detectedAccessor ?? 'Auto detect or use r.items[0].children',
         fallbackBody: value,
@@ -920,9 +922,12 @@ function renderResponseBodyContent(
       <div className="min-h-0 flex-1 overflow-hidden pt-3">
         <div className="flex h-full min-h-0 flex-col gap-3">
           <label className="flex shrink-0 flex-col gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">
-              Table Accessor
-            </span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">
+                Table Accessor
+              </span>
+              <span className="shrink-0 text-[11px] text-base-content/45">{state.itemCount} items</span>
+            </div>
             <input
               type="text"
               value={state.accessor}
