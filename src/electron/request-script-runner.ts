@@ -65,6 +65,8 @@ type RuntimeRequestState = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
 }
 
 type RuntimeRequestMetadataState = SendRequestMetadata & {

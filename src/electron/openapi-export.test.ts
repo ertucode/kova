@@ -311,4 +311,53 @@ describe('openapi export', () => {
       'response-visualizer-not-exported',
     ]))
   })
+
+  it('reports skipped graphql requests', () => {
+    const analysis = analyzeOpenApiExportSource({
+      scope: 'request',
+      folderId: null,
+      requestId: 'request-1',
+      suggestedSpecName: 'GraphQL',
+      folders: [],
+      requests: [
+        {
+          id: 'request-1',
+          name: 'GraphQL Viewer',
+          requestType: 'http',
+          method: 'POST',
+          url: 'https://api.example.com/graphql',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          testScript: '',
+          responseVisualizer: '',
+          responseTableAccessor: '',
+          preferredResponseBodyView: 'raw',
+          headers: 'content-type:application/json',
+          body: '',
+          bodyType: 'graphql',
+          rawType: 'json',
+          graphqlQuery: 'query Viewer { viewer { id } }',
+          graphqlVariables: '',
+          websocketSubprotocols: '',
+          websocketOnOpenMessage: '',
+          websocketAutoSendEnabled: false,
+          websocketAutoSendMessage: '',
+          websocketAutoSendIntervalSeconds: 0,
+          saveToHistory: true,
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 0,
+        },
+      ],
+      examplesByRequestId: new Map(),
+      ancestorFoldersByRequestId: new Map([['request-1', []]]),
+    })
+
+    expect(analysis.requestCount).toBe(0)
+    expect(analysis.warnings.map(warning => warning.code)).toContain('graphql-requests-skipped')
+  })
 })

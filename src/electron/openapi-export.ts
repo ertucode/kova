@@ -171,23 +171,28 @@ export async function exportOpenApiSpec(input: ExportOpenApiSpecInput): Promise<
 export function analyzeOpenApiExportSource(source: OpenApiExportSource): ExportAnalysis {
   const warnings = new Map<OpenApiExportWarningCode, { count: number; examples: string[] }>()
   const httpRequests = source.requests.filter(request => request.requestType === 'http')
+  const graphqlRequests = httpRequests.filter(request => request.bodyType === 'graphql')
+  const exportableHttpRequests = httpRequests.filter(request => request.bodyType !== 'graphql')
   const websocketRequests = source.requests.filter(request => request.requestType === 'websocket')
   const foldersWithHeaders = source.folders.filter(folder => hasKeyValueContent(folder.headers))
   const foldersWithScripts = source.folders.filter(folder => folder.preRequestScript.trim() || folder.postRequestScript.trim())
-  const requestsWithScripts = httpRequests.filter(request => request.preRequestScript.trim() || request.postRequestScript.trim())
-  const requestsWithVisualizer = httpRequests.filter(request => request.responseVisualizer.trim() || request.responseTableAccessor.trim())
-  const requestsWithTokenRefresh = httpRequests.filter(request => {
+  const requestsWithScripts = exportableHttpRequests.filter(request => request.preRequestScript.trim() || request.postRequestScript.trim())
+  const requestsWithVisualizer = exportableHttpRequests.filter(request => request.responseVisualizer.trim() || request.responseTableAccessor.trim())
+  const requestsWithTokenRefresh = exportableHttpRequests.filter(request => {
     const effectiveAuth = getEffectiveAuth(source, request)
     return effectiveAuth.type === 'bearer' || effectiveAuth.type === 'apikey' || effectiveAuth.type === 'basic'
       ? Boolean(effectiveAuth.tokenRefreshRequestId)
       : false
   })
-  const requestsWithDisabledRows = httpRequests.filter(request => countDisabledRowsForRequest(request) > 0)
-  const servers = Array.from(new Set(httpRequests.map(request => splitRequestUrl(request.url).server).filter((value): value is string => Boolean(value))))
-  const duplicateOperations = countDuplicateOperations(httpRequests)
+  const requestsWithDisabledRows = exportableHttpRequests.filter(request => countDisabledRowsForRequest(request) > 0)
+  const servers = Array.from(new Set(exportableHttpRequests.map(request => splitRequestUrl(request.url).server).filter((value): value is string => Boolean(value))))
+  const duplicateOperations = countDuplicateOperations(exportableHttpRequests)
 
   if (websocketRequests.length > 0) {
     addWarning(warnings, 'websocket-requests-skipped', websocketRequests.length, websocketRequests.slice(0, 5).map(request => request.name))
+  }
+  if (graphqlRequests.length > 0) {
+    addWarning(warnings, 'graphql-requests-skipped', graphqlRequests.length, graphqlRequests.slice(0, 5).map(request => request.name))
   }
   if (foldersWithHeaders.length > 0) {
     addWarning(warnings, 'folder-headers-not-exported', foldersWithHeaders.length, foldersWithHeaders.slice(0, 5).map(folder => folder.name))
@@ -220,7 +225,7 @@ export function analyzeOpenApiExportSource(source: OpenApiExportSource): ExportA
     requestId: source.requestId,
     suggestedSpecName: source.suggestedSpecName,
     folderCount: source.folders.length,
-    requestCount: httpRequests.length,
+    requestCount: exportableHttpRequests.length,
     exampleCount: Array.from(source.examplesByRequestId.values()).reduce((sum, examples) => sum + examples.length, 0),
     warnings: buildWarnings(warnings),
   }
@@ -229,7 +234,7 @@ export function analyzeOpenApiExportSource(source: OpenApiExportSource): ExportA
 export function buildOpenApiExportDocument(source: OpenApiExportSource, specName: string): OpenApiDocument {
   const paths: Record<string, OpenApiPathItem> = {}
   const securitySchemes: Record<string, OpenApiSecurityScheme> = {}
-  const httpRequests = source.requests.filter(request => request.requestType === 'http')
+  const httpRequests = source.requests.filter(request => request.requestType === 'http' && request.bodyType !== 'graphql')
   const operationServers = new Set<string>()
   const useFolderTags = shouldUseImmediateFolderTags(source)
 
@@ -776,6 +781,7 @@ function buildWarnings(warnings: Map<OpenApiExportWarningCode, { count: number; 
 
 const warningMessages: Record<OpenApiExportWarningCode, string> = {
   'websocket-requests-skipped': 'WebSocket requests are skipped because OpenAPI export only supports HTTP requests.',
+  'graphql-requests-skipped': 'GraphQL requests are skipped because OpenAPI export in Kova only models generic HTTP request bodies.',
   'folder-headers-not-exported': 'Folder-level headers are not exported because OpenAPI has no equivalent folder header model.',
   'folder-scripts-not-exported': 'Folder scripts are not exported because OpenAPI has no script runtime model.',
   'request-scripts-not-exported': 'Request scripts are not exported because OpenAPI has no script runtime model.',

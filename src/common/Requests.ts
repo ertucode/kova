@@ -17,7 +17,7 @@ export type SendRequestMetadata = {
 
 export type RequestType = 'http' | 'websocket'
 
-export type RequestBodyType = 'raw' | 'form-data' | 'x-www-form-urlencoded' | 'none'
+export type RequestBodyType = 'raw' | 'form-data' | 'x-www-form-urlencoded' | 'none' | 'graphql'
 
 export type RequestRawType = 'json' | 'text'
 
@@ -42,6 +42,9 @@ export type HttpRequestRecord = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
+  graphqlSchema?: string
   websocketSubprotocols: string
   websocketOnOpenMessage: string
   websocketAutoSendEnabled: boolean
@@ -81,6 +84,9 @@ export type UpdateRequestInput = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
+  graphqlSchema?: string
   websocketSubprotocols: string
   websocketOnOpenMessage: string
   websocketAutoSendEnabled: boolean
@@ -120,11 +126,34 @@ export type SendRequestInput = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
   activeEnvironmentIds: string[]
   saveToHistory: boolean
   historyKeepLast: number
   callRequestOverrides?: ScriptCallRequestOverrides
   requestMetadata?: SendRequestMetadata
+}
+
+export type FetchGraphqlSchemaInput = {
+  requestId: string
+  method: RequestMethod
+  url: string
+  pathParams: string
+  searchParams: string
+  auth: HttpAuth
+  preRequestScript: string
+  headers: string
+  body: string
+  bodyType: RequestBodyType
+  rawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
+  activeEnvironmentIds: string[]
+}
+
+export type FetchGraphqlSchemaResponse = {
+  schema: string
 }
 
 export type CancelHttpRequestInput = {
@@ -251,6 +280,8 @@ export type ExecutedRequestSnapshot = {
   variables: Record<string, string>
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
   sentAt: number
 }
 

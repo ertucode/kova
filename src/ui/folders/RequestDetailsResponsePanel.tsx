@@ -54,6 +54,8 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
   requestBody,
   requestBodyType,
   requestRawType,
+  requestGraphqlQuery,
+  requestGraphqlVariables,
   responseVisualizer,
   responseTableAccessor,
   preferredResponseBodyView,
@@ -69,6 +71,8 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
   requestBody: string
   requestBodyType: RequestDetailsDraft['bodyType']
   requestRawType: RequestDetailsDraft['rawType']
+  requestGraphqlQuery: RequestDetailsDraft['graphqlQuery']
+  requestGraphqlVariables: RequestDetailsDraft['graphqlVariables']
   responseVisualizer: string
   responseTableAccessor: string
   preferredResponseBodyView: RequestDetailsDraft['preferredResponseBodyView']
@@ -165,6 +169,8 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
       requestBody,
       requestBodyType,
       requestRawType,
+      graphqlQuery: requestGraphqlQuery,
+      graphqlVariables: requestGraphqlVariables,
       responseStatus: responseSource.status,
       responseStatusText: responseSource.statusText,
       responseHeaders: responseSource.headers,
@@ -185,6 +191,8 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
     requestHeaders,
     requestName,
     requestRawType,
+    requestGraphqlQuery,
+    requestGraphqlVariables,
     response,
     selectedRequestId,
     sseStream,

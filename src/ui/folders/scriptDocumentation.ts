@@ -496,7 +496,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
         entries: [
           { label: 'value', detail: 'Editor content string.' },
           {
-            label: "language: 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'",
+            label: "language: 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml' | 'graphql'",
             detail: 'Syntax highlighting mode.',
           },
           { label: 'onChange(value, params)', detail: 'Receive content updates and caret metadata.' },

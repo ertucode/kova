@@ -16,6 +16,8 @@ export type ClipboardHttpRequestImport = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery: string
+  graphqlVariables: string
 }
 
 export function buildImportedHttpUrlFields(nextUrl: string, bodyType: RequestBodyType) {
@@ -74,6 +76,8 @@ export function parseClipboardHttpRequest(
     body: '',
     bodyType: 'none',
     rawType: 'json',
+    graphqlQuery: '',
+    graphqlVariables: '',
   }
 }
 

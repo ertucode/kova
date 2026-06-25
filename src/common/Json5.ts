@@ -95,6 +95,10 @@ export async function formatJson5PreferringJsonWithTemplates(value: string) {
 }
 
 export function getJson5Diagnostic(value: string) {
+  if (value.trim().length === 0) {
+    return null
+  }
+
   const masked = maskBareTemplateTokensForDiagnostics(value)
 
   try {

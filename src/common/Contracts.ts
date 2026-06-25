@@ -47,6 +47,8 @@ import {
   type DeleteRequestResponse,
   type DeleteWebSocketSavedMessageInput,
   type DuplicateRequestInput,
+  type FetchGraphqlSchemaInput,
+  type FetchGraphqlSchemaResponse,
   type DeleteRequestHistoryEntryInput,
   type DeleteRequestInput,
   type GetRequestHistoryCountInput,
@@ -267,6 +269,7 @@ export type EventResponseMapping = {
   moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
+  fetchGraphqlSchema: Promise<GenericResult<FetchGraphqlSchemaResponse>>
   cancelHttpRequest: Promise<GenericResult<void>>
   generateRequestCode: Promise<GenericResult<GenerateRequestCodeResponse>>
   loadScriptAiWorkspace: Promise<GenericResult<ScriptAiWorkspaceState>>
@@ -407,6 +410,7 @@ export type EventRequestMapping = {
   moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
+  fetchGraphqlSchema: FetchGraphqlSchemaInput
   cancelHttpRequest: CancelHttpRequestInput
   generateRequestCode: GenerateRequestCodeInput
   loadScriptAiWorkspace: LoadScriptAiWorkspaceInput
@@ -561,6 +565,7 @@ export type WindowElectron = {
   moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
+  fetchGraphqlSchema: (input: FetchGraphqlSchemaInput) => Promise<GenericResult<FetchGraphqlSchemaResponse>>
   cancelHttpRequest: (input: CancelHttpRequestInput) => Promise<GenericResult<void>>
   generateRequestCode: (input: GenerateRequestCodeInput) => Promise<GenericResult<GenerateRequestCodeResponse>>
   loadScriptAiWorkspace: (input: LoadScriptAiWorkspaceInput) => Promise<GenericResult<ScriptAiWorkspaceState>>

@@ -59,6 +59,9 @@ export type RequestDetailsDraft = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery: string
+  graphqlVariables: string
+  graphqlSchema: string
   websocketSubprotocols: string
   websocketOnOpenMessage: string
   websocketAutoSendEnabled: boolean
@@ -75,6 +78,8 @@ export type RequestExampleDetailsDraft = {
   requestBody: string
   requestBodyType: RequestBodyType
   requestRawType: RequestRawType
+  graphqlQuery: string
+  graphqlVariables: string
   responseStatus: number
   responseStatusText: string
   responseHeaders: string
@@ -96,7 +101,7 @@ export type HeaderRow = KeyValueRow
 
 export const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
-export const REQUEST_BODY_TYPES: RequestBodyType[] = ['none', 'raw', 'form-data', 'x-www-form-urlencoded']
+export const REQUEST_BODY_TYPES: RequestBodyType[] = ['none', 'raw', 'form-data', 'x-www-form-urlencoded', 'graphql']
 
 export const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
 

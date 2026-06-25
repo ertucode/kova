@@ -86,6 +86,10 @@ type PostmanHeader = {
 type PostmanBody = {
   mode?: string
   raw?: string
+  graphql?: {
+    query?: string
+    variables?: string
+  }
   urlencoded?: PostmanParam[]
   formdata?: PostmanParam[]
   options?: { raw?: { language?: string } }
@@ -399,6 +403,8 @@ function importItem(
       body: requestModel.body,
       bodyType: requestModel.bodyType,
       rawType: requestModel.rawType,
+      graphqlQuery: requestModel.graphqlQuery,
+      graphqlVariables: requestModel.graphqlVariables,
       websocketSubprotocols: '',
       websocketOnOpenMessage: '',
       websocketAutoSendEnabled: false,
@@ -423,6 +429,8 @@ function importItem(
         requestBody: exampleRequestModel.body,
         requestBodyType: exampleRequestModel.bodyType,
         requestRawType: exampleRequestModel.rawType,
+        graphqlQuery: exampleRequestModel.graphqlQuery,
+        graphqlVariables: exampleRequestModel.graphqlVariables,
         responseStatus: response.code ?? 200,
         responseStatusText: response.status ?? 'OK',
         responseHeaders: stringifyKeyValueRows(
@@ -492,7 +500,7 @@ function inspectAuth(warnings: WarningAccumulator, pathLabel: string, auth: Post
 
 function inspectRequestBody(warnings: WarningAccumulator, pathLabel: string, body: PostmanBody | undefined) {
   const mode = body?.mode?.toLowerCase()
-  if (!mode || mode === 'raw' || mode === 'urlencoded' || mode === 'formdata') {
+  if (!mode || mode === 'raw' || mode === 'urlencoded' || mode === 'formdata' || mode === 'graphql') {
     return
   }
 
@@ -550,6 +558,8 @@ export function mapRequest(request: PostmanRequest) {
     body: body.body,
     bodyType: body.bodyType,
     rawType: body.rawType,
+    graphqlQuery: body.graphqlQuery,
+    graphqlVariables: body.graphqlVariables,
   }
 }
 
@@ -663,6 +673,18 @@ function mapBody(body: PostmanBody | undefined) {
       body: body?.raw ?? '',
       bodyType: 'raw' as const,
       rawType: body?.options?.raw?.language === 'json' ? 'json' as const : 'text' as const,
+      graphqlQuery: '',
+      graphqlVariables: '',
+    }
+  }
+
+   if (mode === 'graphql') {
+    return {
+      body: '',
+      bodyType: 'graphql' as const,
+      rawType: 'json' as const,
+      graphqlQuery: body?.graphql?.query ?? '',
+      graphqlVariables: body?.graphql?.variables ?? '',
     }
   }
 
@@ -671,6 +693,8 @@ function mapBody(body: PostmanBody | undefined) {
       body: stringifyKeyValueRows(mapKeyValueRows(body?.urlencoded ?? [], 'body-url-encoded')),
       bodyType: 'x-www-form-urlencoded' as const,
       rawType: 'json' as const,
+      graphqlQuery: '',
+      graphqlVariables: '',
     }
   }
 
@@ -684,6 +708,8 @@ function mapBody(body: PostmanBody | undefined) {
       ),
       bodyType: 'form-data' as const,
       rawType: 'json' as const,
+      graphqlQuery: '',
+      graphqlVariables: '',
     }
   }
 
@@ -691,6 +717,8 @@ function mapBody(body: PostmanBody | undefined) {
     body: '',
     bodyType: 'none' as const,
     rawType: 'json' as const,
+    graphqlQuery: '',
+    graphqlVariables: '',
   }
 }
 

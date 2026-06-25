@@ -43,11 +43,28 @@ describe('postman import', () => {
         'scripts-commented',
         'unsupported-script-api',
         'unsupported-auth',
-        'unsupported-body-mode',
         'collection-variables-ignored',
         'protocol-profile-ignored',
       ])
     )
+  })
+
+  it('maps graphql bodies into graphql request mode', () => {
+    const request = mapRequest({
+      method: 'post',
+      body: {
+        mode: 'graphql',
+        graphql: {
+          query: 'query Viewer { viewer { id } }',
+          variables: '{"id":"123"}',
+        },
+      },
+    })
+
+    expect(request.bodyType).toBe('graphql')
+    expect(request.graphqlQuery).toBe('query Viewer { viewer { id } }')
+    expect(request.graphqlVariables).toBe('{"id":"123"}')
+    expect(request.body).toBe('')
   })
 
   it('maps request url, params, headers, and form body', () => {

@@ -80,7 +80,7 @@ import {
   replaceTagItems,
   updateTag,
 } from './db/tags.js'
-import { cancelHttpRequest, sendRequest } from './send-request.js'
+import { cancelHttpRequest, fetchGraphqlSchema, sendRequest } from './send-request.js'
 import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
 import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
@@ -814,6 +814,18 @@ app.on('ready', async () => {
     })
   })
 
+  ipcHandle('fetchGraphqlSchema', async (input, event) => {
+    const makeRequestBridge = createScriptRequestBridge(event.sender)
+    return fetchGraphqlSchema(input, {
+      toast: createScriptToastBridge(event.sender),
+      prompt: scriptPromptRegistry.createBridge(event.sender),
+      clipboard: {
+        writeText: value => clipboard.writeText(value),
+      },
+      makeRequest: makeRequestBridge,
+    })
+  })
+
   ipcHandle('cancelHttpRequest', async input => {
     return cancelHttpRequest(input)
   })
@@ -838,6 +850,8 @@ app.on('ready', async () => {
       body: requestResult.data.body,
       bodyType: requestResult.data.bodyType,
       rawType: requestResult.data.rawType,
+      graphqlQuery: requestResult.data.graphqlQuery,
+      graphqlVariables: requestResult.data.graphqlVariables,
       activeEnvironmentIds: input.activeEnvironmentIds,
       saveToHistory: false,
       historyKeepLast: 0,

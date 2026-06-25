@@ -623,6 +623,8 @@ async function saveExecutionAsExample(execution: RequestExecutionRecord) {
     requestBody: execution.request.body,
     requestBodyType: execution.request.bodyType,
     requestRawType: execution.request.rawType,
+    graphqlQuery: execution.request.graphqlQuery,
+    graphqlVariables: execution.request.graphqlVariables,
     responseStatus: execution.response.status,
     responseStatusText: execution.response.statusText,
     responseHeaders: execution.response.headers,

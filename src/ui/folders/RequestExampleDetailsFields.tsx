@@ -93,7 +93,38 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
       </section>
 
       <HeadersEditor value={draft.requestHeaders} onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestHeaders: value })} />
-      <DetailsTextArea label="Request Body" value={draft.requestBody} minHeightClassName="min-h-32" onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestBody: value })} onBlur={() => undefined} />
+      {draft.requestBodyType === 'graphql' ? (
+        <>
+          <section className="border-b border-base-content/10">
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">Query</div>
+          </section>
+          <CodeEditor
+            value={draft.graphqlQuery}
+            language="plain"
+            size="small"
+            minHeightClassName="min-h-40"
+            className="border-x-0 border-b-0"
+            placeholder={'query ExampleQuery {\n  viewer {\n    id\n  }\n}'}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, graphqlQuery: value })}
+            onBlur={() => undefined}
+          />
+          <section className="border-b border-base-content/10">
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">Variables</div>
+          </section>
+          <CodeEditor
+            value={draft.graphqlVariables}
+            language="json5"
+            size="small"
+            minHeightClassName="min-h-32"
+            className="border-x-0 border-b-0"
+            placeholder={'{\n  "id": "123"\n}'}
+            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, graphqlVariables: value })}
+            onBlur={() => undefined}
+          />
+        </>
+      ) : (
+        <DetailsTextArea label="Request Body" value={draft.requestBody} minHeightClassName="min-h-32" onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestBody: value })} onBlur={() => undefined} />
+      )}
       <KeyValueEditor label="Response Headers" value={draft.responseHeaders} onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseHeaders: value })} keyPlaceholder="Content-Type" valuePlaceholder="application/json" valueEditorAsCode />
       <section className="w-full border-b border-base-content/10">
         <div className="flex items-center justify-between gap-3 p-2">

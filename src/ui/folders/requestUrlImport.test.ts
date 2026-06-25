@@ -64,6 +64,9 @@ describe('requestUrlImport', () => {
       body: '',
       bodyType: 'none',
       rawType: 'json',
+      graphqlQuery: '',
+      graphqlVariables: '',
+      graphqlSchema: '',
     })
   })
 
@@ -79,6 +82,9 @@ describe('requestUrlImport', () => {
       body: '{"id":42}',
       bodyType: 'raw',
       rawType: 'json',
+      graphqlQuery: '',
+      graphqlVariables: '',
+      graphqlSchema: '',
     })
   })
 })

@@ -11,6 +11,8 @@ export type ParsedCurlRequest = {
   body: string
   bodyType: RequestBodyType
   rawType: RequestRawType
+  graphqlQuery: string
+  graphqlVariables: string
   auth: HttpAuth
   pathParams: string
   searchParams: string
@@ -41,6 +43,8 @@ export function parseCurlRequest(value: string): ParsedCurlRequest | null {
     body,
     bodyType,
     rawType,
+    graphqlQuery: '',
+    graphqlVariables: '',
     auth,
     pathParams: syncPathParamsWithUrl(url, ''),
     searchParams: syncSearchParamsWithUrl(url, ''),

@@ -10,6 +10,7 @@ import { json5 as json5Language } from 'codemirror-json5'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
+import { graphqlLanguageSupport } from 'cm6-graphql'
 import { EditorView, keymap, lineNumbers, placeholder as placeholderExtension } from '@codemirror/view'
 import { defaultSettingsTokyoNight, tokyoNight } from '@uiw/codemirror-theme-tokyo-night'
 import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
@@ -23,7 +24,7 @@ import { useSelector } from '@xstate/store/react'
 import { DEFAULT_VIM_MODE } from '@common/AppSettings'
 import { appSettingsStore } from '@/global/appSettingsStore'
 
-export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'
+export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml' | 'graphql'
 
 export type CodeEditorHandle = {
   focusLine: (line: number, column?: number | null) => void
@@ -109,6 +110,7 @@ const jsxLanguageExtension = javascript({ jsx: true, typescript: true })
 const htmlLanguageExtension = html()
 const cssLanguageExtension = css()
 const xmlLanguageExtension = xml()
+const graphqlLanguageExtension = graphqlLanguageSupport()
 const tokyoNightColors = {
   background: defaultSettingsTokyoNight.background ?? '#1a1b26',
   foreground: '#a9b1d6',
@@ -934,6 +936,8 @@ export const CodeEditor = memo(function CodeEditor({
         return cssLanguageExtension
       case 'xml':
         return xmlLanguageExtension
+      case 'graphql':
+        return graphqlLanguageExtension
       default:
         return null
     }
@@ -1068,7 +1072,7 @@ export const CodeEditor = memo(function CodeEditor({
       nextExtensions.push(foldGutterExtension)
     }
 
-    if (language === 'javascript' || language === 'jsx' || language === 'json' || language === 'json5') {
+    if (language === 'javascript' || language === 'jsx' || language === 'json' || language === 'json5' || language === 'graphql') {
       nextExtensions.push(lintGutterExtension)
     }
 

@@ -9,6 +9,8 @@ export type RequestExampleRecord = {
   requestBody: string
   requestBodyType: RequestBodyType
   requestRawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
   responseStatus: number
   responseStatusText: string
   responseHeaders: string
@@ -25,6 +27,8 @@ export type CreateRequestExampleInput = {
   requestBody: string
   requestBodyType: RequestBodyType
   requestRawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
   responseStatus: number
   responseStatusText: string
   responseHeaders: string
@@ -42,6 +46,8 @@ export type UpdateRequestExampleInput = {
   requestBody: string
   requestBodyType: RequestBodyType
   requestRawType: RequestRawType
+  graphqlQuery?: string
+  graphqlVariables?: string
   responseStatus: number
   responseStatusText: string
   responseHeaders: string

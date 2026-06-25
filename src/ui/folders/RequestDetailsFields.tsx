@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { CopyIcon, InfoIcon, LibraryBigIcon, PencilIcon, SaveIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import type { Extension } from '@codemirror/state'
+import { buildClientSchema, type GraphQLSchema, type IntrospectionQuery } from 'graphql'
 import type { ExplorerItem } from '@common/Explorer'
 import { getAuthVariableSources } from '@common/Auth'
 import type { RequestMetaTab } from '@common/FolderExplorerTabs'
@@ -45,7 +46,10 @@ import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { RequestSendCoordinator } from './requestSendCoordinator'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
-import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
+import {
+  variableAutocompleteExtension,
+  type VariableAutocompleteItem,
+} from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
@@ -60,6 +64,8 @@ import { DetailsSectionHeader } from './DetailsSectionHeader'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { RequestDetailsResponsePanel } from './RequestDetailsResponsePanel'
 import { jsonDiagnosticsExtension } from './codeEditorJsonDiagnostics'
+import { graphqlDiagnosticsExtension } from './codeEditorGraphqlDiagnostics'
+import { graphqlSchemaExtension } from './codeEditorGraphqlSchema'
 import { buildImportedHttpUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -73,6 +79,7 @@ import { twMerge } from 'tailwind-merge'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
+  const [isFetchingGraphqlSchema, setIsFetchingGraphqlSchema] = useState(false)
   const compactRequestView = useSelector(
     appSettingsStore,
     state => state.context.settings?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW
@@ -189,7 +196,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   searchParamsValueRef.current = draft.searchParams
   definedPathParamNamesRef.current = pathParamRowsRef.current.map(row => row.key.trim()).filter(Boolean)
 
-  const variableEditorExtensions = useMemo(
+  const variableEditorBaseExtensions = useMemo(
     () => [
       variableHighlightExtension({
         getDefinedVariableNames: () => activeEnvironmentVariableNamesRef.current,
@@ -206,6 +213,13 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         getSharedScripts: () => visibleSharedScriptsRef.current,
         getPackages: () => scriptPackageArtifactsRef.current,
       }),
+    ],
+    []
+  )
+
+  const variableEditorExtensions = useMemo(
+    () => [
+      ...variableEditorBaseExtensions,
       variableAutocompleteExtension(() => variableAutocompleteItemsRef.current, {
         extraSources: [
           createTemplateCompletionSource({
@@ -217,7 +231,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         ],
       }),
     ],
-    []
+    [variableEditorBaseExtensions]
   )
 
   const variableEditorExtensionsWithBrowserTabFallback = useMemo(
@@ -451,6 +465,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     () => visibleSharedScripts.filter(script => script.targets.includes('response-visualizer')),
     [visibleSharedScripts]
   )
+  const graphqlSchema = useMemo(() => parseGraphqlSchema(draft.graphqlSchema), [draft.graphqlSchema])
   const hasPreRequestScript = draft.preRequestScript.trim().length > 0
   const hasPostRequestScript = draft.postRequestScript.trim().length > 0
   const usedVariableNames = useMemo(() => getUsedRequestVariableNames(draft), [draft])
@@ -722,9 +737,59 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [updateRequestDraft]
   )
 
-  const formatJsonBody = async () => {
+  const formatBody = async () => {
+    const latestDraft = draftRef.current
+
+    if (latestDraft.bodyType === 'graphql') {
+      let graphqlQuery = latestDraft.graphqlQuery
+      let graphqlVariables = latestDraft.graphqlVariables
+      let hasInvalidQuery = false
+      let hasInvalidVariables = false
+
+      if (graphqlQuery.trim()) {
+        try {
+          graphqlQuery = await formatGraphqlQueryWithTemplates(graphqlQuery)
+        } catch {
+          hasInvalidQuery = true
+        }
+      }
+
+      if (graphqlVariables.trim()) {
+        try {
+          graphqlVariables = await formatJson5PreferringJsonWithTemplates(graphqlVariables)
+        } catch {
+          hasInvalidVariables = true
+        }
+      }
+
+      if (graphqlQuery !== latestDraft.graphqlQuery || graphqlVariables !== latestDraft.graphqlVariables) {
+        updateRequestDraft(
+          {
+            ...latestDraft,
+            graphqlQuery,
+            graphqlVariables,
+          },
+          'request-format-graphql-body'
+        )
+      }
+
+      if (hasInvalidQuery || hasInvalidVariables) {
+        toast.show({
+          severity: 'warning',
+          title: 'Could not format GraphQL body',
+          message:
+            hasInvalidQuery && hasInvalidVariables
+              ? 'Fix GraphQL query and variables errors before formatting.'
+              : hasInvalidQuery
+                ? 'Fix GraphQL query errors before formatting.'
+                : 'Fix JSON5 errors in GraphQL variables before formatting.',
+        })
+      }
+
+      return
+    }
+
     try {
-      const latestDraft = draftRef.current
       const formatted = await formatJson5PreferringJsonWithTemplates(latestDraft.body)
       updateRequestDraft(
         {
@@ -746,6 +811,48 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     const result = await getWindowElectron().pickFilePath({ defaultPath: row.value.trim() || undefined })
     return result.success ? result.data.filePath : null
   }, [])
+
+  const fetchRequestGraphqlSchema = useCallback(async () => {
+    if (!selectedRequestId) {
+      return
+    }
+
+    setIsFetchingGraphqlSchema(true)
+    try {
+      const result = await getWindowElectron().fetchGraphqlSchema({
+        requestId: selectedRequestId,
+        method: draftRef.current.method,
+        url: draftRef.current.url,
+        pathParams: draftRef.current.pathParams,
+        searchParams: draftRef.current.searchParams,
+        auth: draftRef.current.auth,
+        preRequestScript: draftRef.current.preRequestScript,
+        headers: draftRef.current.headers,
+        body: draftRef.current.body,
+        bodyType: draftRef.current.bodyType,
+        rawType: draftRef.current.rawType,
+        graphqlQuery: draftRef.current.graphqlQuery,
+        graphqlVariables: draftRef.current.graphqlVariables,
+        activeEnvironmentIds,
+      })
+
+      if (!result.success) {
+        toast.show(result)
+        return
+      }
+
+      updateRequestDraft(
+        {
+          ...draftRef.current,
+          graphqlSchema: result.data.schema,
+        },
+        'request-graphql-schema'
+      )
+      toast.show({ severity: 'success', title: 'Fetched GraphQL schema', message: 'Schema autocomplete is ready.' })
+    } finally {
+      setIsFetchingGraphqlSchema(false)
+    }
+  }, [activeEnvironmentIds, selectedRequestId, updateRequestDraft])
 
   const handleJumpToScriptError = useCallback(
     (error: RequestScriptError) => {
@@ -808,11 +915,14 @@ export default function View() {
   const bodyTab = (
     <RequestBodyTab
       draft={draft}
-      formatJsonBody={formatJsonBody}
+      formatBody={formatBody}
       getSharedScripts={() => visibleSharedScriptsRef.current}
       getPackages={() => scriptPackageArtifactsRef.current}
       pickFormDataFilePath={pickFormDataFilePath}
+      graphqlSchema={graphqlSchema}
       showHeader={compactRequestView}
+      isFetchingGraphqlSchema={isFetchingGraphqlSchema}
+      onFetchGraphqlSchema={fetchRequestGraphqlSchema}
       updateRequestDraft={updateRequestDraft}
       variableEditorExtensions={variableEditorExtensions}
       variableHighlightRefreshKey={variableHighlightRefreshKey}
@@ -1072,6 +1182,8 @@ export default function View() {
         requestBody={draft.body}
         requestBodyType={draft.bodyType}
         requestRawType={draft.rawType}
+        requestGraphqlQuery={draft.graphqlQuery}
+        requestGraphqlVariables={draft.graphqlVariables}
         responseVisualizer={draft.responseVisualizer}
         responseTableAccessor={draft.responseTableAccessor}
         preferredResponseBodyView={draft.preferredResponseBodyView}
@@ -1508,21 +1620,27 @@ function RequestOverviewTab({
 
 function RequestBodyTab({
   draft,
-  formatJsonBody,
+  formatBody,
   getSharedScripts,
   getPackages,
   pickFormDataFilePath,
+  graphqlSchema,
   showHeader,
+  isFetchingGraphqlSchema,
+  onFetchGraphqlSchema,
   updateRequestDraft,
   variableEditorExtensions,
   variableHighlightRefreshKey,
 }: {
   draft: RequestDetailsDraft
-  formatJsonBody: () => Promise<void>
+  formatBody: () => Promise<void>
   getSharedScripts: () => ScriptAutocompleteSharedScript[]
   getPackages: () => ScriptAutocompletePackage[]
   pickFormDataFilePath: (row: KeyValueRow) => Promise<string | null>
+  graphqlSchema: GraphQLSchema | null
   showHeader: boolean
+  isFetchingGraphqlSchema: boolean
+  onFetchGraphqlSchema: () => Promise<void>
   updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
   variableEditorExtensions: Extension[]
   variableHighlightRefreshKey: string
@@ -1534,6 +1652,17 @@ function RequestBodyTab({
 
     return [...variableEditorExtensions, jsonDiagnosticsExtension({ getSharedScripts, getPackages })]
   }, [draft.bodyType, draft.rawType, getPackages, getSharedScripts, variableEditorExtensions])
+  const graphqlVariablesExtensions = useMemo(
+    () => [...variableEditorExtensions, jsonDiagnosticsExtension({ getSharedScripts, getPackages })],
+    [getPackages, getSharedScripts, variableEditorExtensions]
+  )
+  const graphqlQueryExtensions = useMemo(
+    () => [
+      ...graphqlSchemaExtension(graphqlSchema),
+      graphqlDiagnosticsExtension({ getSharedScripts, getPackages }),
+    ],
+    [getPackages, getSharedScripts, graphqlSchema]
+  )
 
   return (
     <section className="h-full min-h-0 flex-1">
@@ -1544,7 +1673,9 @@ function RequestBodyTab({
             actions={
               <RequestBodyTabActions
                 draft={draft}
-                formatJsonBody={formatJsonBody}
+                formatBody={formatBody}
+                isFetchingGraphqlSchema={isFetchingGraphqlSchema}
+                onFetchGraphqlSchema={onFetchGraphqlSchema}
                 updateRequestDraft={updateRequestDraft}
               />
             }
@@ -1553,7 +1684,9 @@ function RequestBodyTab({
           <div className="flex h-12 min-h-12 max-h-12 items-stretch justify-start border-b border-base-content/10 bg-base-100/70">
             <RequestBodyTabActions
               draft={draft}
-              formatJsonBody={formatJsonBody}
+              formatBody={formatBody}
+              isFetchingGraphqlSchema={isFetchingGraphqlSchema}
+              onFetchGraphqlSchema={onFetchGraphqlSchema}
               updateRequestDraft={updateRequestDraft}
             />
           </div>
@@ -1572,6 +1705,45 @@ function RequestBodyTab({
             refreshKey={variableHighlightRefreshKey}
             onChange={value => updateRequestDraft({ ...draft, body: value }, 'request-body-raw')}
           />
+        ) : null}
+
+        {draft.bodyType === 'graphql' ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 border-b border-base-content/10">
+              <div className="border-b border-base-content/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">
+                Query
+              </div>
+              <CodeEditor
+                value={draft.graphqlQuery}
+                language="graphql"
+                size="small"
+                showLineNumbers
+                minHeightClassName="min-h-0 h-full"
+                className="border-x-0 border-b-0"
+                placeholder={'query ExampleQuery {\n  viewer {\n    id\n  }\n}'}
+                extensions={graphqlQueryExtensions}
+                refreshKey={variableHighlightRefreshKey}
+                onChange={value => updateRequestDraft({ ...draft, graphqlQuery: value }, 'request-body-graphql-query')}
+              />
+            </div>
+            <div className="min-h-[180px] flex-1">
+              <div className="border-b border-base-content/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">
+                Variables
+              </div>
+              <CodeEditor
+                value={draft.graphqlVariables}
+                language="json5"
+                size="small"
+                showLineNumbers
+                minHeightClassName="min-h-0 h-full"
+                className="border-x-0 border-b-0"
+                placeholder={'{\n  "id": "123"\n}'}
+                extensions={graphqlVariablesExtensions}
+                refreshKey={variableHighlightRefreshKey}
+                onChange={value => updateRequestDraft({ ...draft, graphqlVariables: value }, 'request-body-graphql-variables')}
+              />
+            </div>
+          </div>
         ) : null}
 
         {isParamBodyType(draft.bodyType) ? (
@@ -1608,11 +1780,15 @@ function RequestBodyTab({
 
 function RequestBodyTabActions({
   draft,
-  formatJsonBody,
+  formatBody,
+  isFetchingGraphqlSchema,
+  onFetchGraphqlSchema,
   updateRequestDraft,
 }: {
   draft: RequestDetailsDraft
-  formatJsonBody: () => Promise<void>
+  formatBody: () => Promise<void>
+  isFetchingGraphqlSchema: boolean
+  onFetchGraphqlSchema: () => Promise<void>
   updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
 }) {
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
@@ -1640,7 +1816,11 @@ function RequestBodyTabActions({
     void Promise.all(
       requestBodyExamples.map(async exampleItem => {
         const result = await getWindowElectron().getRequestExample({ id: exampleItem.id })
-        return result.success ? [exampleItem.id, result.data.requestBody] : null
+        if (!result.success) {
+          return null
+        }
+
+        return [exampleItem.id, result.data.requestBodyType === 'graphql' ? (result.data.graphqlQuery ?? '') : result.data.requestBody] as const
       })
     ).then(entries => {
       if (isCancelled) {
@@ -1690,6 +1870,8 @@ function RequestBodyTabActions({
           body: result.data.requestBody,
           bodyType: result.data.requestBodyType,
           rawType: result.data.requestRawType,
+          graphqlQuery: result.data.graphqlQuery ?? '',
+          graphqlVariables: result.data.graphqlVariables ?? '',
         },
         'request-body-example-apply'
       )
@@ -1723,6 +1905,8 @@ function RequestBodyTabActions({
       requestBody: draft.body,
       requestBodyType: draft.bodyType,
       requestRawType: draft.rawType,
+      graphqlQuery: draft.graphqlQuery,
+      graphqlVariables: draft.graphqlVariables,
       responseStatus: 200,
       responseStatusText: 'OK',
       responseHeaders: '',
@@ -1804,13 +1988,23 @@ function RequestBodyTabActions({
           )
         }
       />
-      {draft.bodyType === 'raw' && draft.rawType === 'json' ? (
+      {(draft.bodyType === 'raw' && draft.rawType === 'json') || draft.bodyType === 'graphql' ? (
         <button
           type="button"
           className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70"
-          onClick={() => void formatJsonBody()}
+          onClick={() => void formatBody()}
         >
           Format
+        </button>
+      ) : null}
+      {draft.bodyType === 'graphql' ? (
+        <button
+          type="button"
+          className="h-full rounded-none border-l border-base-content/10 bg-base-100/70 px-3 text-xs font-medium uppercase tracking-[0.08em] text-base-content transition hover:bg-base-200/70 disabled:cursor-wait disabled:opacity-60"
+          onClick={() => void onFetchGraphqlSchema()}
+          disabled={isFetchingGraphqlSchema}
+        >
+          {isFetchingGraphqlSchema ? 'Fetching...' : draft.graphqlSchema.trim() ? 'Refetch Schema' : 'Auto Fetch'}
         </button>
       ) : null}
     </>
@@ -1918,6 +2112,73 @@ function isParamBodyType(bodyType: RequestBodyType) {
 
 function getRawEditorLanguage(rawType: RequestRawType): CodeEditorLanguage {
   return rawType === 'json' ? 'json5' : 'plain'
+}
+
+type PrettierGraphqlModule = {
+  format: (source: string, options: { parser: 'graphql'; plugins: unknown[] }) => Promise<string> | string
+}
+
+let graphqlFormatterPromise: Promise<(value: string) => Promise<string>> | null = null
+
+async function formatGraphqlQueryWithTemplates(value: string) {
+  const format = await getGraphqlFormatter()
+  const masked = maskGraphqlTemplateTokens(value)
+  const formatted = await format(masked.value)
+
+  return restoreGraphqlTemplateTokens(formatted, masked.tokens)
+}
+
+async function getGraphqlFormatter() {
+  if (!graphqlFormatterPromise) {
+    graphqlFormatterPromise = Promise.all([
+      import('prettier/standalone'),
+      import('prettier/plugins/graphql'),
+    ]).then(([prettier, graphqlPlugin]) => {
+      const standalonePrettier = prettier as PrettierGraphqlModule
+
+      return async (value: string) => standalonePrettier.format(value, {
+        parser: 'graphql',
+        plugins: [graphqlPlugin.default],
+      })
+    })
+  }
+
+  return graphqlFormatterPromise
+}
+
+function maskGraphqlTemplateTokens(value: string) {
+  const tokens: string[] = []
+
+  return {
+    value: value.replace(/\{\{[\s\S]*?\}\}/g, token => {
+      const placeholder = `KOVA_GRAPHQL_TEMPLATE_TOKEN_${tokens.length}`
+      tokens.push(token)
+      return placeholder
+    }),
+    tokens,
+  }
+}
+
+function restoreGraphqlTemplateTokens(value: string, tokens: string[]) {
+  let restored = value
+
+  for (const [index, token] of tokens.entries()) {
+    restored = restored.replaceAll(`KOVA_GRAPHQL_TEMPLATE_TOKEN_${index}`, token)
+  }
+
+  return restored
+}
+
+function parseGraphqlSchema(value: string): GraphQLSchema | null {
+  if (!value.trim()) {
+    return null
+  }
+
+  try {
+    return buildClientSchema(JSON.parse(value) as IntrospectionQuery)
+  } catch {
+    return null
+  }
 }
 
 function updateEnvironmentVariableDraft(environmentId: string, variableName: string, value: string) {

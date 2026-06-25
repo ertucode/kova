@@ -7,6 +7,7 @@ import {
   type CompletionResult,
   type CompletionSource,
 } from '@codemirror/autocomplete'
+import { graphqlLanguage } from 'cm6-graphql'
 
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
@@ -56,6 +57,12 @@ export function variableAutocompleteExtension(
       startCompletion(update.view)
     }),
   ]
+}
+
+export function graphqlVariableAutocompleteExtension(getVariables: () => VariableAutocompleteItem[]): Extension {
+  return graphqlLanguage.data.of({
+    autocomplete: (context: CompletionContext) => completeVariables(context, getVariables),
+  })
 }
 
 function completeVariables(

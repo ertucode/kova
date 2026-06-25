@@ -46,12 +46,14 @@ export const requests = sqliteTable(
     responseVisualizer: text('response_visualizer').notNull().default(''),
     responseTableAccessor: text('response_table_accessor').notNull().default(''),
     preferredResponseBodyView: text('preferred_response_body_view').notNull().default('raw'),
-    // Legacy column kept to avoid destructive table rebuild migration. Unused by app code.
     prefersResponseVisualizer: integer('prefers_response_visualizer', { mode: 'boolean' }).notNull().default(false),
     headers: text('headers').notNull().default(''),
     body: text('body').notNull().default(''),
     bodyType: text('body_type').notNull().default('none'),
     rawType: text('raw_type').notNull().default('json'),
+    graphqlQuery: text('graphql_query').notNull().default(''),
+    graphqlVariables: text('graphql_variables').notNull().default(''),
+    graphqlSchema: text('graphql_schema').notNull().default(''),
     websocketSubprotocols: text('websocket_subprotocols').notNull().default(''),
     websocketOnOpenMessage: text('websocket_on_open_message').notNull().default(''),
     websocketAutoSendEnabled: integer('websocket_auto_send_enabled', { mode: 'boolean' }).notNull().default(false),
@@ -64,10 +66,6 @@ export const requests = sqliteTable(
   table => [
     index('requests_deleted_at_idx').on(table.deletedAt),
     index('requests_request_type_idx').on(table.requestType),
-    check('requests_request_type_check', sql`${table.requestType} in ('http', 'websocket')`),
-    check('requests_body_type_check', sql`${table.bodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`),
-    check('requests_raw_type_check', sql`${table.rawType} in ('json', 'text')`),
-    check('requests_preferred_response_body_view_check', sql`${table.preferredResponseBodyView} in ('raw', 'table', 'visualizer')`),
   ]
 )
 
@@ -364,6 +362,8 @@ export const requestHistory = sqliteTable(
     requestVariablesJson: text('request_variables_json').notNull().default('{}'),
     requestBodyType: text('request_body_type').notNull().default('none'),
     requestRawType: text('request_raw_type').notNull().default('json'),
+    graphqlQuery: text('graphql_query').notNull().default(''),
+    graphqlVariables: text('graphql_variables').notNull().default(''),
     responseStatus: integer('response_status'),
     responseStatusText: text('response_status_text'),
     responseHeaders: text('response_headers').notNull().default(''),
@@ -396,6 +396,8 @@ export const requestExamples = sqliteTable(
     requestBody: text('request_body').notNull().default(''),
     requestBodyType: text('request_body_type').notNull().default('none'),
     requestRawType: text('request_raw_type').notNull().default('json'),
+    graphqlQuery: text('graphql_query').notNull().default(''),
+    graphqlVariables: text('graphql_variables').notNull().default(''),
     responseStatus: integer('response_status').notNull().default(200),
     responseStatusText: text('response_status_text').notNull().default('OK'),
     responseHeaders: text('response_headers').notNull().default(''),
@@ -408,8 +410,6 @@ export const requestExamples = sqliteTable(
     index('request_examples_request_id_idx').on(table.requestId),
     index('request_examples_request_position_idx').on(table.requestId, table.position),
     index('request_examples_deleted_at_idx').on(table.deletedAt),
-    check('request_examples_request_body_type_check', sql`${table.requestBodyType} in ('raw', 'form-data', 'x-www-form-urlencoded', 'none')`),
-    check('request_examples_request_raw_type_check', sql`${table.requestRawType} in ('json', 'text')`),
   ]
 )
 
@@ -424,11 +424,6 @@ export const websocketSavedMessages = sqliteTable(
     deletedAt: integer('deleted_at'),
   },
   table => [
-    foreignKey({
-      columns: [table.requestId],
-      foreignColumns: [requests.id],
-      name: 'websocket_saved_messages_request_id_fkey',
-    }),
     index('websocket_saved_messages_request_id_idx').on(table.requestId),
     index('websocket_saved_messages_deleted_at_idx').on(table.deletedAt),
   ]
@@ -452,11 +447,6 @@ export const websocketHistory = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   table => [
-    foreignKey({
-      columns: [table.requestId],
-      foreignColumns: [requests.id],
-      name: 'websocket_history_request_id_fkey',
-    }),
     index('websocket_history_created_at_idx').on(table.createdAt),
     index('websocket_history_request_id_idx').on(table.requestId),
     index('websocket_history_connected_at_idx').on(table.connectedAt),
@@ -476,14 +466,8 @@ export const websocketHistoryMessages = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   table => [
-    foreignKey({
-      columns: [table.historyId],
-      foreignColumns: [websocketHistory.id],
-      name: 'websocket_history_messages_history_id_fkey',
-    }),
     index('websocket_history_messages_history_id_idx').on(table.historyId),
     index('websocket_history_messages_timestamp_idx').on(table.timestamp),
-    check('websocket_history_messages_direction_check', sql`${table.direction} in ('sent', 'received')`),
   ]
 )
 
@@ -502,11 +486,6 @@ export const websocketExamples = sqliteTable(
     deletedAt: integer('deleted_at'),
   },
   table => [
-    foreignKey({
-      columns: [table.requestId],
-      foreignColumns: [requests.id],
-      name: 'websocket_examples_request_id_fkey',
-    }),
     index('websocket_examples_request_id_idx').on(table.requestId),
     index('websocket_examples_request_position_idx').on(table.requestId, table.position),
     index('websocket_examples_deleted_at_idx').on(table.deletedAt),
@@ -526,13 +505,7 @@ export const websocketExampleMessages = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   table => [
-    foreignKey({
-      columns: [table.exampleId],
-      foreignColumns: [websocketExamples.id],
-      name: 'websocket_example_messages_example_id_fkey',
-    }),
     index('websocket_example_messages_example_id_idx').on(table.exampleId),
     index('websocket_example_messages_timestamp_idx').on(table.timestamp),
-    check('websocket_example_messages_direction_check', sql`${table.direction} in ('sent', 'received')`),
   ]
 )

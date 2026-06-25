@@ -27,7 +27,7 @@ import { ensureParentFolderExists, insertTreeItem, insertTreeItemAtPosition, mar
 type RequestRow = typeof requests.$inferSelect
 
 const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
-const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www-form-urlencoded', 'none']
+const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www-form-urlencoded', 'none', 'graphql']
 const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
 const REQUEST_TYPES: RequestType[] = ['http', 'websocket']
 const RESPONSE_BODY_VIEWS: ResponseBodyView[] = ['raw', 'table', 'visualizer']
@@ -69,6 +69,9 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         body: '',
         bodyType: 'none',
         rawType: 'json',
+        graphqlQuery: '',
+        graphqlVariables: '',
+        graphqlSchema: '',
         websocketSubprotocols: '',
         websocketOnOpenMessage: '',
         websocketAutoSendEnabled: false,
@@ -169,6 +172,9 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
         body: input.body,
         bodyType: input.bodyType,
         rawType: input.rawType,
+        graphqlQuery: input.graphqlQuery,
+        graphqlVariables: input.graphqlVariables,
+        graphqlSchema: input.graphqlSchema,
         websocketSubprotocols: input.websocketSubprotocols,
         websocketOnOpenMessage: input.websocketOnOpenMessage,
         websocketAutoSendEnabled: input.websocketAutoSendEnabled,
@@ -380,6 +386,9 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     body: request.body,
     bodyType: request.bodyType as RequestBodyType,
     rawType: request.rawType as RequestRawType,
+    graphqlQuery: request.graphqlQuery,
+    graphqlVariables: request.graphqlVariables,
+    graphqlSchema: request.graphqlSchema,
     websocketSubprotocols: request.websocketSubprotocols,
     websocketOnOpenMessage: request.websocketOnOpenMessage,
     websocketAutoSendEnabled: request.websocketAutoSendEnabled,

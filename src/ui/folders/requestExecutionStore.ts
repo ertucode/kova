@@ -406,6 +406,8 @@ function normalizeExecutionRecord(event: {
       variables: {},
       bodyType: event.requestDraft.bodyType,
       rawType: event.requestDraft.rawType,
+      graphqlQuery: event.requestDraft.graphqlQuery,
+      graphqlVariables: event.requestDraft.graphqlVariables,
       sentAt: Date.now(),
     },
     response: {

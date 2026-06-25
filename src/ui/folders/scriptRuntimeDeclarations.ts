@@ -343,7 +343,7 @@ const responseVisualizerDeclarations = String.raw`
 type SetStateAction<T> = T | ((previousState: T) => T)
 type Dispatch<T> = (value: T) => void
 type DependencyList = readonly unknown[]
-type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml'
+type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml' | 'graphql'
 type ReactElementLike = {
   readonly type: unknown
   readonly props: unknown

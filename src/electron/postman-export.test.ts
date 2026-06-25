@@ -262,4 +262,58 @@ describe('postman export', () => {
       ],
     })
   })
+
+  it('exports graphql requests using postman graphql mode', () => {
+    const document = buildCollectionExportDocument({
+      scope: 'request',
+      folderId: null,
+      requestId: 'request-1',
+      suggestedCollectionName: 'Viewer',
+      folders: [],
+      requests: [
+        {
+          id: 'request-1',
+          name: 'Viewer',
+          requestType: 'http',
+          method: 'POST',
+          url: 'https://api.example.com/graphql',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          testScript: '',
+          responseVisualizer: '',
+          responseTableAccessor: '',
+          preferredResponseBodyView: 'raw',
+          headers: 'content-type:application/json',
+          body: '',
+          bodyType: 'graphql',
+          rawType: 'json',
+          graphqlQuery: 'query Viewer { viewer { id } }',
+          graphqlVariables: '{"id":"123"}',
+          websocketSubprotocols: '',
+          websocketOnOpenMessage: '',
+          websocketAutoSendEnabled: false,
+          websocketAutoSendMessage: '',
+          websocketAutoSendIntervalSeconds: 0,
+          saveToHistory: true,
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 0,
+        },
+      ],
+      examplesByRequestId: new Map(),
+      orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Viewer', requestType: 'http', method: 'POST', url: 'https://api.example.com/graphql', position: 0, createdAt: 1, deletedAt: null }],
+    }, 'Viewer')
+
+    expect(document.item[0]?.request?.body).toEqual({
+      mode: 'graphql',
+      graphql: {
+        query: 'query Viewer { viewer { id } }',
+        variables: '{"id":"123"}',
+      },
+    })
+  })
 })

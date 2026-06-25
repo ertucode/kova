@@ -100,6 +100,13 @@ type PostmanBody =
       options: { raw: { language: 'json' | 'text' } }
     }
   | {
+      mode: 'graphql'
+      graphql: {
+        query: string
+        variables?: string
+      }
+    }
+  | {
       mode: 'urlencoded'
       urlencoded: PostmanKeyValue[]
     }
@@ -456,7 +463,9 @@ function buildRequestItem(request: RequestExportRecord, examples: RequestExample
   }
 }
 
-function mapRequest(request: Pick<HttpRequestRecord, 'method' | 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType' | 'rawType' | 'auth'>): PostmanRequest {
+function mapRequest(
+  request: Pick<HttpRequestRecord, 'method' | 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType' | 'rawType' | 'graphqlQuery' | 'graphqlVariables' | 'auth'>
+): PostmanRequest {
   const headers = parseKeyValueRows(request.headers)
   const pathVariables = parseKeyValueRows(request.pathParams)
   const searchParams = parseKeyValueRows(request.searchParams)
@@ -481,7 +490,7 @@ function mapRequest(request: Pick<HttpRequestRecord, 'method' | 'url' | 'pathPar
     postmanRequest.url.query = searchParams.map(mapKeyValueRow)
   }
 
-  const body = mapBody(request.body, request.bodyType, request.rawType)
+  const body = mapBody(request)
   if (body) {
     postmanRequest.body = body
   }
@@ -512,6 +521,8 @@ function mapResponseExample(example: RequestExampleRecord, request: RequestExpor
           body: example.requestBody,
           bodyType: example.requestBodyType,
           rawType: example.requestRawType,
+          graphqlQuery: example.graphqlQuery,
+          graphqlVariables: example.graphqlVariables,
         })
       : undefined,
   }
@@ -522,6 +533,8 @@ function hasExampleRequestSnapshotOverride(example: RequestExampleRecord, reques
     || example.requestBody !== request.body
     || example.requestBodyType !== request.bodyType
     || example.requestRawType !== request.rawType
+    || example.graphqlQuery !== request.graphqlQuery
+    || example.graphqlVariables !== request.graphqlVariables
 }
 
 function mapKeyValueRow(row: ReturnType<typeof parseKeyValueRows>[number]): PostmanKeyValue {
@@ -561,30 +574,40 @@ function buildRawUrl(url: string, pathRows: ReturnType<typeof parseKeyValueRows>
   return `${rawUrl}${separator}${enabledQuery.map(row => `${encodeURIComponent(row.key)}=${encodeURIComponent(row.value)}`).join('&')}`
 }
 
-function mapBody(body: string, bodyType: RequestBodyType, rawType: RequestRawType): PostmanBody | undefined {
-  if (bodyType === 'raw') {
+function mapBody(request: Pick<HttpRequestRecord, 'body' | 'bodyType' | 'rawType' | 'graphqlQuery' | 'graphqlVariables'>): PostmanBody | undefined {
+  if (request.bodyType === 'raw') {
     return {
       mode: 'raw',
-      raw: body,
+      raw: request.body,
       options: {
         raw: {
-          language: rawType,
+          language: request.rawType,
         },
       },
     }
   }
 
-  if (bodyType === 'x-www-form-urlencoded') {
+  if (request.bodyType === 'graphql') {
     return {
-      mode: 'urlencoded',
-      urlencoded: parseKeyValueRows(body).map(mapKeyValueRow),
+      mode: 'graphql',
+      graphql: {
+        query: request.graphqlQuery ?? '',
+        variables: request.graphqlVariables?.trim() ? request.graphqlVariables : undefined,
+      },
     }
   }
 
-  if (bodyType === 'form-data') {
+  if (request.bodyType === 'x-www-form-urlencoded') {
+    return {
+      mode: 'urlencoded',
+      urlencoded: parseKeyValueRows(request.body).map(mapKeyValueRow),
+    }
+  }
+
+  if (request.bodyType === 'form-data') {
     return {
       mode: 'formdata',
-      formdata: parseKeyValueRows(body).map(row => ({ ...mapKeyValueRow(row), type: row.type === 'file' ? 'file' : 'text' as const })),
+      formdata: parseKeyValueRows(request.body).map(row => ({ ...mapKeyValueRow(row), type: row.type === 'file' ? 'file' : 'text' as const })),
     }
   }
 

@@ -59,6 +59,26 @@ export type PreparedHttpRequest = {
   testScriptSources: Array<{ name: string; script: string }>
 }
 
+export type PreparedHttpRequestBase = Omit<PreparedHttpRequest, 'resolvedBody' | 'requestBody'>
+
+type PrepareHttpRequestBaseInput = Pick<
+  SendRequestInput,
+  | 'requestId'
+  | 'method'
+  | 'url'
+  | 'pathParams'
+  | 'searchParams'
+  | 'auth'
+  | 'preRequestScript'
+  | 'headers'
+  | 'bodyType'
+  | 'rawType'
+  | 'graphqlQuery'
+  | 'graphqlVariables'
+  | 'activeEnvironmentIds'
+> &
+  Partial<Pick<SendRequestInput, 'body' | 'postRequestScript' | 'testScript' | 'requestMetadata'>>
+
 type ScriptToastBridge = {
   show: (options: ScriptToastOptions) => void
   hide: (id: string) => void
@@ -73,6 +93,37 @@ export async function prepareHttpRequest(
     makeRequest?: ScriptMakeRequestBridge
   }
 ): Promise<GenericResult<PreparedHttpRequest>> {
+  const baseResult = await prepareHttpRequestBase(input, options)
+  if (!baseResult.success) {
+    return baseResult
+  }
+
+  const resolvedBodyResult = await buildResolvedRequestBody(baseResult.data.runtime.request, baseResult.data.variables)
+  if (!resolvedBodyResult.success) {
+    return resolvedBodyResult
+  }
+
+  const resolvedBody = resolvedBodyResult.data
+  const headers = new Headers(baseResult.data.headers)
+  applyDefaultBodyHeaders(headers, baseResult.data.runtime.request.rawType, resolvedBody)
+
+  return Result.Success({
+    ...baseResult.data,
+    headers,
+    resolvedBody,
+    requestBody: buildRuntimeRequestBody(resolvedBody),
+  })
+}
+
+export async function prepareHttpRequestBase(
+  input: PrepareHttpRequestBaseInput,
+  options?: {
+    toast?: ScriptToastBridge
+    prompt?: ScriptPromptBridge
+    clipboard?: ScriptClipboardBridge
+    makeRequest?: ScriptMakeRequestBridge
+  }
+): Promise<GenericResult<PreparedHttpRequestBase>> {
   const requestResult = await getRequest({ id: input.requestId })
   if (!requestResult.success) {
     return requestResult
@@ -104,9 +155,11 @@ export async function prepareHttpRequest(
         folders.map(folder => folder.headers),
         input.headers
       ),
-      body: input.body,
+      body: input.bodyType === 'graphql' ? (input.graphqlQuery ?? '') : (input.body ?? ''),
       bodyType: input.bodyType,
       rawType: input.rawType,
+      graphqlQuery: input.graphqlQuery ?? '',
+      graphqlVariables: input.graphqlVariables ?? '',
     },
     requestMetadata: input.requestMetadata,
     environments: activeEnvironments,
@@ -204,14 +257,6 @@ export async function prepareHttpRequest(
     }
   }
 
-  const resolvedBodyResult = await buildResolvedRequestBody(runtime.request, variables)
-  if (!resolvedBodyResult.success) {
-    return resolvedBodyResult
-  }
-
-  const resolvedBody = resolvedBodyResult.data
-  applyDefaultBodyHeaders(headers, runtime.request.rawType, resolvedBody)
-
   return Result.Success({
     requestId: input.requestId,
     requestName: requestResult.data.name,
@@ -221,16 +266,14 @@ export async function prepareHttpRequest(
     url,
     resolvedAuth,
     headers,
-    resolvedBody,
-    requestBody: buildRuntimeRequestBody(resolvedBody),
     postRequestScriptSources: [
-      { name: `Request: ${requestResult.data.name}`, script: input.postRequestScript },
+      { name: `Request: ${requestResult.data.name}`, script: input.postRequestScript ?? '' },
       ...folders
         .slice()
         .reverse()
         .map(folder => ({ name: `Folder: ${folder.name}`, script: folder.postRequestScript })),
     ],
-    testScriptSources: [{ name: `Request: ${requestResult.data.name}`, script: input.testScript }],
+    testScriptSources: [{ name: `Request: ${requestResult.data.name}`, script: input.testScript ?? '' }],
   })
 }
 
@@ -333,7 +376,7 @@ export async function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method
 }
 
 export async function buildResolvedRequestBody(
-  input: Pick<SendRequestInput, 'bodyType' | 'body' | 'rawType'>,
+  input: Pick<SendRequestInput, 'bodyType' | 'body' | 'rawType' | 'graphqlQuery' | 'graphqlVariables'>,
   variables: Record<string, string>
 ): Promise<GenericResult<ResolvedRequestBody>> {
   switch (input.bodyType) {
@@ -373,6 +416,35 @@ export async function buildResolvedRequestBody(
       }
       return Result.Success({ kind: 'x-www-form-urlencoded', entries, serialized: searchParams.toString() })
     }
+    case 'graphql': {
+      const query = resolveTemplateVariables(input.graphqlQuery ?? '', variables).trim()
+      if (!query) {
+        return GenericError.Message('GraphQL query is required')
+      }
+
+      const variablesSource = resolveTemplateVariables(input.graphqlVariables ?? '', variables).trim()
+      let variablesValue: Record<string, unknown> | undefined
+      if (variablesSource !== '') {
+        let normalizedVariables: string
+        try {
+          normalizedVariables = normalizeJson5ToJson(variablesSource)
+        } catch (error) {
+          return GenericError.Message(getInvalidGraphqlVariablesMessage(error))
+        }
+
+        try {
+          const parsed = JSON.parse(normalizedVariables) as unknown
+          if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+            return GenericError.Message('GraphQL variables must be a JSON object')
+          }
+          variablesValue = parsed as Record<string, unknown>
+        } catch (error) {
+          return GenericError.Message(getInvalidGraphqlVariablesMessage(error))
+        }
+      }
+
+      return Result.Success({ kind: 'raw', value: JSON.stringify(variablesValue ? { query, variables: variablesValue } : { query }) })
+    }
   }
 }
 
@@ -382,6 +454,14 @@ function getInvalidJsonBodyMessage(error: unknown) {
   }
 
   return 'Invalid JSON body'
+}
+
+function getInvalidGraphqlVariablesMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return `Invalid GraphQL variables: ${error.message.trim()}`
+  }
+
+  return 'Invalid GraphQL variables'
 }
 
 function buildRuntimeRequestBody(input: ResolvedRequestBody) {
@@ -470,7 +550,7 @@ async function resolveFormDataEntries(value: string, variables: Record<string, s
 }
 
 function collectMissingVariables(
-  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType'>,
+  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'graphqlQuery' | 'graphqlVariables'>,
   variables: Record<string, string>
 ) {
   const missingVariables = new Set<string>()
@@ -525,6 +605,16 @@ function collectMissingVariables(
 
   if (input.bodyType === 'raw') {
     for (const variableName of findMissingTemplateVariables(input.body, variables)) {
+      missingVariables.add(variableName)
+    }
+  }
+
+  if (input.bodyType === 'graphql') {
+    for (const variableName of findMissingTemplateVariables(input.graphqlQuery ?? '', variables)) {
+      missingVariables.add(variableName)
+    }
+
+    for (const variableName of findMissingTemplateVariables(input.graphqlVariables ?? '', variables)) {
       missingVariables.add(variableName)
     }
   }

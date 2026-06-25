@@ -97,6 +97,8 @@ export async function persistRequestHistory(input: { execution: RequestExecution
       requestVariablesJson: JSON.stringify(execution.request.variables ?? {}),
       requestBodyType: execution.request.bodyType,
       requestRawType: execution.request.rawType,
+      graphqlQuery: execution.request.graphqlQuery,
+      graphqlVariables: execution.request.graphqlVariables,
       responseStatus: execution.response?.status ?? null,
       responseStatusText: execution.response?.statusText ?? null,
       responseHeaders: execution.response?.headers ?? '',
@@ -226,6 +228,8 @@ function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecor
       variables: parseJson<Record<string, string>>(row.requestVariablesJson, {}),
       bodyType: row.requestBodyType as RequestExecutionRecord['request']['bodyType'],
       rawType: row.requestRawType as RequestExecutionRecord['request']['rawType'],
+      graphqlQuery: row.graphqlQuery,
+      graphqlVariables: row.graphqlVariables,
       sentAt: row.sentAt,
     },
     response:

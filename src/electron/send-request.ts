@@ -11,6 +11,8 @@ import { isSseContentType, parseSseBlock, stringifySseEvent } from '../common/Ss
 import type {
   CancelHttpRequestInput,
   ExecutedRequestSnapshot,
+  FetchGraphqlSchemaInput,
+  FetchGraphqlSchemaResponse,
   HttpSseStreamState,
   ReceivedResponseSnapshot,
   RequestExecutionRecord,
@@ -20,12 +22,13 @@ import type {
   SendRequestResponse,
   SseEventRecord,
 } from '../common/Requests.js'
+import { buildClientSchema, getIntrospectionQuery, type IntrospectionQuery } from 'graphql'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getSetCookieHeaderValuesFromEntries, storeResponseCookies } from './db/cookies.js'
 import { getRequest } from './db/requests.js'
 import { persistRequestHistory } from './db/request-history.js'
 import { emitGenericEvent } from './generic-events.js'
-import { prepareHttpRequest, type PreparedHttpRequest } from './http-request-runtime.js'
+import { prepareHttpRequest, prepareHttpRequestBase, type PreparedHttpRequest } from './http-request-runtime.js'
 
 const activeHttpRequests = new Map<string, { executionId: string; abortController: AbortController }>()
 const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
@@ -38,6 +41,70 @@ type ScriptToastBridge = {
 export async function cancelHttpRequest(input: CancelHttpRequestInput): Promise<GenericResult<void>> {
   activeHttpRequests.get(input.requestId)?.abortController.abort()
   return Result.Success(undefined)
+}
+
+export async function fetchGraphqlSchema(
+  input: FetchGraphqlSchemaInput,
+  options?: {
+    toast?: ScriptToastBridge
+    prompt?: ScriptPromptBridge
+    clipboard?: ScriptClipboardBridge
+    makeRequest?: ScriptMakeRequestBridge
+  }
+): Promise<GenericResult<FetchGraphqlSchemaResponse>> {
+  try {
+    const preparedRequest = await prepareHttpRequestBase(
+      {
+        ...input,
+        postRequestScript: '',
+        testScript: '',
+      },
+      options
+    )
+    if (!preparedRequest.success) {
+      return preparedRequest
+    }
+
+    const headers = new Headers(preparedRequest.data.headers)
+    headers.set('accept', 'application/graphql-response+json, application/json')
+    headers.set('content-type', 'application/json')
+
+    const response = await fetch(preparedRequest.data.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query: getIntrospectionQuery() }),
+    })
+    const responseText = await response.text()
+    const parsedPayload = parseGraphqlSchemaPayload(responseText)
+    if (!parsedPayload.success) {
+      return parsedPayload
+    }
+
+    if (!response.ok) {
+      return GenericError.Http(
+        response.status,
+        parsedPayload.data.errors[0] ?? parsedPayload.data.errorMessage ?? (response.statusText || 'Failed to fetch GraphQL schema')
+      )
+    }
+
+    if (parsedPayload.data.errors.length > 0) {
+      return GenericError.Message(parsedPayload.data.errors.join('\n'))
+    }
+
+    if (!parsedPayload.data.data) {
+      return GenericError.Message('GraphQL introspection response did not include schema data')
+    }
+
+    try {
+      buildClientSchema(parsedPayload.data.data)
+    } catch (error) {
+      return GenericError.Message(getGraphqlSchemaValidationErrorMessage(error))
+    }
+
+    return Result.Success({ schema: JSON.stringify(parsedPayload.data.data) })
+  } catch (error) {
+    return GenericError.Message(isAbortError(error) ? 'GraphQL schema fetch cancelled' : formatRequestError(error))
+  }
 }
 
 export async function sendRequest(
@@ -558,7 +625,7 @@ function isAbortError(error: unknown) {
 function buildExecutedRequestSnapshot(input: {
   requestId: string
   requestName: string
-  request: Pick<SendRequestInput, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  request: Pick<SendRequestInput, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType' | 'graphqlQuery' | 'graphqlVariables'>
   url: string
   headers: Headers
   body: string
@@ -577,6 +644,8 @@ function buildExecutedRequestSnapshot(input: {
     variables: collectUsedVariables(input.request, input.variables),
     bodyType: input.request.bodyType,
     rawType: input.request.rawType,
+    graphqlQuery: input.request.graphqlQuery ?? '',
+    graphqlVariables: input.request.graphqlVariables ?? '',
     sentAt: input.sentAt,
   }
 }
@@ -595,6 +664,35 @@ function cloneHeaders(headers: Headers) {
   return new Headers(Array.from(headers.entries()))
 }
 
+function parseGraphqlSchemaPayload(body: string) {
+  try {
+    const parsed = JSON.parse(body) as {
+      data?: IntrospectionQuery
+      errors?: Array<{ message?: unknown }>
+    }
+
+    return Result.Success({
+      data: parsed.data,
+      errors: Array.isArray(parsed.errors)
+        ? parsed.errors
+            .map(error => (typeof error?.message === 'string' ? error.message : null))
+            .filter((message): message is string => message !== null)
+        : [],
+      errorMessage: undefined,
+    })
+  } catch {
+    return GenericError.Message('GraphQL introspection response was not valid JSON')
+  }
+}
+
+function getGraphqlSchemaValidationErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return `Fetched GraphQL schema was invalid: ${error.message.trim()}`
+  }
+
+  return 'Fetched GraphQL schema was invalid'
+}
+
 function parseResponseHeaderEntries(headers: string) {
   return headers
     .split('\n')
@@ -610,7 +708,7 @@ function parseResponseHeaderEntries(headers: string) {
 }
 
 function collectUsedVariables(
-  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType'>,
+  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'graphqlQuery' | 'graphqlVariables'>,
   variables: Record<string, string>
 ) {
   const variableNames = new Set<string>()
@@ -665,6 +763,16 @@ function collectUsedVariables(
 
   if (input.bodyType === 'raw') {
     for (const variableName of extractTemplateVariables(input.body)) {
+      variableNames.add(variableName)
+    }
+  }
+
+  if (input.bodyType === 'graphql') {
+    for (const variableName of extractTemplateVariables(input.graphqlQuery ?? '')) {
+      variableNames.add(variableName)
+    }
+
+    for (const variableName of extractTemplateVariables(input.graphqlVariables ?? '')) {
       variableNames.add(variableName)
     }
   }
@@ -786,6 +894,8 @@ async function maybeRetryWithTokenRefresh(input: {
       body: tokenRefreshRequest.body,
       bodyType: tokenRefreshRequest.bodyType,
       rawType: tokenRefreshRequest.rawType,
+      graphqlQuery: tokenRefreshRequest.graphqlQuery,
+      graphqlVariables: tokenRefreshRequest.graphqlVariables,
       activeEnvironmentIds: input.input.activeEnvironmentIds,
       saveToHistory: tokenRefreshRequest.saveToHistory,
       historyKeepLast: input.input.historyKeepLast,
