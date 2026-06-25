@@ -271,6 +271,7 @@ interface KvResponseExpectation {
 }
 
 interface KvExpectation<T> {
+  not: KvNegatedExpectation<T>
   toBe(expected: unknown): void
   toEqual(expected: unknown): void
   toStrictEqual(expected: unknown): void
@@ -279,10 +280,41 @@ interface KvExpectation<T> {
   toBeFalsy(): void
   toBeNull(): void
   toBeUndefined(): void
+  toBeDefined(): void
   toContain(value: unknown): void
   toHaveLength(length: number): void
   toBeOneOf(values: unknown[]): void
+  toMatchObject(expected: unknown): void
+  toBeGreaterThan(expected: number): void
+  toBeGreaterThanOrEqual(expected: number): void
+  toBeLessThan(expected: number): void
+  toBeLessThanOrEqual(expected: number): void
+  toStartWith(prefix: string): void
+  toEndWith(suffix: string): void
   toMatchSchema<TParsed>(schema: import('./vendor/zod/index.cjs').ZodType<TParsed>): TParsed
+}
+
+interface KvNegatedExpectation<T> {
+  toBe(expected: unknown): void
+  toEqual(expected: unknown): void
+  toStrictEqual(expected: unknown): void
+  toMatch(pattern: RegExp | string): void
+  toBeTruthy(): void
+  toBeFalsy(): void
+  toBeNull(): void
+  toBeUndefined(): void
+  toBeDefined(): void
+  toContain(value: unknown): void
+  toHaveLength(length: number): void
+  toBeOneOf(values: unknown[]): void
+  toMatchObject(expected: unknown): void
+  toBeGreaterThan(expected: number): void
+  toBeGreaterThanOrEqual(expected: number): void
+  toBeLessThan(expected: number): void
+  toBeLessThanOrEqual(expected: number): void
+  toStartWith(prefix: string): void
+  toEndWith(suffix: string): void
+  toMatchSchema<TParsed>(schema: import('./vendor/zod/index.cjs').ZodType<TParsed>): void
 }
 
 interface ScriptClipboardApi {

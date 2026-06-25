@@ -859,7 +859,7 @@ it('does not expose retryRequest in test scripts', async () => {
   expect(result.scriptErrors[0]?.message).toContain('retryRequest is not defined')
 })
 
-it('supports only and async example matching in test scripts', async () => {
+  it('supports only and async example matching in test scripts', async () => {
   const listExamplesSpy = vi.spyOn(requestExamplesDb, 'listRequestExamplesByRequestIds').mockResolvedValue([
     {
       id: 'example-1',
@@ -925,7 +925,131 @@ it('supports only and async example matching in test scripts', async () => {
   }
 })
 
-it('allows post-request scripts to mutate response headers', async () => {
+it('supports richer kv.test.expect matchers', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      requestId: 'request-1',
+      method: 'GET',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
+  })
+
+  const result = await runtime.runTestScripts(
+    [
+      {
+        name: 'Request: Tests',
+        script:
+          "kv.test.it('rich matchers', () => {\n  kv.test.expect({ user: { id: 1, roles: ['admin', 'editor'] } }).toMatchObject({ user: { id: 1 } })\n  kv.test.expect([{ id: 1 }, { id: 2 }]).toContain({ id: 2 })\n  kv.test.expect(200).toBeGreaterThan(199)\n  kv.test.expect(200).toBeGreaterThanOrEqual(200)\n  kv.test.expect(200).toBeLessThan(201)\n  kv.test.expect(200).toBeLessThanOrEqual(200)\n  kv.test.expect('application/json').toStartWith('application/')\n  kv.test.expect('application/json').toEndWith('json')\n  kv.test.expect('application/json').not.toContain('xml')\n  kv.test.expect(undefined).not.toBeDefined()\n  kv.test.expect('Ada').toBeDefined()\n  kv.test.expect('Ada').not.toBeUndefined()\n  kv.test.expect('Ada').not.toMatchSchema(z.number())\n  const parsed = kv.test.expect(response.body.type === 'json' ? response.body.data : null).toMatchSchema(z.object({ ok: z.boolean(), count: z.number() }))\n  kv.test.expect(parsed.count).not.toBe(0)\n})",
+      },
+    ],
+    {
+      status: 200,
+      statusText: 'OK',
+      headers: 'content-type: application/json',
+      body: { type: 'json', data: { ok: true, count: 2 } },
+      rawBody: '{"ok":true,"count":2}',
+    }
+  )
+
+  expect(result.scriptErrors).toEqual([])
+  expect(result.registeredTests).toBe(1)
+  expect(result.testRun?.passedCount).toBe(1)
+  expect(result.testRun?.failedCount).toBe(0)
+})
+
+it('records negated matcher failures', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      requestId: 'request-1',
+      method: 'GET',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
+  })
+
+  const result = await runtime.runTestScripts(
+    [
+      {
+        name: 'Request: Tests',
+        script: "kv.test.it('fails', () => { kv.test.expect('abc').not.toContain('a') })",
+      },
+    ],
+    {
+      status: 200,
+      statusText: 'OK',
+      headers: '',
+      body: { type: 'text', data: '' },
+    }
+  )
+
+  expect(result.scriptErrors).toEqual([])
+  expect(result.testRun?.failedCount).toBe(1)
+  expect(result.testRun?.suites[0]?.tests[0]?.failures[0]).toMatchObject({
+    matcherName: 'not.toContain',
+    message: "Expected 'abc' not to contain 'a'",
+    expected: 'a',
+    actual: 'abc',
+  })
+})
+
+it('rejects non-string substring assertions for string values', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      requestId: 'request-1',
+      method: 'GET',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
+  })
+
+  const result = await runtime.runTestScripts(
+    [
+      {
+        name: 'Request: Tests',
+        script: "kv.test.it('fails', () => { kv.test.expect('abc').toContain(123) })",
+      },
+    ],
+    {
+      status: 200,
+      statusText: 'OK',
+      headers: '',
+      body: { type: 'text', data: '' },
+    }
+  )
+
+  expect(result.scriptErrors).toEqual([])
+  expect(result.testRun?.failedCount).toBe(1)
+  expect(result.testRun?.suites[0]?.tests[0]?.failures[0]).toMatchObject({
+    matcherName: 'toContain',
+    message: 'Expected 123 to be a string',
+    expected: 123,
+    actual: 'abc',
+  })
+})
+
+  it('allows post-request scripts to mutate response headers', async () => {
   const runtime = createRequestScriptRuntime({
     request: {
       method: 'GET',

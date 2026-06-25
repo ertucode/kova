@@ -256,7 +256,7 @@ type KvResponseExpectation = {
   toMatchExample: (name: string, options?: { compare?: KvExampleCompareTarget[]; ignoreHeaders?: string[] }) => Promise<void>
 }
 
-type KvExpectation<T> = {
+type KvNegatedExpectation<T> = {
   toBe: (expected: unknown) => void
   toEqual: (expected: unknown) => void
   toStrictEqual: (expected: unknown) => void
@@ -265,9 +265,41 @@ type KvExpectation<T> = {
   toBeFalsy: () => void
   toBeNull: () => void
   toBeUndefined: () => void
+  toBeDefined: () => void
   toContain: (value: unknown) => void
   toHaveLength: (length: number) => void
   toBeOneOf: (values: unknown[]) => void
+  toMatchObject: (expected: unknown) => void
+  toBeGreaterThan: (expected: number) => void
+  toBeGreaterThanOrEqual: (expected: number) => void
+  toBeLessThan: (expected: number) => void
+  toBeLessThanOrEqual: (expected: number) => void
+  toStartWith: (prefix: string) => void
+  toEndWith: (suffix: string) => void
+  toMatchSchema: <TParsed>(schema: z.ZodType<TParsed>) => void
+}
+
+type KvExpectation<T> = {
+  not: KvNegatedExpectation<T>
+  toBe: (expected: unknown) => void
+  toEqual: (expected: unknown) => void
+  toStrictEqual: (expected: unknown) => void
+  toMatch: (pattern: RegExp | string) => void
+  toBeTruthy: () => void
+  toBeFalsy: () => void
+  toBeNull: () => void
+  toBeUndefined: () => void
+  toBeDefined: () => void
+  toContain: (value: unknown) => void
+  toHaveLength: (length: number) => void
+  toBeOneOf: (values: unknown[]) => void
+  toMatchObject: (expected: unknown) => void
+  toBeGreaterThan: (expected: number) => void
+  toBeGreaterThanOrEqual: (expected: number) => void
+  toBeLessThan: (expected: number) => void
+  toBeLessThanOrEqual: (expected: number) => void
+  toStartWith: (prefix: string) => void
+  toEndWith: (suffix: string) => void
   toMatchSchema: <TParsed>(schema: z.ZodType<TParsed>) => TParsed
 }
 
@@ -1789,35 +1821,36 @@ type KvAssertionError = Error & {
 
 function createKvExpectation<T>(actual: T): KvExpectation<T> {
   return {
+    not: createKvNegatedExpectation(actual),
     toBe(expected) {
-      if (!Object.is(actual, expected)) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to be ${inspect(expected)}`,
-          matcherName: 'toBe',
-          expected,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toBe',
+        pass: Object.is(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to be ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be ${inspect(expected)}`,
+      })
     },
     toEqual(expected) {
-      if (!isDeepStrictEqual(actual, expected)) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to equal ${inspect(expected)}`,
-          matcherName: 'toEqual',
-          expected,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toEqual',
+        pass: isDeepStrictEqual(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to equal ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to equal ${inspect(expected)}`,
+      })
     },
     toStrictEqual(expected) {
-      if (!isDeepStrictEqual(actual, expected)) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to strictly equal ${inspect(expected)}`,
-          matcherName: 'toStrictEqual',
-          expected,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toStrictEqual',
+        pass: isDeepStrictEqual(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to strictly equal ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to strictly equal ${inspect(expected)}`,
+      })
     },
     toMatch(pattern) {
       if (typeof actual !== 'string') {
@@ -1829,94 +1862,215 @@ function createKvExpectation<T>(actual: T): KvExpectation<T> {
         })
       }
 
-      const matched = typeof pattern === 'string' ? actual.includes(pattern) : pattern.test(actual)
-      if (!matched) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to match ${inspect(pattern)}`,
-          matcherName: 'toMatch',
-          expected: pattern,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected: pattern,
+        matcherName: 'toMatch',
+        pass: typeof pattern === 'string' ? actual.includes(pattern) : pattern.test(actual),
+        positiveMessage: `Expected ${inspect(actual)} to match ${inspect(pattern)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to match ${inspect(pattern)}`,
+      })
     },
     toBeTruthy() {
-      if (!actual) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to be truthy`,
-          matcherName: 'toBeTruthy',
-          expected: true,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected: true,
+        matcherName: 'toBeTruthy',
+        pass: Boolean(actual),
+        positiveMessage: `Expected ${inspect(actual)} to be truthy`,
+        negativeMessage: `Expected ${inspect(actual)} to be falsy`,
+      })
     },
     toBeFalsy() {
-      if (actual) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to be falsy`,
-          matcherName: 'toBeFalsy',
-          expected: false,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected: false,
+        matcherName: 'toBeFalsy',
+        pass: !actual,
+        positiveMessage: `Expected ${inspect(actual)} to be falsy`,
+        negativeMessage: `Expected ${inspect(actual)} to be truthy`,
+      })
     },
     toBeNull() {
-      if (actual !== null) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to be null`,
-          matcherName: 'toBeNull',
-          expected: null,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected: null,
+        matcherName: 'toBeNull',
+        pass: actual === null,
+        positiveMessage: `Expected ${inspect(actual)} to be null`,
+        negativeMessage: `Expected ${inspect(actual)} not to be null`,
+      })
     },
     toBeUndefined() {
-      if (actual !== undefined) {
-        throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to be undefined`,
-          matcherName: 'toBeUndefined',
-          expected: undefined,
-          actual,
-        })
-      }
+      assertKvMatcher({
+        actual,
+        expected: undefined,
+        matcherName: 'toBeUndefined',
+        pass: actual === undefined,
+        positiveMessage: `Expected ${inspect(actual)} to be undefined`,
+        negativeMessage: `Expected ${inspect(actual)} not to be undefined`,
+      })
+    },
+    toBeDefined() {
+      assertKvMatcher({
+        actual,
+        expected: 'defined',
+        matcherName: 'toBeDefined',
+        pass: actual !== undefined,
+        positiveMessage: `Expected ${inspect(actual)} to be defined`,
+        negativeMessage: `Expected ${inspect(actual)} to be undefined`,
+      })
     },
     toContain(value) {
       const contains = Array.isArray(actual)
         ? actual.some(entry => isDeepStrictEqual(entry, value))
         : typeof actual === 'string'
-          ? actual.includes(String(value))
-          : false
-      if (!contains) {
+          ? typeof value === 'string'
+            ? actual.includes(value)
+            : null
+          : null
+
+      if (contains === null) {
         throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to contain ${inspect(value)}`,
+          message:
+            typeof actual === 'string'
+              ? `Expected ${inspect(value)} to be a string`
+              : `Expected ${inspect(actual)} to be an array or string`,
           matcherName: 'toContain',
           expected: value,
           actual,
         })
       }
+
+      assertKvMatcher({
+        actual,
+        expected: value,
+        matcherName: 'toContain',
+        pass: contains,
+        positiveMessage: `Expected ${inspect(actual)} to contain ${inspect(value)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to contain ${inspect(value)}`,
+      })
     },
     toHaveLength(length) {
       const actualLength = typeof actual === 'string' || Array.isArray(actual) ? actual.length : null
-      if (actualLength !== length) {
-        throw createKvAssertionError({
-          message: `Expected length ${inspect(actualLength)} to be ${inspect(length)}`,
-          matcherName: 'toHaveLength',
-          expected: length,
-          actual: actualLength,
-        })
-      }
+      assertKvMatcher({
+        actual: actualLength,
+        expected: length,
+        matcherName: 'toHaveLength',
+        pass: actualLength === length,
+        positiveMessage: `Expected length ${inspect(actualLength)} to be ${inspect(length)}`,
+        negativeMessage: `Expected length ${inspect(actualLength)} not to be ${inspect(length)}`,
+      })
     },
     toBeOneOf(values) {
-      if (!values.some(value => isDeepStrictEqual(value, actual))) {
+      assertKvMatcher({
+        actual,
+        expected: values,
+        matcherName: 'toBeOneOf',
+        pass: values.some(value => isDeepStrictEqual(value, actual)),
+        positiveMessage: `Expected ${inspect(actual)} to be one of ${inspect(values)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be one of ${inspect(values)}`,
+      })
+    },
+    toMatchObject(expected) {
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toMatchObject',
+        pass: matchesKvPartialValue(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to match object ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to match object ${inspect(expected)}`,
+      })
+    },
+    toBeGreaterThan(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeGreaterThan',
+        pass: typeof actual === 'number' && actual > expected,
+        positiveMessage: `Expected ${inspect(actual)} to be greater than ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be greater than ${inspect(expected)}`,
+      })
+    },
+    toBeGreaterThanOrEqual(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeGreaterThanOrEqual',
+        pass: typeof actual === 'number' && actual >= expected,
+        positiveMessage: `Expected ${inspect(actual)} to be greater than or equal to ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be greater than or equal to ${inspect(expected)}`,
+      })
+    },
+    toBeLessThan(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeLessThan',
+        pass: typeof actual === 'number' && actual < expected,
+        positiveMessage: `Expected ${inspect(actual)} to be less than ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be less than ${inspect(expected)}`,
+      })
+    },
+    toBeLessThanOrEqual(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeLessThanOrEqual',
+        pass: typeof actual === 'number' && actual <= expected,
+        positiveMessage: `Expected ${inspect(actual)} to be less than or equal to ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be less than or equal to ${inspect(expected)}`,
+      })
+    },
+    toStartWith(prefix) {
+      if (typeof actual !== 'string') {
         throw createKvAssertionError({
-          message: `Expected ${inspect(actual)} to be one of ${inspect(values)}`,
-          matcherName: 'toBeOneOf',
-          expected: values,
+          message: `Expected ${inspect(actual)} to be a string`,
+          matcherName: 'toStartWith',
+          expected: prefix,
           actual,
         })
       }
+
+      assertKvMatcher({
+        actual,
+        expected: prefix,
+        matcherName: 'toStartWith',
+        pass: actual.startsWith(prefix),
+        positiveMessage: `Expected ${inspect(actual)} to start with ${inspect(prefix)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to start with ${inspect(prefix)}`,
+      })
+    },
+    toEndWith(suffix) {
+      if (typeof actual !== 'string') {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be a string`,
+          matcherName: 'toEndWith',
+          expected: suffix,
+          actual,
+        })
+      }
+
+      assertKvMatcher({
+        actual,
+        expected: suffix,
+        matcherName: 'toEndWith',
+        pass: actual.endsWith(suffix),
+        positiveMessage: `Expected ${inspect(actual)} to end with ${inspect(suffix)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to end with ${inspect(suffix)}`,
+      })
     },
     toMatchSchema(schema) {
       const parsed = schema.safeParse(actual)
+      assertKvMatcher({
+        actual,
+        expected: schema,
+        matcherName: 'toMatchSchema',
+        pass: parsed.success,
+        positiveMessage: parsed.success ? '' : parsed.error.message,
+        negativeMessage: `Expected ${inspect(actual)} not to match schema ${inspect(schema)}`,
+      })
+
       if (!parsed.success) {
         throw createKvAssertionError({
           message: parsed.error.message,
@@ -1929,6 +2083,352 @@ function createKvExpectation<T>(actual: T): KvExpectation<T> {
       return parsed.data
     },
   }
+}
+
+function createKvNegatedExpectation<T>(actual: T): KvNegatedExpectation<T> {
+  return {
+    toBe(expected) {
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toBe',
+        pass: Object.is(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to be ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toEqual(expected) {
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toEqual',
+        pass: isDeepStrictEqual(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to equal ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to equal ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toStrictEqual(expected) {
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toStrictEqual',
+        pass: isDeepStrictEqual(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to strictly equal ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to strictly equal ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toMatch(pattern) {
+      if (typeof actual !== 'string') {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be a string`,
+          matcherName: 'toMatch',
+          expected: pattern,
+          actual,
+        })
+      }
+
+      assertKvMatcher({
+        actual,
+        expected: pattern,
+        matcherName: 'toMatch',
+        pass: typeof pattern === 'string' ? actual.includes(pattern) : pattern.test(actual),
+        positiveMessage: `Expected ${inspect(actual)} to match ${inspect(pattern)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to match ${inspect(pattern)}`,
+        isNot: true,
+      })
+    },
+    toBeTruthy() {
+      assertKvMatcher({
+        actual,
+        expected: true,
+        matcherName: 'toBeTruthy',
+        pass: Boolean(actual),
+        positiveMessage: `Expected ${inspect(actual)} to be truthy`,
+        negativeMessage: `Expected ${inspect(actual)} to be falsy`,
+        isNot: true,
+      })
+    },
+    toBeFalsy() {
+      assertKvMatcher({
+        actual,
+        expected: false,
+        matcherName: 'toBeFalsy',
+        pass: !actual,
+        positiveMessage: `Expected ${inspect(actual)} to be falsy`,
+        negativeMessage: `Expected ${inspect(actual)} to be truthy`,
+        isNot: true,
+      })
+    },
+    toBeNull() {
+      assertKvMatcher({
+        actual,
+        expected: null,
+        matcherName: 'toBeNull',
+        pass: actual === null,
+        positiveMessage: `Expected ${inspect(actual)} to be null`,
+        negativeMessage: `Expected ${inspect(actual)} not to be null`,
+        isNot: true,
+      })
+    },
+    toBeUndefined() {
+      assertKvMatcher({
+        actual,
+        expected: undefined,
+        matcherName: 'toBeUndefined',
+        pass: actual === undefined,
+        positiveMessage: `Expected ${inspect(actual)} to be undefined`,
+        negativeMessage: `Expected ${inspect(actual)} not to be undefined`,
+        isNot: true,
+      })
+    },
+    toBeDefined() {
+      assertKvMatcher({
+        actual,
+        expected: 'defined',
+        matcherName: 'toBeDefined',
+        pass: actual !== undefined,
+        positiveMessage: `Expected ${inspect(actual)} to be defined`,
+        negativeMessage: `Expected ${inspect(actual)} to be undefined`,
+        isNot: true,
+      })
+    },
+    toContain(value) {
+      const contains = Array.isArray(actual)
+        ? actual.some(entry => isDeepStrictEqual(entry, value))
+        : typeof actual === 'string'
+          ? typeof value === 'string'
+            ? actual.includes(value)
+            : null
+          : null
+
+      if (contains === null) {
+        throw createKvAssertionError({
+          message:
+            typeof actual === 'string'
+              ? `Expected ${inspect(value)} to be a string`
+              : `Expected ${inspect(actual)} to be an array or string`,
+          matcherName: 'toContain',
+          expected: value,
+          actual,
+        })
+      }
+
+      assertKvMatcher({
+        actual,
+        expected: value,
+        matcherName: 'toContain',
+        pass: contains,
+        positiveMessage: `Expected ${inspect(actual)} to contain ${inspect(value)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to contain ${inspect(value)}`,
+        isNot: true,
+      })
+    },
+    toHaveLength(length) {
+      const actualLength = typeof actual === 'string' || Array.isArray(actual) ? actual.length : null
+      assertKvMatcher({
+        actual: actualLength,
+        expected: length,
+        matcherName: 'toHaveLength',
+        pass: actualLength === length,
+        positiveMessage: `Expected length ${inspect(actualLength)} to be ${inspect(length)}`,
+        negativeMessage: `Expected length ${inspect(actualLength)} not to be ${inspect(length)}`,
+        isNot: true,
+      })
+    },
+    toBeOneOf(values) {
+      assertKvMatcher({
+        actual,
+        expected: values,
+        matcherName: 'toBeOneOf',
+        pass: values.some(value => isDeepStrictEqual(value, actual)),
+        positiveMessage: `Expected ${inspect(actual)} to be one of ${inspect(values)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be one of ${inspect(values)}`,
+        isNot: true,
+      })
+    },
+    toMatchObject(expected) {
+      assertKvMatcher({
+        actual,
+        expected,
+        matcherName: 'toMatchObject',
+        pass: matchesKvPartialValue(actual, expected),
+        positiveMessage: `Expected ${inspect(actual)} to match object ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to match object ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toBeGreaterThan(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeGreaterThan',
+        pass: typeof actual === 'number' && actual > expected,
+        positiveMessage: `Expected ${inspect(actual)} to be greater than ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be greater than ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toBeGreaterThanOrEqual(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeGreaterThanOrEqual',
+        pass: typeof actual === 'number' && actual >= expected,
+        positiveMessage: `Expected ${inspect(actual)} to be greater than or equal to ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be greater than or equal to ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toBeLessThan(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeLessThan',
+        pass: typeof actual === 'number' && actual < expected,
+        positiveMessage: `Expected ${inspect(actual)} to be less than ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be less than ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toBeLessThanOrEqual(expected) {
+      assertKvNumericMatcher({
+        actual,
+        expected,
+        matcherName: 'toBeLessThanOrEqual',
+        pass: typeof actual === 'number' && actual <= expected,
+        positiveMessage: `Expected ${inspect(actual)} to be less than or equal to ${inspect(expected)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to be less than or equal to ${inspect(expected)}`,
+        isNot: true,
+      })
+    },
+    toStartWith(prefix) {
+      if (typeof actual !== 'string') {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be a string`,
+          matcherName: 'toStartWith',
+          expected: prefix,
+          actual,
+        })
+      }
+
+      assertKvMatcher({
+        actual,
+        expected: prefix,
+        matcherName: 'toStartWith',
+        pass: actual.startsWith(prefix),
+        positiveMessage: `Expected ${inspect(actual)} to start with ${inspect(prefix)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to start with ${inspect(prefix)}`,
+        isNot: true,
+      })
+    },
+    toEndWith(suffix) {
+      if (typeof actual !== 'string') {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be a string`,
+          matcherName: 'toEndWith',
+          expected: suffix,
+          actual,
+        })
+      }
+
+      assertKvMatcher({
+        actual,
+        expected: suffix,
+        matcherName: 'toEndWith',
+        pass: actual.endsWith(suffix),
+        positiveMessage: `Expected ${inspect(actual)} to end with ${inspect(suffix)}`,
+        negativeMessage: `Expected ${inspect(actual)} not to end with ${inspect(suffix)}`,
+        isNot: true,
+      })
+    },
+    toMatchSchema(schema) {
+      const parsed = schema.safeParse(actual)
+      assertKvMatcher({
+        actual,
+        expected: schema,
+        matcherName: 'toMatchSchema',
+        pass: parsed.success,
+        positiveMessage: parsed.success ? '' : parsed.error.message,
+        negativeMessage: `Expected ${inspect(actual)} not to match schema ${inspect(schema)}`,
+        isNot: true,
+      })
+    },
+  }
+}
+
+function assertKvMatcher(input: {
+  actual: unknown
+  expected: unknown
+  matcherName: string
+  pass: boolean
+  positiveMessage: string
+  negativeMessage: string
+  isNot?: boolean
+}) {
+  const didFail = input.isNot ? input.pass : !input.pass
+  if (!didFail) {
+    return
+  }
+
+  throw createKvAssertionError({
+    message: input.isNot ? input.negativeMessage : input.positiveMessage,
+    matcherName: input.isNot ? `not.${input.matcherName}` : input.matcherName,
+    expected: input.expected,
+    actual: input.actual,
+  })
+}
+
+function assertKvNumericMatcher(input: {
+  actual: unknown
+  expected: number
+  matcherName: string
+  pass: boolean
+  positiveMessage: string
+  negativeMessage: string
+  isNot?: boolean
+}) {
+  if (typeof input.actual !== 'number') {
+    throw createKvAssertionError({
+      message: `Expected ${inspect(input.actual)} to be a number`,
+      matcherName: input.matcherName,
+      expected: input.expected,
+      actual: input.actual,
+    })
+  }
+
+  assertKvMatcher(input)
+}
+
+function matchesKvPartialValue(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && actual.length === expected.length && expected.every((value, index) => matchesKvPartialValue(actual[index], value))
+  }
+
+  if (isKvPlainObject(expected)) {
+    if (!isKvObjectLike(actual)) {
+      return false
+    }
+
+    return Object.entries(expected).every(([key, value]) => matchesKvPartialValue(Reflect.get(actual, key), value))
+  }
+
+  return isDeepStrictEqual(actual, expected)
+}
+
+function isKvObjectLike(value: unknown): value is Record<PropertyKey, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isKvPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!isKvObjectLike(value)) {
+    return false
+  }
+
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === null || Object.prototype.toString.call(value) === '[object Object]'
 }
 
 function createKvAssertionError(input: {
