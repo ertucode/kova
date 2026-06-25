@@ -16,6 +16,7 @@ import type {
   RequestExecutionRecord,
   RequestHistoryListItem,
   RequestScriptError,
+  RequestTestRun,
   WebSocketSessionRecord,
 } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -183,6 +184,7 @@ export function ExecutionCard({
   const requestTime = useMemo(() => formatTimestamp(execution.request.sentAt), [execution.request.sentAt])
   const consoleEntries = execution.consoleEntries ?? []
   const scriptErrors = execution.scriptErrors ?? []
+  const testRun = execution.testRun
 
   return (
     <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
@@ -209,6 +211,7 @@ export function ExecutionCard({
                 </span>
               ) : null}
               {execution.response ? <span>{execution.response.durationMs} ms</span> : null}
+              {testRun ? <span>{formatTestRunSummary(testRun)}</span> : null}
               {execution.responseError ? <span className="text-error">{execution.responseError}</span> : null}
               {consoleEntries.length > 0 ? <span>{consoleEntries.length} logs</span> : null}
             </div>
@@ -274,6 +277,7 @@ export function ExecutionCard({
             bodyExpanded={responseBodyExpanded}
             onToggleBody={() => setResponseBodyExpanded(current => !current)}
           />
+          {testRun ? <TestRunSection testRun={testRun} /> : null}
           {scriptErrors.length > 0 ? <ScriptErrorsSection errors={scriptErrors} /> : null}
         </div>
       ) : null}
@@ -296,6 +300,10 @@ function ScriptErrorsSection({ errors }: { errors: RequestScriptError[] }) {
       </div>
     </Tooltip>
   )
+}
+
+function TestRunSection({ testRun }: { testRun: RequestTestRun }) {
+  return <ExecutionSection title="Tests" value={formatTestRunDetails(testRun)} />
 }
 
 function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) {
@@ -772,6 +780,10 @@ function getExecutionTone(execution: RequestExecutionRecord) {
     return 'text-error'
   }
 
+   if (execution.testRun?.failedCount) {
+    return 'text-error'
+  }
+
   if (!execution.response) {
     return 'text-base-content/55'
   }
@@ -785,6 +797,40 @@ function getExecutionTone(execution: RequestExecutionRecord) {
   }
 
   return 'text-info'
+}
+
+function formatTestRunSummary(testRun: RequestTestRun) {
+  return `${testRun.passedCount}/${testRun.totalCount} passed${testRun.failedCount > 0 ? `, ${testRun.failedCount} failed` : ''}`
+}
+
+function formatTestRunDetails(testRun: RequestTestRun) {
+  const lines = [
+    `Status: ${testRun.status}`,
+    `Summary: ${testRun.passedCount} passed, ${testRun.failedCount} failed, ${testRun.skippedCount} skipped`,
+  ]
+
+  for (const line of formatTestSuiteLines(testRun.suites)) {
+    lines.push(line)
+  }
+
+  return lines.join('\n')
+}
+
+function formatTestSuiteLines(suites: RequestTestRun['suites'], indent = ''): string[] {
+  const lines: string[] = []
+
+  for (const suite of suites) {
+    lines.push(`${indent}[${suite.status}] ${suite.name}`)
+    for (const test of suite.tests) {
+      lines.push(`${indent}  - [${test.status}] ${test.name}`)
+      for (const failure of test.failures) {
+        lines.push(`${indent}    ${failure.message}`)
+      }
+    }
+    lines.push(...formatTestSuiteLines(suite.suites, `${indent}  `))
+  }
+
+  return lines
 }
 
 function getConsoleTone(level: RequestConsoleEntry['level']) {

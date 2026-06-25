@@ -147,6 +147,8 @@ function formatDocumentationPhaseLabel(phase: ScriptDocumentationPhase) {
       return 'Pre-request'
     case 'post-request':
       return 'Post-request'
+    case 'test':
+      return 'Tests'
     case 'response-visualizer':
       return 'Response visualizer'
     case 'view-runtime':

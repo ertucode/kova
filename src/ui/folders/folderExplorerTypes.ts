@@ -51,6 +51,7 @@ export type RequestDetailsDraft = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  testScript: string
   responseVisualizer: string
   responseTableAccessor: string
   preferredResponseBodyView: 'raw' | 'table' | 'visualizer'

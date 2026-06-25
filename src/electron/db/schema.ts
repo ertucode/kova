@@ -42,6 +42,7 @@ export const requests = sqliteTable(
     authJson: text('auth_json').notNull().default('{"type":"inherit"}'),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
+    testScript: text('test_script').notNull().default(''),
     responseVisualizer: text('response_visualizer').notNull().default(''),
     responseTableAccessor: text('response_table_accessor').notNull().default(''),
     preferredResponseBodyView: text('preferred_response_body_view').notNull().default('raw'),
@@ -325,10 +326,6 @@ export const folderExplorerTabs = sqliteTable(
     index('folder_explorer_tabs_item_ref_idx').on(table.itemType, table.itemId),
     index('folder_explorer_tabs_active_idx').on(table.isActive),
     check('folder_explorer_tabs_item_type_check', sql`${table.itemType} in ('folder', 'request', 'example')`),
-    check(
-      'folder_explorer_tabs_request_meta_tab_check',
-      sql`${table.requestMetaTab} is null or ${table.requestMetaTab} in ('overview', 'body', 'search-params', 'headers', 'auth', 'path-params', 'scripts', 'response-visualizer')`
-    ),
   ]
 )
 
@@ -376,6 +373,7 @@ export const requestHistory = sqliteTable(
     responseDurationMs: integer('response_duration_ms'),
     responseReceivedAt: integer('response_received_at'),
     scriptErrorsJson: text('script_errors_json').notNull().default('[]'),
+    testRunJson: text('test_run_json').notNull().default('null'),
     consoleEntriesJson: text('console_entries_json').notNull().default('[]'),
     sentAt: integer('sent_at').notNull(),
     createdAt: integer('created_at').notNull(),

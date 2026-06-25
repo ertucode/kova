@@ -833,6 +833,7 @@ app.on('ready', async () => {
       auth: requestResult.data.auth,
       preRequestScript: requestResult.data.preRequestScript,
       postRequestScript: requestResult.data.postRequestScript,
+      testScript: requestResult.data.testScript,
       headers: requestResult.data.headers,
       body: requestResult.data.body,
       bodyType: requestResult.data.bodyType,

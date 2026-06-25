@@ -81,12 +81,15 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const draftRef = useRef(draft)
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const postRequestEditorRef = useRef<CodeEditorHandle | null>(null)
+  const testEditorRef = useRef<CodeEditorHandle | null>(null)
   const responseVisualizerEditorRef = useRef<CodeEditorHandle | null>(null)
   const preRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
   const postRequestSelectionRef = useRef<CodeEditorSelection | null>(null)
+  const testSelectionRef = useRef<CodeEditorSelection | null>(null)
   const responseVisualizerSelectionRef = useRef<CodeEditorSelection | null>(null)
   const pendingPreRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
   const pendingPostRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
+  const pendingTestSelectionRef = useRef<PendingScriptSelection | null>(null)
   const pendingResponseVisualizerSelectionRef = useRef<PendingScriptSelection | null>(null)
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
@@ -346,6 +349,37 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     []
   )
 
+  const testScriptExtensions = useMemo(
+    () => [
+      scriptDiagnosticsExtension({
+        phase: 'test',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      scriptAutocompleteExtension({
+        phase: 'test',
+        includeResponse: true,
+        getEnvironmentNames: () => activeEnvironmentNamesRef.current,
+        getVariableNames: () => activeEnvironmentVariableNamesRef.current,
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      scriptHoverExtension({
+        phase: 'test',
+        getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
+        getSharedScripts: () => visibleSharedScriptsRef.current,
+        getPackages: () => scriptPackageArtifactsRef.current,
+      }),
+      supermavenGhostCompletionExtension({
+        getDocumentPath: () => `kova://requests/${selectedRequestIdRef.current ?? 'unknown'}/test.ts`,
+        phase: 'test',
+      }),
+    ],
+    []
+  )
+
   const responseVisualizerExtensions = useMemo(
     () => [
       scriptDiagnosticsExtension({
@@ -557,6 +591,14 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     )
     changed = changed || responseVisualizer !== sourceDraft.responseVisualizer
 
+    const testScript = await formatScriptValueWithSelection(
+      sourceDraft.testScript,
+      testSelectionRef.current,
+      pendingTestSelectionRef,
+      'Test script'
+    )
+    changed = changed || testScript !== sourceDraft.testScript
+
     if (!changed) {
       return sourceDraft
     }
@@ -565,6 +607,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       ...sourceDraft,
       preRequestScript,
       postRequestScript,
+      testScript,
       responseVisualizer,
     }
   }
@@ -710,6 +753,14 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         updateMetaTab('scripts')
         window.requestAnimationFrame(() => {
           preRequestEditorRef.current?.focusLine(error.line ?? 1, error.column)
+        })
+        return
+      }
+
+      if (error.phase === 'test') {
+        updateMetaTab('tests')
+        window.requestAnimationFrame(() => {
+          testEditorRef.current?.focusLine(error.line ?? 1, error.column)
         })
         return
       }
@@ -973,6 +1024,25 @@ export default function View() {
         </section>
       ) : null}
 
+      {metaTab === 'tests' ? (
+        <TestScriptTab
+          value={draft.testScript}
+          extensions={testScriptExtensions}
+          editorRef={testEditorRef}
+          externalSelection={
+            pendingTestSelectionRef.current?.code === draft.testScript ? pendingTestSelectionRef.current.selection : null
+          }
+          onChange={value => updateRequestDraft({ ...draft, testScript: value }, 'request-test-script')}
+          onSelectionChange={selection => {
+            testSelectionRef.current = selection
+            if (pendingTestSelectionRef.current?.code === draft.testScript) {
+              pendingTestSelectionRef.current = null
+            }
+          }}
+          ownerId={selectedRequestId ?? ''}
+        />
+      ) : null}
+
       {metaTab === 'response-visualizer' ? (
         <ResponseVisualizerTab
           value={draft.responseVisualizer}
@@ -1105,7 +1175,7 @@ function ScriptDocumentationButton({
   mode = 'full',
   tooltip,
 }: {
-  phase: 'pre-request' | 'post-request' | 'response-visualizer'
+  phase: 'pre-request' | 'post-request' | 'test' | 'response-visualizer'
   className?: string
   mode?: 'full' | 'examples'
   tooltip?: string
@@ -1119,6 +1189,8 @@ function ScriptDocumentationButton({
         ? 'Open pre-request script documentation'
         : phase === 'post-request'
           ? 'Open post-request script documentation'
+          : phase === 'test'
+            ? 'Open test script documentation'
           : 'Open response visualizer documentation'
 
   const button = (
@@ -1267,13 +1339,25 @@ function VariableUsageBanner({
               : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
           ].join(' ')}
           onClick={() => onMetaTabChange('scripts')}
+          >
+            <span>Scripts</span>
+            <span className={metaTab === 'scripts' ? 'text-base-content/55' : 'text-base-content/30'}>
+              <span className={hasPreRequestScript ? '' : 'opacity-45'}>Pre</span>
+              <span className="mx-1">/</span>
+              <span className={hasPostRequestScript ? '' : 'opacity-45'}>Post</span>
+            </span>
+        </button>
+        <button
+          type="button"
+          className={[
+            'flex h-10 items-center gap-2 border-l border-base-content/10 px-3 text-xs font-semibold transition',
+            metaTab === 'tests'
+              ? 'border-b-2 border-b-base-content text-base-content'
+              : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+          ].join(' ')}
+          onClick={() => onMetaTabChange('tests')}
         >
-          <span>Scripts</span>
-          <span className={metaTab === 'scripts' ? 'text-base-content/55' : 'text-base-content/30'}>
-            <span className={hasPreRequestScript ? '' : 'opacity-45'}>Pre</span>
-            <span className="mx-1">/</span>
-            <span className={hasPostRequestScript ? '' : 'opacity-45'}>Post</span>
-          </span>
+          <span>Tests</span>
         </button>
         <button
           type="button"
@@ -1307,6 +1391,64 @@ function normalizeMetaTabForLayout(tab: RequestMetaTab, compactRequestView: bool
 
   return tab === 'overview' ? 'body' : tab
 }
+
+const FLOATING_SCRIPT_ACTION_BUTTON_CLASS_NAME =
+  'h-8 w-10 rounded-lg border border-base-content/10 bg-base-100/90 px-0 text-base-content/60 backdrop-blur hover:border-base-content/20 hover:bg-base-100/90 hover:text-base-content'
+
+const TestScriptTab = memo(function TestScriptTab({
+  value,
+  extensions,
+  editorRef,
+  externalSelection,
+  onChange,
+  onSelectionChange,
+  ownerId,
+}: {
+  value: string
+  extensions: Extension[]
+  editorRef: RefObject<CodeEditorHandle | null>
+  externalSelection: CodeEditorSelection | null
+  onChange: (value: string) => void
+  onSelectionChange: (selection: CodeEditorSelection) => void
+  ownerId: string
+}) {
+  return (
+    <section className="min-h-0 flex-1">
+      <div className="relative h-full">
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          <ScriptAiIconButton
+            ownerType="request"
+            ownerId={ownerId}
+            runtimeContext={{ phase: 'test' }}
+            currentCode={value}
+            onApply={onChange}
+            tooltip="Generate with AI"
+            className={FLOATING_SCRIPT_ACTION_BUTTON_CLASS_NAME}
+          />
+          <ScriptDocumentationButton
+            phase="test"
+            tooltip="Documentation"
+            className={FLOATING_SCRIPT_ACTION_BUTTON_CLASS_NAME}
+          />
+        </div>
+        <CodeEditor
+          ref={editorRef}
+          value={value}
+          language="javascript"
+          size="small"
+          showLineNumbers
+          minHeightClassName="min-h-0 h-full"
+          className="h-full border-x-0 border-b-0 border-t-0"
+          extensions={extensions}
+          externalSelection={externalSelection}
+          onChange={onChange}
+          onSelectionChange={onSelectionChange}
+          onBlur={() => undefined}
+        />
+      </div>
+    </section>
+  )
+})
 
 function RequestOverviewTab({
   body,

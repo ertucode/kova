@@ -1,6 +1,6 @@
 import type { SharedScriptTarget } from './SharedScripts.js'
 
-export type ScriptAiPhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
+export type ScriptAiPhase = 'pre-request' | 'post-request' | 'test' | 'response-visualizer' | 'view-runtime'
 
 export type ScriptAiRuntimeContext =
   | { phase: ScriptAiPhase }
@@ -217,6 +217,8 @@ export function getScriptAiFileName(runtimeContext: ScriptAiRuntimeContext) {
       return 'script.js'
     case 'post-request':
       return 'script.js'
+    case 'test':
+      return 'script.js'
     case 'response-visualizer':
       return 'script.jsx'
     case 'view-runtime':
@@ -244,6 +246,10 @@ export function getPrimaryScriptAiPhase(runtimeContext: ScriptAiRuntimeContext):
 
   if (targets.includes('post-request')) {
     return 'post-request'
+  }
+
+  if (targets.includes('test')) {
+    return 'test'
   }
 
   if (targets.includes('response-visualizer')) {

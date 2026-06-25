@@ -56,6 +56,7 @@ export type PreparedHttpRequest = {
     preview: string
   }
   postRequestScriptSources: Array<{ name: string; script: string }>
+  testScriptSources: Array<{ name: string; script: string }>
 }
 
 type ScriptToastBridge = {
@@ -93,6 +94,7 @@ export async function prepareHttpRequest(
   ])
   const runtime = createRequestScriptRuntime({
     request: {
+      requestId: input.requestId,
       method: input.method,
       url: input.url,
       pathParams: input.pathParams,
@@ -228,6 +230,7 @@ export async function prepareHttpRequest(
         .reverse()
         .map(folder => ({ name: `Folder: ${folder.name}`, script: folder.postRequestScript })),
     ],
+    testScriptSources: [{ name: `Request: ${requestResult.data.name}`, script: input.testScript }],
   })
 }
 

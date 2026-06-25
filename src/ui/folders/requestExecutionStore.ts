@@ -419,6 +419,7 @@ function normalizeExecutionRecord(event: {
     },
     responseError: null,
     scriptErrors: normalizeScriptErrors(event.response.scriptErrors ?? []),
+    testRun: event.response.testRun ?? null,
     consoleEntries: event.response.consoleEntries ?? [],
   }
 }
@@ -435,6 +436,7 @@ function normalizeSendRequestResponse(event: {
     ...event.response,
     requestScope: event.response.requestScope ?? {},
     scriptErrors: normalizeScriptErrors(event.response.scriptErrors ?? []),
+    testRun: event.response.testRun ?? null,
     updatedEnvironments: event.response.updatedEnvironments ?? [],
     consoleEntries: event.response.consoleEntries ?? [],
     execution: execution ?? event.response.execution,
@@ -467,7 +469,8 @@ function removeRecentHttpRequestUsage(requestIds: string[], requestId: string) {
 function normalizeScriptErrors(errors: RequestScriptError[]): RequestScriptError[] {
   return errors.map(error => {
     const line = typeof error.line === 'number' ? error.line : null
-    const phase: RequestScriptError['phase'] = error.phase === 'pre-request' ? 'pre-request' : 'post-request'
+    const phase: RequestScriptError['phase'] =
+      error.phase === 'pre-request' ? 'pre-request' : error.phase === 'test' ? 'test' : 'post-request'
     const compactLabel = error.compactLabel || buildCompactScriptErrorLabel(phase, line, typeof error.column === 'number' ? error.column : null)
     const compactMessage = error.compactMessage || error.message
     const detailedMessage = error.detailedMessage || error.message
@@ -490,7 +493,7 @@ function buildCompactScriptErrorLabel(
   line: number | null,
   column: number | null
 ) {
-  const phaseLabel = phase === 'pre-request' ? 'Pre-request' : 'Post-request'
+  const phaseLabel = phase === 'pre-request' ? 'Pre-request' : phase === 'test' ? 'Test' : 'Post-request'
   if (line === null) {
     return phaseLabel
   }

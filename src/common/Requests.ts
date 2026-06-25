@@ -5,7 +5,7 @@ import type { ScriptCallRequestOverrides } from './ScriptMakeRequest.js'
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
-export type RequestRuntimePhase = 'pre-request' | 'post-request' | 'template-expression'
+export type RequestRuntimePhase = 'pre-request' | 'post-request' | 'test' | 'template-expression'
 
 export type RequestRuntimeSource = 'request-editor' | 'call-request' | 'navigate-and-call-request' | 'generate-request-code' | 'websocket'
 
@@ -34,6 +34,7 @@ export type HttpRequestRecord = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  testScript: string
   responseVisualizer: string
   responseTableAccessor: string
   preferredResponseBodyView: ResponseBodyView
@@ -72,6 +73,7 @@ export type UpdateRequestInput = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  testScript: string
   responseVisualizer: string
   responseTableAccessor: string
   preferredResponseBodyView: ResponseBodyView
@@ -113,6 +115,7 @@ export type SendRequestInput = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  testScript: string
   headers: string
   body: string
   bodyType: RequestBodyType
@@ -194,7 +197,7 @@ export type ScriptResponseBody =
     }
 
 export type RequestScriptError = {
-  phase: 'pre-request' | 'post-request'
+  phase: 'pre-request' | 'post-request' | 'test'
   sourceName: string
   message: string
   compactLabel: string
@@ -261,6 +264,49 @@ export type ReceivedResponseSnapshot = {
   receivedAt: number
 }
 
+export type RequestTestFailure = {
+  message: string
+  matcherName: string | null
+  expected: unknown
+  actual: unknown
+  diff: string | null
+  sourceName: string | null
+  line: number | null
+  column: number | null
+  sourceLine: string | null
+}
+
+export type RequestTestStatus = 'passed' | 'failed' | 'skipped'
+
+export type RequestTestCaseResult = {
+  id: string
+  path: string[]
+  name: string
+  status: RequestTestStatus
+  durationMs: number
+  failures: RequestTestFailure[]
+}
+
+export type RequestTestSuiteResult = {
+  id: string
+  path: string[]
+  name: string
+  status: RequestTestStatus
+  durationMs: number
+  suites: RequestTestSuiteResult[]
+  tests: RequestTestCaseResult[]
+}
+
+export type RequestTestRun = {
+  status: RequestTestStatus
+  totalCount: number
+  passedCount: number
+  failedCount: number
+  skippedCount: number
+  durationMs: number
+  suites: RequestTestSuiteResult[]
+}
+
 export type RequestExecutionRecord = {
   itemType: 'http'
   id: string
@@ -270,6 +316,7 @@ export type RequestExecutionRecord = {
   response: ReceivedResponseSnapshot | null
   responseError: string | null
   scriptErrors: RequestScriptError[]
+  testRun: RequestTestRun | null
   consoleEntries: RequestConsoleEntry[]
 }
 
@@ -314,6 +361,7 @@ export type SendRequestResponse = {
   durationMs: number
   requestScope: Record<string, string>
   scriptErrors: RequestScriptError[]
+  testRun: RequestTestRun | null
   updatedEnvironments: EnvironmentRecord[]
   consoleEntries: RequestConsoleEntry[]
   execution: RequestExecutionRecord

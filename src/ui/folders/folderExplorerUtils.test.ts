@@ -101,6 +101,7 @@ describe('folderExplorerUtils search', () => {
           auth: { type: 'noauth' },
           preRequestScript: '',
           postRequestScript: '',
+          testScript: '',
           responseVisualizer: '',
           responseTableAccessor: '',
           preferredResponseBodyView: 'raw',

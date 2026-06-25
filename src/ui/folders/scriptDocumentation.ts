@@ -226,6 +226,57 @@ const retryRequestSection: ScriptDocumentationSection = {
   ],
 }
 
+const kvTestApiSection: ScriptDocumentationSection = {
+  title: 'kv.test API',
+  description: 'Available only in test scripts.',
+  entries: [
+    { label: 'kv.test.describe(name, callback)', detail: 'Group related tests into a named suite.' },
+    { label: 'kv.test.it(name, callback)', detail: 'Register a test case.' },
+    { label: 'kv.test.test(name, callback)', detail: 'Alias for kv.test.it.' },
+    { label: 'kv.test.skip(name, callback)', detail: 'Register a skipped test without running its callback.' },
+    { label: 'kv.test.only(name, callback)', detail: 'Run only this test and other only-marked tests in the current script.' },
+    { label: 'kv.test.beforeEach(callback)', detail: 'Run a hook before each test in the current suite.' },
+    { label: 'kv.test.afterEach(callback)', detail: 'Run a hook after each test in the current suite.' },
+    { label: 'kv.test.expect(actual)', detail: 'Create an assertion object for the given value.' },
+    { label: 'kv.test.fail(message)', detail: 'Fail the current test immediately with a custom message.' },
+    {
+      label: 'kv.test.assert(condition, message?)',
+      detail: 'Fail the current test unless the condition is truthy.',
+    },
+    {
+      label: 'await kv.test.example(name)',
+      detail: 'Load a saved request example by name and return its request and response snapshot.',
+    },
+    {
+      label: 'kv.test.expectResponse().toMatchExample(name, options?)',
+      detail:
+        'Assert that the settled response matches a saved example. compare defaults to status, headers, and body. ignoreHeaders lets you skip specific header names.',
+    },
+  ],
+}
+
+const kvTestMatchersSection: ScriptDocumentationSection = {
+  title: 'kv.test Matchers',
+  description: 'Methods returned from kv.test.expect(actual).',
+  entries: [
+    { label: 'toBe(expected)', detail: 'Assert strict equality using Object.is semantics.' },
+    { label: 'toEqual(expected)', detail: 'Assert deep equality.' },
+    { label: 'toStrictEqual(expected)', detail: 'Assert strict deep equality.' },
+    { label: 'toMatch(pattern)', detail: 'Assert that a string matches the given substring or regular expression.' },
+    { label: 'toBeTruthy()', detail: 'Assert that the value is truthy.' },
+    { label: 'toBeFalsy()', detail: 'Assert that the value is falsy.' },
+    { label: 'toBeNull()', detail: 'Assert that the value is null.' },
+    { label: 'toBeUndefined()', detail: 'Assert that the value is undefined.' },
+    { label: 'toContain(value)', detail: 'Assert that an array or string contains the given value.' },
+    { label: 'toHaveLength(length)', detail: 'Assert that the value has the expected length.' },
+    { label: 'toBeOneOf(values)', detail: 'Assert that the value equals one of the provided candidates.' },
+    {
+      label: 'toMatchSchema(schema)',
+      detail: 'Validate the value with Zod. Returns the parsed value when the assertion passes.',
+    },
+  ],
+}
+
 export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, ScriptDocumentation> = {
   'pre-request': {
     title: 'Pre-request Script Docs',
@@ -334,6 +385,55 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       {
         title: 'Copy a token from the response',
         code: "if (response.body.type === 'json') {\n  const token = typeof response.body.data === 'object' && response.body.data !== null ? Reflect.get(response.body.data, 'token') : null\n  if (typeof token === 'string') {\n    clipboard.write(token)\n  }\n}",
+      },
+    ],
+  },
+  test: {
+    title: 'Test Script Docs',
+    description:
+      'Test scripts run after the final settled request result is available, so they are ideal for defining suites, asserting on the response, and persisting any environment values that should survive a successful test run.',
+    notes: [
+      'Scripts run in an async sandbox, so you can use await.',
+      'Each script has a 500ms execution timeout.',
+      'Environment changes made here are rolled back if the script throws.',
+      'Environment changes made by failing tests are rolled back before the next test runs.',
+      'Zod is available globally as z.',
+    ],
+    sections: [
+      ...sharedSections,
+      responseSection,
+      callRequestSection,
+      navigateAndCallRequestSection,
+      kvTestApiSection,
+      kvTestMatchersSection,
+    ],
+    examples: [
+      {
+        title: 'Basic response assertions',
+        code:
+          "kv.test.it('returns 200', () => {\n  kv.test.expect(response.status).toBe(200)\n  kv.test.expect(response.statusText).toMatch('OK')\n})",
+      },
+      {
+        title: 'Use suite hooks',
+        code:
+          "kv.test.describe('token flow', () => {\n  kv.test.beforeEach(() => {\n    scope.set('startedAt', String(Date.now()))\n  })\n\n  kv.test.afterEach(() => {\n    console.info('finished test')\n  })\n\n  kv.test.it('has auth header', () => {\n    kv.test.assert(request.headers.has('authorization'), 'Authorization header is required')\n  })\n})",
+      },
+      {
+        title: 'Persist a token for later tests',
+        code: "if (response.body.type === 'json' && response.body.data && typeof response.body.data === 'object') {\n  const token = Reflect.get(response.body.data, 'token')\n  if (typeof token === 'string') {\n    env.set('token', token)\n  }\n}",
+      },
+      {
+        title: 'Inspect a settled failure',
+        code: "if (response.status >= 400) {\n  console.error('Request failed', response.status, response.statusText)\n}",
+      },
+      {
+        title: 'Match a saved example',
+        code:
+          "kv.test.only('matches success example', async () => {\n  const example = await kv.test.example('success')\n  kv.test.expect(example.response.status).toBe(200)\n  await kv.test.expectResponse().toMatchExample('success', {\n    ignoreHeaders: ['date', 'content-length'],\n  })\n})",
+      },
+      {
+        title: 'Trigger a follow-up request in a test',
+        code: "if (response.status === 401) {\n  await navigateAndCallRequest(['Auth', 'Refresh Token'])\n}",
       },
     ],
   },

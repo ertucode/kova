@@ -877,6 +877,8 @@ function getPromptPlaceholder(phase: ReturnType<typeof getPrimaryScriptAiPhase>)
       return 'Read a token from the active environment, set the Authorization header, and generate a trace id.'
     case 'post-request':
       return 'If the response is 401, call the refresh token request and save the returned token.'
+    case 'test':
+      return 'Define a test suite that validates the settled response status, payload shape, and any saved environment updates.'
     case 'response-visualizer':
       return 'Render the JSON body as cards grouped by status and show a raw payload editor underneath.'
     case 'view-runtime':

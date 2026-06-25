@@ -75,6 +75,7 @@ const requestDetailsDraftSchema = z.object({
   auth: authSchema.default({ type: 'inherit' }),
   preRequestScript: z.string(),
   postRequestScript: z.string(),
+  testScript: z.string().default(''),
   responseVisualizer: z.string().default(''),
   responseTableAccessor: z.string().default(''),
   preferredResponseBodyView: z.enum(RESPONSE_BODY_VIEWS).default('raw'),

@@ -1,13 +1,28 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { type Extension } from '@codemirror/state'
-import { CopyIcon, SaveIcon } from 'lucide-react'
+import {
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CircleDashedIcon,
+  CopyIcon,
+  SaveIcon,
+  XCircleIcon,
+} from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES, type AppSettingsResponseBodyDisplayMode } from '@common/AppSettings'
 import type { ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import { getSseEventDisplayName, isSseContentType, parseSseEvents } from '@common/Sse'
-import type { HttpSseStreamState, RequestScriptError, SendRequestResponse, SseEventRecord } from '@common/Requests'
+import type {
+  HttpSseStreamState,
+  RequestScriptError,
+  RequestTestRun,
+  SendRequestResponse,
+  SseEventRecord,
+} from '@common/Requests'
 import { formatJson } from '@common/Json5'
+import { Typescript } from '@common/Typescript'
 import { getWindowElectron } from '@/getWindowElectron'
 import { dialogActions } from '@/global/dialogStore'
 import { toast } from '@/lib/components/toast'
@@ -337,6 +352,8 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
                 onUpdateResponseBodyDisplayMode={AppSettingsCoordinator.saveResponseBodyDisplayMode}
                 environments={visualizerEnvironments}
                 response={response}
+                testRun={response?.testRun ?? null}
+                onJumpToScriptError={onJumpToScriptError}
                 onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
               />
             </>
@@ -497,6 +514,8 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   sharedScripts,
   scriptPackageArtifacts,
   response,
+  testRun,
+  onJumpToScriptError,
   onSaveAsExample,
 }: {
   value: string
@@ -530,6 +549,8 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   sharedScripts: SharedScriptRecord[]
   scriptPackageArtifacts: ScriptPackageArtifact[]
   response: SendRequestResponse | null
+  testRun: RequestTestRun | null
+  onJumpToScriptError: (error: RequestScriptError) => void
   onSaveAsExample?: () => void
 }) {
   const language = detectResponseLanguage(contentType, rawBody)
@@ -552,9 +573,15 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
     [parsedStructuredResponse, responseTableAccessor]
   )
   const [viewMode, setViewMode] = useState<ResponseBodyPanelViewMode>(preferredResponseBodyView)
-  const [section, setSection] = useState<'body' | 'headers'>('body')
+  const [section, setSection] = useState<'body' | 'headers' | 'tests'>('body')
   const bodyViewResetKeyRef = useRef<string | null>(null)
-  const canCopyResponseSection = section === 'body' ? displayedRawBody.trim().length > 0 : responseHeaderRows.length > 0
+  const testsText = useMemo(() => formatTestRunDetails(testRun), [testRun])
+  const canCopyResponseSection =
+    section === 'body'
+      ? displayedRawBody.trim().length > 0
+      : section === 'headers'
+        ? responseHeaderRows.length > 0
+        : testsText.trim().length > 0
   const historyButtonLabel =
     requestHistoryCount === null
       ? 'Loading History...'
@@ -720,6 +747,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             {[
               { value: 'body' as const, label: 'Body' },
               { value: 'headers' as const, label: 'Headers' },
+              { value: 'tests' as const, label: 'Tests' },
             ].map(option => (
               <button
                 key={option.value}
@@ -729,7 +757,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
                   section === option.value
                     ? 'bg-base-200/80 text-base-content'
                     : 'text-base-content/60 hover:text-base-content',
-                  option.value === 'headers' ? 'border-l border-base-content/10' : '',
+                  option.value !== 'body' ? 'border-l border-base-content/10' : '',
                 ].join(' ')}
                 onClick={() => setSection(option.value)}
               >
@@ -773,7 +801,13 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
         <div className="flex shrink-0 items-center gap-2">
           {canCopyResponseSection ? (
             <Tooltip
-              content={section === 'body' ? 'Copy Response Body' : 'Copy Response Headers'}
+              content={
+                section === 'body'
+                  ? 'Copy Response Body'
+                  : section === 'headers'
+                    ? 'Copy Response Headers'
+                    : 'Copy Test Results'
+              }
               placement="top"
               className="flex"
             >
@@ -782,11 +816,21 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
                 className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
                 onClick={() =>
                   void copyTextToClipboard(
-                    section === 'body' ? displayedRawBody : headers,
-                    section === 'body' ? 'Response body copied to clipboard.' : 'Response headers copied to clipboard.'
+                    section === 'body' ? displayedRawBody : section === 'headers' ? headers : testsText,
+                    section === 'body'
+                      ? 'Response body copied to clipboard.'
+                      : section === 'headers'
+                        ? 'Response headers copied to clipboard.'
+                        : 'Test results copied to clipboard.'
                   )
                 }
-                aria-label={section === 'body' ? 'Copy response body' : 'Copy response headers'}
+                aria-label={
+                  section === 'body'
+                    ? 'Copy response body'
+                    : section === 'headers'
+                      ? 'Copy response headers'
+                      : 'Copy test results'
+                }
               >
                 <CopyIcon className="h-4 w-4" />
               </button>
@@ -829,7 +873,9 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
 
       {section === 'headers'
         ? renderResponseHeaders(responseHeaderRows, headersDescription)
-        : renderResponseBodyContent(bodyContentState, onUpdateResponseTableAccessor, scriptPackageArtifacts)}
+        : section === 'tests'
+          ? renderResponseTests(testRun, onJumpToScriptError)
+          : renderResponseBodyContent(bodyContentState, onUpdateResponseTableAccessor, scriptPackageArtifacts)}
     </div>
   )
 })
@@ -853,6 +899,14 @@ function renderResponseHeaders(rows: ResponseHeaderRow[], emptyMessage: string) 
       </table>
     </div>
   )
+}
+
+function renderResponseTests(testRun: RequestTestRun | null, onJumpToScriptError: (error: RequestScriptError) => void) {
+  if (!testRun) {
+    return <div className="mt-2 text-sm text-base-content/50">Test results will appear here.</div>
+  }
+
+  return <ResponseTestsPanel testRun={testRun} onJumpToScriptError={onJumpToScriptError} />
 }
 
 function renderResponseBodyContent(
@@ -983,6 +1037,227 @@ function renderResponseBodyContent(
   )
 }
 
+const ResponseTestsPanel = memo(function ResponseTestsPanel({
+  testRun,
+  onJumpToScriptError,
+}: {
+  testRun: RequestTestRun
+  onJumpToScriptError: (error: RequestScriptError) => void
+}) {
+  const statusTone = getTestStatusTone(testRun.status)
+
+  return (
+    <div className="mt-3 min-h-0 flex-1 overflow-auto pr-1">
+      <div className="space-y-3">
+        <div className="rounded-2xl bg-base-200/30 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">Test Run</div>
+              <div className={`mt-1 text-sm font-semibold ${statusTone.className}`}>{getTestRunHeading(testRun)}</div>
+            </div>
+            <div className="text-xs text-base-content/45">{testRun.durationMs} ms</div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: 'Total', value: testRun.totalCount, toneClassName: 'text-base-content' },
+              { label: 'Passed', value: testRun.passedCount, toneClassName: 'text-success' },
+              { label: 'Failed', value: testRun.failedCount, toneClassName: 'text-error' },
+              { label: 'Skipped', value: testRun.skippedCount, toneClassName: 'text-warning' },
+            ].map(item => (
+              <div key={item.label} className="rounded-xl bg-base-100/70 px-3 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">
+                  {item.label}
+                </div>
+                <div className={`mt-1 text-lg font-semibold ${item.toneClassName}`}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {testRun.suites.length > 0 ? (
+          <div className="space-y-1">
+            {testRun.suites.map(suite => (
+              <TestSuiteCard key={suite.id} suite={suite} depth={0} onJumpToScriptError={onJumpToScriptError} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-base-100/50 px-4 py-4 text-sm text-base-content/45">
+            No test suites were reported for this run.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+
+const TestSuiteCard = memo(function TestSuiteCard({
+  suite,
+  depth,
+  onJumpToScriptError,
+}: {
+  suite: RequestTestRun['suites'][number]
+  depth: number
+  onJumpToScriptError: (error: RequestScriptError) => void
+}) {
+  const statusTone = getTestStatusTone(suite.status)
+  const [expanded, setExpanded] = useState(suite.status === 'failed')
+  const hasChildren = suite.tests.length > 0 || suite.suites.length > 0
+  const suiteSummary = [
+    `${suite.durationMs} ms`,
+    `${suite.tests.length} test${suite.tests.length === 1 ? '' : 's'}`,
+    suite.suites.length > 0 ? `${suite.suites.length} nested suite${suite.suites.length === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return (
+    <div style={{ marginLeft: `${Math.min(depth, 5) * 18}px` }}>
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-base-200/35"
+        onClick={() => {
+          if (hasChildren) {
+            setExpanded(current => !current)
+          }
+        }}
+      >
+        <span className="shrink-0 text-base-content/45">
+          {hasChildren ? (
+            expanded ? (
+              <ChevronDownIcon className="size-4" />
+            ) : (
+              <ChevronRightIcon className="size-4" />
+            )
+          ) : (
+            <span className="block size-4" />
+          )}
+        </span>
+        <span className={`shrink-0 ${statusTone.className}`}>
+          <TestStatusIcon status={suite.status} />
+        </span>
+        <div className={`min-w-0 flex-1 truncate text-sm font-semibold ${statusTone.className}`}>{suite.name}</div>
+        <span className="shrink-0 text-xs text-base-content/45">{suiteSummary}</span>
+      </button>
+
+      {expanded ? (
+        <div className="mt-0.5 space-y-1">
+          {suite.tests.map(test => (
+            <TestCaseRow key={test.id} test={test} depth={depth + 1} onJumpToScriptError={onJumpToScriptError} />
+          ))}
+          {suite.suites.map(childSuite => (
+            <TestSuiteCard
+              key={childSuite.id}
+              suite={childSuite}
+              depth={depth + 1}
+              onJumpToScriptError={onJumpToScriptError}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+})
+
+const TestCaseRow = memo(function TestCaseRow({
+  test,
+  depth,
+  onJumpToScriptError,
+}: {
+  test: RequestTestRun['suites'][number]['tests'][number]
+  depth: number
+  onJumpToScriptError: (error: RequestScriptError) => void
+}) {
+  const statusTone = getTestStatusTone(test.status)
+  const [expanded, setExpanded] = useState(test.status === 'failed')
+  const hasDetails = test.failures.length > 0
+  const primaryFailure = test.failures[0]?.message.trim() ?? ''
+  const testSummary = [
+    `${test.durationMs} ms`,
+    hasDetails ? `${test.failures.length} failure${test.failures.length === 1 ? '' : 's'}` : null,
+    primaryFailure || null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return (
+    <div style={{ marginLeft: `${Math.min(depth, 5) * 18}px` }}>
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-base-200/30"
+        onClick={() => {
+          if (hasDetails) {
+            setExpanded(current => !current)
+          }
+        }}
+      >
+        <span className="shrink-0 text-base-content/45">
+          {hasDetails ? (
+            expanded ? (
+              <ChevronDownIcon className="size-4" />
+            ) : (
+              <ChevronRightIcon className="size-4" />
+            )
+          ) : (
+            <span className="block size-4" />
+          )}
+        </span>
+        <span className={`shrink-0 ${statusTone.className}`}>
+          <TestStatusIcon status={test.status} />
+        </span>
+        <div className="min-w-0 flex-1 items-baseline gap-2 text-left sm:flex">
+          <span className={`block min-w-0 truncate text-sm font-medium ${statusTone.className}`}>{test.name}</span>
+          <span className="block min-w-0 truncate text-xs text-base-content/45">{testSummary}</span>
+        </div>
+      </button>
+
+      {expanded && hasDetails ? (
+        <div className="mt-0.5 space-y-2">
+          {test.failures.map((failure, index) => (
+            <div key={`${test.id}-failure-${index}`} className="ml-6 rounded-xl px-2 py-0">
+              {failure.line !== null || failure.sourceLine ? (
+                <button
+                  type="button"
+                  className="mb-2 flex min-w-0 w-full items-stretch overflow-hidden rounded-lg bg-base-100/85 text-left transition hover:bg-base-100 hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                  onClick={() => {
+                    if (failure.line === null) {
+                      return
+                    }
+
+                    onJumpToScriptError({
+                      phase: 'test',
+                      sourceName: failure.sourceName ?? 'Test Script',
+                      message: failure.message,
+                      compactLabel: 'Test Failure',
+                      compactMessage: failure.message,
+                      detailedMessage: failure.message,
+                      line: failure.line,
+                      column: failure.column,
+                      sourceLine: failure.sourceLine,
+                    })
+                  }}
+                  disabled={failure.line === null}
+                >
+                  <div className="flex shrink-0 items-center bg-error/10 px-2.5 text-[11px] font-semibold text-error">
+                    {failure.line !== null
+                      ? `${failure.line}${failure.column !== null ? `:${failure.column}` : ''}`
+                      : 'code'}
+                  </div>
+                  <div className="min-w-0 flex-1 px-3 py-0 font-mono text-xs leading-5 text-base-content/82">
+                    <div className="truncate">{failure.sourceLine ?? 'Source line unavailable'}</div>
+                  </div>
+                </button>
+              ) : null}
+              <div className="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/80">
+                {failure.message}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+})
+
 function LabeledSelect<TValue extends string>({
   label,
   value,
@@ -1037,6 +1312,45 @@ function getResponseBodyViewOptions({
   options.push({ value: 'visualizer', label: 'Visualizer' })
 
   return options
+}
+
+function getTestRunHeading(testRun: RequestTestRun) {
+  switch (testRun.status) {
+    case 'failed':
+      return 'Tests failed'
+    case 'passed':
+      return 'Tests passed'
+    case 'skipped':
+      return 'Tests skipped'
+    default:
+      return Typescript.assertUnreachable(testRun.status)
+  }
+}
+
+function getTestStatusTone(status: RequestTestRun['status']) {
+  switch (status) {
+    case 'passed':
+      return { className: 'text-success' }
+    case 'failed':
+      return { className: 'text-error' }
+    case 'skipped':
+      return { className: 'text-warning' }
+    default:
+      return Typescript.assertUnreachable(status)
+  }
+}
+
+function TestStatusIcon({ status }: { status: RequestTestRun['status'] }) {
+  switch (status) {
+    case 'passed':
+      return <CheckCircle2Icon className="size-3.5" />
+    case 'failed':
+      return <XCircleIcon className="size-3.5" />
+    case 'skipped':
+      return <CircleDashedIcon className="size-3.5" />
+    default:
+      return Typescript.assertUnreachable(status)
+  }
 }
 
 function isPersistedResponseBodyViewMode(
@@ -1197,7 +1511,9 @@ function SseResponsePanel({
             </button>
           ) : null}
           {headerContentType ? <span>{headerContentType}</span> : null}
-          <span>{filteredEvents.length} / {events.length} events</span>
+          <span>
+            {filteredEvents.length} / {events.length} events
+          </span>
           {durationMs !== null ? <span>{durationMs} ms</span> : null}
           {status !== null ? (
             <span className={`font-semibold ${statusTone.className}`}>
@@ -1582,6 +1898,41 @@ function getStatusTone(status: number | undefined) {
   }
 
   return { className: 'text-error' }
+}
+
+function formatTestRunDetails(testRun: RequestTestRun | null) {
+  if (!testRun) {
+    return ''
+  }
+
+  const lines = [
+    `Status: ${testRun.status}`,
+    `Summary: ${testRun.passedCount} passed, ${testRun.failedCount} failed, ${testRun.skippedCount} skipped`,
+    `Duration: ${testRun.durationMs} ms`,
+  ]
+
+  for (const line of formatTestSuiteLines(testRun.suites)) {
+    lines.push(line)
+  }
+
+  return lines.join('\n')
+}
+
+function formatTestSuiteLines(suites: RequestTestRun['suites'], indent = ''): string[] {
+  const lines: string[] = []
+
+  for (const suite of suites) {
+    lines.push(`${indent}[${suite.status}] ${suite.name} (${suite.durationMs} ms)`)
+    for (const test of suite.tests) {
+      lines.push(`${indent}  - [${test.status}] ${test.name} (${test.durationMs} ms)`)
+      for (const failure of test.failures) {
+        lines.push(`${indent}    ${failure.message}`)
+      }
+    }
+    lines.push(...formatTestSuiteLines(suite.suites, `${indent}  `))
+  }
+
+  return lines
 }
 
 function clampResponsePaneHeight(height: number) {

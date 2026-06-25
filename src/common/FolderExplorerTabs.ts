@@ -8,6 +8,7 @@ export type RequestMetaTab =
   | 'auth'
   | 'path-params'
   | 'scripts'
+  | 'tests'
   | 'response-visualizer'
 
 export type FolderExplorerTabRecord = {

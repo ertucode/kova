@@ -357,6 +357,7 @@ export function importOpenApiDocument(
           authJson: JSON.stringify(operation.auth),
           preRequestScript: '',
           postRequestScript: '',
+          testScript: '',
           responseVisualizer: '',
           responseTableAccessor: '',
           preferredResponseBodyView: 'raw',

@@ -1,6 +1,7 @@
 import vm from 'node:vm'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
+import { inspect, isDeepStrictEqual } from 'node:util'
 import ts from 'typescript'
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping'
 import { z } from 'zod'
@@ -19,8 +20,13 @@ import type {
   RequestRuntimePhase,
   RequestRuntimeSource,
   RequestRawType,
+  RequestTestCaseResult,
+  RequestTestFailure,
   SendRequestMetadata,
   ScriptResponseBody,
+  RequestTestRun,
+  RequestTestStatus,
+  RequestTestSuiteResult,
 } from '../common/Requests.js'
 import type { SharedScriptRecord } from '../common/SharedScripts.js'
 import type { ScriptPromptTextOptions } from '../common/ScriptPrompt.js'
@@ -34,6 +40,7 @@ import {
 import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
+import { listRequestExamplesByRequestIds } from './db/request-examples.js'
 import type { CookieSameSite } from '../common/Cookies.js'
 import { parseScriptPackageSpecifier } from '../common/ScriptPackages.js'
 
@@ -48,6 +55,7 @@ type ScriptSource = {
 type CallRequestApi = ReturnType<typeof createScriptCallRequestApi>
 
 type RuntimeRequestState = {
+  requestId?: string
   method: RequestMethod
   url: string
   pathParams: string
@@ -103,6 +111,7 @@ type RuntimeResponseState = {
   statusText: string
   headers: string
   body: ScriptResponseBody
+  rawBody?: string
 }
 
 type RuntimeResponseApiState = {
@@ -125,7 +134,7 @@ type ScriptCookie = {
 }
 
 type ScriptErrorDetails = {
-  phase: 'pre-request' | 'post-request'
+  phase: 'pre-request' | 'post-request' | 'test'
   sourceName: string
   message: string
   compactLabel: string
@@ -140,6 +149,14 @@ export type PostRequestScriptResult = {
   scriptErrors: RequestScriptError[]
   retryRequested: boolean
 }
+
+export type TestScriptResult = {
+  scriptErrors: RequestScriptError[]
+  registeredTests: number
+  testRun: RequestTestRun | null
+}
+
+type ScriptPhase = 'pre-request' | 'post-request' | 'test'
 
 type CompiledRequestScript = {
   code: string
@@ -187,16 +204,70 @@ export type ScriptRuntime = {
     sources: ScriptSource[],
     response: RuntimeResponseState
   ) => Promise<PostRequestScriptResult>
+  runTestScripts: (sources: ScriptSource[], response: RuntimeResponseState) => Promise<TestScriptResult>
 }
 
 type ScriptPhaseResult =
   | {
       kind: 'completed'
       scriptErrors: RequestScriptError[]
+      registeredTests: number
+      testRun: RequestTestRun | null
     }
   | {
       kind: 'retry-request'
     }
+
+type KvExampleCompareTarget = 'status' | 'headers' | 'body'
+
+type KvTestRuntimeApi = {
+  describe: (name: string, callback: () => void | Promise<void>) => void
+  it: (name: string, callback: () => void | Promise<void>) => void
+  test: (name: string, callback: () => void | Promise<void>) => void
+  skip: (name: string, callback: () => void | Promise<void>) => void
+  only: (name: string, callback: () => void | Promise<void>) => void
+  beforeEach: (callback: () => void | Promise<void>) => void
+  afterEach: (callback: () => void | Promise<void>) => void
+  expect: <T>(actual: T) => KvExpectation<T>
+  fail: (message: string) => never
+  assert: (condition: unknown, message?: string) => asserts condition
+  example: (name: string) => Promise<KvTestExample>
+  expectResponse: () => KvResponseExpectation
+}
+
+type KvTestExample = {
+  id: string
+  name: string
+  request: {
+    headers: string
+    body: string
+  }
+  response: {
+    status: number
+    statusText: string
+    headers: string
+    body: string
+  }
+}
+
+type KvResponseExpectation = {
+  toMatchExample: (name: string, options?: { compare?: KvExampleCompareTarget[]; ignoreHeaders?: string[] }) => Promise<void>
+}
+
+type KvExpectation<T> = {
+  toBe: (expected: unknown) => void
+  toEqual: (expected: unknown) => void
+  toStrictEqual: (expected: unknown) => void
+  toMatch: (pattern: RegExp | string) => void
+  toBeTruthy: () => void
+  toBeFalsy: () => void
+  toBeNull: () => void
+  toBeUndefined: () => void
+  toContain: (value: unknown) => void
+  toHaveLength: (length: number) => void
+  toBeOneOf: (values: unknown[]) => void
+  toMatchSchema: <TParsed>(schema: z.ZodType<TParsed>) => TParsed
+}
 
 class RetryRequestSignal extends Error {
   constructor() {
@@ -469,6 +540,55 @@ export function createRequestScriptRuntime(input: {
         }
       }
     },
+    runTestScripts: async (sources, response) => {
+      const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
+
+      try {
+        const result = await runScriptPhase({
+          phase: 'test',
+          sources,
+          sharedScripts: input.sharedScripts ?? [],
+          runtimeRequest,
+          runtimeRequestMetadata,
+          requestScope,
+          response: createRuntimeResponseApiState(response),
+          environmentContext: createEnvironmentContext(),
+          consoleEntries,
+          toastBridge: input.toast,
+          promptBridge: input.prompt,
+          clipboardBridge: input.clipboard,
+          makeRequestBridge: input.makeRequest,
+          scriptPackages: input.scriptPackages ?? [],
+        })
+        if (result.kind !== 'completed') {
+          throw new Error('retryRequest is not available in test scripts')
+        }
+
+        if (result.scriptErrors.length > 0) {
+          ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+        } else if (pendingEnvironmentIds.size > 0) {
+          environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
+          environmentValues = buildEnvironmentVariableMap(environments)
+          environmentOwners = buildEffectiveEnvironmentOwners(environments)
+          pendingEnvironmentIds.forEach(id => updatedEnvironmentIds.add(id))
+          pendingEnvironmentIds = new Set<string>()
+        }
+
+        return {
+          scriptErrors: result.scriptErrors,
+          registeredTests: result.registeredTests,
+          testRun: result.testRun,
+        }
+      } catch (error) {
+        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+
+        return {
+          scriptErrors: [toScriptErrorDetails(error, 'test')],
+          registeredTests: 0,
+          testRun: null,
+        }
+      }
+    },
   }
 
   function createEnvironmentContext(): EnvironmentContext {
@@ -553,10 +673,10 @@ function restoreRuntimeSnapshot(
   }
 }
 
-function toScriptErrorDetails(error: unknown, fallbackPhase: 'pre-request' | 'post-request'): ScriptErrorDetails {
+function toScriptErrorDetails(error: unknown, fallbackPhase: ScriptPhase): ScriptErrorDetails {
   if (typeof error === 'object' && error !== null && 'sourceName' in error && 'message' in error) {
     return {
-      phase: 'phase' in error && (error.phase === 'pre-request' || error.phase === 'post-request') ? error.phase : fallbackPhase,
+      phase: 'phase' in error && (error.phase === 'pre-request' || error.phase === 'post-request' || error.phase === 'test') ? error.phase : fallbackPhase,
       sourceName: String(error.sourceName),
       message: String(error.message),
       compactLabel:
@@ -583,7 +703,7 @@ function toScriptErrorDetails(error: unknown, fallbackPhase: 'pre-request' | 'po
 }
 
 async function runScriptPhase(input: {
-  phase: 'pre-request' | 'post-request'
+  phase: ScriptPhase
   sources: ScriptSource[]
   sharedScripts: SharedScriptRecord[]
   scriptPackages: ScriptRuntimePackage[]
@@ -607,6 +727,16 @@ async function runScriptPhase(input: {
   const currentCallRequest = {
     value: createScriptCallRequestApi(input.makeRequestBridge, createIdleScriptExecutionController()),
   }
+  const currentSourceContext = {
+    sourceName: 'Script',
+    sourceCode: '',
+    compiledScript: null as CompiledRequestScript | null,
+  }
+  const kvTestRuntime = createKvTestRuntime({
+    runtimeRequest: input.runtimeRequest,
+    response: input.response,
+    getSourceContext: () => ({ ...currentSourceContext }),
+  })
   const sandboxGlobals = {
     request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
       ...input.environmentContext.getValues(),
@@ -622,12 +752,13 @@ async function runScriptPhase(input: {
     cookies: createCookiesApi(),
     prompt: createPromptProxy(() => currentPrompt.value),
     callRequest: createCallRequestProxy(() => currentCallRequest.value),
-    ...(input.phase === 'post-request'
+    ...(input.phase === 'post-request' || input.phase === 'test'
       ? {
           navigateAndCallRequest: createMakeRequestProxy(() => currentMakeRequest.value),
-          retryRequest: createRetryRequestApi(),
+          ...(input.phase === 'post-request' ? { retryRequest: createRetryRequestApi() } : {}),
         }
       : {}),
+    ...(input.phase === 'test' ? { kv: { test: kvTestRuntime.api } } : {}),
     z,
   }
   const requirePackage = createInstalledPackageLoader(input.scriptPackages)
@@ -666,7 +797,11 @@ async function runScriptPhase(input: {
       compiledScript = compileRequestScript(
         source.globalBindings ? appendGlobalBindingAssignments(source.script, source.globalBindings) : source.script
       )
+      currentSourceContext.sourceName = source.name
+      currentSourceContext.sourceCode = source.script
+      currentSourceContext.compiledScript = compiledScript
       await executeScriptInContext(compiledScript.code, sharedContext, executionController)
+      await kvTestRuntime.waitForPending()
       input.runtimeRequest.headers = headerEditor.serialize()
     } catch (error) {
       if (isRetryRequestSignal(error)) {
@@ -682,13 +817,20 @@ async function runScriptPhase(input: {
           sourceCode: source.script,
           compiledScript,
         })],
+        registeredTests: kvTestRuntime.getRegisteredTestCount(),
+        testRun: null,
       }
     } finally {
       executionController.cancel()
     }
   }
 
-  return { kind: 'completed', scriptErrors: [] }
+  return {
+    kind: 'completed',
+    scriptErrors: [],
+    registeredTests: kvTestRuntime.getRegisteredTestCount(),
+    testRun: input.phase === 'test' ? await kvTestRuntime.executeRegisteredTests() : null,
+  }
 }
 
 function createRetryRequestApi() {
@@ -788,7 +930,7 @@ function createIdleScriptExecutionController(): ScriptExecutionPauseController {
 }
 
 function buildScriptErrorDetails(input: {
-  phase: 'pre-request' | 'post-request'
+  phase: ScriptPhase
   sourceName: string
   error: unknown
   sourceCode: string
@@ -825,7 +967,7 @@ function buildScriptErrorDetails(input: {
 }
 
 function buildCompactScriptErrorLabel(
-  phase: 'pre-request' | 'post-request',
+  phase: ScriptPhase,
   line: number | null,
   column: number | null
 ) {
@@ -836,8 +978,15 @@ function buildCompactScriptErrorLabel(
   return column === null ? `${formatScriptPhase(phase)}:${line}` : `${formatScriptPhase(phase)}:${line}:${column}`
 }
 
-function formatScriptPhase(phase: 'pre-request' | 'post-request') {
-  return phase === 'pre-request' ? 'Pre-request' : 'Post-request'
+function formatScriptPhase(phase: ScriptPhase) {
+  switch (phase) {
+    case 'pre-request':
+      return 'Pre-request'
+    case 'post-request':
+      return 'Post-request'
+    case 'test':
+      return 'Test'
+  }
 }
 
 function extractScriptLocation(error: unknown, sourceCode: string, compiledScript: CompiledRequestScript | null) {
@@ -1278,6 +1427,607 @@ function createScopeApi(requestScope: Map<string, string>) {
   }
 }
 
+function createKvTestRuntime(input: {
+  runtimeRequest: RuntimeRequestState
+  response: RuntimeResponseApiState | null
+  getSourceContext: () => { sourceName: string; sourceCode: string; compiledScript: CompiledRequestScript | null }
+}) {
+  type SourceContext = ReturnType<typeof input.getSourceContext>
+  type TestMode = 'run' | 'skip' | 'only'
+  type HookDefinition = { id: string; callback: () => void | Promise<void>; source: SourceContext }
+  type TestDefinition = { id: string; name: string; mode: TestMode; callback: () => void | Promise<void>; source: SourceContext }
+  type SuiteDefinition = {
+    id: string
+    name: string
+    source: SourceContext | null
+    beforeEachHooks: HookDefinition[]
+    afterEachHooks: HookDefinition[]
+    suites: SuiteDefinition[]
+    tests: TestDefinition[]
+  }
+
+  const rootSuite: SuiteDefinition = {
+    id: 'root',
+    name: 'root',
+    source: null,
+    beforeEachHooks: [],
+    afterEachHooks: [],
+    suites: [],
+    tests: [],
+  }
+  const suiteStack: SuiteDefinition[] = [rootSuite]
+  const pendingRegistrations: Array<() => Promise<void>> = []
+  const exampleCache = new Map<string, KvTestExample>()
+  let registeredTestCount = 0
+
+  const currentSuite = () => suiteStack[suiteStack.length - 1] ?? rootSuite
+  const scheduleRegistration = (callback: () => void | Promise<void>) => {
+    pendingRegistrations.push(async () => {
+      await callback()
+    })
+  }
+  const createHook = (callback: () => void | Promise<void>): HookDefinition => ({
+    id: randomUUID(),
+    callback,
+    source: input.getSourceContext(),
+  })
+  const createTest = (name: string, mode: TestMode, callback: () => void | Promise<void>): TestDefinition => ({
+    id: randomUUID(),
+    name,
+    mode,
+    callback,
+    source: input.getSourceContext(),
+  })
+
+  const api: KvTestRuntimeApi = {
+    describe(name, callback) {
+      const suite: SuiteDefinition = {
+        id: randomUUID(),
+        name,
+        source: input.getSourceContext(),
+        beforeEachHooks: [],
+        afterEachHooks: [],
+        suites: [],
+        tests: [],
+      }
+      currentSuite().suites.push(suite)
+      scheduleRegistration(async () => {
+        suiteStack.push(suite)
+        try {
+          await callback()
+        } finally {
+          suiteStack.pop()
+        }
+      })
+    },
+    it(name, callback) {
+      currentSuite().tests.push(createTest(name, 'run', callback))
+      registeredTestCount += 1
+    },
+    test(name, callback) {
+      currentSuite().tests.push(createTest(name, 'run', callback))
+      registeredTestCount += 1
+    },
+    skip(name, callback) {
+      currentSuite().tests.push(createTest(name, 'skip', callback))
+      registeredTestCount += 1
+    },
+    only(name, callback) {
+      currentSuite().tests.push(createTest(name, 'only', callback))
+      registeredTestCount += 1
+    },
+    beforeEach(callback) {
+      currentSuite().beforeEachHooks.push(createHook(callback))
+    },
+    afterEach(callback) {
+      currentSuite().afterEachHooks.push(createHook(callback))
+    },
+    expect(actual) {
+      return createKvExpectation(actual)
+    },
+    fail(message) {
+      throw createKvAssertionError({ message, matcherName: 'fail', expected: undefined, actual: undefined })
+    },
+    assert(condition, message) {
+      if (!condition) {
+        throw createKvAssertionError({
+          message: message ?? 'Expected condition to be truthy',
+          matcherName: 'assert',
+          expected: true,
+          actual: condition,
+        })
+      }
+    },
+    async example(name) {
+      return await loadExample(name)
+    },
+    expectResponse() {
+      return {
+        toMatchExample: async (name, options) => {
+          const example = await loadExample(name)
+          const response = input.response
+          if (!response) {
+            throw createKvAssertionError({
+              message: `Cannot match example ${name} without a settled response`,
+              matcherName: 'toMatchExample',
+              expected: example.response,
+              actual: null,
+            })
+          }
+
+          const compare = options?.compare?.length ? options.compare : ['status', 'headers', 'body']
+          if (compare.includes('status') && response.status !== example.response.status) {
+            throw createKvAssertionError({
+              message: `Expected response status ${response.status} to match example ${name} status ${example.response.status}`,
+              matcherName: 'toMatchExample',
+              expected: example.response.status,
+              actual: response.status,
+            })
+          }
+
+          if (compare.includes('headers')) {
+            const actualHeaders = normalizeHeadersForExampleComparison(response.headers.serialize(), options?.ignoreHeaders ?? [])
+            const expectedHeaders = normalizeHeadersForExampleComparison(example.response.headers, options?.ignoreHeaders ?? [])
+            if (!isDeepStrictEqual(actualHeaders, expectedHeaders)) {
+              throw createKvAssertionError({
+                message: `Expected response headers to match example ${name}`,
+                matcherName: 'toMatchExample',
+                expected: expectedHeaders,
+                actual: actualHeaders,
+              })
+            }
+          }
+
+          if (compare.includes('body')) {
+            const actualBody = getRuntimeResponseRawBody(response)
+            if (actualBody !== example.response.body) {
+              throw createKvAssertionError({
+                message: `Expected response body to match example ${name}`,
+                matcherName: 'toMatchExample',
+                expected: example.response.body,
+                actual: actualBody,
+              })
+            }
+          }
+        },
+      }
+    },
+  }
+
+  async function loadExample(name: string): Promise<KvTestExample> {
+    const normalizedName = name.trim()
+    if (!normalizedName) {
+      throw new Error('Example name is required')
+    }
+
+    const cacheKey = `${input.runtimeRequest.requestId ?? 'unknown'}:${normalizedName}`
+    const cached = exampleCache.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
+    if (!input.runtimeRequest.requestId) {
+      throw new Error('Request examples are not available in this runtime')
+    }
+
+    const examples = await listRequestExamplesByRequestIds([input.runtimeRequest.requestId])
+    const matches = examples.filter(example => example.name.trim() === normalizedName)
+    if (matches.length === 0) {
+      throw new Error(`Example ${normalizedName} was not found`)
+    }
+
+    if (matches.length > 1) {
+      throw new Error(`Example ${normalizedName} is ambiguous because multiple saved examples share that name`)
+    }
+
+    const [example] = matches
+    const result: KvTestExample = {
+      id: example.id,
+      name: example.name,
+      request: {
+        headers: example.requestHeaders,
+        body: example.requestBody,
+      },
+      response: {
+        status: example.responseStatus,
+        statusText: example.responseStatusText,
+        headers: example.responseHeaders,
+        body: example.responseBody,
+      },
+    }
+    exampleCache.set(cacheKey, result)
+    return result
+  }
+
+  async function waitForPending() {
+    while (pendingRegistrations.length > 0) {
+      const registration = pendingRegistrations.shift()
+      if (!registration) {
+        continue
+      }
+
+      await registration()
+    }
+  }
+
+  async function executeRegisteredTests(): Promise<RequestTestRun | null> {
+    await waitForPending()
+    if (registeredTestCount === 0) {
+      return null
+    }
+
+    const onlyIds = collectOnlyTestIds(rootSuite)
+    const startedAt = Date.now()
+    const suites = rootSuite.tests.length > 0
+      ? [
+          await executeSuite(
+            {
+              id: 'top-level-tests',
+              name: 'Tests',
+              source: null,
+              beforeEachHooks: rootSuite.beforeEachHooks,
+              afterEachHooks: rootSuite.afterEachHooks,
+              suites: rootSuite.suites,
+              tests: rootSuite.tests,
+            },
+            [],
+            [],
+            onlyIds,
+            []
+          ),
+        ]
+      : await Promise.all(rootSuite.suites.map(suite => executeSuite(suite, [], [], onlyIds, [])))
+    const durationMs = Date.now() - startedAt
+    const counts = countTestResults(suites)
+
+    return {
+      status: counts.failedCount > 0 ? 'failed' : counts.passedCount > 0 ? 'passed' : 'skipped',
+      totalCount: counts.totalCount,
+      passedCount: counts.passedCount,
+      failedCount: counts.failedCount,
+      skippedCount: counts.skippedCount,
+      durationMs,
+      suites,
+    }
+  }
+
+  async function executeSuite(
+    suite: SuiteDefinition,
+    inheritedBeforeEach: HookDefinition[],
+    inheritedAfterEach: HookDefinition[],
+    onlyIds: Set<string>,
+    parentPath: string[]
+  ): Promise<RequestTestSuiteResult> {
+    const startedAt = Date.now()
+    const path = [...parentPath, suite.name]
+    const nextBeforeEach = [...inheritedBeforeEach, ...suite.beforeEachHooks]
+    const nextAfterEach = [...suite.afterEachHooks, ...inheritedAfterEach]
+    const nestedSuites = await Promise.all(
+      suite.suites.map(child => executeSuite(child, nextBeforeEach, nextAfterEach, onlyIds, path))
+    )
+    const tests = await Promise.all(suite.tests.map(test => executeTest(test, path, nextBeforeEach, nextAfterEach, onlyIds)))
+    const durationMs = Date.now() - startedAt
+    const statuses = [...nestedSuites.map(result => result.status), ...tests.map(result => result.status)]
+
+    return {
+      id: suite.id,
+      path,
+      name: suite.name,
+      status: statuses.includes('failed') ? 'failed' : statuses.includes('passed') ? 'passed' : 'skipped',
+      durationMs,
+      suites: nestedSuites,
+      tests,
+    }
+  }
+
+  async function executeTest(
+    test: TestDefinition,
+    path: string[],
+    beforeEachHooks: HookDefinition[],
+    afterEachHooks: HookDefinition[],
+    onlyIds: Set<string>
+  ): Promise<RequestTestCaseResult> {
+    if (test.mode === 'skip' || (onlyIds.size > 0 && !onlyIds.has(test.id))) {
+      return { id: test.id, path, name: test.name, status: 'skipped', durationMs: 0, failures: [] }
+    }
+
+    const failures: RequestTestFailure[] = []
+    const startedAt = Date.now()
+
+    for (const hook of beforeEachHooks) {
+      try {
+        await hook.callback()
+      } catch (error) {
+        failures.push(buildRequestTestFailure(error, hook.source, 'beforeEach'))
+        break
+      }
+    }
+
+    if (failures.length === 0) {
+      try {
+        await test.callback()
+      } catch (error) {
+        failures.push(buildRequestTestFailure(error, test.source, null))
+      }
+    }
+
+    for (const hook of afterEachHooks) {
+      try {
+        await hook.callback()
+      } catch (error) {
+        failures.push(buildRequestTestFailure(error, hook.source, 'afterEach'))
+      }
+    }
+
+    return {
+      id: test.id,
+      path,
+      name: test.name,
+      status: failures.length > 0 ? 'failed' : 'passed',
+      durationMs: Date.now() - startedAt,
+      failures,
+    }
+  }
+
+  return {
+    api,
+    getRegisteredTestCount() {
+      return registeredTestCount
+    },
+    waitForPending,
+    executeRegisteredTests,
+  }
+}
+
+type KvAssertionError = Error & {
+  matcherName: string | null
+  expected: unknown
+  actual: unknown
+}
+
+function createKvExpectation<T>(actual: T): KvExpectation<T> {
+  return {
+    toBe(expected) {
+      if (!Object.is(actual, expected)) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be ${inspect(expected)}`,
+          matcherName: 'toBe',
+          expected,
+          actual,
+        })
+      }
+    },
+    toEqual(expected) {
+      if (!isDeepStrictEqual(actual, expected)) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to equal ${inspect(expected)}`,
+          matcherName: 'toEqual',
+          expected,
+          actual,
+        })
+      }
+    },
+    toStrictEqual(expected) {
+      if (!isDeepStrictEqual(actual, expected)) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to strictly equal ${inspect(expected)}`,
+          matcherName: 'toStrictEqual',
+          expected,
+          actual,
+        })
+      }
+    },
+    toMatch(pattern) {
+      if (typeof actual !== 'string') {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be a string`,
+          matcherName: 'toMatch',
+          expected: pattern,
+          actual,
+        })
+      }
+
+      const matched = typeof pattern === 'string' ? actual.includes(pattern) : pattern.test(actual)
+      if (!matched) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to match ${inspect(pattern)}`,
+          matcherName: 'toMatch',
+          expected: pattern,
+          actual,
+        })
+      }
+    },
+    toBeTruthy() {
+      if (!actual) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be truthy`,
+          matcherName: 'toBeTruthy',
+          expected: true,
+          actual,
+        })
+      }
+    },
+    toBeFalsy() {
+      if (actual) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be falsy`,
+          matcherName: 'toBeFalsy',
+          expected: false,
+          actual,
+        })
+      }
+    },
+    toBeNull() {
+      if (actual !== null) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be null`,
+          matcherName: 'toBeNull',
+          expected: null,
+          actual,
+        })
+      }
+    },
+    toBeUndefined() {
+      if (actual !== undefined) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be undefined`,
+          matcherName: 'toBeUndefined',
+          expected: undefined,
+          actual,
+        })
+      }
+    },
+    toContain(value) {
+      const contains = Array.isArray(actual)
+        ? actual.some(entry => isDeepStrictEqual(entry, value))
+        : typeof actual === 'string'
+          ? actual.includes(String(value))
+          : false
+      if (!contains) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to contain ${inspect(value)}`,
+          matcherName: 'toContain',
+          expected: value,
+          actual,
+        })
+      }
+    },
+    toHaveLength(length) {
+      const actualLength = typeof actual === 'string' || Array.isArray(actual) ? actual.length : null
+      if (actualLength !== length) {
+        throw createKvAssertionError({
+          message: `Expected length ${inspect(actualLength)} to be ${inspect(length)}`,
+          matcherName: 'toHaveLength',
+          expected: length,
+          actual: actualLength,
+        })
+      }
+    },
+    toBeOneOf(values) {
+      if (!values.some(value => isDeepStrictEqual(value, actual))) {
+        throw createKvAssertionError({
+          message: `Expected ${inspect(actual)} to be one of ${inspect(values)}`,
+          matcherName: 'toBeOneOf',
+          expected: values,
+          actual,
+        })
+      }
+    },
+    toMatchSchema(schema) {
+      const parsed = schema.safeParse(actual)
+      if (!parsed.success) {
+        throw createKvAssertionError({
+          message: parsed.error.message,
+          matcherName: 'toMatchSchema',
+          expected: schema,
+          actual,
+        })
+      }
+
+      return parsed.data
+    },
+  }
+}
+
+function createKvAssertionError(input: {
+  message: string
+  matcherName: string | null
+  expected: unknown
+  actual: unknown
+}) {
+  const error = new Error(input.message) as KvAssertionError
+  error.matcherName = input.matcherName
+  error.expected = input.expected
+  error.actual = input.actual
+  return error
+}
+
+function buildRequestTestFailure(
+  error: unknown,
+  source: { sourceName: string; sourceCode: string; compiledScript: CompiledRequestScript | null },
+  hookName: 'beforeEach' | 'afterEach' | null
+): RequestTestFailure {
+  const location = extractScriptLocation(error, source.sourceCode, source.compiledScript)
+  const matcherName = isKvAssertionError(error) ? error.matcherName : hookName
+  const expected = isKvAssertionError(error) ? error.expected : undefined
+  const actual = isKvAssertionError(error) ? error.actual : undefined
+
+  return {
+    message: error instanceof Error ? error.message : String(error),
+    matcherName,
+    expected,
+    actual,
+    diff: expected === undefined && actual === undefined ? null : `${inspect(actual)}\n!=\n${inspect(expected)}`,
+    sourceName: source.sourceName,
+    line: location?.line ?? null,
+    column: location?.column ?? null,
+    sourceLine: location?.sourceLine ?? null,
+  }
+}
+
+function isKvAssertionError(error: unknown): error is KvAssertionError {
+  return Boolean(
+    error && typeof error === 'object' && 'matcherName' in error && 'expected' in error && 'actual' in error
+  )
+}
+
+function collectOnlyTestIds(suite: {
+  suites: Array<{ suites: unknown[]; tests: Array<{ id: string; mode: 'run' | 'skip' | 'only' }> }>
+  tests: Array<{ id: string; mode: 'run' | 'skip' | 'only' }>
+}) {
+  const ids = new Set<string>()
+  for (const test of suite.tests) {
+    if (test.mode === 'only') {
+      ids.add(test.id)
+    }
+  }
+
+  for (const child of suite.suites) {
+    for (const id of collectOnlyTestIds(child as never)) {
+      ids.add(id)
+    }
+  }
+
+  return ids
+}
+
+function countTestResults(suites: RequestTestSuiteResult[]) {
+  return suites.reduce(
+    (counts, suite) => {
+      for (const test of suite.tests) {
+        counts.totalCount += 1
+        if (test.status === 'passed') counts.passedCount += 1
+        if (test.status === 'failed') counts.failedCount += 1
+        if (test.status === 'skipped') counts.skippedCount += 1
+      }
+
+      const childCounts = countTestResults(suite.suites)
+      counts.totalCount += childCounts.totalCount
+      counts.passedCount += childCounts.passedCount
+      counts.failedCount += childCounts.failedCount
+      counts.skippedCount += childCounts.skippedCount
+      return counts
+    },
+    { totalCount: 0, passedCount: 0, failedCount: 0, skippedCount: 0 }
+  )
+}
+
+function normalizeHeadersForExampleComparison(headers: string, ignoreHeaders: string[]) {
+  const ignored = new Set(ignoreHeaders.map(header => header.trim().toLowerCase()).filter(Boolean))
+  return parseResponseHeaderEntries(headers)
+    .filter(([name]) => !ignored.has(name.trim().toLowerCase()))
+    .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]))
+}
+
+function getRuntimeResponseRawBody(response: RuntimeResponseApiState) {
+  const rawBody = Reflect.get(response, 'rawBody')
+  if (typeof rawBody === 'string') {
+    return rawBody
+  }
+
+  return response.body.type === 'text' ? response.body.data : JSON.stringify(response.body.data)
+}
+
 function createRequestMetadataApi(runtimeRequestMetadata: RuntimeRequestMetadataState): RequestMetadataApi {
   return {
     get isRetry() {
@@ -1446,7 +2196,7 @@ function executeModuleScript(code: string, context: vm.Context) {
   return script.runInContext(context, { timeout: SCRIPT_TIMEOUT_MS })
 }
 
-function getActiveGlobalScriptSources(sharedScripts: SharedScriptRecord[], phase: 'pre-request' | 'post-request'): ScriptSource[] {
+function getActiveGlobalScriptSources(sharedScripts: SharedScriptRecord[], phase: ScriptPhase): ScriptSource[] {
   return sharedScripts
     .filter(script => script.isActive && script.kind === 'global' && script.targets.includes(phase))
     .map(script => ({
@@ -1457,7 +2207,7 @@ function getActiveGlobalScriptSources(sharedScripts: SharedScriptRecord[], phase
 }
 
 function createSharedModuleLoader(input: {
-  phase: 'pre-request' | 'post-request'
+  phase: ScriptPhase
   sharedScripts: SharedScriptRecord[]
   consoleEntries: RequestConsoleEntry[]
   loadPackage: (specifier: string) => unknown
@@ -1469,11 +2219,12 @@ function createSharedModuleLoader(input: {
     crypto: ReturnType<typeof createCryptoApi>
     z: typeof z
     toast?: ReturnType<typeof createScriptToastApi>
-    prompt?: ReturnType<typeof createPromptProxy>
-    navigateAndCallRequest?: ReturnType<typeof createMakeRequestProxy>
-    callRequest?: ReturnType<typeof createCallRequestProxy>
-    loadPackage?: (specifier: string) => unknown
-  }
+      prompt?: ReturnType<typeof createPromptProxy>
+      navigateAndCallRequest?: ReturnType<typeof createMakeRequestProxy>
+      callRequest?: ReturnType<typeof createCallRequestProxy>
+      kv?: { test: KvTestRuntimeApi }
+      loadPackage?: (specifier: string) => unknown
+    }
 }) {
   const visibleModules = input.sharedScripts.filter(
     script => script.isActive && script.kind === 'module' && script.targets.includes(input.phase) && script.name.trim() !== ''

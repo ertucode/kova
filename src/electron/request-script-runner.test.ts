@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import path from 'node:path'
 import { createRequestScriptRuntime } from './request-script-runner.js'
+import * as environmentDb from './db/environments.js'
+import * as requestExamplesDb from './db/request-examples.js'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -154,6 +156,7 @@ describe('createRequestScriptRuntime', () => {
   it('shares active global shared script declarations with request scripts', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
+        requestId: 'request-1',
         method: 'GET',
         url: 'https://example.com',
         pathParams: '',
@@ -722,6 +725,204 @@ describe('createRequestScriptRuntime', () => {
 
   expect(postRequestErrors).toEqual({ scriptErrors: [], retryRequested: false })
   expect(hiddenToastIds).toEqual(['loading-toast'])
+})
+
+it('runs test scripts with kv.test and persists environment updates', async () => {
+  const navigatedPaths: string[][] = []
+  const updateEnvironmentVariablesSpy = vi.spyOn(environmentDb, 'updateEnvironmentVariables').mockImplementation(async input => ({
+    id: input.id,
+    name: 'Default',
+    variables: input.variables,
+    color: null,
+    warnOnRequest: false,
+    position: 0,
+    priority: 0,
+    createdAt: 1,
+    deletedAt: null,
+  }))
+  try {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [
+        {
+          id: 'env-1',
+          name: 'Default',
+          variables: '',
+          color: null,
+          warnOnRequest: false,
+          position: 0,
+          priority: 0,
+          createdAt: 1,
+          deletedAt: null,
+        },
+      ],
+      makeRequest: {
+        navigateAndCallRequest: async path => {
+          navigatedPaths.push(path)
+        },
+        callRequest: async () => ({
+          status: 200,
+          statusText: 'OK',
+          headers: '',
+          body: { type: 'text', data: '' },
+        }),
+      },
+    })
+
+    const result = await runtime.runTestScripts(
+      [
+        {
+          name: 'Request: Tests',
+          script:
+            "kv.test.describe('suite', () => {\n  kv.test.beforeEach(() => {\n    scope.set('before', '1')\n  })\n\n  kv.test.it('updates env', async () => {\n    env.set('token', 'abc')\n    await navigateAndCallRequest(['Auth', 'Refresh Token'])\n  })\n\n  kv.test.skip('ignored', () => {\n    env.set('token', 'skip')\n  })\n})",
+        },
+      ],
+      {
+        status: 200,
+        statusText: 'OK',
+        headers: '',
+        body: { type: 'text', data: '' },
+      }
+    )
+
+    expect(result.scriptErrors).toEqual([])
+    expect(result.registeredTests).toBe(2)
+    expect(result.testRun?.passedCount).toBe(1)
+    expect(result.testRun?.skippedCount).toBe(1)
+    expect(navigatedPaths).toEqual([['Auth', 'Refresh Token']])
+    expect(runtime.getRequestScopeValues().before).toBe('1')
+    expect(runtime.getUpdatedEnvironments()).toEqual([
+      {
+        id: 'env-1',
+        name: 'Default',
+        variables: 'token:abc',
+        color: null,
+        warnOnRequest: false,
+        position: 0,
+        priority: 0,
+        createdAt: 1,
+        deletedAt: null,
+      },
+    ])
+    expect(updateEnvironmentVariablesSpy).toHaveBeenCalledWith({ id: 'env-1', variables: 'token:abc' })
+  } finally {
+    updateEnvironmentVariablesSpy.mockRestore()
+  }
+})
+
+it('does not expose retryRequest in test scripts', async () => {
+  const runtime = createRequestScriptRuntime({
+    request: {
+      requestId: 'request-1',
+      method: 'GET',
+      url: 'https://example.com',
+      pathParams: '',
+      searchParams: '',
+      auth: { type: 'noauth' },
+      headers: '',
+      body: '',
+      bodyType: 'none',
+      rawType: 'text',
+    },
+    environments: [],
+  })
+
+  const result = await runtime.runTestScripts(
+    [
+      {
+        name: 'Request: Tests',
+        script: 'retryRequest()',
+      },
+    ],
+    {
+      status: 200,
+      statusText: 'OK',
+      headers: '',
+      body: { type: 'text', data: '' },
+    }
+  )
+
+  expect(result.registeredTests).toBe(0)
+  expect(result.testRun).toBeNull()
+  expect(result.scriptErrors).toHaveLength(1)
+  expect(result.scriptErrors[0]?.phase).toBe('test')
+  expect(result.scriptErrors[0]?.message).toContain('retryRequest is not defined')
+})
+
+it('supports only and async example matching in test scripts', async () => {
+  const listExamplesSpy = vi.spyOn(requestExamplesDb, 'listRequestExamplesByRequestIds').mockResolvedValue([
+    {
+      id: 'example-1',
+      requestId: 'request-1',
+      name: 'success',
+      position: 0,
+      requestHeaders: '',
+      requestBody: '',
+      requestBodyType: 'none',
+      requestRawType: 'json',
+      responseStatus: 200,
+      responseStatusText: 'OK',
+      responseHeaders: 'content-type: application/json',
+      responseBody: '{"ok":true}',
+      createdAt: 1,
+      updatedAt: 1,
+      deletedAt: null,
+    },
+  ])
+
+  try {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        requestId: 'request-1',
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+
+    const result = await runtime.runTestScripts(
+      [
+        {
+          name: 'Request: Tests',
+          script:
+            "kv.test.it('plain', () => { kv.test.fail('should be skipped') })\nkv.test.only('matches example', async () => {\n  const example = await kv.test.example('success')\n  kv.test.expect(example.response.status).toBe(200)\n  await kv.test.expectResponse().toMatchExample('success')\n})",
+        },
+      ],
+      {
+        status: 200,
+        statusText: 'OK',
+        headers: 'content-type: application/json',
+        body: { type: 'json', data: { ok: true } },
+        rawBody: '{"ok":true}',
+      }
+    )
+
+    expect(result.scriptErrors).toEqual([])
+    expect(result.registeredTests).toBe(2)
+    expect(result.testRun?.passedCount).toBe(1)
+    expect(result.testRun?.skippedCount).toBe(1)
+    expect(result.testRun?.failedCount).toBe(0)
+    expect(listExamplesSpy).toHaveBeenCalledWith(['request-1'])
+  } finally {
+    listExamplesSpy.mockRestore()
+  }
 })
 
 it('allows post-request scripts to mutate response headers', async () => {

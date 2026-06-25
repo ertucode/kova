@@ -75,7 +75,7 @@ export async function sendRequest(
     }
 
     const { headers, method, requestBody, url } = overrideResult.data
-    const { postRequestScriptSources, requestName, resolvedAuth, runtime, variables } = preparedRequest.data
+    const { postRequestScriptSources, testScriptSources, requestName, resolvedAuth, runtime, variables } = preparedRequest.data
     if (Object.hasOwn(input.callRequestOverrides ?? {}, 'method')) {
       runtime.request.method = method
     }
@@ -126,6 +126,7 @@ export async function sendRequest(
         resolvedAuth,
         runtime,
         postRequestScriptSources,
+        testScriptSources,
         executedRequest,
         executionId,
         sentAt,
@@ -141,6 +142,7 @@ export async function sendRequest(
       statusText: response.statusText,
       headers: responseHeaders,
       body: parseScriptResponseBody(bodyText, responseHeaders),
+      rawBody: bodyText,
     }
     const postRequestResult = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
     const scriptErrors = postRequestResult.scriptErrors
@@ -179,6 +181,7 @@ export async function sendRequest(
         resolvedAuth,
       })
     const shouldRetryRequest = (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.requestMetadata)
+    const testResult = shouldRetryRequest ? { scriptErrors: [], registeredTests: 0, testRun: null } : await runtime.runTestScripts(testScriptSources, scriptResponse)
 
     const execution: RequestExecutionRecord = {
       itemType: 'http',
@@ -189,6 +192,7 @@ export async function sendRequest(
       response: responseSnapshot,
       responseError: null,
       scriptErrors,
+      testRun: testResult.testRun,
       consoleEntries: runtime.getConsoleEntries(),
     }
 
@@ -213,6 +217,7 @@ export async function sendRequest(
       durationMs,
       requestScope: runtime.getRequestScopeValues(),
       scriptErrors,
+      testRun: testResult.testRun,
       updatedEnvironments,
       consoleEntries: runtime.getConsoleEntries(),
       execution: persistedExecution,
@@ -300,12 +305,13 @@ async function consumeSseResponse(input: {
   resolvedAuth: PreparedHttpRequest['resolvedAuth']
   runtime: PreparedHttpRequest['runtime']
   postRequestScriptSources: PreparedHttpRequest['postRequestScriptSources']
+  testScriptSources: PreparedHttpRequest['testScriptSources']
   executedRequest: ExecutedRequestSnapshot
   executionId: string
   sentAt: number
   startedAt: number
 }): Promise<GenericResult<SendRequestResponse>> {
-  const { response, requestName, runtime, postRequestScriptSources, executedRequest, executionId, sentAt } = input
+  const { response, requestName, runtime, postRequestScriptSources, testScriptSources, executedRequest, executionId, sentAt } = input
   let { responseHeaders } = input
   const reader = response.body?.getReader()
   let bodyText = ''
@@ -362,6 +368,7 @@ async function consumeSseResponse(input: {
       statusText: response.statusText,
       headers: responseHeaders,
       body: parseScriptResponseBody(bodyText, responseHeaders),
+      rawBody: bodyText,
     }
     const postRequestResult = await runtime.runPostRequestScripts(postRequestScriptSources, scriptResponse)
     const scriptErrors = postRequestResult.scriptErrors
@@ -389,6 +396,7 @@ async function consumeSseResponse(input: {
         resolvedAuth: input.resolvedAuth,
       })
     const shouldRetryRequest = (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.input.requestMetadata)
+    const testResult = shouldRetryRequest ? { scriptErrors: [], registeredTests: 0, testRun: null } : await runtime.runTestScripts(testScriptSources, scriptResponse)
 
     const responseSnapshot: ReceivedResponseSnapshot = {
       status: response.status,
@@ -409,6 +417,7 @@ async function consumeSseResponse(input: {
       response: responseSnapshot,
       responseError: null,
       scriptErrors,
+      testRun: testResult.testRun,
       consoleEntries: runtime.getConsoleEntries(),
     }
 
@@ -442,6 +451,7 @@ async function consumeSseResponse(input: {
       durationMs,
       requestScope: runtime.getRequestScopeValues(),
       scriptErrors,
+      testRun: testResult.testRun,
       updatedEnvironments,
       consoleEntries: runtime.getConsoleEntries(),
       execution: persistedExecution,
@@ -771,6 +781,7 @@ async function maybeRetryWithTokenRefresh(input: {
       auth: tokenRefreshRequest.auth,
       preRequestScript: tokenRefreshRequest.preRequestScript,
       postRequestScript: tokenRefreshRequest.postRequestScript,
+      testScript: tokenRefreshRequest.testScript,
       headers: tokenRefreshRequest.headers,
       body: tokenRefreshRequest.body,
       bodyType: tokenRefreshRequest.bodyType,

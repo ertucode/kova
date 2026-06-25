@@ -101,6 +101,7 @@ export function toRequestDetailsDraft(request: HttpRequestRecord): RequestDetail
     auth: request.auth,
     preRequestScript: request.preRequestScript,
     postRequestScript: request.postRequestScript,
+    testScript: request.testScript,
     responseVisualizer: request.responseVisualizer,
     responseTableAccessor: request.responseTableAccessor,
     preferredResponseBodyView: request.preferredResponseBodyView,

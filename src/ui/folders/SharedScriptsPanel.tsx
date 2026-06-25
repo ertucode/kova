@@ -31,8 +31,8 @@ import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 import { Tooltip } from '../components/Tooltip'
 
-const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime']
-const ALL_SCRIPT_DOCUMENTATION_PHASES = ['pre-request', 'post-request', 'response-visualizer', 'view-runtime'] as const
+const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'test', 'response-visualizer', 'view-runtime']
+const ALL_SCRIPT_DOCUMENTATION_PHASES = ['pre-request', 'post-request', 'test', 'response-visualizer', 'view-runtime'] as const
 const EMPTY_ENTRIES: Record<string, never> = {}
 
 export function SharedScriptsPanel() {
@@ -693,6 +693,8 @@ function formatTargetLabel(target: SharedScriptTarget) {
       return 'Pre-request'
     case 'post-request':
       return 'Post-request'
+    case 'test':
+      return 'Tests'
     case 'response-visualizer':
       return 'Response visualizer'
     case 'view-runtime':

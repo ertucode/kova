@@ -555,6 +555,7 @@ function selectionsMatch(left: Selection | null, right: Selection | null) {
       auth: importedRequest.auth,
       preRequestScript: createResult.data.preRequestScript,
       postRequestScript: createResult.data.postRequestScript,
+      testScript: createResult.data.testScript,
       responseVisualizer: createResult.data.responseVisualizer,
       responseTableAccessor: createResult.data.responseTableAccessor,
       preferredResponseBodyView: createResult.data.preferredResponseBodyView,
@@ -1370,6 +1371,7 @@ async function saveItem(selection: Selection, options?: { skipFormatting?: boole
             auth: draft.auth,
             preRequestScript: draft.preRequestScript,
             postRequestScript: draft.postRequestScript,
+            testScript: draft.testScript,
             responseVisualizer: draft.responseVisualizer,
             responseTableAccessor: draft.responseTableAccessor,
             preferredResponseBodyView: draft.preferredResponseBodyView,
@@ -1443,12 +1445,13 @@ async function maybeFormatDetailsDraftScriptsForSave(draft: DetailsDraft) {
   }
 
   if (draft.itemType === 'request') {
-    return {
-      ...draft,
-      preRequestScript: await maybeFormatScriptBlock(draft.preRequestScript, 'Pre-request script'),
-      postRequestScript: await maybeFormatScriptBlock(draft.postRequestScript, 'Post-request script'),
-      responseVisualizer: await maybeFormatScriptBlock(draft.responseVisualizer, 'Response visualizer'),
-    }
+      return {
+        ...draft,
+        preRequestScript: await maybeFormatScriptBlock(draft.preRequestScript, 'Pre-request script'),
+        postRequestScript: await maybeFormatScriptBlock(draft.postRequestScript, 'Post-request script'),
+        testScript: await maybeFormatScriptBlock(draft.testScript, 'Test script'),
+        responseVisualizer: await maybeFormatScriptBlock(draft.responseVisualizer, 'Response visualizer'),
+      }
   }
 
   return draft
@@ -1507,6 +1510,14 @@ function syncScriptAiTargetsForDetailsDraft(selection: Selection, draft: Details
           runtimeContext: { phase: 'post-request' },
         },
         draft.postRequestScript
+      )
+      void ScriptAiReviewCoordinator.syncEditorCode(
+        {
+          ownerType: 'request',
+          ownerId: selection.id,
+          runtimeContext: { phase: 'test' },
+        },
+        draft.testScript
       )
       void ScriptAiReviewCoordinator.syncEditorCode(
         {

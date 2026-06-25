@@ -1,7 +1,7 @@
 import type { SharedScriptTarget } from '../../common/SharedScripts.js'
 import type { ScriptAiRuntimeContext } from '../../common/ScriptAi.js'
 
-export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'response-visualizer' | 'view-runtime'
+export type ScriptAutocompletePhase = 'pre-request' | 'post-request' | 'test' | 'response-visualizer' | 'view-runtime'
 export type ScriptRuntimeContext = ScriptAiRuntimeContext & ({ phase: ScriptAutocompletePhase } | { templatePhase: 'pre-request' } | { targets: SharedScriptTarget[] })
 
 const sharedDeclarations = String.raw`
@@ -138,7 +138,7 @@ interface ScriptRequestApi {
   headers: ScriptHeaderApi
 }
 
-type ScriptRequestRuntimePhase = 'pre-request' | 'post-request' | 'template-expression'
+type ScriptRequestRuntimePhase = 'pre-request' | 'post-request' | 'test' | 'template-expression'
 
 type ScriptRequestRuntimeSource =
   | 'request-editor'
@@ -230,6 +230,61 @@ interface ScriptPromptApi {
   text(options: ScriptPromptTextOptions): Promise<string | null>
 }
 
+interface KvTestApi {
+  describe(name: string, callback: () => void | Promise<void>): void
+  it(name: string, callback: () => void | Promise<void>): void
+  test(name: string, callback: () => void | Promise<void>): void
+  skip(name: string, callback: () => void | Promise<void>): void
+  only(name: string, callback: () => void | Promise<void>): void
+  beforeEach(callback: () => void | Promise<void>): void
+  afterEach(callback: () => void | Promise<void>): void
+  expect<T>(actual: T): KvExpectation<T>
+  fail(message: string): never
+  assert(condition: unknown, message?: string): asserts condition
+  example(name: string): Promise<KvTestExample>
+  expectResponse(): KvResponseExpectation
+}
+
+interface KvApi {
+  test: KvTestApi
+}
+
+type KvExampleCompareTarget = 'status' | 'headers' | 'body'
+
+interface KvTestExample {
+  id: string
+  name: string
+  request: {
+    headers: string
+    body: string
+  }
+  response: {
+    status: number
+    statusText: string
+    headers: string
+    body: string
+  }
+}
+
+interface KvResponseExpectation {
+  toMatchExample(name: string, options?: { compare?: KvExampleCompareTarget[]; ignoreHeaders?: string[] }): Promise<void>
+}
+
+interface KvExpectation<T> {
+  toBe(expected: unknown): void
+  toEqual(expected: unknown): void
+  toStrictEqual(expected: unknown): void
+  toMatch(pattern: RegExp | string): void
+  toBeTruthy(): void
+  toBeFalsy(): void
+  toBeNull(): void
+  toBeUndefined(): void
+  toContain(value: unknown): void
+  toHaveLength(length: number): void
+  toBeOneOf(values: unknown[]): void
+  toMatchSchema<TParsed>(schema: import('./vendor/zod/index.cjs').ZodType<TParsed>): TParsed
+}
+
 interface ScriptClipboardApi {
   /** Write a string to the system clipboard. */
   write(value: string): void
@@ -265,6 +320,10 @@ declare const toast: ScriptToastApi
 
 const scriptPromptDeclarations = String.raw`
 declare const prompt: ScriptPromptApi
+`
+
+const testDeclarations = String.raw`
+declare const kv: KvApi
 `
 
 const postRequestDeclarations = String.raw`
@@ -396,20 +455,28 @@ export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
   const targets = getContextTargets(context)
   let declarations = sharedDeclarations
 
-  if (targets.every(target => target === 'pre-request' || target === 'post-request' || target === 'response-visualizer')) {
+  if (targets.every(target => target === 'pre-request' || target === 'post-request' || target === 'test' || target === 'response-visualizer')) {
     declarations = `${declarations}\n${requestDeclarations}`
   }
 
   if (targets.every(target => target === 'pre-request' || target === 'post-request')) {
-    declarations = `${declarations}\n${scriptToastDeclarations}\n${scriptPromptDeclarations}`
+    declarations = `${declarations}\n${scriptToastDeclarations}`
   }
 
-  if (targets.every(target => target === 'post-request' || target === 'response-visualizer')) {
+  if (targets.every(target => target === 'pre-request' || target === 'post-request' || target === 'test')) {
+    declarations = `${declarations}\n${scriptPromptDeclarations}`
+  }
+
+  if (targets.every(target => target === 'post-request' || target === 'test' || target === 'response-visualizer')) {
     declarations = `${declarations}\n${postRequestDeclarations}`
   }
 
   if (targets.every(target => target === 'post-request')) {
     declarations = `${declarations}\n${postRequestOnlyDeclarations}`
+  }
+
+  if (targets.every(target => target === 'test')) {
+    declarations = `${declarations}\n${testDeclarations}`
   }
 
   if (supportsVisualRuntimeDeclarations(targets)) {

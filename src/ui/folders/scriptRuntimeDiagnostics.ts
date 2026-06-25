@@ -221,26 +221,28 @@ function buildRequestPathDeclarations(runtimeContext: ScriptRuntimeContext, requ
 
 function supportsRequestPathDeclarations(runtimeContext: ScriptRuntimeContext) {
   if ('phase' in runtimeContext) {
-    return runtimeContext.phase === 'pre-request' || runtimeContext.phase === 'post-request' || runtimeContext.phase === 'view-runtime'
+    return runtimeContext.phase === 'pre-request' || runtimeContext.phase === 'post-request' || runtimeContext.phase === 'test' || runtimeContext.phase === 'view-runtime'
   }
 
   if ('templatePhase' in runtimeContext) {
     return false
   }
 
-  return runtimeContext.targets.some(target => target === 'pre-request' || target === 'post-request' || target === 'view-runtime')
+  return runtimeContext.targets.length > 0 && runtimeContext.targets.every(
+    target => target === 'pre-request' || target === 'post-request' || target === 'test' || target === 'view-runtime'
+  )
 }
 
 function supportsNavigateAndCallRequestDeclarations(runtimeContext: ScriptRuntimeContext) {
   if ('phase' in runtimeContext) {
-    return runtimeContext.phase === 'post-request'
+    return runtimeContext.phase === 'post-request' || runtimeContext.phase === 'test'
   }
 
   if ('templatePhase' in runtimeContext) {
     return false
   }
 
-  return runtimeContext.targets.includes('post-request')
+  return runtimeContext.targets.length > 0 && runtimeContext.targets.every(target => target === 'post-request' || target === 'test')
 }
 
 function dedupeDiagnostics(diagnostics: readonly ts.Diagnostic[]) {

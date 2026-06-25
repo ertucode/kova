@@ -60,6 +60,7 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         authJson: serializeHttpAuth(createDefaultHttpAuth()),
         preRequestScript: '',
         postRequestScript: '',
+        testScript: '',
         responseVisualizer: '',
         responseTableAccessor: '',
         preferredResponseBodyView: 'raw',
@@ -160,6 +161,7 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
         authJson: serializeHttpAuth(input.auth),
         preRequestScript: input.preRequestScript,
         postRequestScript: input.postRequestScript,
+        testScript: input.testScript,
         responseVisualizer: input.responseVisualizer,
         responseTableAccessor: input.responseTableAccessor,
         preferredResponseBodyView: input.preferredResponseBodyView,
@@ -368,6 +370,7 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     auth: parseHttpAuth(request.authJson),
     preRequestScript: request.preRequestScript,
     postRequestScript: request.postRequestScript,
+    testScript: request.testScript,
     responseVisualizer: request.responseVisualizer,
     responseTableAccessor: request.responseTableAccessor,
     preferredResponseBodyView: (RESPONSE_BODY_VIEWS.includes(request.preferredResponseBodyView as ResponseBodyView)

@@ -104,9 +104,10 @@ export async function persistRequestHistory(input: { execution: RequestExecution
       responseBodyOmitted: execution.response?.bodyOmitted ?? false,
       responseError: execution.responseError,
       responseDurationMs: execution.response?.durationMs ?? null,
-      responseReceivedAt: execution.response?.receivedAt ?? null,
-      scriptErrorsJson: JSON.stringify(execution.scriptErrors ?? []),
-      consoleEntriesJson: JSON.stringify(execution.consoleEntries ?? []),
+       responseReceivedAt: execution.response?.receivedAt ?? null,
+       scriptErrorsJson: JSON.stringify(execution.scriptErrors ?? []),
+       testRunJson: JSON.stringify(execution.testRun ?? null),
+       consoleEntriesJson: JSON.stringify(execution.consoleEntries ?? []),
       sentAt: execution.request.sentAt,
       createdAt: execution.request.sentAt,
     })
@@ -200,6 +201,7 @@ function buildRequestHistoryWhereClause(input: ListRequestHistoryInput) {
         like(sql`lower(${requestHistory.responseBody})`, searchPattern),
         like(sql`lower(${requestHistory.responseError})`, searchPattern),
         like(sql`lower(${requestHistory.scriptErrorsJson})`, searchPattern),
+        like(sql`lower(${requestHistory.testRunJson})`, searchPattern),
         like(sql`lower(${requestHistory.consoleEntriesJson})`, searchPattern)
       ) as SQL
     )
@@ -240,6 +242,7 @@ function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecor
           },
     responseError: row.responseError,
     scriptErrors: parseJson<RequestScriptError[]>(row.scriptErrorsJson, []),
+    testRun: parseJson<RequestExecutionRecord['testRun']>(row.testRunJson, null),
     consoleEntries: parseJson<RequestConsoleEntry[]>(row.consoleEntriesJson, []),
   }
 }

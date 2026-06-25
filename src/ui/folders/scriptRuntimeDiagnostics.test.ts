@@ -97,17 +97,41 @@ describe('script runtime DOM completions', () => {
 
     expect(diagnostics).toEqual([])
   })
+
+  it('accepts navigateAndCallRequest declarations in the test runtime', async () => {
+    const diagnostics = await getDiagnostics(
+      { phase: 'test' },
+      "export {}\n\nasync function run() {\n  await navigateAndCallRequest(['Auth', 'Refresh Token'])\n}"
+    )
+
+    expect(diagnostics).toEqual([])
+  })
+
+  it('keeps shared-script request helpers as target intersections', async () => {
+    const diagnostics = await getDiagnostics(
+      { targets: ['pre-request', 'test'] },
+      "await navigateAndCallRequest(['Auth', 'Refresh Token'])"
+    )
+
+    expect(diagnostics.some(message => message.includes("Cannot find name 'navigateAndCallRequest'"))).toBe(true)
+  })
 })
 
 async function getCompletionLabels(
-  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  runtimeContext:
+    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { targets: ['response-visualizer', 'view-runtime'] }
+    | { targets: ['pre-request', 'test'] },
   code: string
 ) {
   return await getCompletionLabelsAt(runtimeContext, code, code.length)
 }
 
 async function getCompletionLabelsAt(
-  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  runtimeContext:
+    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { targets: ['response-visualizer', 'view-runtime'] }
+    | { targets: ['pre-request', 'test'] },
   code: string,
   position: number
 ) {
@@ -122,7 +146,10 @@ async function getCompletionLabelsAt(
 }
 
 async function getQuickInfoDisplayText(
-  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  runtimeContext:
+    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { targets: ['response-visualizer', 'view-runtime'] }
+    | { targets: ['pre-request', 'test'] },
   code: string,
   position: number
 ) {
@@ -133,7 +160,10 @@ async function getQuickInfoDisplayText(
 }
 
 async function getDiagnostics(
-  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  runtimeContext:
+    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { targets: ['response-visualizer', 'view-runtime'] }
+    | { targets: ['pre-request', 'test'] },
   code: string
 ) {
   const phaseState = await createPhaseState(runtimeContext, code)
@@ -143,7 +173,10 @@ async function getDiagnostics(
 }
 
 async function createPhaseState(
-  runtimeContext: { phase: 'view-runtime' | 'pre-request' } | { targets: ['response-visualizer', 'view-runtime'] },
+  runtimeContext:
+    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { targets: ['response-visualizer', 'view-runtime'] }
+    | { targets: ['pre-request', 'test'] },
   code: string
 ) {
   const declarationFiles = await declarationFilesPromise
