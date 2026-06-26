@@ -16,6 +16,15 @@ import {
   type RenameFolderInput,
   type UpdateFolderInput,
 } from './Folders.js'
+import type {
+  CancelFolderRunInput,
+  GetFolderRunHistoryInput,
+  GetFolderRunHistoryResponse,
+  ListFolderRunHistoryInput,
+  ListFolderRunHistoryResponse,
+  RunFolderRequestsInput,
+  RunFolderRequestsResponse,
+} from './FolderRuns.js'
 import {
   type CreateEnvironmentInput,
   type DeleteEnvironmentInput,
@@ -231,6 +240,10 @@ export type EventResponseMapping = {
   listFolderExplorerTabs: Promise<FolderExplorerTabRecord[]>
   saveFolderExplorerTabs: Promise<GenericResult<void>>
   updateFolderExplorerTab: Promise<GenericResult<void>>
+  runFolderRequests: Promise<GenericResult<RunFolderRequestsResponse>>
+  cancelFolderRun: Promise<GenericResult<void>>
+  listFolderRunHistory: Promise<ListFolderRunHistoryResponse>
+  getFolderRunHistory: Promise<GenericResult<GetFolderRunHistoryResponse>>
   createFolder: Promise<GenericResult<FolderRecord>>
   getFolder: Promise<GenericResult<FolderRecord>>
   renameFolder: Promise<GenericResult<void>>
@@ -372,6 +385,10 @@ export type EventRequestMapping = {
   listFolderExplorerTabs: void
   saveFolderExplorerTabs: SaveFolderExplorerTabsInput
   updateFolderExplorerTab: UpdateFolderExplorerTabInput
+  runFolderRequests: RunFolderRequestsInput
+  cancelFolderRun: CancelFolderRunInput
+  listFolderRunHistory: ListFolderRunHistoryInput
+  getFolderRunHistory: GetFolderRunHistoryInput
   createFolder: CreateFolderInput
   getFolder: GetFolderInput
   renameFolder: RenameFolderInput
@@ -523,6 +540,10 @@ export type WindowElectron = {
   listFolderExplorerTabs: () => Promise<FolderExplorerTabRecord[]>
   saveFolderExplorerTabs: (input: SaveFolderExplorerTabsInput) => Promise<GenericResult<void>>
   updateFolderExplorerTab: (input: UpdateFolderExplorerTabInput) => Promise<GenericResult<void>>
+  runFolderRequests: (input: RunFolderRequestsInput) => Promise<GenericResult<RunFolderRequestsResponse>>
+  cancelFolderRun: (input: CancelFolderRunInput) => Promise<GenericResult<void>>
+  listFolderRunHistory: (input: ListFolderRunHistoryInput) => Promise<ListFolderRunHistoryResponse>
+  getFolderRunHistory: (input: GetFolderRunHistoryInput) => Promise<GenericResult<GetFolderRunHistoryResponse>>
   createFolder: (input: CreateFolderInput) => Promise<GenericResult<FolderRecord>>
   getFolder: (input: GetFolderInput) => Promise<GenericResult<FolderRecord>>
   renameFolder: (input: RenameFolderInput) => Promise<GenericResult<void>>

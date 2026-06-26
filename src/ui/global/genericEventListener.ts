@@ -2,6 +2,7 @@ import { RequestSendCoordinator } from '@/folders/requestSendCoordinator'
 import { getWindowElectron } from '@/getWindowElectron'
 import { CookiesCoordinator } from '@/folders/cookiesCoordinator'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
+import { folderRunStore } from '@/folders/folderRunStore'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
 import { ScriptAiReviewCoordinator } from '@/folders/scriptAiReviewStore'
 import { toast } from '@/lib/components/toast'
@@ -62,6 +63,25 @@ export function subscribeToGenericEvents() {
     } else if (e.type === 'retry-request') {
       void RequestSendCoordinator.sendRequestById(e.requestId, e.requestMetadata).catch(error => {
         console.error('retry-request failed', error)
+      })
+    } else if (e.type === 'folder-run-started') {
+      folderRunStore.trigger.runStarted({ run: e.run })
+    } else if (e.type === 'folder-run-request-started') {
+      folderRunStore.trigger.requestStarted({
+        runId: e.runId,
+        requestId: e.requestId,
+        startedAt: e.startedAt,
+        summary: e.summary,
+      })
+    } else if (e.type === 'folder-run-request-completed') {
+      folderRunStore.trigger.requestCompleted({ runId: e.runId, request: e.request, summary: e.summary })
+    } else if (e.type === 'folder-run-completed') {
+      folderRunStore.trigger.runCompleted({
+        runId: e.runId,
+        folderId: e.folderId,
+        status: e.status,
+        completedAt: e.completedAt,
+        summary: e.summary,
       })
     } else if (e.type === 'script-ai-state-updated') {
       ScriptAiReviewCoordinator.applyWorkspaceState(e.state)

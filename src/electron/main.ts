@@ -29,6 +29,7 @@ import {
   listRequestHistory,
   trimRequestHistory,
 } from './db/request-history.js'
+import { getFolderRunHistory, listFolderRunHistory } from './db/folder-run-history.js'
 import {
   createRequest,
   deleteRequest,
@@ -81,6 +82,7 @@ import {
   updateTag,
 } from './db/tags.js'
 import { cancelHttpRequest, fetchGraphqlSchema, sendRequest } from './send-request.js'
+import { cancelFolderRun, runFolderRequests } from './folder-request-runner.js'
 import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
 import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
@@ -489,6 +491,29 @@ app.on('ready', async () => {
 
   ipcHandle('updateFolderExplorerTab', async input => {
     return updateFolderExplorerTab(input)
+  })
+
+  ipcHandle('runFolderRequests', async (input, event) => {
+    return runFolderRequests(input, {
+      toast: createScriptToastBridge(event.sender),
+      prompt: scriptPromptRegistry.createBridge(event.sender),
+      clipboard: {
+        writeText: value => clipboard.writeText(value),
+      },
+      makeRequest: createScriptRequestBridge(event.sender),
+    })
+  })
+
+  ipcHandle('cancelFolderRun', async input => {
+    return cancelFolderRun(input)
+  })
+
+  ipcHandle('listFolderRunHistory', async input => {
+    return listFolderRunHistory(input)
+  })
+
+  ipcHandle('getFolderRunHistory', async input => {
+    return getFolderRunHistory(input)
   })
 
   ipcHandle('createFolder', async input => {

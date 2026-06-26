@@ -337,6 +337,13 @@
       "when": 1782396510763,
       "tag": "0047_square_the_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1782505629625,
+      "tag": "0048_previous_warlock",
+      "breakpoints": true
     }
   ]
 }

@@ -1358,10 +1358,11 @@ async function saveItem(selection: Selection, options?: { skipFormatting?: boole
           name: draft.name,
           description: draft.description,
           headers: draft.headers,
-          auth: draft.auth,
-          preRequestScript: draft.preRequestScript,
-          postRequestScript: draft.postRequestScript,
-        })
+            auth: draft.auth,
+            preRequestScript: draft.preRequestScript,
+            postRequestScript: draft.postRequestScript,
+            runConfig: draft.runConfig,
+          })
       : draft.itemType === 'request'
         ? await getWindowElectron().updateRequest({
             id: selection.id,

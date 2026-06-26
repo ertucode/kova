@@ -1,5 +1,11 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createDefaultHttpAuth, parseHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
+import {
+  FOLDER_REQUEST_EXECUTION_MODES,
+  FOLDER_REQUEST_SELECTION_MODES,
+  createDefaultFolderRequestRunConfig,
+  type FolderRequestRunConfig,
+} from '../../common/FolderRuns.js'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import type {
   CreateFolderInput,
@@ -40,6 +46,7 @@ export async function createFolder(input: CreateFolderInput): Promise<GenericRes
         authJson: serializeHttpAuth(createDefaultHttpAuth()),
         preRequestScript: '',
         postRequestScript: '',
+        runConfigJson: JSON.stringify(createDefaultFolderRequestRunConfig()),
         position: 0,
         createdAt: now,
         deletedAt: null,
@@ -119,6 +126,7 @@ export async function updateFolder(input: UpdateFolderInput): Promise<GenericRes
         authJson: serializeHttpAuth(input.auth),
         preRequestScript: input.preRequestScript,
         postRequestScript: input.postRequestScript,
+        runConfigJson: serializeFolderRequestRunConfig(input.runConfig),
       })
       .where(and(eq(folders.id, input.id), isNull(folders.deletedAt)))
       .run()
@@ -283,7 +291,37 @@ function toFolderRecord(folder: FolderRow): FolderRecord {
     auth: parseHttpAuth(folder.authJson),
     preRequestScript: folder.preRequestScript,
     postRequestScript: folder.postRequestScript,
+    runConfig: parseFolderRequestRunConfig(folder.runConfigJson),
     createdAt: folder.createdAt,
     deletedAt: folder.deletedAt,
+  }
+}
+
+export function parseFolderRequestRunConfig(value: string): FolderRequestRunConfig {
+  try {
+    const parsed = JSON.parse(value) as Partial<FolderRequestRunConfig>
+    return normalizeFolderRequestRunConfig(parsed)
+  } catch {
+    return createDefaultFolderRequestRunConfig()
+  }
+}
+
+export function serializeFolderRequestRunConfig(value: FolderRequestRunConfig): string {
+  return JSON.stringify(normalizeFolderRequestRunConfig(value))
+}
+
+function normalizeFolderRequestRunConfig(value: Partial<FolderRequestRunConfig>): FolderRequestRunConfig {
+  const defaults = createDefaultFolderRequestRunConfig()
+  return {
+    selectionMode: FOLDER_REQUEST_SELECTION_MODES.includes(value.selectionMode as FolderRequestRunConfig['selectionMode'])
+      ? (value.selectionMode as FolderRequestRunConfig['selectionMode'])
+      : defaults.selectionMode,
+    selectedRequestIds: Array.isArray(value.selectedRequestIds)
+      ? Array.from(new Set(value.selectedRequestIds.filter((id): id is string => typeof id === 'string')))
+      : defaults.selectedRequestIds,
+    executionMode: FOLDER_REQUEST_EXECUTION_MODES.includes(value.executionMode as FolderRequestRunConfig['executionMode'])
+      ? (value.executionMode as FolderRequestRunConfig['executionMode'])
+      : defaults.executionMode,
+    continueOnFailure: typeof value.continueOnFailure === 'boolean' ? value.continueOnFailure : defaults.continueOnFailure,
   }
 }

@@ -1,6 +1,7 @@
 import type { HttpAuth } from '@common/Auth'
 import type { ExplorerItem } from '@common/Explorer'
 import type { FolderRecord } from '@common/Folders'
+import type { FolderRequestRunConfig } from '@common/FolderRuns'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import type { RequestExampleRecord } from '@common/RequestExamples'
 import type { HttpRequestRecord, RequestBodyType, RequestMethod, RequestRawType, RequestType } from '@common/Requests'
@@ -38,6 +39,7 @@ export type FolderDetailsDraft = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  runConfig: FolderRequestRunConfig
 }
 
 export type RequestDetailsDraft = {

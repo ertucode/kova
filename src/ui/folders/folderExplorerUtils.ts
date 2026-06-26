@@ -1,4 +1,5 @@
 import type { ExplorerItem } from '@common/Explorer'
+import { createDefaultFolderRequestRunConfig } from '@common/FolderRuns'
 import type { FolderRecord } from '@common/Folders'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import type { RequestExampleRecord } from '@common/RequestExamples'
@@ -86,6 +87,7 @@ export function toFolderDetailsDraft(folder: FolderRecord): FolderDetailsDraft {
     auth: folder.auth,
     preRequestScript: folder.preRequestScript,
     postRequestScript: folder.postRequestScript,
+    runConfig: folder.runConfig ?? createDefaultFolderRequestRunConfig(),
   }
 }
 

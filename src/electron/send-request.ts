@@ -253,6 +253,8 @@ export async function sendRequest(
     const execution: RequestExecutionRecord = {
       itemType: 'http',
       id: executionId,
+      folderRunId: input.folderRunId ?? null,
+      folderRunFolderId: input.folderRunFolderId ?? null,
       requestId: input.requestId,
       requestName,
       request: executedRequest,
@@ -478,6 +480,8 @@ async function consumeSseResponse(input: {
     const execution: RequestExecutionRecord = {
       itemType: 'http',
       id: executionId,
+      folderRunId: input.input.folderRunId ?? null,
+      folderRunFolderId: input.input.folderRunFolderId ?? null,
       requestId: input.input.requestId,
       requestName,
       request: executedRequest,

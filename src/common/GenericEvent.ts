@@ -1,4 +1,5 @@
 import type { HttpSseStreamState, WebSocketSessionRecord } from './Requests.js'
+import type { FolderRunRecord, FolderRunRequest, FolderRunSummary, FolderRunStatus } from './FolderRuns.js'
 import type { ScriptAiWorkspaceState } from './ScriptAi.js'
 import type { ScriptCallRequestRequest, ScriptMakeRequestRequest } from './ScriptMakeRequest.js'
 import type { ScriptPromptRequest } from './ScriptPrompt.js'
@@ -45,6 +46,29 @@ export type GenericEvent = {
   type: 'retry-request'
   requestId: string
   requestMetadata: SendRequestMetadata
+} | {
+  type: 'folder-run-started'
+  run: FolderRunRecord
+} | {
+  type: 'folder-run-request-started'
+  runId: string
+  folderId: string
+  requestId: string
+  startedAt: number
+  summary: FolderRunSummary
+} | {
+  type: 'folder-run-request-completed'
+  runId: string
+  folderId: string
+  request: FolderRunRequest
+  summary: FolderRunSummary
+} | {
+  type: 'folder-run-completed'
+  runId: string
+  folderId: string
+  status: FolderRunStatus
+  completedAt: number
+  summary: FolderRunSummary
 } | {
   type: 'script-ai-state-updated'
   state: ScriptAiWorkspaceState

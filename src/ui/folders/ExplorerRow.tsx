@@ -28,6 +28,7 @@ import { toast } from '@/lib/components/toast'
 import { tagsStore } from './tagsStore'
 import { TagDots } from './TagDots'
 import { AssignTagsDialog } from './AssignTagsDialog'
+import { folderRunStore } from './folderRunStore'
 
 export function ExplorerRow({
   node,
@@ -84,6 +85,7 @@ export function ExplorerRow({
   })
   const tagItems = useSelector(tagsStore, state => state.context.items)
   const tagAssignments = useSelector(tagsStore, state => state.context.assignments)
+  const activeRunIdByFolderId = useSelector(folderRunStore, state => state.context.activeRunIdByFolderId)
   const assignedTags = useMemo(() => {
     if (node.itemType !== 'folder' && node.itemType !== 'request') {
       return []
@@ -108,6 +110,9 @@ export function ExplorerRow({
   const showDropBefore = dropTarget?.indicatorId === `${rowKey}:before`
   const showDropAfter = dropTarget?.indicatorId === `${rowKey}:after`
   const showDropInside = dropTarget?.indicatorId === `${rowKey}:inside`
+  const folderRunIndicator = node.itemType === 'folder'
+    ? getFolderRunIndicator(node, activeRunIdByFolderId)
+    : 'none'
 
   return (
     <div className="relative">
@@ -179,6 +184,16 @@ export function ExplorerRow({
           </div>
           <div className="min-w-0 flex-1 truncate px-1 text-[13px] leading-[1.2] text-base-content">{node.name}</div>
           <TagDots tags={assignedTags} />
+          {folderRunIndicator !== 'none' ? (
+            <div
+              className={[
+                'size-2 shrink-0 rounded-full',
+                folderRunIndicator === 'active' ? 'bg-info shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-info)_18%,transparent)]' : 'bg-info/35',
+              ].join(' ')}
+              aria-label={folderRunIndicator === 'active' ? 'Folder run active' : 'Descendant folder run active'}
+              title={folderRunIndicator === 'active' ? 'Folder run active' : 'Descendant folder run active'}
+            />
+          ) : null}
           {isItemDirty ? (
             <div
               className="size-2 shrink-0 rounded-full bg-warning"
@@ -272,6 +287,31 @@ export function ExplorerRow({
       {showDropAfter ? <div className="pointer-events-none absolute inset-x-3 bottom-0 z-10 h-0.5 bg-primary" /> : null}
     </div>
   )
+}
+
+function getFolderRunIndicator(
+  node: TreeNode,
+  activeRunIdByFolderId: Record<string, string>
+): 'active' | 'descendant' | 'none' {
+  if (activeRunIdByFolderId[node.id]) {
+    return 'active'
+  }
+
+  return hasActiveDescendantFolderRun(node, activeRunIdByFolderId) ? 'descendant' : 'none'
+}
+
+function hasActiveDescendantFolderRun(node: TreeNode, activeRunIdByFolderId: Record<string, string>): boolean {
+  for (const child of node.children) {
+    if (child.itemType === 'folder') {
+      if (activeRunIdByFolderId[child.id] || hasActiveDescendantFolderRun(child, activeRunIdByFolderId)) {
+        return true
+      }
+    } else if (hasActiveDescendantFolderRun(child, activeRunIdByFolderId)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 export function RequestMethodTag({ method, requestType }: { method: string; requestType: 'http' | 'websocket' }) {

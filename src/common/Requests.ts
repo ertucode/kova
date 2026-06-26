@@ -7,7 +7,7 @@ export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
 
 export type RequestRuntimePhase = 'pre-request' | 'post-request' | 'test' | 'template-expression'
 
-export type RequestRuntimeSource = 'request-editor' | 'call-request' | 'navigate-and-call-request' | 'generate-request-code' | 'websocket'
+export type RequestRuntimeSource = 'request-editor' | 'call-request' | 'navigate-and-call-request' | 'generate-request-code' | 'folder-run' | 'websocket'
 
 export type SendRequestMetadata = {
   sourceRuntime: RequestRuntimeSource
@@ -129,10 +129,13 @@ export type SendRequestInput = {
   graphqlQuery?: string
   graphqlVariables?: string
   activeEnvironmentIds: string[]
+  environmentSnapshot?: EnvironmentRecord[]
   saveToHistory: boolean
   historyKeepLast: number
   callRequestOverrides?: ScriptCallRequestOverrides
   requestMetadata?: SendRequestMetadata
+  folderRunId?: string
+  folderRunFolderId?: string
 }
 
 export type FetchGraphqlSchemaInput = {
@@ -341,6 +344,8 @@ export type RequestTestRun = {
 export type RequestExecutionRecord = {
   itemType: 'http'
   id: string
+  folderRunId?: string | null
+  folderRunFolderId?: string | null
   requestId: string
   requestName: string
   request: ExecutedRequestSnapshot
@@ -407,6 +412,7 @@ export type WebSocketConnectResponse = {
 export type ListRequestHistoryInput = {
   searchQuery: string
   requestId?: string
+  folderRunId?: string
   offset: number
   limit: number
 }

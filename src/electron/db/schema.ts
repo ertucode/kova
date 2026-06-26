@@ -12,6 +12,7 @@ export const folders = sqliteTable(
     authJson: text('auth_json').notNull().default('{"type":"inherit"}'),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
+    runConfigJson: text('run_config_json').notNull().default('{"selectionMode":"tests-only","selectedRequestIds":[],"executionMode":"sequential","continueOnFailure":true}'),
     position: integer('position').notNull().default(0),
     createdAt: integer('created_at').notNull(),
     deletedAt: integer('deleted_at'),
@@ -353,6 +354,8 @@ export const requestHistory = sqliteTable(
   'request_history',
   {
     id: text('id').primaryKey(),
+    folderRunId: text('folder_run_id'),
+    folderRunFolderId: text('folder_run_folder_id'),
     requestId: text('request_id').notNull(),
     requestName: text('request_name').notNull(),
     method: text('method').notNull(),
@@ -381,7 +384,33 @@ export const requestHistory = sqliteTable(
   table => [
     index('request_history_created_at_idx').on(table.createdAt),
     index('request_history_request_id_idx').on(table.requestId),
+    index('request_history_folder_run_id_idx').on(table.folderRunId),
+    index('request_history_folder_run_folder_id_idx').on(table.folderRunFolderId),
     index('request_history_sent_at_idx').on(table.sentAt),
+  ]
+)
+
+export const folderRunHistory = sqliteTable(
+  'folder_run_history',
+  {
+    id: text('id').primaryKey(),
+    folderId: text('folder_id').notNull(),
+    folderName: text('folder_name').notNull(),
+    runConfigJson: text('run_config_json').notNull(),
+    status: text('status').notNull(),
+    summaryJson: text('summary_json').notNull(),
+    requestCount: integer('request_count').notNull().default(0),
+    passedRequestCount: integer('passed_request_count').notNull().default(0),
+    failedRequestCount: integer('failed_request_count').notNull().default(0),
+    startedAt: integer('started_at').notNull(),
+    completedAt: integer('completed_at'),
+    createdAt: integer('created_at').notNull(),
+  },
+  table => [
+    index('folder_run_history_folder_id_idx').on(table.folderId),
+    index('folder_run_history_started_at_idx').on(table.startedAt),
+    index('folder_run_history_status_idx').on(table.status),
+    check('folder_run_history_status_check', sql`${table.status} in ('running', 'completed', 'failed', 'cancelled')`),
   ]
 )
 

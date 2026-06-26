@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, like, or, sql, type SQL } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, like, or, sql, type SQL } from 'drizzle-orm'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import { Result } from '../../common/Result.js'
 import type {
@@ -88,6 +88,8 @@ export async function persistRequestHistory(input: { execution: RequestExecution
   db.insert(requestHistory)
     .values({
       id: execution.id,
+      folderRunId: execution.folderRunId ?? null,
+      folderRunFolderId: execution.folderRunFolderId ?? null,
       requestId: execution.requestId,
       requestName: execution.requestName,
       method: execution.request.method,
@@ -149,6 +151,7 @@ function trimRequestHistoryInternal(keepLast: number) {
   const orderedIds = db
     .select({ id: requestHistory.id })
     .from(requestHistory)
+    .where(isNull(requestHistory.folderRunId))
     .orderBy(desc(requestHistory.createdAt), desc(requestHistory.id))
     .all()
     .map(row => row.id)
@@ -189,6 +192,10 @@ function buildRequestHistoryWhereClause(input: ListRequestHistoryInput) {
     filters.push(eq(requestHistory.requestId, input.requestId))
   }
 
+  if (input.folderRunId) {
+    filters.push(eq(requestHistory.folderRunId, input.folderRunId))
+  }
+
   if (searchQuery) {
     const searchPattern = `%${escapeLikePattern(searchQuery)}%`
     filters.push(
@@ -216,6 +223,8 @@ function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecor
   return {
     itemType: 'http',
     id: row.id,
+    folderRunId: row.folderRunId,
+    folderRunFolderId: row.folderRunFolderId,
     requestId: row.requestId,
     requestName: row.requestName,
     request: {

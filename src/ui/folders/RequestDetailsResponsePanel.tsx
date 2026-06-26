@@ -1045,7 +1045,7 @@ function renderResponseBodyContent(
   )
 }
 
-const ResponseTestsPanel = memo(function ResponseTestsPanel({
+export const ResponseTestsPanel = memo(function ResponseTestsPanel({
   testRun,
   onJumpToScriptError,
 }: {

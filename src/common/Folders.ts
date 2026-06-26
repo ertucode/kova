@@ -1,4 +1,5 @@
 import type { HttpAuth } from './Auth.js'
+import type { FolderRequestRunConfig } from './FolderRuns.js'
 import type { OperationRecord } from './Operations.js'
 
 export type FolderRecord = {
@@ -9,6 +10,7 @@ export type FolderRecord = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  runConfig?: FolderRequestRunConfig
   createdAt: number
   deletedAt: number | null
 }
@@ -35,6 +37,7 @@ export type UpdateFolderInput = {
   auth: HttpAuth
   preRequestScript: string
   postRequestScript: string
+  runConfig: FolderRequestRunConfig
 }
 
 export type DeleteFolderInput = {

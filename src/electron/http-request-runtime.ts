@@ -76,6 +76,7 @@ type PrepareHttpRequestBaseInput = Pick<
   | 'graphqlQuery'
   | 'graphqlVariables'
   | 'activeEnvironmentIds'
+  | 'environmentSnapshot'
 > &
   Partial<Pick<SendRequestInput, 'body' | 'postRequestScript' | 'testScript' | 'requestMetadata'>>
 
@@ -130,7 +131,7 @@ export async function prepareHttpRequestBase(
   }
 
   const [activeEnvironments, parentFolderId] = await Promise.all([
-    getEnvironmentsByIds(input.activeEnvironmentIds),
+    input.environmentSnapshot ? Promise.resolve(input.environmentSnapshot) : getEnvironmentsByIds(input.activeEnvironmentIds),
     getRequestParentFolderId(input.requestId),
   ])
 

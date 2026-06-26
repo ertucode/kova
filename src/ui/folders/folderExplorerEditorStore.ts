@@ -2,6 +2,7 @@ import { createStore } from '@xstate/store'
 import { z } from 'zod'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import { AUTH_LOCATIONS } from '@common/Auth'
+import { FOLDER_REQUEST_EXECUTION_MODES, FOLDER_REQUEST_SELECTION_MODES } from '@common/FolderRuns'
 import type { FolderExplorerTabRecord } from '@common/FolderExplorerTabs'
 import type { ExplorerItem } from '@common/Explorer'
 import type { DetailsDraft, Selection } from './folderExplorerTypes'
@@ -62,6 +63,17 @@ const folderDetailsDraftSchema = z.object({
   auth: authSchema.default({ type: 'inherit' }),
   preRequestScript: z.string(),
   postRequestScript: z.string(),
+  runConfig: z.object({
+    selectionMode: z.enum(FOLDER_REQUEST_SELECTION_MODES).default('tests-only'),
+    selectedRequestIds: z.array(z.string()).default([]),
+    executionMode: z.enum(FOLDER_REQUEST_EXECUTION_MODES).default('sequential'),
+    continueOnFailure: z.boolean().default(true),
+  }).default({
+    selectionMode: 'tests-only',
+    selectedRequestIds: [],
+    executionMode: 'sequential',
+    continueOnFailure: true,
+  }),
 })
 
 const requestDetailsDraftSchema = z.object({
