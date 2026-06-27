@@ -9,6 +9,7 @@ import {
   FolderIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  SparklesIcon,
   TagIcon,
   Trash2Icon,
   XIcon,
@@ -29,6 +30,7 @@ import { tagsStore } from './tagsStore'
 import { TagDots } from './TagDots'
 import { AssignTagsDialog } from './AssignTagsDialog'
 import { folderRunStore } from './folderRunStore'
+import { openImportAgentDialog } from './ImportAgentDialog'
 
 export function ExplorerRow({
   node,
@@ -604,6 +606,15 @@ function ExplorerMenu({
           ? { type: 'item', icon: <ChevronDownIcon className="size-4" />, label: 'Flatten Folder', action: onFlattenFolder }
           : null,
         { type: 'divider' },
+        {
+          type: 'item',
+          icon: <SparklesIcon className="size-4" />,
+          label: 'Import with Agent',
+          action: () => openImportAgentDialog({ scopeType: 'folder', targetFolderId: itemId }),
+        },
+        {
+          type: 'divider',
+        },
         {
           type: 'item',
           icon: <FileJsonIcon className="size-4" />,

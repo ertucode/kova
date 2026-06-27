@@ -85,6 +85,8 @@ export function subscribeToGenericEvents() {
       })
     } else if (e.type === 'script-ai-state-updated') {
       ScriptAiReviewCoordinator.applyWorkspaceState(e.state)
+    } else if (e.type === 'import-agent-state-updated') {
+      return
     } else {
       const _exhaustiveCheck: never = e
       return _exhaustiveCheck

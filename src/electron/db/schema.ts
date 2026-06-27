@@ -521,6 +521,62 @@ export const websocketExamples = sqliteTable(
   ]
 )
 
+export const importAgentSessions = sqliteTable(
+  'import_agent_sessions',
+  {
+    id: text('id').primaryKey(),
+    scopeType: text('scope_type').notNull(),
+    targetFolderId: text('target_folder_id'),
+    title: text('title').notNull(),
+    opencodeSessionId: text('opencode_session_id'),
+    selectedModel: text('selected_model'),
+    status: text('status').notNull().default('idle'),
+    latestErrorMessage: text('latest_error_message'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  table => [
+    foreignKey({
+      columns: [table.targetFolderId],
+      foreignColumns: [folders.id],
+      name: 'import_agent_sessions_target_folder_id_fkey',
+    }),
+    index('import_agent_sessions_scope_idx').on(table.scopeType, table.targetFolderId, table.updatedAt),
+    index('import_agent_sessions_deleted_at_idx').on(table.deletedAt),
+    check('import_agent_sessions_scope_type_check', sql`${table.scopeType} in ('workspace', 'folder')`),
+    check('import_agent_sessions_status_check', sql`${table.status} in ('idle', 'busy', 'error')`),
+    check(
+      'import_agent_sessions_scope_target_check',
+      sql`(${table.scopeType} = 'workspace' and ${table.targetFolderId} is null) or (${table.scopeType} = 'folder' and ${table.targetFolderId} is not null)`
+    ),
+  ]
+)
+
+
+export const importAgentPlans = sqliteTable(
+  'import_agent_plans',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    kind: text('kind').notNull(),
+    status: text('status').notNull(),
+    planJson: text('plan_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.sessionId],
+      foreignColumns: [importAgentSessions.id],
+      name: 'import_agent_plans_session_id_fkey',
+    }),
+    index('import_agent_plans_session_idx').on(table.sessionId, table.updatedAt),
+    check('import_agent_plans_kind_check', sql`${table.kind} in ('draft', 'applied')`),
+    check('import_agent_plans_status_check', sql`${table.status} in ('active', 'applied', 'superseded')`),
+  ]
+)
+
 export const websocketExampleMessages = sqliteTable(
   'websocket_example_messages',
   {

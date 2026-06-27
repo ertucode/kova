@@ -144,6 +144,14 @@ import {
   type SyncScriptAiWorkspaceInput,
   type SyncScriptAiWorkspaceResponse,
 } from './ScriptAi.js'
+import {
+  type AbortImportAgentSessionInput,
+  type ApplyImportAgentPlanInput,
+  type CreateImportAgentSessionInput,
+  type ImportAgentWorkspaceState,
+  type LoadImportAgentWorkspaceInput,
+  type SendImportAgentMessageInput,
+} from './ImportAgent.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
 import {
   type CreateViewInput,
@@ -292,6 +300,11 @@ export type EventResponseMapping = {
   applyScriptAiWorkspace: Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
   abortScriptAiSession: Promise<GenericResult<ScriptAiWorkspaceState>>
   loadScriptAiMessagePatchDiff: Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>>
+  loadImportAgentWorkspace: Promise<GenericResult<ImportAgentWorkspaceState>>
+  createImportAgentSession: Promise<GenericResult<ImportAgentWorkspaceState>>
+  sendImportAgentMessage: Promise<GenericResult<ImportAgentWorkspaceState>>
+  abortImportAgentSession: Promise<GenericResult<ImportAgentWorkspaceState>>
+  applyImportAgentPlan: Promise<GenericResult<ImportAgentWorkspaceState>>
   listOpenCodeModels: Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: Promise<GenericResult<void>>
@@ -437,6 +450,11 @@ export type EventRequestMapping = {
   applyScriptAiWorkspace: ApplyScriptAiWorkspaceInput
   abortScriptAiSession: AbortScriptAiSessionInput
   loadScriptAiMessagePatchDiff: LoadScriptAiMessagePatchDiffInput
+  loadImportAgentWorkspace: LoadImportAgentWorkspaceInput
+  createImportAgentSession: CreateImportAgentSessionInput
+  sendImportAgentMessage: SendImportAgentMessageInput
+  abortImportAgentSession: AbortImportAgentSessionInput
+  applyImportAgentPlan: ApplyImportAgentPlanInput
   listOpenCodeModels: void
   connectWebSocket: WebSocketConnectInput
   sendWebSocketMessage: WebSocketSendMessageInput
@@ -598,6 +616,11 @@ export type WindowElectron = {
   loadScriptAiMessagePatchDiff: (
     input: LoadScriptAiMessagePatchDiffInput
   ) => Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>>
+  loadImportAgentWorkspace: (input: LoadImportAgentWorkspaceInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
+  createImportAgentSession: (input: CreateImportAgentSessionInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
+  sendImportAgentMessage: (input: SendImportAgentMessageInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
+  abortImportAgentSession: (input: AbortImportAgentSessionInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
+  applyImportAgentPlan: (input: ApplyImportAgentPlanInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
   listOpenCodeModels: () => Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>

@@ -1,6 +1,7 @@
 import type { HttpSseStreamState, WebSocketSessionRecord } from './Requests.js'
 import type { FolderRunRecord, FolderRunRequest, FolderRunSummary, FolderRunStatus } from './FolderRuns.js'
 import type { ScriptAiWorkspaceState } from './ScriptAi.js'
+import type { ImportAgentWorkspaceState } from './ImportAgent.js'
 import type { ScriptCallRequestRequest, ScriptMakeRequestRequest } from './ScriptMakeRequest.js'
 import type { ScriptPromptRequest } from './ScriptPrompt.js'
 import type { ScriptToastOptions } from './ScriptToast.js'
@@ -72,4 +73,7 @@ export type GenericEvent = {
 } | {
   type: 'script-ai-state-updated'
   state: ScriptAiWorkspaceState
+} | {
+  type: 'import-agent-state-updated'
+  state: ImportAgentWorkspaceState
 }

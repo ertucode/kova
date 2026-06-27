@@ -18,6 +18,7 @@ import {
   MoreHorizontalIcon,
   PackageIcon,
   SearchIcon,
+  SparklesIcon,
   TagIcon,
   Undo2Icon,
   XIcon,
@@ -48,6 +49,7 @@ import { OpenApiImportDialog } from './OpenApiImportDialog'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
+import { openImportAgentDialog } from './ImportAgentDialog'
 import { tagsStore } from './tagsStore'
 
 type DropPlacement = ExplorerDropTarget['placement']
@@ -668,6 +670,15 @@ function CreateMenuButton() {
             >
               <FileJsonIcon className="size-4" />
               Export OpenAPI
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => runAction(() => openImportAgentDialog({ scopeType: 'workspace', targetFolderId: null }))}
+            >
+              <SparklesIcon className="size-4" />
+              Import with Agent
             </button>
           </li>
           <li>

@@ -131,10 +131,22 @@ import {
 } from './script-package-registry.js'
 import { listOpenCodeModels } from './opencode-models.js'
 import { supermavenService } from './supermaven-service.js'
+import {
+  abortImportAgentSession,
+  applyImportAgentPlan,
+  configureImportAgentBaseDirectory,
+  createImportAgentSession,
+  loadImportAgentWorkspace,
+  sendImportAgentMessage,
+  shutdownImportAgentServer,
+} from './import-agent.js'
+import { startImportAgentToolBridge } from './import-agent-tool-bridge.js'
+import { configureImportAgentToolBridge } from './import-agent-bridge-state.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
 let scriptAiDiagnosticsBridge: Awaited<ReturnType<typeof startScriptAiDiagnosticsBridge>> | null = null
+let importAgentToolBridge: Awaited<ReturnType<typeof startImportAgentToolBridge>> | null = null
 
 app.on('open-file', (event, path) => {
   event.preventDefault()
@@ -152,7 +164,11 @@ app.once('will-quit', () => {
   void scriptAiDiagnosticsBridge?.close().catch(error => {
     console.error('Failed to close Script AI diagnostics bridge', error)
   })
+  void importAgentToolBridge?.close().catch(error => {
+    console.error('Failed to close Import Agent tool bridge', error)
+  })
   void shutdownScriptAiServer()
+  void shutdownImportAgentServer()
 })
 
 type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev'>
@@ -321,6 +337,7 @@ app.on('ready', async () => {
   Menu.setApplicationMenu(menu)
   configureScriptPackageRegistry(path.join(app.getPath('userData'), 'shared'))
   configureScriptAiBaseDirectory(path.join(app.getPath('userData'), 'script-ai'))
+  configureImportAgentBaseDirectory(path.join(app.getPath('userData'), 'import-agent'))
 
   app.on('web-contents-created', (_event, contents) => {
     // if (contents.getType() === 'webview') return
@@ -352,6 +369,16 @@ app.on('ready', async () => {
     })
   } catch (error) {
     console.error('Failed to start Script AI diagnostics bridge', error)
+  }
+
+  try {
+    importAgentToolBridge = await startImportAgentToolBridge()
+    configureImportAgentToolBridge({
+      url: importAgentToolBridge.url,
+      token: importAgentToolBridge.token,
+    })
+  } catch (error) {
+    console.error('Failed to start Import Agent tool bridge', error)
   }
 
   // Use pending path from open-file event if available, otherwise check argv
@@ -656,6 +683,7 @@ app.on('ready', async () => {
 
     if (previousScriptAiServerPort !== nextScriptAiServerPort) {
       await shutdownScriptAiServer()
+      await shutdownImportAgentServer()
     }
 
     if (previousSettings.supermavenEnabled !== result.data.supermavenEnabled) {
@@ -922,6 +950,26 @@ app.on('ready', async () => {
 
   ipcHandle('loadScriptAiMessagePatchDiff', async input => {
     return loadScriptAiMessagePatchDiff(input)
+  })
+
+  ipcHandle('loadImportAgentWorkspace', async input => {
+    return loadImportAgentWorkspace(input)
+  })
+
+  ipcHandle('createImportAgentSession', async input => {
+    return createImportAgentSession(input)
+  })
+
+  ipcHandle('sendImportAgentMessage', async input => {
+    return sendImportAgentMessage(input)
+  })
+
+  ipcHandle('abortImportAgentSession', async input => {
+    return abortImportAgentSession(input)
+  })
+
+  ipcHandle('applyImportAgentPlan', async input => {
+    return applyImportAgentPlan(input)
   })
 
   ipcHandle('listOpenCodeModels', async () => {
