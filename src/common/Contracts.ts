@@ -18,6 +18,7 @@ import {
 } from './Folders.js'
 import type {
   CancelFolderRunInput,
+  DeleteFolderRunHistoryInput,
   GetFolderRunHistoryInput,
   GetFolderRunHistoryResponse,
   ListFolderRunHistoryInput,
@@ -250,6 +251,7 @@ export type EventResponseMapping = {
   updateFolderExplorerTab: Promise<GenericResult<void>>
   runFolderRequests: Promise<GenericResult<RunFolderRequestsResponse>>
   cancelFolderRun: Promise<GenericResult<void>>
+  deleteFolderRunHistory: Promise<GenericResult<void>>
   listFolderRunHistory: Promise<ListFolderRunHistoryResponse>
   getFolderRunHistory: Promise<GenericResult<GetFolderRunHistoryResponse>>
   createFolder: Promise<GenericResult<FolderRecord>>
@@ -400,6 +402,7 @@ export type EventRequestMapping = {
   updateFolderExplorerTab: UpdateFolderExplorerTabInput
   runFolderRequests: RunFolderRequestsInput
   cancelFolderRun: CancelFolderRunInput
+  deleteFolderRunHistory: DeleteFolderRunHistoryInput
   listFolderRunHistory: ListFolderRunHistoryInput
   getFolderRunHistory: GetFolderRunHistoryInput
   createFolder: CreateFolderInput
@@ -560,6 +563,7 @@ export type WindowElectron = {
   updateFolderExplorerTab: (input: UpdateFolderExplorerTabInput) => Promise<GenericResult<void>>
   runFolderRequests: (input: RunFolderRequestsInput) => Promise<GenericResult<RunFolderRequestsResponse>>
   cancelFolderRun: (input: CancelFolderRunInput) => Promise<GenericResult<void>>
+  deleteFolderRunHistory: (input: DeleteFolderRunHistoryInput) => Promise<GenericResult<void>>
   listFolderRunHistory: (input: ListFolderRunHistoryInput) => Promise<ListFolderRunHistoryResponse>
   getFolderRunHistory: (input: GetFolderRunHistoryInput) => Promise<GenericResult<GetFolderRunHistoryResponse>>
   createFolder: (input: CreateFolderInput) => Promise<GenericResult<FolderRecord>>

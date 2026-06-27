@@ -126,6 +126,11 @@ export async function deleteRequestHistoryEntry(input: DeleteRequestHistoryEntry
   const db = getDb()
 
   try {
+    const row = db.select({ folderRunId: requestHistory.folderRunId }).from(requestHistory).where(eq(requestHistory.id, input.id)).get()
+    if (row?.folderRunId) {
+      return GenericError.Message('Attached request history entries cannot be deleted directly')
+    }
+
     const result = db.delete(requestHistory).where(eq(requestHistory.id, input.id)).run()
     if (result.changes === 0) {
       return deleteWebSocketHistoryEntry(input)

@@ -185,6 +185,7 @@ export function ExecutionCard({
   const consoleEntries = execution.consoleEntries ?? []
   const scriptErrors = execution.scriptErrors ?? []
   const testRun = execution.testRun
+  const canDelete = execution.folderRunId === null || execution.folderRunId === undefined
 
   return (
     <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
@@ -242,28 +243,30 @@ export function ExecutionCard({
           >
             <SaveIcon className="size-4" />
           </button>
-          <button
-            type="button"
-            className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
-            onClick={event => {
-              event.stopPropagation()
-              void RequestExecutionCoordinator.deleteHistoryEntry({
-                id: execution.id,
-                itemType: 'http',
-                requestId: execution.requestId,
-              })
-                .then(() => {
-                  onDelete?.(execution.id)
+          {canDelete ? (
+            <button
+              type="button"
+              className="rounded-xl p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
+              onClick={event => {
+                event.stopPropagation()
+                void RequestExecutionCoordinator.deleteHistoryEntry({
+                  id: execution.id,
+                  itemType: 'http',
+                  requestId: execution.requestId,
                 })
-                .catch(error => {
-                  console.error('deleteHistoryEntry failed', error)
-                })
-            }}
-            aria-label="Delete history entry"
-            title="Delete history entry"
-          >
-            <Trash2Icon className="size-4" />
-          </button>
+                  .then(() => {
+                    onDelete?.(execution.id)
+                  })
+                  .catch(error => {
+                    console.error('deleteHistoryEntry failed', error)
+                  })
+              }}
+              aria-label="Delete history entry"
+              title="Delete history entry"
+            >
+              <Trash2Icon className="size-4" />
+            </button>
+          ) : null}
         </div>
       </div>
 

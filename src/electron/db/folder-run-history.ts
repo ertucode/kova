@@ -1,6 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm'
 import { GenericError, type GenericResult } from '../../common/GenericError.js'
 import {
+  type DeleteFolderRunHistoryInput,
   FOLDER_RUN_STATUSES,
   createEmptyFolderRunSummary,
   type FolderRunHistoryRecord,
@@ -105,6 +106,22 @@ export async function getFolderRunHistory(
     .map(toRequestExecutionRecord)
 
   return Result.Success({ run: toFolderRunHistoryRecord(run), requests })
+}
+
+export async function deleteFolderRunHistory(input: DeleteFolderRunHistoryInput): Promise<GenericResult<void>> {
+  const db = getDb()
+
+  try {
+    db.delete(requestHistory).where(eq(requestHistory.folderRunId, input.runId)).run()
+    const result = db.delete(folderRunHistory).where(eq(folderRunHistory.id, input.runId)).run()
+    if (result.changes === 0) {
+      return GenericError.Message('Folder run history not found')
+    }
+
+    return Result.Success(undefined)
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
 }
 
 function toFolderRunHistoryRecord(row: FolderRunHistoryRow): FolderRunHistoryRecord {

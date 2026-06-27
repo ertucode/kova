@@ -45,6 +45,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   updateFolderExplorerTab: input => ipcInvoke('updateFolderExplorerTab', input),
   runFolderRequests: input => ipcInvoke('runFolderRequests', input),
   cancelFolderRun: input => ipcInvoke('cancelFolderRun', input),
+  deleteFolderRunHistory: input => ipcInvoke('deleteFolderRunHistory', input),
   listFolderRunHistory: input => ipcInvoke('listFolderRunHistory', input),
   getFolderRunHistory: input => ipcInvoke('getFolderRunHistory', input),
   createFolder: input => ipcInvoke('createFolder', input),

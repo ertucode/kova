@@ -19,6 +19,22 @@ type FolderRunContext = {
   historyLoadingByFolderId: Record<string, boolean>
 }
 
+function getLatestFolderRunId(context: FolderRunContext, folderId: string) {
+  const liveRuns = Object.values(context.runsById).filter(run => run.folderId === folderId)
+  const historyRuns = context.historyByFolderId[folderId] ?? []
+  const liveRunIds = new Set(liveRuns.map(run => run.id))
+
+  const latestHistoryRun = historyRuns
+    .filter(run => !liveRunIds.has(run.id))
+    .sort((left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id))[0]
+  const latestLiveRun = liveRuns.sort((left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id))[0]
+  const latestRun = [latestLiveRun, latestHistoryRun]
+    .filter((run): run is FolderRunRecord | FolderRunHistoryRecord => run !== undefined)
+    .sort((left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id))[0]
+
+  return latestRun?.id ?? null
+}
+
 export const folderRunStore = createStore({
   context: {
     runsById: {},
@@ -103,6 +119,39 @@ export const folderRunStore = createStore({
       ...context,
       historyLoadingByFolderId: { ...context.historyLoadingByFolderId, [event.folderId]: false },
     }),
+    historyEntryDeleted: (context, event: { folderId: string; runId: string }) => {
+      const nextRunsById = { ...context.runsById }
+      delete nextRunsById[event.runId]
+
+      const nextHistoryByFolderId = {
+        ...context.historyByFolderId,
+        [event.folderId]: (context.historyByFolderId[event.folderId] ?? []).filter(item => item.id !== event.runId),
+      }
+
+      const nextActiveRunIdByFolderId = { ...context.activeRunIdByFolderId }
+      if (nextActiveRunIdByFolderId[event.folderId] === event.runId) {
+        delete nextActiveRunIdByFolderId[event.folderId]
+      }
+
+      const nextContext = {
+        ...context,
+        runsById: nextRunsById,
+        historyByFolderId: nextHistoryByFolderId,
+        activeRunIdByFolderId: nextActiveRunIdByFolderId,
+      }
+      const nextLatestRunIdByFolderId = { ...context.latestRunIdByFolderId }
+      const latestRunId = getLatestFolderRunId(nextContext, event.folderId)
+      if (latestRunId) {
+        nextLatestRunIdByFolderId[event.folderId] = latestRunId
+      } else {
+        delete nextLatestRunIdByFolderId[event.folderId]
+      }
+
+      return {
+        ...nextContext,
+        latestRunIdByFolderId: nextLatestRunIdByFolderId,
+      }
+    },
   },
 })
 
@@ -141,5 +190,15 @@ export namespace FolderRunCoordinator {
     } catch {
       folderRunStore.trigger.historyLoadFailed({ folderId })
     }
+  }
+
+  export async function deleteHistoryEntry(folderId: string, runId: string) {
+    const result = await getWindowElectron().deleteFolderRunHistory({ runId })
+    if (!result.success) {
+      toast.show(result)
+      throw new Error(errorResponseToMessage(result.error))
+    }
+
+    folderRunStore.trigger.historyEntryDeleted({ folderId, runId })
   }
 }

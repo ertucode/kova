@@ -91,6 +91,10 @@ export type CancelFolderRunInput = {
   runId: string
 }
 
+export type DeleteFolderRunHistoryInput = {
+  runId: string
+}
+
 export type ListFolderRunHistoryInput = {
   folderId: string
   offset: number

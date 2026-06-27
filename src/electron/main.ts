@@ -29,7 +29,7 @@ import {
   listRequestHistory,
   trimRequestHistory,
 } from './db/request-history.js'
-import { getFolderRunHistory, listFolderRunHistory } from './db/folder-run-history.js'
+import { deleteFolderRunHistory, getFolderRunHistory, listFolderRunHistory } from './db/folder-run-history.js'
 import {
   createRequest,
   deleteRequest,
@@ -517,6 +517,10 @@ app.on('ready', async () => {
 
   ipcHandle('cancelFolderRun', async input => {
     return cancelFolderRun(input)
+  })
+
+  ipcHandle('deleteFolderRunHistory', async input => {
+    return deleteFolderRunHistory(input)
   })
 
   ipcHandle('listFolderRunHistory', async input => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, ChevronRightIcon, HistoryIcon, InfoIcon, PlayIcon, SquareIcon } from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, HistoryIcon, InfoIcon, PlayIcon, SquareIcon, Trash2Icon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { buildEnvironmentVariableMap } from '@common/RequestVariables'
@@ -545,6 +545,25 @@ function FolderRunSection({
     await FolderRunCoordinator.startRun({ folderId, config, activeEnvironmentIds, historyKeepLast })
   }
 
+  const deleteHistoryRun = async (runId: string) => {
+    await FolderRunCoordinator.deleteHistoryEntry(folderId, runId)
+    setExpandedRunIds(current => {
+      const next = new Set(current)
+      next.delete(runId)
+      return next
+    })
+    setLoadingHistoryRunIds(current => {
+      const next = new Set(current)
+      next.delete(runId)
+      return next
+    })
+    setLoadedHistoryRunsById(current => {
+      const next = { ...current }
+      delete next[runId]
+      return next
+    })
+  }
+
   const toggleHistoryRun = async (item: FolderRunHistoryListItem) => {
     const shouldExpand = !expandedRunIds.has(item.history.id)
     setExpandedRunIds(current => {
@@ -676,6 +695,8 @@ function FolderRunSection({
                 expanded={expandedRunIds.has(item.history.id)}
                 loading={loadingHistoryRunIds.has(item.history.id)}
                 onToggle={() => void toggleHistoryRun(item)}
+                onDelete={() => void deleteHistoryRun(item.history.id)}
+                canDelete={item.history.status !== 'running' && activeRunId !== item.history.id}
               />
             ))}
           </div>
@@ -789,41 +810,57 @@ function FolderRunHistoryItem({
   expanded,
   loading,
   onToggle,
+  onDelete,
+  canDelete,
 }: {
   item: FolderRunHistoryListItem
   loadedRun: FolderRunRecord | null
   expanded: boolean
   loading: boolean
   onToggle: () => void
+  onDelete: () => void
+  canDelete: boolean
 }) {
   const run = item.run ?? loadedRun
 
   return (
     <div className="overflow-hidden rounded-xl border border-base-content/8 bg-base-100 text-sm">
-      <button
-        type="button"
-        className="flex w-full items-start gap-3 px-3 py-2 text-left transition hover:bg-base-200/35"
-        onClick={onToggle}
-      >
-        <span className="mt-0.5 shrink-0 text-base-content/45">
-          {expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="font-medium text-base-content">{item.history.status}</span>
-              {item.isLatest ? (
-                <span className="rounded-full bg-info/12 px-2 py-0.5 text-[11px] font-medium text-info">Latest</span>
-              ) : null}
+      <div className="flex items-start gap-2 px-3 py-2 transition hover:bg-base-200/35">
+        <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={onToggle}>
+          <span className="mt-0.5 shrink-0 text-base-content/45">
+            {expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="font-medium text-base-content">{item.history.status}</span>
+                {item.isLatest ? (
+                  <span className="rounded-full bg-info/12 px-2 py-0.5 text-[11px] font-medium text-info">Latest</span>
+                ) : null}
+              </div>
+              <span className="text-xs text-base-content/45">{new Date(item.history.startedAt).toLocaleString()}</span>
             </div>
-            <span className="text-xs text-base-content/45">{new Date(item.history.startedAt).toLocaleString()}</span>
+            <div className="mt-1 text-xs text-base-content/55">
+              {item.history.passedRequestCount}/{item.history.requestCount} requests passed, {item.history.failedRequestCount}{' '}
+              failed
+            </div>
           </div>
-          <div className="mt-1 text-xs text-base-content/55">
-            {item.history.passedRequestCount}/{item.history.requestCount} requests passed,{' '}
-            {item.history.failedRequestCount} failed
-          </div>
-        </div>
-      </button>
+        </button>
+        {canDelete ? (
+          <button
+            type="button"
+            className="mt-0.5 rounded-lg p-2 text-base-content/35 transition hover:bg-error/10 hover:text-error"
+            onClick={event => {
+              event.stopPropagation()
+              void onDelete()
+            }}
+            aria-label="Delete folder run"
+            title="Delete folder run"
+          >
+            <Trash2Icon className="size-4" />
+          </button>
+        ) : null}
+      </div>
 
       {expanded ? (
         <div className="border-t border-base-content/8 px-3 pb-3 pt-3">
