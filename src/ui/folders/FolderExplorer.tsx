@@ -38,7 +38,11 @@ import { PackagesPanel } from './PackagesPanel'
 import { ViewsPanel } from './ViewsPanel'
 import { TagsPanel } from './TagsPanel'
 import { TagsCoordinator } from './tagsCoordinator'
-import { captureFolderTreeSearchSnapshot, filterTreeWithDrafts, type FolderTreeSearchSnapshot } from './folderExplorerSearch'
+import {
+  captureFolderTreeSearchSnapshot,
+  filterTreeWithDrafts,
+  type FolderTreeSearchSnapshot,
+} from './folderExplorerSearch'
 import { buildTree, toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
@@ -670,15 +674,6 @@ function CreateMenuButton() {
             >
               <FileJsonIcon className="size-4" />
               Export OpenAPI
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              onClick={() => runAction(() => openManagementAgentDialog({ scopeType: 'workspace', targetFolderId: null }))}
-            >
-              <SparklesIcon className="size-4" />
-              Manage with AI
             </button>
           </li>
           <li>

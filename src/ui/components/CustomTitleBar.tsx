@@ -1,17 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckIcon, PinIcon, PinOffIcon, Minimize2Icon, Maximize2Icon, CogIcon } from 'lucide-react'
+import { CheckIcon, CogIcon, SparklesIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
-import { windowStore, WindowStoreHelpers } from '@/global/windowStore'
 import { environmentEditorStore } from '@/folders/environmentEditorStore'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { folderExplorerEditorStore } from '@/folders/folderExplorerEditorStore'
 import { dialogActions } from '@/global/dialogStore'
 import { AppSettingsDialog } from '@/global/AppSettingsDialog'
+import { ManagementAgentDialog } from '@/folders/ManagementAgentDialog'
 
 export function CustomTitleBar() {
-  const state = useSelector(windowStore, s => s.context)
-  const alwaysOnTop = state.alwaysOnTop
-  const isCompact = state.isCompactWindowSize
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const [isEnvMenuOpen, setIsEnvMenuOpen] = useState(false)
@@ -150,32 +147,22 @@ export function CustomTitleBar() {
       >
         <button
           className="btn btn-xs btn-soft btn-info"
+          onClick={() =>
+            dialogActions.open({
+              component: ManagementAgentDialog,
+              props: { scope: { scopeType: 'workspace', targetFolderId: null } },
+            })
+          }
+          title="Manage With AI"
+        >
+          <SparklesIcon className="size-4" />
+        </button>
+        <button
+          className="btn btn-xs btn-soft btn-info"
           onClick={() => dialogActions.open({ component: AppSettingsDialog, props: {} })}
           title="Open settings"
         >
           <CogIcon className="size-4" />
-        </button>
-
-        {/* Compact window size toggle */}
-        <button
-          className={`btn btn-xs ${isCompact ? 'btn-info' : 'btn-soft btn-info'}`}
-          onClick={WindowStoreHelpers.toggleWindowSize}
-          title={isCompact ? 'Restore window size' : 'Set compact size (1/3 screen)'}
-        >
-          {isCompact ? <Maximize2Icon className="size-4" /> : <Minimize2Icon className="size-4" />}
-        </button>
-
-        {/* Always on top button */}
-        <button
-          className={`btn btn-xs ${alwaysOnTop ? 'btn-info' : 'btn-soft btn-info'}`}
-          onClick={WindowStoreHelpers.toggleAlwaysOnTop}
-          title={
-            alwaysOnTop
-              ? 'Disable always on top (⌘+click to also resize)'
-              : 'Enable always on top (⌘+click to also resize)'
-          }
-        >
-          {alwaysOnTop ? <PinIcon className="size-4" /> : <PinOffIcon className="size-4" />}
         </button>
       </div>
     </div>
