@@ -351,6 +351,13 @@
       "when": 1782549149963,
       "tag": "0049_wise_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1782600053627,
+      "tag": "0050_known_kang",
+      "breakpoints": true
     }
   ]
 }

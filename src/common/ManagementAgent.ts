@@ -8,7 +8,7 @@ import {
 import type { ScriptAiMessage, ScriptAiMessagePart } from './ScriptAi.js'
 import type { TaggableItemType } from './Tags.js'
 
-export type ManagementAgentScopeType = 'workspace' | 'folder'
+export type ManagementAgentScopeType = 'workspace' | 'folder' | 'request'
 export type ManagementAgentSessionStatus = 'idle' | 'busy' | 'error'
 export type ManagementAgentPlanKind = 'draft' | 'applied'
 export type ManagementAgentPlanStatus = 'active' | 'applied' | 'superseded'
@@ -16,6 +16,7 @@ export type ManagementAgentPlanStatus = 'active' | 'applied' | 'superseded'
 export type ManagementAgentScope = {
   scopeType: ManagementAgentScopeType
   targetFolderId: string | null
+  targetRequestId: string | null
 }
 
 export type ManagementAgentQuestion = {

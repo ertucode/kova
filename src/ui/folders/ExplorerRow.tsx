@@ -208,6 +208,7 @@ export function ExplorerRow({
         <ExplorerMenu
           itemId={node.id}
           itemType={node.itemType}
+          parentFolderId={node.itemType === 'folder' || node.itemType === 'request' ? node.parentFolderId : null}
           requestType={node.itemType === 'request' ? node.requestType : undefined}
           activeEnvironmentIds={activeEnvironmentIds}
           onAddFolder={
@@ -452,6 +453,7 @@ type ExplorerMenuEntry =
 function ExplorerMenu({
   itemId,
   itemType,
+  parentFolderId,
   requestType,
   activeEnvironmentIds,
   onAddFolder,
@@ -465,6 +467,7 @@ function ExplorerMenu({
 }: {
   itemId: string
   itemType: ExplorerItem['itemType']
+  parentFolderId: string | null
   requestType?: RequestType
   activeEnvironmentIds: string[]
   onAddFolder?: () => void
@@ -610,7 +613,7 @@ function ExplorerMenu({
           type: 'item',
           icon: <SparklesIcon className="size-4" />,
           label: 'Manage with AI',
-          action: () => openManagementAgentDialog({ scopeType: 'folder', targetFolderId: itemId }),
+          action: () => openManagementAgentDialog({ scopeType: 'folder', targetFolderId: itemId, targetRequestId: null }),
         },
         {
           type: 'divider',
@@ -650,6 +653,12 @@ function ExplorerMenu({
         label: 'Export Postman',
         action: () => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'request', requestId: itemId } }),
       },
+      {
+        type: 'item',
+        icon: <SparklesIcon className="size-4" />,
+        label: 'Manage with AI',
+        action: () => openManagementAgentDialog({ scopeType: 'request', targetFolderId: parentFolderId, targetRequestId: itemId }),
+      },
       requestType === 'http'
         ? {
             type: 'item',
@@ -664,6 +673,7 @@ function ExplorerMenu({
   }, [
     itemId,
     itemType,
+    parentFolderId,
     onAddFolder,
     onAddHttpRequest,
     onAddRequestFromClipboard,

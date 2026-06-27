@@ -27,6 +27,7 @@ import {
   type SendManagementAgentMessageInput,
 } from '../common/ManagementAgent.js'
 import { Result } from '../common/Result.js'
+import { Typescript } from '../common/Typescript.js'
 import { emitGenericEvent } from './generic-events.js'
 import { getAppSettings } from './db/app-settings.js'
 import {
@@ -38,7 +39,8 @@ import {
   updateManagementAgentSession,
 } from './db/management-agent.js'
 import { listEnvironments } from './db/environments.js'
-import { listExplorerItems } from './db/explorer.js'
+import { getRequestParentFolderId, listExplorerItems } from './db/explorer.js'
+import { getRequest } from './db/requests.js'
 import { MANAGEMENT_AGENT_MCP_SERVER_NAME, startManagementAgentMcpServer } from './management-agent-mcp-server.js'
 import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
 
@@ -120,6 +122,7 @@ export async function createManagementAgentSession(
     const state = await createManagementAgentSessionRecord({
       scopeType: input.scopeType,
       targetFolderId: input.targetFolderId,
+      targetRequestId: input.targetRequestId,
       title: buildManagementAgentSessionTitle(input),
       selectedModel: input.model,
     })
@@ -275,10 +278,9 @@ async function buildSystemPrompt(sessionId: string) {
     throw new Error('Management session not found.')
   }
 
-  const scopeLabel = session.scopeType === 'folder'
-    ? `folder scope rooted at ${session.targetFolderId}`
-    : 'workspace scope'
-  const currentFolderId = session.scopeType === 'folder' ? session.targetFolderId : null
+  const requestContext = session.targetRequestId ? await getRequestContext(session.targetRequestId) : null
+  const scopeLabel = getManagementScopeLabel(session, requestContext)
+  const currentFolderId = await getScopeFolderId(session)
   const currentFolderPath = currentFolderId ? await getFolderPathById(currentFolderId) : []
 
   return [
@@ -290,8 +292,16 @@ async function buildSystemPrompt(sessionId: string) {
     `Current management scope: ${scopeLabel}. When the draft uses parentFolderId: null, it means the root of this scope.`,
     `Current scope folderId: ${currentFolderId ?? 'null'}.`,
     `Current scope folderPath from workspace root: ${JSON.stringify(currentFolderPath)}.`,
+    `Current scope requestId: ${session.targetRequestId ?? 'null'}.`,
+    `Current scope requestPath from workspace root: ${JSON.stringify(requestContext?.path ?? [])}.`,
+    `Current scope request name: ${requestContext?.request.name ?? 'null'}.`,
+    `Current scope request method: ${requestContext?.request.method ?? 'null'}.`,
+    `Current scope request url: ${requestContext?.request.url ?? 'null'}.`,
     'When you update the draft, replace the entire plan with one complete draft update.',
     'If the agent is unsure which environment should receive variables, keep the draft apply-safe by adding explicit questions instead of guessing.',
+    session.scopeType === 'request'
+      ? 'This request scope is primarily a convenience scope: default to the current request and its folder path without asking the user to restate them, but you may propose changes anywhere in the workspace when needed.'
+      : 'Use the current scope as your default starting point.',
     '',
     'Draft plan JSON shape:',
     JSON.stringify(
@@ -560,7 +570,63 @@ async function getSessionWorkspaceDirectory(sessionId: string) {
 }
 
 function buildManagementAgentSessionTitle(scope: ManagementAgentScope) {
-  return scope.scopeType === 'folder' ? `Manage folder ${scope.targetFolderId}` : 'Manage workspace'
+  switch (scope.scopeType) {
+    case 'workspace':
+      return 'Manage workspace'
+    case 'folder':
+      return `Manage folder ${scope.targetFolderId}`
+    case 'request':
+      return `Manage request ${scope.targetRequestId}`
+    default:
+      return Typescript.assertUnreachable(scope.scopeType)
+  }
+}
+
+async function getRequestContext(requestId: string) {
+  const requestResult = await getRequest({ id: requestId })
+  if (!requestResult.success) {
+    return null
+  }
+
+  const parentFolderId = await getRequestParentFolderId(requestId)
+  const folderPath = parentFolderId ? await getFolderPathById(parentFolderId) : []
+
+  return {
+    request: requestResult.data,
+    path: [...folderPath, requestResult.data.name],
+    parentFolderId,
+  }
+}
+
+function getManagementScopeLabel(
+  session: { scopeType: string; targetFolderId: string | null; targetRequestId: string | null },
+  requestContext: Awaited<ReturnType<typeof getRequestContext>>
+) {
+  switch (session.scopeType) {
+    case 'workspace':
+      return 'workspace scope'
+    case 'folder':
+      return `folder scope rooted at ${session.targetFolderId}`
+    case 'request':
+      return requestContext
+        ? `request scope centered on ${requestContext.request.id} at path ${JSON.stringify(requestContext.path)}`
+        : `request scope centered on ${session.targetRequestId}`
+    default:
+      return Typescript.assertUnreachable(session.scopeType as never)
+  }
+}
+
+async function getScopeFolderId(session: { scopeType: string; targetFolderId: string | null; targetRequestId: string | null }) {
+  switch (session.scopeType) {
+    case 'workspace':
+      return null
+    case 'folder':
+      return session.targetFolderId
+    case 'request':
+      return session.targetRequestId ? await getRequestParentFolderId(session.targetRequestId) : null
+    default:
+      return Typescript.assertUnreachable(session.scopeType as never)
+  }
 }
 
 async function getFolderPathById(folderId: string) {
@@ -745,10 +811,11 @@ function getSdkErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : null
 }
 
-function toScope(session: { scopeType: string; targetFolderId: string | null }): ManagementAgentScope {
+function toScope(session: { scopeType: string; targetFolderId: string | null; targetRequestId: string | null }): ManagementAgentScope {
   return {
     scopeType: session.scopeType as ManagementAgentScope['scopeType'],
     targetFolderId: session.targetFolderId,
+    targetRequestId: session.targetRequestId,
   }
 }
 

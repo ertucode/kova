@@ -14,6 +14,7 @@ import type {
 } from '@common/ManagementAgent'
 import type { ExplorerItem } from '@common/Explorer'
 import type { TagRecord } from '@common/Tags'
+import { Typescript } from '@common/Typescript'
 import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -66,7 +67,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
 
   useEffect(() => {
     void loadWorkspace()
-  }, [scope.scopeType, scope.targetFolderId])
+  }, [scope.scopeType, scope.targetFolderId, scope.targetRequestId])
 
   useEffect(() => {
     return getWindowElectron().onGenericEvent(event => {
@@ -74,13 +75,13 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
         return
       }
 
-      if (event.state.scopeType !== scope.scopeType || event.state.targetFolderId !== scope.targetFolderId) {
+      if (!isSameManagementScope(event.state, scope)) {
         return
       }
 
       applyWorkspaceState(event.state)
     })
-  }, [scope.scopeType, scope.targetFolderId])
+  }, [scope.scopeType, scope.targetFolderId, scope.targetRequestId])
 
   useEffect(() => {
     const container = transcriptContainerRef.current
@@ -277,7 +278,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
 
   return (
     <Dialog
-      title={scope.scopeType === 'folder' ? 'Manage with AI - Folder' : 'Manage with AI'}
+      title={getManagementAgentDialogTitle(scope)}
       onClose={() => dialogActions.close()}
       className="h-[90vh] max-h-[90vh] max-w-[1800px] overflow-hidden"
       bodyClassName="overflow-hidden"
@@ -742,7 +743,34 @@ function writeSelectedSessionId(scope: ManagementAgentScope, sessionId: string |
 }
 
 function getSelectedSessionStorageKey(scope: ManagementAgentScope) {
-  return `management-agent-selected-session:${scope.scopeType}:${scope.targetFolderId ?? 'workspace'}`
+  return scope.scopeType === 'request'
+    ? `management-agent-selected-session:request:${scope.targetRequestId ?? 'no-request'}`
+    : `management-agent-selected-session:${scope.scopeType}:${scope.targetFolderId ?? 'no-folder'}`
+}
+
+function getManagementAgentDialogTitle(scope: ManagementAgentScope) {
+  switch (scope.scopeType) {
+    case 'workspace':
+      return 'Manage with AI'
+    case 'folder':
+      return 'Manage with AI - Folder'
+    case 'request':
+      return 'Manage with AI - Request'
+    default:
+      return Typescript.assertUnreachable(scope.scopeType)
+  }
+}
+
+function isSameManagementScope(left: ManagementAgentScope, right: ManagementAgentScope) {
+  if (left.scopeType !== right.scopeType) {
+    return false
+  }
+
+  if (left.scopeType === 'request') {
+    return left.targetRequestId === right.targetRequestId
+  }
+
+  return left.targetFolderId === right.targetFolderId && left.targetRequestId === right.targetRequestId
 }
 
 function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {

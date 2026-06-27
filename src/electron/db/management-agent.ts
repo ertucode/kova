@@ -35,6 +35,7 @@ export async function createManagementAgentSessionRecord(input: ManagementAgentS
     id: crypto.randomUUID(),
     scopeType: input.scopeType,
     targetFolderId: input.targetFolderId,
+    targetRequestId: input.targetRequestId,
     title: input.title,
     opencodeSessionId: null,
     selectedModel: input.selectedModel,
@@ -46,7 +47,11 @@ export async function createManagementAgentSessionRecord(input: ManagementAgentS
   }
 
   db.insert(managementAgentSessions).values(session).run()
-  return await loadManagementAgentWorkspaceState({ scopeType: input.scopeType, targetFolderId: input.targetFolderId })
+  return await loadManagementAgentWorkspaceState({
+    scopeType: input.scopeType,
+    targetFolderId: input.targetFolderId,
+    targetRequestId: input.targetRequestId,
+  })
 }
 
 export async function loadManagementAgentWorkspaceState(
@@ -56,16 +61,22 @@ export async function loadManagementAgentWorkspaceState(
   }
 ): Promise<ManagementAgentWorkspaceState> {
   const db = getDb()
+  const scopeMatcher = scope.scopeType === 'request'
+    ? and(
+        eq(managementAgentSessions.scopeType, scope.scopeType),
+        scope.targetRequestId === null ? isNull(managementAgentSessions.targetRequestId) : eq(managementAgentSessions.targetRequestId, scope.targetRequestId),
+        isNull(managementAgentSessions.deletedAt)
+      )
+    : and(
+        eq(managementAgentSessions.scopeType, scope.scopeType),
+        scope.targetFolderId === null ? isNull(managementAgentSessions.targetFolderId) : eq(managementAgentSessions.targetFolderId, scope.targetFolderId),
+        scope.targetRequestId === null ? isNull(managementAgentSessions.targetRequestId) : eq(managementAgentSessions.targetRequestId, scope.targetRequestId),
+        isNull(managementAgentSessions.deletedAt)
+      )
   const sessionRows = db
     .select()
     .from(managementAgentSessions)
-    .where(
-      and(
-        eq(managementAgentSessions.scopeType, scope.scopeType),
-        scope.targetFolderId === null ? isNull(managementAgentSessions.targetFolderId) : eq(managementAgentSessions.targetFolderId, scope.targetFolderId),
-        isNull(managementAgentSessions.deletedAt)
-      )
-    )
+    .where(scopeMatcher)
     .orderBy(desc(managementAgentSessions.updatedAt), desc(managementAgentSessions.createdAt))
     .all()
 
@@ -101,6 +112,7 @@ export async function loadManagementAgentWorkspaceState(
         id: session.id,
         scopeType: session.scopeType as ManagementAgentScopeType,
         targetFolderId: session.targetFolderId,
+        targetRequestId: session.targetRequestId,
         title: session.title,
         opencodeSessionId: session.opencodeSessionId,
         selectedModel: session.selectedModel,
@@ -120,6 +132,7 @@ export async function loadManagementAgentWorkspaceState(
   return {
     scopeType: scope.scopeType,
     targetFolderId: scope.targetFolderId,
+    targetRequestId: scope.targetRequestId,
     sessions,
   }
 }
@@ -288,7 +301,11 @@ export async function applyManagementAgentDraftPlan(sessionId: string) {
       .run()
   })
 
-  return await loadManagementAgentWorkspaceState({ scopeType: session.scopeType as ManagementAgentScopeType, targetFolderId: session.targetFolderId })
+  return await loadManagementAgentWorkspaceState({
+    scopeType: session.scopeType as ManagementAgentScopeType,
+    targetFolderId: session.targetFolderId,
+    targetRequestId: session.targetRequestId,
+  })
 }
 
 function insertFolderFromPlan(tx: Database, parentFolderId: string | null, name: string) {

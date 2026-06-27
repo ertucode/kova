@@ -150,7 +150,7 @@ export function CustomTitleBar() {
           onClick={() =>
             dialogActions.open({
               component: ManagementAgentDialog,
-              props: { scope: { scopeType: 'workspace', targetFolderId: null } },
+              props: { scope: { scopeType: 'workspace', targetFolderId: null, targetRequestId: null } },
             })
           }
           title="Manage With AI"

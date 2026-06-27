@@ -527,6 +527,7 @@ export const managementAgentSessions = sqliteTable(
     id: text('id').primaryKey(),
     scopeType: text('scope_type').notNull(),
     targetFolderId: text('target_folder_id'),
+    targetRequestId: text('target_request_id'),
     title: text('title').notNull(),
     opencodeSessionId: text('opencode_session_id'),
     selectedModel: text('selected_model'),
@@ -537,19 +538,8 @@ export const managementAgentSessions = sqliteTable(
     deletedAt: integer('deleted_at'),
   },
   table => [
-    foreignKey({
-      columns: [table.targetFolderId],
-      foreignColumns: [folders.id],
-      name: 'import_agent_sessions_target_folder_id_fkey',
-    }),
-    index('import_agent_sessions_scope_idx').on(table.scopeType, table.targetFolderId, table.updatedAt),
+    index('import_agent_sessions_scope_idx').on(table.scopeType, table.targetFolderId, table.targetRequestId, table.updatedAt),
     index('import_agent_sessions_deleted_at_idx').on(table.deletedAt),
-    check('import_agent_sessions_scope_type_check', sql`${table.scopeType} in ('workspace', 'folder')`),
-    check('import_agent_sessions_status_check', sql`${table.status} in ('idle', 'busy', 'error')`),
-    check(
-      'import_agent_sessions_scope_target_check',
-      sql`(${table.scopeType} = 'workspace' and ${table.targetFolderId} is null) or (${table.scopeType} = 'folder' and ${table.targetFolderId} is not null)`
-    ),
   ]
 )
 
@@ -566,14 +556,7 @@ export const managementAgentPlans = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   table => [
-    foreignKey({
-      columns: [table.sessionId],
-      foreignColumns: [managementAgentSessions.id],
-      name: 'import_agent_plans_session_id_fkey',
-    }),
     index('import_agent_plans_session_idx').on(table.sessionId, table.updatedAt),
-    check('import_agent_plans_kind_check', sql`${table.kind} in ('draft', 'applied')`),
-    check('import_agent_plans_status_check', sql`${table.status} in ('active', 'applied', 'superseded')`),
   ]
 )
 

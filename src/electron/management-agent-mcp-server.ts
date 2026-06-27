@@ -256,7 +256,7 @@ function createManagementAgentMcpServer(boundSessionId: string | null) {
     }
 
     return toToolResult({
-      scope: { scopeType: session.scopeType, targetFolderId: session.targetFolderId },
+      scope: { scopeType: session.scopeType, targetFolderId: session.targetFolderId, targetRequestId: session.targetRequestId },
       items: addExplorerPaths(filteredExplorer.data, explorer),
     })
   }
