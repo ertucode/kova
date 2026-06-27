@@ -3,15 +3,15 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
 import { errorResponseToMessage } from '@common/GenericError'
 import type {
-  ImportAgentItemTagUpdatePlanItem,
-  ImportAgentMessagePart,
-  ImportAgentPlanRecord,
-  ImportAgentRequestCreatePlanItem,
-  ImportAgentRequestUpdatePlanItem,
-  ImportAgentScope,
-  ImportAgentTagItemUpdatePlanItem,
-  ImportAgentWorkspaceState,
-} from '@common/ImportAgent'
+  ManagementAgentItemTagUpdatePlanItem,
+  ManagementAgentMessagePart,
+  ManagementAgentPlanRecord,
+  ManagementAgentRequestCreatePlanItem,
+  ManagementAgentRequestUpdatePlanItem,
+  ManagementAgentScope,
+  ManagementAgentTagItemUpdatePlanItem,
+  ManagementAgentWorkspaceState,
+} from '@common/ManagementAgent'
 import type { ExplorerItem } from '@common/Explorer'
 import type { TagRecord } from '@common/Tags'
 import { Dialog } from '@/lib/components/dialog'
@@ -25,21 +25,21 @@ import { EnvironmentCoordinator } from './environmentCoordinator'
 import { TagsCoordinator } from './tagsCoordinator'
 import { tagsStore } from './tagsStore'
 
-type ImportAgentDialogProps = {
-  scope: ImportAgentScope
+type ManagementAgentDialogProps = {
+  scope: ManagementAgentScope
 }
 
 const EMPTY_PROMPT_HISTORY: string[] = []
 
-export function openImportAgentDialog(scope: ImportAgentScope) {
-  dialogActions.open({ component: ImportAgentDialog, props: { scope } })
+export function openManagementAgentDialog(scope: ManagementAgentScope) {
+  dialogActions.open({ component: ManagementAgentDialog, props: { scope } })
 }
 
-export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
+export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
   const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const tagItems = useSelector(tagsStore, state => state.context.items)
-  const [workspaceState, setWorkspaceState] = useState<ImportAgentWorkspaceState | null>(null)
+  const [workspaceState, setWorkspaceState] = useState<ManagementAgentWorkspaceState | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(readSelectedSessionId(scope))
   const [selectedModel, setSelectedModel] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -70,7 +70,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
 
   useEffect(() => {
     return getWindowElectron().onGenericEvent(event => {
-      if (event.type !== 'import-agent-state-updated') {
+      if (event.type !== 'management-agent-state-updated') {
         return
       }
 
@@ -106,7 +106,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
     setSelectedModel(current => (current === nextSelectedModel ? current : nextSelectedModel))
   }, [selectedSession?.selectedModel])
 
-  function applyWorkspaceState(nextState: ImportAgentWorkspaceState, options?: { selectedSessionId?: string | null }) {
+  function applyWorkspaceState(nextState: ManagementAgentWorkspaceState, options?: { selectedSessionId?: string | null }) {
     setWorkspaceState(nextState)
     setSelectedSessionId(currentSelectedSessionId => {
       const requestedSelectedSessionId = options?.selectedSessionId
@@ -125,7 +125,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
   async function loadWorkspace() {
     setIsLoading(true)
     setErrorMessage(null)
-    const result = await getWindowElectron().loadImportAgentWorkspace(scope)
+    const result = await getWindowElectron().loadManagementAgentWorkspace(scope)
     if (!result.success) {
       setIsLoading(false)
       setErrorMessage(errorResponseToMessage(result.error))
@@ -139,7 +139,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
     setErrorMessage(null)
     setIsSubmitting(true)
     const existingSessionIds = new Set((workspaceState?.sessions ?? []).map(sessionState => sessionState.session.id))
-    const result = await getWindowElectron().createImportAgentSession({ ...scope, model: selectedModel || null })
+    const result = await getWindowElectron().createManagementAgentSession({ ...scope, model: selectedModel || null })
     if (!result.success) {
       setIsSubmitting(false)
       setErrorMessage(errorResponseToMessage(result.error))
@@ -171,7 +171,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
     setErrorMessage(null)
     setIsSubmitting(true)
 
-    const result = await getWindowElectron().sendImportAgentMessage({
+    const result = await getWindowElectron().sendManagementAgentMessage({
       sessionId: nextSessionId,
       message: trimmedPrompt,
       model: selectedModel || null,
@@ -193,7 +193,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
     }
 
     setErrorMessage(null)
-    const result = await getWindowElectron().abortImportAgentSession({ sessionId: selectedSessionId })
+    const result = await getWindowElectron().abortManagementAgentSession({ sessionId: selectedSessionId })
     if (!result.success) {
       setErrorMessage(errorResponseToMessage(result.error))
       return
@@ -209,7 +209,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
 
     setErrorMessage(null)
     setIsSubmitting(true)
-    const result = await getWindowElectron().applyImportAgentPlan({ sessionId: selectedSessionId })
+    const result = await getWindowElectron().applyManagementAgentPlan({ sessionId: selectedSessionId })
     if (!result.success) {
       setIsSubmitting(false)
       setErrorMessage(errorResponseToMessage(result.error))
@@ -277,7 +277,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
 
   return (
     <Dialog
-      title={scope.scopeType === 'folder' ? 'Import with Agent - Folder' : 'Import with Agent'}
+      title={scope.scopeType === 'folder' ? 'Manage with AI - Folder' : 'Manage with AI'}
       onClose={() => dialogActions.close()}
       className="h-[90vh] max-h-[90vh] max-w-[1800px] overflow-hidden"
       bodyClassName="overflow-hidden"
@@ -297,9 +297,9 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
                   <EmptyPanel message="No messages yet for this session." />
                 )
               ) : isLoading ? (
-                <EmptyPanel message="Loading import sessions..." />
+                <EmptyPanel message="Loading management sessions..." />
               ) : (
-                <EmptyPanel message="Create a session to start importing with the agent." />
+                <EmptyPanel message="Create a session to start managing this workspace with AI." />
               )}
             </div>
           </section>
@@ -371,7 +371,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
           <textarea
             ref={promptRef}
             className="min-h-12 w-full resize-none border-0 bg-base-100 px-3 py-3 font-mono text-sm leading-6 text-base-content outline-none placeholder:text-base-content/40"
-            placeholder="Paste cURL examples or describe the API requests you want imported."
+              placeholder="Describe what you want to organize, update, or create in Kova."
             value={prompt}
             onChange={event => {
               setPrompt(event.target.value)
@@ -404,7 +404,7 @@ function PlanView({
   explorerItems,
   tagItems,
 }: {
-  planRecord: ImportAgentPlanRecord
+  planRecord: ManagementAgentPlanRecord
   explorerItems: ExplorerItem[]
   tagItems: TagRecord[]
 }) {
@@ -471,7 +471,7 @@ function RequestPlanSection({
   requests,
 }: {
   title: string
-  requests: Array<ImportAgentRequestCreatePlanItem | ImportAgentRequestUpdatePlanItem>
+  requests: Array<ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem>
 }) {
   return (
     <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
@@ -485,7 +485,7 @@ function RequestPlanSection({
   )
 }
 
-function RequestPlanCard({ request }: { request: ImportAgentRequestCreatePlanItem | ImportAgentRequestUpdatePlanItem }) {
+function RequestPlanCard({ request }: { request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem }) {
   const authSummary = getRequestAuthSummary(request)
 
   return (
@@ -555,7 +555,7 @@ function InlineMeta({ label, value }: { label: string; value: string }) {
   )
 }
 
-function getRequestBodyPreview(request: ImportAgentRequestCreatePlanItem | ImportAgentRequestUpdatePlanItem) {
+function getRequestBodyPreview(request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem) {
   if (request.bodyType === 'graphql') {
     return [request.graphqlQuery.trim() ? `Query:\n${request.graphqlQuery}` : null, request.graphqlVariables.trim() ? `Variables:\n${request.graphqlVariables}` : null]
       .filter(Boolean)
@@ -565,7 +565,7 @@ function getRequestBodyPreview(request: ImportAgentRequestCreatePlanItem | Impor
   return request.body
 }
 
-function getRequestAuthSummary(request: ImportAgentRequestCreatePlanItem | ImportAgentRequestUpdatePlanItem) {
+function getRequestAuthSummary(request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem) {
   switch (request.auth.type) {
     case 'inherit':
       return 'inherit'
@@ -634,7 +634,7 @@ function getExplorerItemLabel(explorerItemMap: Map<string, ExplorerItem>, itemTy
 }
 
 function formatItemTagUpdate(
-  update: ImportAgentItemTagUpdatePlanItem,
+  update: ManagementAgentItemTagUpdatePlanItem,
   explorerItemMap: Map<string, ExplorerItem>,
   tagMap: Map<string, TagRecord>
 ) {
@@ -643,7 +643,7 @@ function formatItemTagUpdate(
 }
 
 function formatTagItemUpdate(
-  update: ImportAgentTagItemUpdatePlanItem,
+  update: ManagementAgentTagItemUpdatePlanItem,
   explorerItemMap: Map<string, ExplorerItem>,
   tagMap: Map<string, TagRecord>
 ) {
@@ -653,7 +653,7 @@ function formatTagItemUpdate(
   return `${getTagLabel(tagMap, update.tagId)}\nItems:\n${itemLabels}`
 }
 
-function TranscriptPart({ part }: { part: ImportAgentMessagePart }) {
+function TranscriptPart({ part }: { part: ManagementAgentMessagePart }) {
   return (
     <details className="bg-base-200/20 text-[12px]" open={part.type === 'text'}>
       <summary className={[ 'cursor-pointer list-none px-2 py-1 font-medium', part.type === 'text' ? 'text-base-content' : 'text-base-content/55' ].join(' ')}>
@@ -666,7 +666,7 @@ function TranscriptPart({ part }: { part: ImportAgentMessagePart }) {
   )
 }
 
-function getTranscriptPartTitle(part: ImportAgentMessagePart) {
+function getTranscriptPartTitle(part: ManagementAgentMessagePart) {
   switch (part.type) {
     case 'text':
       return getFirstLine(part.text) || 'Text'
@@ -695,7 +695,7 @@ function getTranscriptPartTitle(part: ImportAgentMessagePart) {
   }
 }
 
-function getTranscriptPartContent(part: ImportAgentMessagePart) {
+function getTranscriptPartContent(part: ManagementAgentMessagePart) {
   switch (part.type) {
     case 'text':
     case 'reasoning':
@@ -727,11 +727,11 @@ function getFirstLine(value: string) {
   return value.trim().split('\n')[0] ?? ''
 }
 
-function readSelectedSessionId(scope: ImportAgentScope) {
+function readSelectedSessionId(scope: ManagementAgentScope) {
   return window.localStorage.getItem(getSelectedSessionStorageKey(scope))
 }
 
-function writeSelectedSessionId(scope: ImportAgentScope, sessionId: string | null) {
+function writeSelectedSessionId(scope: ManagementAgentScope, sessionId: string | null) {
   const key = getSelectedSessionStorageKey(scope)
   if (!sessionId) {
     window.localStorage.removeItem(key)
@@ -741,8 +741,8 @@ function writeSelectedSessionId(scope: ImportAgentScope, sessionId: string | nul
   window.localStorage.setItem(key, sessionId)
 }
 
-function getSelectedSessionStorageKey(scope: ImportAgentScope) {
-  return `import-agent-selected-session:${scope.scopeType}:${scope.targetFolderId ?? 'workspace'}`
+function getSelectedSessionStorageKey(scope: ManagementAgentScope) {
+  return `management-agent-selected-session:${scope.scopeType}:${scope.targetFolderId ?? 'workspace'}`
 }
 
 function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {

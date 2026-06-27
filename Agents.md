@@ -5,7 +5,7 @@
 - Do not generate migrations manually. There is `npm run db:generate` for that. DO NOT RUN `npm run db:migrate`
 - We are always trying to write the best code we can. Don't tell me that something is good for now, but we can make it better later. Just make it the best now.
 - Dont write code like this. Always make sure every arm is handled. use Typescript.assertUnreachable instead
-- Do not add checks while writing db schema.
+- Do not add checks or foreign keys while writing db schema. They make the migrations harder.
 
 ```
 function getString(type: SomeType) {

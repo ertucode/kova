@@ -7,29 +7,29 @@ import { AUTH_LOCATIONS } from '../common/Auth.js'
 import type { ExplorerItem } from '../common/Explorer.js'
 import { errorResponseToMessage, GenericError, type GenericResult } from '../common/GenericError.js'
 import {
-  createEmptyImportAgentPlan,
-  type ImportAgentPlan,
-  normalizeImportAgentPlan,
+  createEmptyManagementAgentPlan,
+  type ManagementAgentPlan,
+  normalizeManagementAgentPlan,
   REQUEST_BODY_TYPES,
   REQUEST_METHODS,
   REQUEST_RAW_TYPES,
   RESPONSE_BODY_VIEWS,
-} from '../common/ImportAgent.js'
+} from '../common/ManagementAgent.js'
 import { getRequest } from './db/requests.js'
 import { listEnvironments } from './db/environments.js'
 import { listExplorerItems } from './db/explorer.js'
 import {
-  clearCurrentImportAgentDraftPlan,
-  getCurrentImportAgentDraftPlan,
-  getImportAgentSession,
-  listAppliedImportAgentPlans,
-  setCurrentImportAgentDraftPlan,
-} from './db/import-agent.js'
+  clearCurrentManagementAgentDraftPlan,
+  getCurrentManagementAgentDraftPlan,
+  getManagementAgentSession,
+  listAppliedManagementAgentPlans,
+  setCurrentManagementAgentDraftPlan,
+} from './db/management-agent.js'
 import { listTagAssignments, listTags } from './db/tags.js'
 
-export const IMPORT_AGENT_MCP_SERVER_NAME = 'kova_import_agent'
+export const MANAGEMENT_AGENT_MCP_SERVER_NAME = 'kova_management_agent'
 
-type ImportAgentMcpServer = {
+type ManagementAgentMcpServer = {
   url: string
   token: string
   close(): Promise<void>
@@ -40,7 +40,8 @@ const MCP_PATHNAME = '/mcp'
 const folderIdSchema = z.string().trim().min(1)
 const nullableFolderIdSchema = folderIdSchema.nullable()
 const parentScopeSchema = z.enum(['session-root', 'workspace-root']).optional()
-const folderPathSchema = z.array(z.string().trim().min(1)).min(1)
+const folderPathSchema = z.array(z.string().trim().min(1))
+const explorerQuerySchema = z.string().trim().min(1)
 const tagIdSchema = z.string().trim().min(1)
 const tagNameSchema = z.string()
 const tagColorSchema = z.string().trim().min(1).nullable()
@@ -143,7 +144,7 @@ const tagItemUpdatePlanItemSchema = z.object({
   tagId: tagIdSchema,
   items: z.array(tagItemRefSchema),
 })
-const importAgentPlanSchema = z.object({
+const managementAgentPlanSchema = z.object({
   summary: z.string(),
   questions: z.array(questionSchema),
   warnings: z.array(warningSchema),
@@ -157,7 +158,7 @@ const importAgentPlanSchema = z.object({
   tagItemUpdates: z.array(tagItemUpdatePlanItemSchema).optional(),
 })
 
-export async function startImportAgentMcpServer(): Promise<ImportAgentMcpServer> {
+export async function startManagementAgentMcpServer(): Promise<ManagementAgentMcpServer> {
   const token = randomBytes(24).toString('hex')
   const server = createServer(async (request, response) => {
     try {
@@ -178,7 +179,7 @@ export async function startImportAgentMcpServer(): Promise<ImportAgentMcpServer>
       }
 
       const boundSessionId = url.searchParams.get('sessionId')?.trim() || null
-      const mcpServer = createImportAgentMcpServer(boundSessionId)
+      const mcpServer = createManagementAgentMcpServer(boundSessionId)
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
       const dispose = () => {
         void transport.close().catch(() => undefined)
@@ -203,7 +204,7 @@ export async function startImportAgentMcpServer(): Promise<ImportAgentMcpServer>
 
   const address = server.address()
   if (!address || typeof address === 'string') {
-    throw new Error('Import agent MCP server did not expose a TCP port.')
+    throw new Error('Management agent MCP server did not expose a TCP port.')
   }
 
   return {
@@ -224,9 +225,9 @@ export async function startImportAgentMcpServer(): Promise<ImportAgentMcpServer>
   }
 }
 
-function createImportAgentMcpServer(boundSessionId: string | null) {
+function createManagementAgentMcpServer(boundSessionId: string | null) {
   const server = new McpServer({
-    name: IMPORT_AGENT_MCP_SERVER_NAME,
+    name: MANAGEMENT_AGENT_MCP_SERVER_NAME,
     version: '1.0.0',
   })
 
@@ -237,8 +238,8 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
     folderId?: string | null
     folderPath?: string[]
   }) {
-    const resolvedSessionId = requireBoundImportAgentSessionId(boundSessionId)
-    const session = requireImportAgentSession(resolvedSessionId)
+    const resolvedSessionId = requireBoundManagementAgentSessionId(boundSessionId)
+    const session = requireManagementAgentSession(resolvedSessionId)
     const explorer = await listExplorerItems()
     const resolvedFolderId = resolveExplorerFolderSelection({
       items: explorer,
@@ -261,13 +262,13 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   }
 
   async function updateDraft(
-    updater: (draft: ImportAgentPlan) => { draft: ImportAgentPlan; result: Record<string, unknown> }
+    updater: (draft: ManagementAgentPlan) => { draft: ManagementAgentPlan; result: Record<string, unknown> }
   ) {
-    const resolvedSessionId = requireBoundImportAgentSessionId(boundSessionId)
-    requireImportAgentSession(resolvedSessionId)
-    const currentDraft = getCurrentImportAgentDraftPlan(resolvedSessionId)?.plan ?? createEmptyImportAgentPlan()
+    const resolvedSessionId = requireBoundManagementAgentSessionId(boundSessionId)
+    requireManagementAgentSession(resolvedSessionId)
+    const currentDraft = getCurrentManagementAgentDraftPlan(resolvedSessionId)?.plan ?? createEmptyManagementAgentPlan()
     const updated = updater(currentDraft)
-    setCurrentImportAgentDraftPlan(resolvedSessionId, normalizeImportAgentPlan(updated.draft))
+    setCurrentManagementAgentDraftPlan(resolvedSessionId, normalizeManagementAgentPlan(updated.draft))
     return toToolResult(updated.result)
   }
 
@@ -287,7 +288,7 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
     {
       description: 'List explorer items under a folder by path relative to workspace root.',
       inputSchema: z.object({
-        folderPath: folderPathSchema.describe('Required path, e.g. ["test"]. or ["mainfolder", "nestedfolder"]'),
+        folderPath: folderPathSchema.describe('Path relative to workspace root. Use [] for the root folder, e.g. ["test"] or ["mainfolder", "nestedfolder"]'),
       }),
     },
     ({ folderPath }) => listExplorerItemsHelper({ folderPath })
@@ -296,13 +297,13 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   server.registerTool(
     'get_request',
     {
-      description: 'Get a request by ID for an import-agent session.',
+      description: 'Get a request by ID for a management-agent session.',
       inputSchema: {
         requestId: z.string().trim().min(1).describe('Request ID to load'),
       },
     },
     async ({ requestId }) => {
-      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      requireManagementAgentSession(requireBoundManagementAgentSessionId(boundSessionId))
       const result = await getRequest({ id: requestId })
       if (!result.success) {
         throw new Error(errorResponseToMessage(result.error))
@@ -313,13 +314,37 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   )
 
   server.registerTool(
+    'find_explorer_items_by_exact_query',
+    {
+      description: 'Find folders and requests whose names exactly match the query after lowercasing both sides.',
+      inputSchema: {
+        query: explorerQuerySchema.describe('Exact query to match case-insensitively against folder and request names.'),
+      },
+    },
+    async ({ query }) => {
+      requireManagementAgentSession(requireBoundManagementAgentSessionId(boundSessionId))
+      const normalizedQuery = query.toLocaleLowerCase()
+      const explorerItems = await listExplorerItems()
+      const matchedItems = explorerItems.filter(
+        (item): item is Extract<ExplorerItem, { itemType: 'folder' | 'request' }> =>
+          (item.itemType === 'folder' || item.itemType === 'request') && item.name.toLocaleLowerCase() === normalizedQuery
+      )
+
+      return toToolResult({
+        query,
+        items: addExplorerPathSegments(matchedItems, explorerItems),
+      })
+    }
+  )
+
+  server.registerTool(
     'list_environments',
     {
-      description: 'List all environments available to the import agent.',
+      description: 'List all environments available to the management agent.',
       inputSchema: {},
     },
     async () => {
-      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      requireManagementAgentSession(requireBoundManagementAgentSessionId(boundSessionId))
       return toToolResult({ environments: await listEnvironments() })
     }
   )
@@ -327,11 +352,11 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   server.registerTool(
     'list_tags',
     {
-      description: 'List all tags available to the import agent.',
+      description: 'List all tags available to the management agent.',
       inputSchema: {},
     },
     async () => {
-      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      requireManagementAgentSession(requireBoundManagementAgentSessionId(boundSessionId))
       return toToolResult({ tags: await listTags() })
     }
   )
@@ -345,7 +370,7 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
       },
     },
     async ({ tagId }) => {
-      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      requireManagementAgentSession(requireBoundManagementAgentSessionId(boundSessionId))
       const [tags, assignments, explorerItems] = await Promise.all([listTags(), listTagAssignments(), listExplorerItems()])
       const tag = tags.find(currentTag => currentTag.id === tagId) ?? null
       if (!tag) {
@@ -370,7 +395,7 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
       },
     },
     async ({ tagId }) => {
-      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      requireManagementAgentSession(requireBoundManagementAgentSessionId(boundSessionId))
       const [tags, assignments, explorerItems] = await Promise.all([listTags(), listTagAssignments(), listExplorerItems()])
       const tag = tags.find(currentTag => currentTag.id === tagId) ?? null
       if (!tag) {
@@ -385,29 +410,29 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   server.registerTool(
     'get_current_draft',
     {
-      description: 'Get the current draft import plan for a session.',
+      description: 'Get the current draft plan for a session.',
       inputSchema: {},
     },
     async () => {
-      const resolvedSessionId = requireBoundImportAgentSessionId(boundSessionId)
-      requireImportAgentSession(resolvedSessionId)
-      return toToolResult({ draft: getCurrentImportAgentDraftPlan(resolvedSessionId) })
+      const resolvedSessionId = requireBoundManagementAgentSessionId(boundSessionId)
+      requireManagementAgentSession(resolvedSessionId)
+      return toToolResult({ draft: getCurrentManagementAgentDraftPlan(resolvedSessionId) })
     }
   )
 
   server.registerTool(
     'set_current_draft',
     {
-      description: 'Replace the entire current draft import plan for a session.',
+      description: 'Replace the entire current draft plan for a session.',
       inputSchema: {
-        plan: importAgentPlanSchema.describe('Complete import plan object to set as the current draft'),
+        plan: managementAgentPlanSchema.describe('Complete draft plan object to set as the current draft'),
       },
     },
     async ({ plan }) => {
-      const resolvedSessionId = requireBoundImportAgentSessionId(boundSessionId)
-      requireImportAgentSession(resolvedSessionId)
+      const resolvedSessionId = requireBoundManagementAgentSessionId(boundSessionId)
+      requireManagementAgentSession(resolvedSessionId)
       return toToolResult({
-        draft: setCurrentImportAgentDraftPlan(resolvedSessionId, normalizeImportAgentPlan(plan)),
+        draft: setCurrentManagementAgentDraftPlan(resolvedSessionId, normalizeManagementAgentPlan(plan)),
       })
     }
   )
@@ -479,13 +504,13 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   server.registerTool(
     'clear_current_draft',
     {
-      description: 'Clear the current draft import plan for a session.',
+      description: 'Clear the current draft plan for a session.',
       inputSchema: {},
     },
     async () => {
-      const resolvedSessionId = requireBoundImportAgentSessionId(boundSessionId)
-      requireImportAgentSession(resolvedSessionId)
-      clearCurrentImportAgentDraftPlan(resolvedSessionId)
+      const resolvedSessionId = requireBoundManagementAgentSessionId(boundSessionId)
+      requireManagementAgentSession(resolvedSessionId)
+      clearCurrentManagementAgentDraftPlan(resolvedSessionId)
       return toToolResult({ success: true })
     }
   )
@@ -493,34 +518,34 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   server.registerTool(
     'list_applied_plans',
     {
-      description: 'List previously applied import plans for a session.',
+      description: 'List previously applied plans for a session.',
       inputSchema: {},
     },
     async () => {
-      const resolvedSessionId = requireBoundImportAgentSessionId(boundSessionId)
-      requireImportAgentSession(resolvedSessionId)
-      return toToolResult({ plans: listAppliedImportAgentPlans(resolvedSessionId) })
+      const resolvedSessionId = requireBoundManagementAgentSessionId(boundSessionId)
+      requireManagementAgentSession(resolvedSessionId)
+      return toToolResult({ plans: listAppliedManagementAgentPlans(resolvedSessionId) })
     }
   )
 
   return server
 }
 
-function requireImportAgentSession(sessionId: string) {
-  const session = getImportAgentSession(sessionId)
+function requireManagementAgentSession(sessionId: string) {
+  const session = getManagementAgentSession(sessionId)
   if (!session) {
-    throw new Error('Import session not found.')
+    throw new Error('Management session not found.')
   }
 
   return session
 }
 
-function requireBoundImportAgentSessionId(boundSessionId: string | null) {
+function requireBoundManagementAgentSessionId(boundSessionId: string | null) {
   if (boundSessionId) {
     return boundSessionId
   }
 
-  throw new Error('Import session not found.')
+  throw new Error('Management session not found.')
 }
 
 function toToolResult<T extends Record<string, unknown>>(value: T) {
@@ -562,6 +587,10 @@ function resolveExplorerFolderSelection(input: {
     return { success: true, data: input.folderId }
   }
 
+  if (input.folderPath.length === 0) {
+    return { success: true, data: null }
+  }
+
   const folderItems = input.items.filter(
     (item): item is Extract<ExplorerItem, { itemType: 'folder' }> => item.itemType === 'folder'
   )
@@ -580,7 +609,7 @@ function filterExplorerItems(
   | ({ statusCode: number } & Exclude<GenericResult<Awaited<ReturnType<typeof listExplorerItems>>>, { success: true }>)
   | Extract<GenericResult<Awaited<ReturnType<typeof listExplorerItems>>>, { success: true }> {
   if (!folderId) {
-    return { success: true, data: items }
+    return { success: true, data: filterExplorerItemsByFolderId(items, null) }
   }
 
   const folderItems = items.filter(
@@ -615,8 +644,12 @@ function resolveFolderIdByPath(
   return currentFolderId
 }
 
-function filterExplorerItemsByFolderId(items: Awaited<ReturnType<typeof listExplorerItems>>, folderId: string) {
-  const visibleFolderIds = new Set<string>([folderId])
+function filterExplorerItemsByFolderId(items: Awaited<ReturnType<typeof listExplorerItems>>, folderId: string | null) {
+  const visibleFolderIds = new Set<string>()
+  if (folderId) {
+    visibleFolderIds.add(folderId)
+  }
+
   for (const item of items) {
     if (item.itemType === 'folder' && item.parentFolderId === folderId) {
       visibleFolderIds.add(item.id)
@@ -627,7 +660,8 @@ function filterExplorerItemsByFolderId(items: Awaited<ReturnType<typeof listExpl
     items
       .filter(
         (item): item is Extract<ExplorerItem, { itemType: 'request' }> =>
-          item.itemType === 'request' && item.parentFolderId !== null && visibleFolderIds.has(item.parentFolderId)
+          item.itemType === 'request'
+            && ((item.parentFolderId === null && folderId === null) || (item.parentFolderId !== null && visibleFolderIds.has(item.parentFolderId)))
       )
       .map(item => item.id)
   )
@@ -637,7 +671,7 @@ function filterExplorerItemsByFolderId(items: Awaited<ReturnType<typeof listExpl
       case 'folder':
         return visibleFolderIds.has(item.id)
       case 'request':
-        return item.parentFolderId !== null && visibleFolderIds.has(item.parentFolderId)
+        return (item.parentFolderId === null && folderId === null) || (item.parentFolderId !== null && visibleFolderIds.has(item.parentFolderId))
       case 'example':
         return requestIds.has(item.requestId)
     }
@@ -655,6 +689,17 @@ function addExplorerPaths(items: Awaited<ReturnType<typeof listExplorerItems>>, 
             ...getFolderPath(itemMap, item.itemType === 'folder' ? item.parentFolderId : item.parentFolderId),
             item.name,
           ].join(' / '),
+  }))
+}
+
+function addExplorerPathSegments(items: Awaited<ReturnType<typeof listExplorerItems>>, allItems = items) {
+  const itemMap = new Map(allItems.map(item => [item.id, item] as const))
+  return items.map(item => ({
+    ...item,
+    path:
+      item.itemType === 'example'
+        ? [itemMap.get(item.requestId)?.name ?? item.requestId, item.name]
+        : [...getFolderPath(itemMap, item.itemType === 'folder' ? item.parentFolderId : item.parentFolderId), item.name],
   }))
 }
 

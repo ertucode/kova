@@ -30,7 +30,7 @@ import { tagsStore } from './tagsStore'
 import { TagDots } from './TagDots'
 import { AssignTagsDialog } from './AssignTagsDialog'
 import { folderRunStore } from './folderRunStore'
-import { openImportAgentDialog } from './ImportAgentDialog'
+import { openManagementAgentDialog } from './ManagementAgentDialog'
 
 export function ExplorerRow({
   node,
@@ -609,8 +609,8 @@ function ExplorerMenu({
         {
           type: 'item',
           icon: <SparklesIcon className="size-4" />,
-          label: 'Import with Agent',
-          action: () => openImportAgentDialog({ scopeType: 'folder', targetFolderId: itemId }),
+          label: 'Manage with AI',
+          action: () => openManagementAgentDialog({ scopeType: 'folder', targetFolderId: itemId }),
         },
         {
           type: 'divider',

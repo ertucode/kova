@@ -132,14 +132,14 @@ import {
 import { listOpenCodeModels } from './opencode-models.js'
 import { supermavenService } from './supermaven-service.js'
 import {
-  abortImportAgentSession,
-  applyImportAgentPlan,
-  configureImportAgentBaseDirectory,
-  createImportAgentSession,
-  loadImportAgentWorkspace,
-  sendImportAgentMessage,
-  shutdownImportAgentServer,
-} from './import-agent.js'
+  abortManagementAgentSession,
+  applyManagementAgentPlan,
+  configureManagementAgentBaseDirectory,
+  createManagementAgentSession,
+  loadManagementAgentWorkspace,
+  sendManagementAgentMessage,
+  shutdownManagementAgentServer,
+} from './management-agent.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -162,7 +162,7 @@ app.once('will-quit', () => {
     console.error('Failed to close Script AI diagnostics bridge', error)
   })
   void shutdownScriptAiServer()
-  void shutdownImportAgentServer()
+  void shutdownManagementAgentServer()
 })
 
 type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev'>
@@ -331,7 +331,7 @@ app.on('ready', async () => {
   Menu.setApplicationMenu(menu)
   configureScriptPackageRegistry(path.join(app.getPath('userData'), 'shared'))
   configureScriptAiBaseDirectory(path.join(app.getPath('userData'), 'script-ai'))
-  configureImportAgentBaseDirectory(path.join(app.getPath('userData'), 'import-agent'))
+  configureManagementAgentBaseDirectory(path.join(app.getPath('userData'), 'management-agent'))
 
   app.on('web-contents-created', (_event, contents) => {
     // if (contents.getType() === 'webview') return
@@ -671,7 +671,7 @@ app.on('ready', async () => {
 
     if (previousScriptAiServerPort !== nextScriptAiServerPort) {
       await shutdownScriptAiServer()
-      await shutdownImportAgentServer()
+      await shutdownManagementAgentServer()
     }
 
     if (previousSettings.supermavenEnabled !== result.data.supermavenEnabled) {
@@ -940,24 +940,24 @@ app.on('ready', async () => {
     return loadScriptAiMessagePatchDiff(input)
   })
 
-  ipcHandle('loadImportAgentWorkspace', async input => {
-    return loadImportAgentWorkspace(input)
+  ipcHandle('loadManagementAgentWorkspace', async input => {
+    return loadManagementAgentWorkspace(input)
   })
 
-  ipcHandle('createImportAgentSession', async input => {
-    return createImportAgentSession(input)
+  ipcHandle('createManagementAgentSession', async input => {
+    return createManagementAgentSession(input)
   })
 
-  ipcHandle('sendImportAgentMessage', async input => {
-    return sendImportAgentMessage(input)
+  ipcHandle('sendManagementAgentMessage', async input => {
+    return sendManagementAgentMessage(input)
   })
 
-  ipcHandle('abortImportAgentSession', async input => {
-    return abortImportAgentSession(input)
+  ipcHandle('abortManagementAgentSession', async input => {
+    return abortManagementAgentSession(input)
   })
 
-  ipcHandle('applyImportAgentPlan', async input => {
-    return applyImportAgentPlan(input)
+  ipcHandle('applyManagementAgentPlan', async input => {
+    return applyManagementAgentPlan(input)
   })
 
   ipcHandle('listOpenCodeModels', async () => {

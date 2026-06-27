@@ -2,36 +2,36 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { createDefaultHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
 import {
-  type ImportAgentParentScope,
-  normalizeImportAgentPlan,
-  type ImportAgentMessage,
-  type ImportAgentItemTagUpdatePlanItem,
-  type ImportAgentPlan,
-  type ImportAgentPlanRecord,
-  type ImportAgentRequestCreatePlanItem,
-  type ImportAgentRequestUpdatePlanItem,
-  type ImportAgentScope,
-  type ImportAgentScopeType,
-  type ImportAgentSessionState,
-  type ImportAgentSessionStatus,
-  type ImportAgentTagCreatePlanItem,
-  type ImportAgentTagItemUpdatePlanItem,
-  type ImportAgentTagUpdatePlanItem,
-  type ImportAgentWorkspaceState,
-} from '../../common/ImportAgent.js'
+  type ManagementAgentParentScope,
+  normalizeManagementAgentPlan,
+  type ManagementAgentMessage,
+  type ManagementAgentItemTagUpdatePlanItem,
+  type ManagementAgentPlan,
+  type ManagementAgentPlanRecord,
+  type ManagementAgentRequestCreatePlanItem,
+  type ManagementAgentRequestUpdatePlanItem,
+  type ManagementAgentScope,
+  type ManagementAgentScopeType,
+  type ManagementAgentSessionState,
+  type ManagementAgentSessionStatus,
+  type ManagementAgentTagCreatePlanItem,
+  type ManagementAgentTagItemUpdatePlanItem,
+  type ManagementAgentTagUpdatePlanItem,
+  type ManagementAgentWorkspaceState,
+} from '../../common/ManagementAgent.js'
 import { normalizeTagColor, type TaggableItemType } from '../../common/Tags.js'
 import { getDb } from './index.js'
-import { environments, folders, importAgentPlans, importAgentSessions, requests, tagAssignments, tags, treeItems } from './schema.js'
+import { environments, folders, managementAgentPlans, managementAgentSessions, requests, tagAssignments, tags, treeItems } from './schema.js'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../../common/KeyValueRows.js'
 
 type Database = BetterSQLite3Database<any>
-type ImportAgentSessionRow = typeof importAgentSessions.$inferSelect
-type ImportAgentPlanRow = typeof importAgentPlans.$inferSelect
+type ManagementAgentSessionRow = typeof managementAgentSessions.$inferSelect
+type ManagementAgentPlanRow = typeof managementAgentPlans.$inferSelect
 
-export async function createImportAgentSessionRecord(input: ImportAgentScope & { title: string; selectedModel: string | null }) {
+export async function createManagementAgentSessionRecord(input: ManagementAgentScope & { title: string; selectedModel: string | null }) {
   const db = getDb()
   const now = Date.now()
-  const session: ImportAgentSessionRow = {
+  const session: ManagementAgentSessionRow = {
     id: crypto.randomUUID(),
     scopeType: input.scopeType,
     targetFolderId: input.targetFolderId,
@@ -45,66 +45,66 @@ export async function createImportAgentSessionRecord(input: ImportAgentScope & {
     deletedAt: null,
   }
 
-  db.insert(importAgentSessions).values(session).run()
-  return await loadImportAgentWorkspaceState({ scopeType: input.scopeType, targetFolderId: input.targetFolderId })
+  db.insert(managementAgentSessions).values(session).run()
+  return await loadManagementAgentWorkspaceState({ scopeType: input.scopeType, targetFolderId: input.targetFolderId })
 }
 
-export async function loadImportAgentWorkspaceState(
-  scope: ImportAgentScope,
+export async function loadManagementAgentWorkspaceState(
+  scope: ManagementAgentScope,
   options?: {
-    messagesBySessionId?: Record<string, ImportAgentMessage[]>
+    messagesBySessionId?: Record<string, ManagementAgentMessage[]>
   }
-): Promise<ImportAgentWorkspaceState> {
+): Promise<ManagementAgentWorkspaceState> {
   const db = getDb()
   const sessionRows = db
     .select()
-    .from(importAgentSessions)
+    .from(managementAgentSessions)
     .where(
       and(
-        eq(importAgentSessions.scopeType, scope.scopeType),
-        scope.targetFolderId === null ? isNull(importAgentSessions.targetFolderId) : eq(importAgentSessions.targetFolderId, scope.targetFolderId),
-        isNull(importAgentSessions.deletedAt)
+        eq(managementAgentSessions.scopeType, scope.scopeType),
+        scope.targetFolderId === null ? isNull(managementAgentSessions.targetFolderId) : eq(managementAgentSessions.targetFolderId, scope.targetFolderId),
+        isNull(managementAgentSessions.deletedAt)
       )
     )
-    .orderBy(desc(importAgentSessions.updatedAt), desc(importAgentSessions.createdAt))
+    .orderBy(desc(managementAgentSessions.updatedAt), desc(managementAgentSessions.createdAt))
     .all()
 
   const sessionIds = sessionRows.map(session => session.id)
   const planRows = sessionIds.length
     ? db
         .select()
-        .from(importAgentPlans)
-        .where(inArray(importAgentPlans.sessionId, sessionIds))
-        .orderBy(desc(importAgentPlans.updatedAt), desc(importAgentPlans.createdAt))
+        .from(managementAgentPlans)
+        .where(inArray(managementAgentPlans.sessionId, sessionIds))
+        .orderBy(desc(managementAgentPlans.updatedAt), desc(managementAgentPlans.createdAt))
         .all()
     : []
 
-  const messagesBySessionId = new Map<string, ImportAgentMessage[]>(
+  const messagesBySessionId = new Map<string, ManagementAgentMessage[]>(
     Object.entries(options?.messagesBySessionId ?? {})
   )
 
-  const plansBySessionId = new Map<string, ImportAgentPlanRow[]>()
+  const plansBySessionId = new Map<string, ManagementAgentPlanRow[]>()
   for (const row of planRows) {
     const existing = plansBySessionId.get(row.sessionId) ?? []
     existing.push(row)
     plansBySessionId.set(row.sessionId, existing)
   }
 
-  const sessions: ImportAgentSessionState[] = sessionRows.map(session => {
+  const sessions: ManagementAgentSessionState[] = sessionRows.map(session => {
     const messages = messagesBySessionId.get(session.id) ?? []
     const sessionPlans = plansBySessionId.get(session.id) ?? []
     const activeDraft = sessionPlans.find(plan => plan.kind === 'draft' && plan.status === 'active') ?? null
-    const appliedPlans = sessionPlans.filter(plan => plan.kind === 'applied' && plan.status === 'applied').map(toImportAgentPlanRecord)
+    const appliedPlans = sessionPlans.filter(plan => plan.kind === 'applied' && plan.status === 'applied').map(toManagementAgentPlanRecord)
 
     return {
       session: {
         id: session.id,
-        scopeType: session.scopeType as ImportAgentScopeType,
+        scopeType: session.scopeType as ManagementAgentScopeType,
         targetFolderId: session.targetFolderId,
         title: session.title,
         opencodeSessionId: session.opencodeSessionId,
         selectedModel: session.selectedModel,
-        status: session.status as ImportAgentSessionStatus,
+        status: session.status as ManagementAgentSessionStatus,
         messageCount: messages.length,
         latestErrorMessage: session.latestErrorMessage,
         createdAt: session.createdAt,
@@ -112,7 +112,7 @@ export async function loadImportAgentWorkspaceState(
         deletedAt: session.deletedAt,
       },
       messages,
-      activePlan: activeDraft ? toImportAgentPlanRecord(activeDraft) : null,
+      activePlan: activeDraft ? toManagementAgentPlanRecord(activeDraft) : null,
       appliedPlans,
     }
   })
@@ -124,73 +124,73 @@ export async function loadImportAgentWorkspaceState(
   }
 }
 
-export function getImportAgentSession(sessionId: string) {
+export function getManagementAgentSession(sessionId: string) {
   const db = getDb()
   return db
     .select()
-    .from(importAgentSessions)
-    .where(and(eq(importAgentSessions.id, sessionId), isNull(importAgentSessions.deletedAt)))
+    .from(managementAgentSessions)
+    .where(and(eq(managementAgentSessions.id, sessionId), isNull(managementAgentSessions.deletedAt)))
     .get() ?? null
 }
 
-export function getImportAgentSessionByOpenCodeSessionId(opencodeSessionId: string) {
+export function getManagementAgentSessionByOpenCodeSessionId(opencodeSessionId: string) {
   const db = getDb()
   return db
     .select()
-    .from(importAgentSessions)
-    .where(and(eq(importAgentSessions.opencodeSessionId, opencodeSessionId), isNull(importAgentSessions.deletedAt)))
+    .from(managementAgentSessions)
+    .where(and(eq(managementAgentSessions.opencodeSessionId, opencodeSessionId), isNull(managementAgentSessions.deletedAt)))
     .get() ?? null
 }
 
-export function updateImportAgentSession(sessionId: string, patch: Partial<ImportAgentSessionRow>) {
+export function updateManagementAgentSession(sessionId: string, patch: Partial<ManagementAgentSessionRow>) {
   const db = getDb()
-  db.update(importAgentSessions)
+  db.update(managementAgentSessions)
     .set({ ...patch, updatedAt: Date.now() })
-    .where(and(eq(importAgentSessions.id, sessionId), isNull(importAgentSessions.deletedAt)))
+    .where(and(eq(managementAgentSessions.id, sessionId), isNull(managementAgentSessions.deletedAt)))
     .run()
 }
 
-export function getCurrentImportAgentDraftPlan(sessionId: string): ImportAgentPlanRecord | null {
+export function getCurrentManagementAgentDraftPlan(sessionId: string): ManagementAgentPlanRecord | null {
   const db = getDb()
   const row = db
     .select()
-    .from(importAgentPlans)
-    .where(and(eq(importAgentPlans.sessionId, sessionId), eq(importAgentPlans.kind, 'draft'), eq(importAgentPlans.status, 'active')))
-    .orderBy(desc(importAgentPlans.updatedAt), desc(importAgentPlans.createdAt))
+    .from(managementAgentPlans)
+    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
+    .orderBy(desc(managementAgentPlans.updatedAt), desc(managementAgentPlans.createdAt))
     .get()
 
-  return row ? toImportAgentPlanRecord(row) : null
+  return row ? toManagementAgentPlanRecord(row) : null
 }
 
-export function listAppliedImportAgentPlans(sessionId: string): ImportAgentPlanRecord[] {
+export function listAppliedManagementAgentPlans(sessionId: string): ManagementAgentPlanRecord[] {
   const db = getDb()
   return db
     .select()
-    .from(importAgentPlans)
-    .where(and(eq(importAgentPlans.sessionId, sessionId), eq(importAgentPlans.kind, 'applied'), eq(importAgentPlans.status, 'applied')))
-    .orderBy(desc(importAgentPlans.updatedAt), desc(importAgentPlans.createdAt))
+    .from(managementAgentPlans)
+    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'applied'), eq(managementAgentPlans.status, 'applied')))
+    .orderBy(desc(managementAgentPlans.updatedAt), desc(managementAgentPlans.createdAt))
     .all()
-    .map(toImportAgentPlanRecord)
+    .map(toManagementAgentPlanRecord)
 }
 
-export function setCurrentImportAgentDraftPlan(sessionId: string, plan: ImportAgentPlan) {
+export function setCurrentManagementAgentDraftPlan(sessionId: string, plan: ManagementAgentPlan) {
   const db = getDb()
   const now = Date.now()
   const existing = db
     .select()
-    .from(importAgentPlans)
-    .where(and(eq(importAgentPlans.sessionId, sessionId), eq(importAgentPlans.kind, 'draft'), eq(importAgentPlans.status, 'active')))
+    .from(managementAgentPlans)
+    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
     .get()
 
   if (existing) {
-    db.update(importAgentPlans)
+    db.update(managementAgentPlans)
       .set({ planJson: JSON.stringify(plan), updatedAt: now })
-      .where(eq(importAgentPlans.id, existing.id))
+      .where(eq(managementAgentPlans.id, existing.id))
       .run()
-    return toImportAgentPlanRecord({ ...existing, planJson: JSON.stringify(plan), updatedAt: now })
+    return toManagementAgentPlanRecord({ ...existing, planJson: JSON.stringify(plan), updatedAt: now })
   }
 
-  const row: ImportAgentPlanRow = {
+  const row: ManagementAgentPlanRow = {
     id: crypto.randomUUID(),
     sessionId,
     kind: 'draft',
@@ -199,36 +199,36 @@ export function setCurrentImportAgentDraftPlan(sessionId: string, plan: ImportAg
     createdAt: now,
     updatedAt: now,
   }
-  db.insert(importAgentPlans).values(row).run()
-  return toImportAgentPlanRecord(row)
+  db.insert(managementAgentPlans).values(row).run()
+  return toManagementAgentPlanRecord(row)
 }
 
-export function clearCurrentImportAgentDraftPlan(sessionId: string) {
+export function clearCurrentManagementAgentDraftPlan(sessionId: string) {
   const db = getDb()
-  db.update(importAgentPlans)
+  db.update(managementAgentPlans)
     .set({ status: 'superseded', updatedAt: Date.now() })
-    .where(and(eq(importAgentPlans.sessionId, sessionId), eq(importAgentPlans.kind, 'draft'), eq(importAgentPlans.status, 'active')))
+    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
     .run()
 }
 
-export async function applyImportAgentDraftPlan(sessionId: string) {
+export async function applyManagementAgentDraftPlan(sessionId: string) {
   const db = getDb()
-  const session = getImportAgentSession(sessionId)
+  const session = getManagementAgentSession(sessionId)
   if (!session) {
-    throw new Error('Import session not found.')
+    throw new Error('Management session not found.')
   }
 
   const activeDraftRow = db
     .select()
-    .from(importAgentPlans)
-    .where(and(eq(importAgentPlans.sessionId, sessionId), eq(importAgentPlans.kind, 'draft'), eq(importAgentPlans.status, 'active')))
+    .from(managementAgentPlans)
+    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
     .get()
 
   if (!activeDraftRow) {
     throw new Error('No active draft plan exists for this session.')
   }
 
-  const plan = normalizeImportAgentPlan(JSON.parse(activeDraftRow.planJson))
+  const plan = normalizeManagementAgentPlan(JSON.parse(activeDraftRow.planJson))
   if (plan.questions.length > 0) {
     throw new Error('Resolve all draft questions before applying changes.')
   }
@@ -277,18 +277,18 @@ export async function applyImportAgentDraftPlan(sessionId: string) {
     }
 
     const now = Date.now()
-    tx.update(importAgentPlans)
+    tx.update(managementAgentPlans)
       .set({ kind: 'applied', status: 'applied', updatedAt: now })
-      .where(eq(importAgentPlans.id, activeDraftRow.id))
+      .where(eq(managementAgentPlans.id, activeDraftRow.id))
       .run()
 
-    tx.update(importAgentSessions)
+    tx.update(managementAgentSessions)
       .set({ status: 'idle', latestErrorMessage: null, updatedAt: now })
-      .where(eq(importAgentSessions.id, sessionId))
+      .where(eq(managementAgentSessions.id, sessionId))
       .run()
   })
 
-  return await loadImportAgentWorkspaceState({ scopeType: session.scopeType as ImportAgentScopeType, targetFolderId: session.targetFolderId })
+  return await loadManagementAgentWorkspaceState({ scopeType: session.scopeType as ManagementAgentScopeType, targetFolderId: session.targetFolderId })
 }
 
 function insertFolderFromPlan(tx: Database, parentFolderId: string | null, name: string) {
@@ -325,7 +325,7 @@ function insertFolderFromPlan(tx: Database, parentFolderId: string | null, name:
   return folderId
 }
 
-function insertRequestFromPlan(tx: Database, parentFolderId: string | null, request: ImportAgentRequestCreatePlanItem) {
+function insertRequestFromPlan(tx: Database, parentFolderId: string | null, request: ManagementAgentRequestCreatePlanItem) {
   const now = Date.now()
   const requestId = crypto.randomUUID()
   const position = getNextTreePosition(tx, parentFolderId)
@@ -377,7 +377,7 @@ function insertRequestFromPlan(tx: Database, parentFolderId: string | null, requ
     .run()
 }
 
-function updateRequestFromPlan(tx: Database, request: ImportAgentRequestUpdatePlanItem) {
+function updateRequestFromPlan(tx: Database, request: ManagementAgentRequestUpdatePlanItem) {
   tx.update(requests)
     .set({
       name: request.name,
@@ -441,7 +441,7 @@ function applyEnvironmentUpdate(tx: Database, environmentId: string, variables: 
     .run()
 }
 
-function insertTagFromPlan(tx: Database, tag: ImportAgentTagCreatePlanItem) {
+function insertTagFromPlan(tx: Database, tag: ManagementAgentTagCreatePlanItem) {
   const name = tag.name.trim()
   if (!name) {
     throw new Error('Tag name is required')
@@ -467,7 +467,7 @@ function insertTagFromPlan(tx: Database, tag: ImportAgentTagCreatePlanItem) {
   return tagId
 }
 
-function updateTagFromPlan(tx: Database, tag: ImportAgentTagUpdatePlanItem, tagIdMap: Map<string, string>) {
+function updateTagFromPlan(tx: Database, tag: ManagementAgentTagUpdatePlanItem, tagIdMap: Map<string, string>) {
   const resolvedTagId = resolvePlanTagId(tag.tagId, tagIdMap)
   const name = tag.name.trim()
   if (!name) {
@@ -490,7 +490,7 @@ function updateTagFromPlan(tx: Database, tag: ImportAgentTagUpdatePlanItem, tagI
     .run()
 }
 
-function applyItemTagUpdate(tx: Database, itemTagUpdate: ImportAgentItemTagUpdatePlanItem, tagIdMap: Map<string, string>) {
+function applyItemTagUpdate(tx: Database, itemTagUpdate: ManagementAgentItemTagUpdatePlanItem, tagIdMap: Map<string, string>) {
   ensureItemExists(tx, itemTagUpdate.itemType, itemTagUpdate.itemId)
   const resolvedTagIds = getValidatedPlanTagIds(tx, itemTagUpdate.tagIds, tagIdMap)
 
@@ -511,7 +511,7 @@ function applyItemTagUpdate(tx: Database, itemTagUpdate: ImportAgentItemTagUpdat
   })
 }
 
-function applyTagItemUpdate(tx: Database, tagItemUpdate: ImportAgentTagItemUpdatePlanItem, tagIdMap: Map<string, string>) {
+function applyTagItemUpdate(tx: Database, tagItemUpdate: ManagementAgentTagItemUpdatePlanItem, tagIdMap: Map<string, string>) {
   const resolvedTagId = resolvePlanTagId(tagItemUpdate.tagId, tagIdMap)
   const tag = tx.select({ id: tags.id }).from(tags).where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt))).get()
   if (!tag) {
@@ -541,9 +541,9 @@ function applyTagItemUpdate(tx: Database, tagItemUpdate: ImportAgentTagItemUpdat
 
 function resolvePlanParentFolderId(
   parentFolderId: string | null,
-  parentScope: ImportAgentParentScope | undefined,
+  parentScope: ManagementAgentParentScope | undefined,
   folderIdMap: Map<string, string>,
-  session: ImportAgentSessionRow
+  session: ManagementAgentSessionRow
 ) {
   if (parentFolderId === null) {
     return resolvePlanRootFolderId(session, parentScope)
@@ -552,7 +552,7 @@ function resolvePlanParentFolderId(
   return folderIdMap.get(parentFolderId) ?? parentFolderId
 }
 
-function resolvePlanRootFolderId(session: ImportAgentSessionRow, parentScope: ImportAgentParentScope | undefined) {
+function resolvePlanRootFolderId(session: ManagementAgentSessionRow, parentScope: ManagementAgentParentScope | undefined) {
   const resolvedParentScope = parentScope ?? (session.scopeType === 'folder' ? 'session-root' : 'workspace-root')
   if (resolvedParentScope === 'workspace-root') {
     return null
@@ -621,8 +621,8 @@ function ensureItemExists(tx: Database, itemType: TaggableItemType, itemId: stri
 }
 
 function ensureNoTagAssignmentConflicts(
-  itemTagUpdates: ImportAgentItemTagUpdatePlanItem[],
-  tagItemUpdates: ImportAgentTagItemUpdatePlanItem[]
+  itemTagUpdates: ManagementAgentItemTagUpdatePlanItem[],
+  tagItemUpdates: ManagementAgentTagItemUpdatePlanItem[]
 ) {
   const directlyUpdatedItemKeys = new Set(itemTagUpdates.map(itemTagUpdate => `${itemTagUpdate.itemType}:${itemTagUpdate.itemId}`))
   for (const tagItemUpdate of tagItemUpdates) {
@@ -635,13 +635,13 @@ function ensureNoTagAssignmentConflicts(
   }
 }
 
-function toImportAgentPlanRecord(row: ImportAgentPlanRow): ImportAgentPlanRecord {
+function toManagementAgentPlanRecord(row: ManagementAgentPlanRow): ManagementAgentPlanRecord {
   return {
     id: row.id,
     sessionId: row.sessionId,
-    kind: row.kind as ImportAgentPlanRecord['kind'],
-    status: row.status as ImportAgentPlanRecord['status'],
-    plan: normalizeImportAgentPlan(JSON.parse(row.planJson)),
+    kind: row.kind as ManagementAgentPlanRecord['kind'],
+    status: row.status as ManagementAgentPlanRecord['status'],
+    plan: normalizeManagementAgentPlan(JSON.parse(row.planJson)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }

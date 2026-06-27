@@ -146,13 +146,13 @@ import {
   type SyncScriptAiWorkspaceResponse,
 } from './ScriptAi.js'
 import {
-  type AbortImportAgentSessionInput,
-  type ApplyImportAgentPlanInput,
-  type CreateImportAgentSessionInput,
-  type ImportAgentWorkspaceState,
-  type LoadImportAgentWorkspaceInput,
-  type SendImportAgentMessageInput,
-} from './ImportAgent.js'
+  type AbortManagementAgentSessionInput,
+  type ApplyManagementAgentPlanInput,
+  type CreateManagementAgentSessionInput,
+  type ManagementAgentWorkspaceState,
+  type LoadManagementAgentWorkspaceInput,
+  type SendManagementAgentMessageInput,
+} from './ManagementAgent.js'
 import { type AppSettingsRecord, type UpdateAppSettingsInput } from './AppSettings.js'
 import {
   type CreateViewInput,
@@ -302,11 +302,11 @@ export type EventResponseMapping = {
   applyScriptAiWorkspace: Promise<GenericResult<ApplyScriptAiWorkspaceResponse>>
   abortScriptAiSession: Promise<GenericResult<ScriptAiWorkspaceState>>
   loadScriptAiMessagePatchDiff: Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>>
-  loadImportAgentWorkspace: Promise<GenericResult<ImportAgentWorkspaceState>>
-  createImportAgentSession: Promise<GenericResult<ImportAgentWorkspaceState>>
-  sendImportAgentMessage: Promise<GenericResult<ImportAgentWorkspaceState>>
-  abortImportAgentSession: Promise<GenericResult<ImportAgentWorkspaceState>>
-  applyImportAgentPlan: Promise<GenericResult<ImportAgentWorkspaceState>>
+  loadManagementAgentWorkspace: Promise<GenericResult<ManagementAgentWorkspaceState>>
+  createManagementAgentSession: Promise<GenericResult<ManagementAgentWorkspaceState>>
+  sendManagementAgentMessage: Promise<GenericResult<ManagementAgentWorkspaceState>>
+  abortManagementAgentSession: Promise<GenericResult<ManagementAgentWorkspaceState>>
+  applyManagementAgentPlan: Promise<GenericResult<ManagementAgentWorkspaceState>>
   listOpenCodeModels: Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: Promise<GenericResult<void>>
@@ -453,11 +453,11 @@ export type EventRequestMapping = {
   applyScriptAiWorkspace: ApplyScriptAiWorkspaceInput
   abortScriptAiSession: AbortScriptAiSessionInput
   loadScriptAiMessagePatchDiff: LoadScriptAiMessagePatchDiffInput
-  loadImportAgentWorkspace: LoadImportAgentWorkspaceInput
-  createImportAgentSession: CreateImportAgentSessionInput
-  sendImportAgentMessage: SendImportAgentMessageInput
-  abortImportAgentSession: AbortImportAgentSessionInput
-  applyImportAgentPlan: ApplyImportAgentPlanInput
+  loadManagementAgentWorkspace: LoadManagementAgentWorkspaceInput
+  createManagementAgentSession: CreateManagementAgentSessionInput
+  sendManagementAgentMessage: SendManagementAgentMessageInput
+  abortManagementAgentSession: AbortManagementAgentSessionInput
+  applyManagementAgentPlan: ApplyManagementAgentPlanInput
   listOpenCodeModels: void
   connectWebSocket: WebSocketConnectInput
   sendWebSocketMessage: WebSocketSendMessageInput
@@ -620,11 +620,11 @@ export type WindowElectron = {
   loadScriptAiMessagePatchDiff: (
     input: LoadScriptAiMessagePatchDiffInput
   ) => Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>>
-  loadImportAgentWorkspace: (input: LoadImportAgentWorkspaceInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
-  createImportAgentSession: (input: CreateImportAgentSessionInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
-  sendImportAgentMessage: (input: SendImportAgentMessageInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
-  abortImportAgentSession: (input: AbortImportAgentSessionInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
-  applyImportAgentPlan: (input: ApplyImportAgentPlanInput) => Promise<GenericResult<ImportAgentWorkspaceState>>
+  loadManagementAgentWorkspace: (input: LoadManagementAgentWorkspaceInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  createManagementAgentSession: (input: CreateManagementAgentSessionInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  sendManagementAgentMessage: (input: SendManagementAgentMessageInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  abortManagementAgentSession: (input: AbortManagementAgentSessionInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  applyManagementAgentPlan: (input: ApplyManagementAgentPlanInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
   listOpenCodeModels: () => Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>

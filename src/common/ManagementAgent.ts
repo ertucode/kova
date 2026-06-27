@@ -8,37 +8,37 @@ import {
 import type { ScriptAiMessage, ScriptAiMessagePart } from './ScriptAi.js'
 import type { TaggableItemType } from './Tags.js'
 
-export type ImportAgentScopeType = 'workspace' | 'folder'
-export type ImportAgentSessionStatus = 'idle' | 'busy' | 'error'
-export type ImportAgentPlanKind = 'draft' | 'applied'
-export type ImportAgentPlanStatus = 'active' | 'applied' | 'superseded'
+export type ManagementAgentScopeType = 'workspace' | 'folder'
+export type ManagementAgentSessionStatus = 'idle' | 'busy' | 'error'
+export type ManagementAgentPlanKind = 'draft' | 'applied'
+export type ManagementAgentPlanStatus = 'active' | 'applied' | 'superseded'
 
-export type ImportAgentScope = {
-  scopeType: ImportAgentScopeType
+export type ManagementAgentScope = {
+  scopeType: ManagementAgentScopeType
   targetFolderId: string | null
 }
 
-export type ImportAgentQuestion = {
+export type ManagementAgentQuestion = {
   id: string
   label: string
   details: string
 }
 
-export type ImportAgentWarning = {
+export type ManagementAgentWarning = {
   id: string
   message: string
 }
 
-export type ImportAgentFolderPlanItem = {
+export type ManagementAgentFolderPlanItem = {
   id: string
   parentFolderId: string | null
-  parentScope?: ImportAgentParentScope
+  parentScope?: ManagementAgentParentScope
   name: string
 }
 
-export type ImportAgentParentScope = 'session-root' | 'workspace-root'
+export type ManagementAgentParentScope = 'session-root' | 'workspace-root'
 
-export type ImportAgentRequestPlanFields = {
+export type ManagementAgentRequestPlanFields = {
   name: string
   method: RequestMethod
   url: string
@@ -60,46 +60,46 @@ export type ImportAgentRequestPlanFields = {
   saveToHistory: boolean
 }
 
-export type ImportAgentRequestCreatePlanItem = ImportAgentRequestPlanFields & {
+export type ManagementAgentRequestCreatePlanItem = ManagementAgentRequestPlanFields & {
   id: string
   parentFolderId: string | null
-  parentScope?: ImportAgentParentScope
+  parentScope?: ManagementAgentParentScope
 }
 
-export type ImportAgentRequestUpdatePlanItem = ImportAgentRequestPlanFields & {
+export type ManagementAgentRequestUpdatePlanItem = ManagementAgentRequestPlanFields & {
   requestId: string
 }
 
-export type ImportAgentEnvironmentVariablePlanItem = {
+export type ManagementAgentEnvironmentVariablePlanItem = {
   key: string
   value: string
 }
 
-export type ImportAgentEnvironmentUpdatePlanItem = {
+export type ManagementAgentEnvironmentUpdatePlanItem = {
   environmentId: string
   environmentName: string
-  variables: ImportAgentEnvironmentVariablePlanItem[]
+  variables: ManagementAgentEnvironmentVariablePlanItem[]
 }
 
-export type ImportAgentTagCreatePlanItem = {
+export type ManagementAgentTagCreatePlanItem = {
   id: string
   name: string
   color: string | null
 }
 
-export type ImportAgentTagUpdatePlanItem = {
+export type ManagementAgentTagUpdatePlanItem = {
   tagId: string
   name: string
   color: string | null
 }
 
-export type ImportAgentItemTagUpdatePlanItem = {
+export type ManagementAgentItemTagUpdatePlanItem = {
   itemType: TaggableItemType
   itemId: string
   tagIds: string[]
 }
 
-export type ImportAgentTagItemUpdatePlanItem = {
+export type ManagementAgentTagItemUpdatePlanItem = {
   tagId: string
   items: Array<{
     itemType: TaggableItemType
@@ -107,29 +107,29 @@ export type ImportAgentTagItemUpdatePlanItem = {
   }>
 }
 
-export type ImportAgentPlan = {
+export type ManagementAgentPlan = {
   summary: string
-  questions: ImportAgentQuestion[]
-  warnings: ImportAgentWarning[]
-  foldersToCreate: ImportAgentFolderPlanItem[]
-  requestsToCreate: ImportAgentRequestCreatePlanItem[]
-  requestsToUpdate: ImportAgentRequestUpdatePlanItem[]
-  environmentUpdates: ImportAgentEnvironmentUpdatePlanItem[]
-  tagsToCreate: ImportAgentTagCreatePlanItem[]
-  tagsToUpdate: ImportAgentTagUpdatePlanItem[]
-  itemTagUpdates: ImportAgentItemTagUpdatePlanItem[]
-  tagItemUpdates: ImportAgentTagItemUpdatePlanItem[]
+  questions: ManagementAgentQuestion[]
+  warnings: ManagementAgentWarning[]
+  foldersToCreate: ManagementAgentFolderPlanItem[]
+  requestsToCreate: ManagementAgentRequestCreatePlanItem[]
+  requestsToUpdate: ManagementAgentRequestUpdatePlanItem[]
+  environmentUpdates: ManagementAgentEnvironmentUpdatePlanItem[]
+  tagsToCreate: ManagementAgentTagCreatePlanItem[]
+  tagsToUpdate: ManagementAgentTagUpdatePlanItem[]
+  itemTagUpdates: ManagementAgentItemTagUpdatePlanItem[]
+  tagItemUpdates: ManagementAgentTagItemUpdatePlanItem[]
 }
 
-export type ImportAgentMessage = ScriptAiMessage
-export type ImportAgentMessagePart = ScriptAiMessagePart
+export type ManagementAgentMessage = ScriptAiMessage
+export type ManagementAgentMessagePart = ScriptAiMessagePart
 
-export type ImportAgentSessionSummary = ImportAgentScope & {
+export type ManagementAgentSessionSummary = ManagementAgentScope & {
   id: string
   title: string
   opencodeSessionId: string | null
   selectedModel: string | null
-  status: ImportAgentSessionStatus
+  status: ManagementAgentSessionStatus
   messageCount: number
   latestErrorMessage: string | null
   createdAt: number
@@ -137,44 +137,44 @@ export type ImportAgentSessionSummary = ImportAgentScope & {
   deletedAt: number | null
 }
 
-export type ImportAgentPlanRecord = {
+export type ManagementAgentPlanRecord = {
   id: string
   sessionId: string
-  kind: ImportAgentPlanKind
-  status: ImportAgentPlanStatus
-  plan: ImportAgentPlan
+  kind: ManagementAgentPlanKind
+  status: ManagementAgentPlanStatus
+  plan: ManagementAgentPlan
   createdAt: number
   updatedAt: number
 }
 
-export type ImportAgentSessionState = {
-  session: ImportAgentSessionSummary
-  messages: ImportAgentMessage[]
-  activePlan: ImportAgentPlanRecord | null
-  appliedPlans: ImportAgentPlanRecord[]
+export type ManagementAgentSessionState = {
+  session: ManagementAgentSessionSummary
+  messages: ManagementAgentMessage[]
+  activePlan: ManagementAgentPlanRecord | null
+  appliedPlans: ManagementAgentPlanRecord[]
 }
 
-export type ImportAgentWorkspaceState = ImportAgentScope & {
-  sessions: ImportAgentSessionState[]
+export type ManagementAgentWorkspaceState = ManagementAgentScope & {
+  sessions: ManagementAgentSessionState[]
 }
 
-export type LoadImportAgentWorkspaceInput = ImportAgentScope
+export type LoadManagementAgentWorkspaceInput = ManagementAgentScope
 
-export type CreateImportAgentSessionInput = ImportAgentScope & {
+export type CreateManagementAgentSessionInput = ManagementAgentScope & {
   model: string | null
 }
 
-export type SendImportAgentMessageInput = {
+export type SendManagementAgentMessageInput = {
   sessionId: string
   message: string
   model: string | null
 }
 
-export type AbortImportAgentSessionInput = {
+export type AbortManagementAgentSessionInput = {
   sessionId: string
 }
 
-export type ApplyImportAgentPlanInput = {
+export type ApplyManagementAgentPlanInput = {
   sessionId: string
 }
 
@@ -183,7 +183,7 @@ export const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www
 export const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
 export const RESPONSE_BODY_VIEWS: ResponseBodyView[] = ['raw', 'table', 'visualizer']
 
-export function createEmptyImportAgentPlan(): ImportAgentPlan {
+export function createEmptyManagementAgentPlan(): ManagementAgentPlan {
   return {
     summary: '',
     questions: [],
@@ -199,9 +199,9 @@ export function createEmptyImportAgentPlan(): ImportAgentPlan {
   }
 }
 
-export function normalizeImportAgentPlan(value: unknown): ImportAgentPlan {
+export function normalizeManagementAgentPlan(value: unknown): ManagementAgentPlan {
   if (!value || typeof value !== 'object') {
-    return createEmptyImportAgentPlan()
+    return createEmptyManagementAgentPlan()
   }
 
   const candidate = value as Record<string, unknown>
@@ -235,7 +235,7 @@ export function normalizeImportAgentPlan(value: unknown): ImportAgentPlan {
   }
 }
 
-function normalizeQuestion(value: unknown): ImportAgentQuestion {
+function normalizeQuestion(value: unknown): ManagementAgentQuestion {
   const candidate = toRecord(value)
   return {
     id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
@@ -244,7 +244,7 @@ function normalizeQuestion(value: unknown): ImportAgentQuestion {
   }
 }
 
-function normalizeWarning(value: unknown): ImportAgentWarning {
+function normalizeWarning(value: unknown): ManagementAgentWarning {
   const candidate = toRecord(value)
   return {
     id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
@@ -252,7 +252,7 @@ function normalizeWarning(value: unknown): ImportAgentWarning {
   }
 }
 
-function normalizeFolderPlanItem(value: unknown): ImportAgentFolderPlanItem {
+function normalizeFolderPlanItem(value: unknown): ManagementAgentFolderPlanItem {
   const candidate = toRecord(value)
   return {
     id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
@@ -262,7 +262,7 @@ function normalizeFolderPlanItem(value: unknown): ImportAgentFolderPlanItem {
   }
 }
 
-function normalizeRequestCreatePlanItem(value: unknown): ImportAgentRequestCreatePlanItem {
+function normalizeRequestCreatePlanItem(value: unknown): ManagementAgentRequestCreatePlanItem {
   const candidate = toRecord(value)
   return {
     id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
@@ -272,7 +272,7 @@ function normalizeRequestCreatePlanItem(value: unknown): ImportAgentRequestCreat
   }
 }
 
-function normalizeTagCreatePlanItem(value: unknown): ImportAgentTagCreatePlanItem {
+function normalizeTagCreatePlanItem(value: unknown): ManagementAgentTagCreatePlanItem {
   const candidate = toRecord(value)
   return {
     id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
@@ -281,7 +281,7 @@ function normalizeTagCreatePlanItem(value: unknown): ImportAgentTagCreatePlanIte
   }
 }
 
-function normalizeTagUpdatePlanItem(value: unknown): ImportAgentTagUpdatePlanItem {
+function normalizeTagUpdatePlanItem(value: unknown): ManagementAgentTagUpdatePlanItem {
   const candidate = toRecord(value)
   return {
     tagId: toTrimmedString(candidate.tagId),
@@ -290,7 +290,7 @@ function normalizeTagUpdatePlanItem(value: unknown): ImportAgentTagUpdatePlanIte
   }
 }
 
-function normalizeItemTagUpdatePlanItem(value: unknown): ImportAgentItemTagUpdatePlanItem {
+function normalizeItemTagUpdatePlanItem(value: unknown): ManagementAgentItemTagUpdatePlanItem {
   const candidate = toRecord(value)
   return {
     itemType: normalizeTaggableItemType(candidate.itemType),
@@ -299,7 +299,7 @@ function normalizeItemTagUpdatePlanItem(value: unknown): ImportAgentItemTagUpdat
   }
 }
 
-function normalizeTagItemUpdatePlanItem(value: unknown): ImportAgentTagItemUpdatePlanItem {
+function normalizeTagItemUpdatePlanItem(value: unknown): ManagementAgentTagItemUpdatePlanItem {
   const candidate = toRecord(value)
   return {
     tagId: toTrimmedString(candidate.tagId),
@@ -317,7 +317,7 @@ function normalizeTagItemRef(value: unknown): { itemType: TaggableItemType; item
   }
 }
 
-function normalizeRequestUpdatePlanItem(value: unknown): ImportAgentRequestUpdatePlanItem {
+function normalizeRequestUpdatePlanItem(value: unknown): ManagementAgentRequestUpdatePlanItem {
   const candidate = toRecord(value)
   return {
     requestId: toTrimmedString(candidate.requestId),
@@ -325,7 +325,7 @@ function normalizeRequestUpdatePlanItem(value: unknown): ImportAgentRequestUpdat
   }
 }
 
-function normalizeRequestPlanFields(candidate: Record<string, unknown>): ImportAgentRequestPlanFields {
+function normalizeRequestPlanFields(candidate: Record<string, unknown>): ManagementAgentRequestPlanFields {
   const method = toTrimmedString(candidate.method).toUpperCase()
   const bodyType = toTrimmedString(candidate.bodyType)
   const rawType = toTrimmedString(candidate.rawType)
@@ -356,7 +356,7 @@ function normalizeRequestPlanFields(candidate: Record<string, unknown>): ImportA
   }
 }
 
-function normalizeParentScope(value: unknown): ImportAgentParentScope | undefined {
+function normalizeParentScope(value: unknown): ManagementAgentParentScope | undefined {
   return value === 'session-root' || value === 'workspace-root' ? value : undefined
 }
 
@@ -364,7 +364,7 @@ function normalizeTaggableItemType(value: unknown): TaggableItemType {
   return value === 'folder' ? 'folder' : 'request'
 }
 
-function normalizeEnvironmentUpdatePlanItem(value: unknown): ImportAgentEnvironmentUpdatePlanItem {
+function normalizeEnvironmentUpdatePlanItem(value: unknown): ManagementAgentEnvironmentUpdatePlanItem {
   const candidate = toRecord(value)
   return {
     environmentId: toTrimmedString(candidate.environmentId),
@@ -406,7 +406,7 @@ function toNullableTrimmedString(value: unknown) {
   return value === null ? null : toOptionalTrimmedString(value)
 }
 
-export function createDefaultImportAgentRequestPlanFields(): ImportAgentRequestPlanFields {
+export function createDefaultManagementAgentRequestPlanFields(): ManagementAgentRequestPlanFields {
   return {
     name: '',
     method: 'GET',

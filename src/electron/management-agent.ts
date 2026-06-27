@@ -16,33 +16,33 @@ import {
 import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import {
-  type AbortImportAgentSessionInput,
-  type ApplyImportAgentPlanInput,
-  type CreateImportAgentSessionInput,
-  type ImportAgentMessage,
-  type ImportAgentPlan,
-  type ImportAgentScope,
-  type ImportAgentWorkspaceState,
-  type LoadImportAgentWorkspaceInput,
-  type SendImportAgentMessageInput,
-} from '../common/ImportAgent.js'
+  type AbortManagementAgentSessionInput,
+  type ApplyManagementAgentPlanInput,
+  type CreateManagementAgentSessionInput,
+  type ManagementAgentMessage,
+  type ManagementAgentPlan,
+  type ManagementAgentScope,
+  type ManagementAgentWorkspaceState,
+  type LoadManagementAgentWorkspaceInput,
+  type SendManagementAgentMessageInput,
+} from '../common/ManagementAgent.js'
 import { Result } from '../common/Result.js'
 import { emitGenericEvent } from './generic-events.js'
 import { getAppSettings } from './db/app-settings.js'
 import {
-  applyImportAgentDraftPlan,
-  createImportAgentSessionRecord,
-  getImportAgentSession,
-  getImportAgentSessionByOpenCodeSessionId,
-  loadImportAgentWorkspaceState,
-  updateImportAgentSession,
-} from './db/import-agent.js'
+  applyManagementAgentDraftPlan,
+  createManagementAgentSessionRecord,
+  getManagementAgentSession,
+  getManagementAgentSessionByOpenCodeSessionId,
+  loadManagementAgentWorkspaceState,
+  updateManagementAgentSession,
+} from './db/management-agent.js'
 import { listEnvironments } from './db/environments.js'
 import { listExplorerItems } from './db/explorer.js'
-import { IMPORT_AGENT_MCP_SERVER_NAME, startImportAgentMcpServer } from './import-agent-mcp-server.js'
+import { MANAGEMENT_AGENT_MCP_SERVER_NAME, startManagementAgentMcpServer } from './management-agent-mcp-server.js'
 import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
 
-type RawImportAgentSession = Session & {
+type RawManagementAgentSession = Session & {
   cost?: number
   tokens?: {
     input: number
@@ -59,7 +59,7 @@ type RawImportAgentSession = Session & {
   }
 }
 
-type ImportAgentServerRuntime = {
+type ManagementAgentServerRuntime = {
   baseUrl: string
   ownedServer: {
     url: string
@@ -70,20 +70,20 @@ type ImportAgentServerRuntime = {
   eventLoopStarted: boolean
   eventLoopPromise: Promise<void> | null
   globalEventAbortController: AbortController
-  mcpServer: Awaited<ReturnType<typeof startImportAgentMcpServer>>
+  mcpServer: Awaited<ReturnType<typeof startManagementAgentMcpServer>>
   mcpRegisteredDirectories: Set<string>
 }
 
-let importAgentBaseDirectory: string | null = null
-let serverRuntimePromise: Promise<ImportAgentServerRuntime> | null = null
+let managementAgentBaseDirectory: string | null = null
+let serverRuntimePromise: Promise<ManagementAgentServerRuntime> | null = null
 let serverStartupAbortController: AbortController | null = null
-const liveMessagesBySessionId = new Map<string, ImportAgentMessage[]>()
+const liveMessagesBySessionId = new Map<string, ManagementAgentMessage[]>()
 
-export function configureImportAgentBaseDirectory(directory: string) {
-  importAgentBaseDirectory = directory
+export function configureManagementAgentBaseDirectory(directory: string) {
+  managementAgentBaseDirectory = directory
 }
 
-export async function shutdownImportAgentServer() {
+export async function shutdownManagementAgentServer() {
   serverStartupAbortController?.abort()
   serverStartupAbortController = null
 
@@ -103,52 +103,52 @@ export async function shutdownImportAgentServer() {
   }
 }
 
-export async function loadImportAgentWorkspace(
-  input: LoadImportAgentWorkspaceInput
-): Promise<GenericResult<ImportAgentWorkspaceState>> {
+export async function loadManagementAgentWorkspace(
+  input: LoadManagementAgentWorkspaceInput
+): Promise<GenericResult<ManagementAgentWorkspaceState>> {
   try {
-    return Result.Success(await loadImportAgentWorkspaceStateWithOpenCode(input))
+    return Result.Success(await loadManagementAgentWorkspaceStateWithOpenCode(input))
   } catch (error) {
     return toGenericError(error)
   }
 }
 
-export async function createImportAgentSession(
-  input: CreateImportAgentSessionInput
-): Promise<GenericResult<ImportAgentWorkspaceState>> {
+export async function createManagementAgentSession(
+  input: CreateManagementAgentSessionInput
+): Promise<GenericResult<ManagementAgentWorkspaceState>> {
   try {
-    const state = await createImportAgentSessionRecord({
+    const state = await createManagementAgentSessionRecord({
       scopeType: input.scopeType,
       targetFolderId: input.targetFolderId,
-      title: buildImportAgentSessionTitle(input),
+      title: buildManagementAgentSessionTitle(input),
       selectedModel: input.model,
     })
-    emitImportAgentState(state)
+    emitManagementAgentState(state)
     return Result.Success(state)
   } catch (error) {
     return toGenericError(error)
   }
 }
 
-export async function sendImportAgentMessage(
-  input: SendImportAgentMessageInput
-): Promise<GenericResult<ImportAgentWorkspaceState>> {
+export async function sendManagementAgentMessage(
+  input: SendManagementAgentMessageInput
+): Promise<GenericResult<ManagementAgentWorkspaceState>> {
   try {
-    const session = getImportAgentSession(input.sessionId)
+    const session = getManagementAgentSession(input.sessionId)
     if (!session) {
-      return GenericError.Message('Import session not found.')
+      return GenericError.Message('Management session not found.')
     }
 
     const opencodeSessionId = await ensureOpencodeSessionId(session.id, input.model)
 
-    updateImportAgentSession(session.id, {
+    updateManagementAgentSession(session.id, {
       opencodeSessionId,
       selectedModel: input.model,
       status: 'busy',
       latestErrorMessage: null,
     })
-    const busyState = await loadImportAgentWorkspaceStateWithOpenCode(toScope(session))
-    emitImportAgentState(busyState)
+    const busyState = await loadManagementAgentWorkspaceStateWithOpenCode(toScope(session))
+    emitManagementAgentState(busyState)
 
     const client = await getClientForSession(session.id)
     const syntheticContext = await buildSyntheticAppliedContext(session.id)
@@ -164,25 +164,25 @@ export async function sendImportAgentMessage(
 
     return Result.Success(busyState)
   } catch (error) {
-    const session = getImportAgentSession(input.sessionId)
+    const session = getManagementAgentSession(input.sessionId)
     if (session) {
-      updateImportAgentSession(session.id, {
+      updateManagementAgentSession(session.id, {
         status: 'error',
         latestErrorMessage: error instanceof Error ? error.message : String(error),
       })
-      emitImportAgentState(await loadImportAgentWorkspaceStateWithOpenCode(toScope(session)).catch(() => loadImportAgentWorkspaceState(toScope(session))))
+      emitManagementAgentState(await loadManagementAgentWorkspaceStateWithOpenCode(toScope(session)).catch(() => loadManagementAgentWorkspaceState(toScope(session))))
     }
     return toGenericError(error)
   }
 }
 
-export async function abortImportAgentSession(
-  input: AbortImportAgentSessionInput
-): Promise<GenericResult<ImportAgentWorkspaceState>> {
+export async function abortManagementAgentSession(
+  input: AbortManagementAgentSessionInput
+): Promise<GenericResult<ManagementAgentWorkspaceState>> {
   try {
-    const session = getImportAgentSession(input.sessionId)
+    const session = getManagementAgentSession(input.sessionId)
     if (!session) {
-      return GenericError.Message('Import session not found.')
+      return GenericError.Message('Management session not found.')
     }
 
     if (session.opencodeSessionId) {
@@ -190,32 +190,32 @@ export async function abortImportAgentSession(
       await client.session.abort({ path: { id: session.opencodeSessionId } })
     }
 
-    const messagesBySessionId = await syncImportAgentSessionFromOpenCode(session.id)
-    const state = await loadImportAgentWorkspaceStateWithOpenCode(toScope(session), { messagesBySessionId })
-    emitImportAgentState(state)
+    const messagesBySessionId = await syncManagementAgentSessionFromOpenCode(session.id)
+    const state = await loadManagementAgentWorkspaceStateWithOpenCode(toScope(session), { messagesBySessionId })
+    emitManagementAgentState(state)
     return Result.Success(state)
   } catch (error) {
     return toGenericError(error)
   }
 }
 
-export async function applyImportAgentPlan(
-  input: ApplyImportAgentPlanInput
-): Promise<GenericResult<ImportAgentWorkspaceState>> {
+export async function applyManagementAgentPlan(
+  input: ApplyManagementAgentPlanInput
+): Promise<GenericResult<ManagementAgentWorkspaceState>> {
   try {
-    const state = await applyImportAgentDraftPlan(input.sessionId)
+    const state = await applyManagementAgentDraftPlan(input.sessionId)
     emitGenericEvent({ type: 'environments-updated', environmentIds: (await listEnvironments()).map(environment => environment.id) })
-    emitImportAgentState(state)
+    emitManagementAgentState(state)
     return Result.Success(state)
   } catch (error) {
     return toGenericError(error)
   }
 }
 
-async function syncImportAgentSessionFromOpenCode(sessionId: string) {
-  const session = getImportAgentSession(sessionId)
+async function syncManagementAgentSessionFromOpenCode(sessionId: string) {
+  const session = getManagementAgentSession(sessionId)
   if (!session?.opencodeSessionId) {
-    return {} as Record<string, ImportAgentMessage[]>
+    return {} as Record<string, ManagementAgentMessage[]>
   }
 
   const client = await getClientForSession(session.id)
@@ -230,10 +230,10 @@ async function syncImportAgentSessionFromOpenCode(sessionId: string) {
   )
   const statuses = requireSdkData(statusesResult.data, 'OpenCode did not return the session statuses.')
   const messages = requireSdkData(messagesResult.data, 'OpenCode did not return the session messages.').map(message =>
-    toImportAgentMessage(message.info, message.parts)
+    toManagementAgentMessage(message.info, message.parts)
   )
 
-  updateImportAgentSession(session.id, {
+  updateManagementAgentSession(session.id, {
     title: sdkSession?.title ?? session.title,
     status: toUiSessionStatus(statuses[session.opencodeSessionId] ?? { type: 'idle' }),
     latestErrorMessage: getLatestErrorMessage(messages),
@@ -246,14 +246,14 @@ async function syncImportAgentSessionFromOpenCode(sessionId: string) {
 }
 
 async function ensureOpencodeSessionId(sessionId: string, selectedModel: string | null) {
-  const session = getImportAgentSession(sessionId)
+  const session = getManagementAgentSession(sessionId)
   if (!session) {
-    throw new Error('Import session not found.')
+    throw new Error('Management session not found.')
   }
 
   if (session.opencodeSessionId) {
     if (selectedModel !== session.selectedModel) {
-      updateImportAgentSession(session.id, { selectedModel })
+      updateManagementAgentSession(session.id, { selectedModel })
     }
     return session.opencodeSessionId
   }
@@ -261,7 +261,7 @@ async function ensureOpencodeSessionId(sessionId: string, selectedModel: string 
   const client = await getClientForSession(session.id)
   const result = await client.session.create({ body: { title: session.title } })
   const opencodeSession = requireSdkData(result.data, 'OpenCode did not return the created session.')
-  updateImportAgentSession(session.id, {
+  updateManagementAgentSession(session.id, {
     opencodeSessionId: opencodeSession.id,
     selectedModel,
     status: 'idle',
@@ -270,9 +270,9 @@ async function ensureOpencodeSessionId(sessionId: string, selectedModel: string 
 }
 
 async function buildSystemPrompt(sessionId: string) {
-  const session = getImportAgentSession(sessionId)
+  const session = getManagementAgentSession(sessionId)
   if (!session) {
-    throw new Error('Import session not found.')
+    throw new Error('Management session not found.')
   }
 
   const scopeLabel = session.scopeType === 'folder'
@@ -282,12 +282,12 @@ async function buildSystemPrompt(sessionId: string) {
   const currentFolderPath = currentFolderId ? await getFolderPathById(currentFolderId) : []
 
   return [
-    'You are Kova\'s Import with Agent assistant.',
-    'Your job is to inspect the current Kova workspace, understand the user\'s API import request, and keep the live draft import plan up to date.',
+    'You are Kova\'s Manage with AI assistant.',
+    'Your job is to inspect the current Kova workspace, understand the user\'s management request, and keep the live draft plan up to date.',
     'The Kova draft plan is the only source of truth for pending changes. Do not return final JSON in chat as the source of truth.',
-    'Never mutate Kova data directly. You may inspect workspace state and replace or clear the current draft plan only through the available Kova import agent MCP tools.',
-    'Do not edit files, create files, or use unrelated tools. Prefer the Kova import agent MCP tools over anything else.',
-    `Current import scope: ${scopeLabel}. When the draft uses parentFolderId: null, it means the root of this import scope.`,
+    'Never mutate Kova data directly. You may inspect workspace state and replace or clear the current draft plan only through the available Kova management agent MCP tools.',
+    'Do not edit files, create files, or use unrelated tools. Prefer the Kova management agent MCP tools over anything else.',
+    `Current management scope: ${scopeLabel}. When the draft uses parentFolderId: null, it means the root of this scope.`,
     `Current scope folderId: ${currentFolderId ?? 'null'}.`,
     `Current scope folderPath from workspace root: ${JSON.stringify(currentFolderPath)}.`,
     'When you update the draft, replace the entire plan with one complete draft update.',
@@ -335,7 +335,7 @@ async function buildSystemPrompt(sessionId: string) {
 }
 
 async function buildSyntheticAppliedContext(sessionId: string) {
-  const workspaceState = await loadImportAgentWorkspaceStateWithOpenCode(toScope(requireSession(sessionId)))
+  const workspaceState = await loadManagementAgentWorkspaceStateWithOpenCode(toScope(requireSession(sessionId)))
   const sessionState = workspaceState.sessions.find(item => item.session.id === sessionId) ?? null
   const latestAppliedPlan = sessionState?.appliedPlans[0] ?? null
   const activePlan = sessionState?.activePlan ?? null
@@ -357,17 +357,17 @@ async function getClientForSession(sessionId: string) {
   const directory = await getSessionWorkspaceDirectory(sessionId)
   const existingClient = runtime.clientsByDirectory.get(directory)
   if (existingClient) {
-    await ensureImportAgentMcpRegistration(existingClient, runtime.mcpServer, directory, runtime, sessionId)
+    await ensureManagementAgentMcpRegistration(existingClient, runtime.mcpServer, directory, runtime, sessionId)
     return existingClient
   }
 
   const client = createOpencodeClient({ baseUrl: runtime.baseUrl, directory })
-  await ensureImportAgentMcpRegistration(client, runtime.mcpServer, directory, runtime, sessionId)
+  await ensureManagementAgentMcpRegistration(client, runtime.mcpServer, directory, runtime, sessionId)
   runtime.clientsByDirectory.set(directory, client)
   return client
 }
 
-async function getServerRuntime(): Promise<ImportAgentServerRuntime> {
+async function getServerRuntime(): Promise<ManagementAgentServerRuntime> {
   if (!serverRuntimePromise) {
     serverRuntimePromise = createServerRuntime().catch(error => {
       serverRuntimePromise = null
@@ -378,10 +378,10 @@ async function getServerRuntime(): Promise<ImportAgentServerRuntime> {
   return await serverRuntimePromise
 }
 
-async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
+async function createServerRuntime(): Promise<ManagementAgentServerRuntime> {
   const spawnConfig = await resolveOpenCodeSpawnConfig()
-  const importAgentServerPort = await getConfiguredOpenCodeServerPort()
-  const mcpServer = await startImportAgentMcpServer()
+  const managementAgentServerPort = await getConfiguredOpenCodeServerPort()
+  const mcpServer = await startManagementAgentMcpServer()
   process.env.PATH = spawnConfig.env.PATH
   process.env.OPENCODE_DISABLE_CLAUDE_CODE = 'true'
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = 'true'
@@ -390,12 +390,12 @@ async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
   const startupAbortController = new AbortController()
   serverStartupAbortController = startupAbortController
 
-  const baseUrl = `http://127.0.0.1:${String(importAgentServerPort)}`
-  let ownedServer: ImportAgentServerRuntime['ownedServer'] = null
+  const baseUrl = `http://127.0.0.1:${String(managementAgentServerPort)}`
+  let ownedServer: ManagementAgentServerRuntime['ownedServer'] = null
   try {
     ownedServer = await createOpencodeServer({
       hostname: '127.0.0.1',
-      port: importAgentServerPort,
+        port: managementAgentServerPort,
       timeout: 10_000,
       signal: startupAbortController.signal,
       config: {
@@ -408,12 +408,12 @@ async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
         },
         tools: {
           '*': false,
-          [`${IMPORT_AGENT_MCP_SERVER_NAME}_*`]: true,
+          [`${MANAGEMENT_AGENT_MCP_SERVER_NAME}_*`]: true,
         },
       },
     })
   } catch (error) {
-    if (!(await tryReuseExistingServer(baseUrl, importAgentServerPort, error))) {
+    if (!(await tryReuseExistingServer(baseUrl, managementAgentServerPort, error))) {
       await mcpServer.close().catch(() => undefined)
       throw error
     }
@@ -423,7 +423,7 @@ async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
     }
   }
 
-  const runtime: ImportAgentServerRuntime = {
+  const runtime: ManagementAgentServerRuntime = {
     baseUrl: ownedServer?.url ?? baseUrl,
     ownedServer,
     globalClient: createOpencodeClient({ baseUrl: ownedServer?.url ?? baseUrl }),
@@ -446,11 +446,11 @@ async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
   }
 }
 
-async function ensureImportAgentMcpRegistration(
+async function ensureManagementAgentMcpRegistration(
   client: ReturnType<typeof createOpencodeClient>,
-  mcpServer: Awaited<ReturnType<typeof startImportAgentMcpServer>>,
+  mcpServer: Awaited<ReturnType<typeof startManagementAgentMcpServer>>,
   directory?: string,
-  runtime?: ImportAgentServerRuntime,
+  runtime?: ManagementAgentServerRuntime,
   sessionId?: string
 ) {
   if (directory && runtime?.mcpRegisteredDirectories.has(directory)) {
@@ -461,7 +461,7 @@ async function ensureImportAgentMcpRegistration(
 
   const result = await client.mcp.add({
     body: {
-      name: IMPORT_AGENT_MCP_SERVER_NAME,
+      name: MANAGEMENT_AGENT_MCP_SERVER_NAME,
       config: {
         type: 'remote',
         url: mcpServerUrl,
@@ -476,7 +476,7 @@ async function ensureImportAgentMcpRegistration(
     ...(directory ? { query: { directory } } : {}),
   })
 
-  const status = requireSdkData(result.data, 'OpenCode did not return the MCP server status.')[IMPORT_AGENT_MCP_SERVER_NAME]
+  const status = requireSdkData(result.data, 'OpenCode did not return the MCP server status.')[MANAGEMENT_AGENT_MCP_SERVER_NAME]
   if (status?.status === 'connected') {
     if (directory && runtime) {
       runtime.mcpRegisteredDirectories.add(directory)
@@ -485,7 +485,7 @@ async function ensureImportAgentMcpRegistration(
   }
 
   await client.mcp.connect({
-    path: { name: IMPORT_AGENT_MCP_SERVER_NAME },
+    path: { name: MANAGEMENT_AGENT_MCP_SERVER_NAME },
     ...(directory ? { query: { directory } } : {}),
   })
 
@@ -494,7 +494,7 @@ async function ensureImportAgentMcpRegistration(
   }
 }
 
-function startGlobalEventLoop(runtime: ImportAgentServerRuntime) {
+function startGlobalEventLoop(runtime: ManagementAgentServerRuntime) {
   if (runtime.eventLoopStarted) {
     return
   }
@@ -553,14 +553,14 @@ async function getConfiguredOpenCodeServerPort() {
 }
 
 async function getSessionWorkspaceDirectory(sessionId: string) {
-  const baseDirectory = getImportAgentBaseDirectory()
+  const baseDirectory = getManagementAgentBaseDirectory()
   const directory = path.join(baseDirectory, hashValue(sessionId))
   await mkdir(directory, { recursive: true })
   return directory
 }
 
-function buildImportAgentSessionTitle(scope: ImportAgentScope) {
-  return scope.scopeType === 'folder' ? `Folder import ${scope.targetFolderId}` : 'Workspace import'
+function buildManagementAgentSessionTitle(scope: ManagementAgentScope) {
+  return scope.scopeType === 'folder' ? `Manage folder ${scope.targetFolderId}` : 'Manage workspace'
 }
 
 async function getFolderPathById(folderId: string) {
@@ -620,11 +620,11 @@ function toUiSessionStatus(status: SessionStatus): 'idle' | 'busy' | 'error' {
   }
 }
 
-function getLatestErrorMessage(messages: ImportAgentMessage[]) {
+function getLatestErrorMessage(messages: ManagementAgentMessage[]) {
   return [...messages].reverse().find(message => message.errorMessage)?.errorMessage ?? null
 }
 
-function toImportAgentMessage(message: Message | AssistantMessage, parts: Part[]): ImportAgentMessage {
+function toManagementAgentMessage(message: Message | AssistantMessage, parts: Part[]): ManagementAgentMessage {
   const usage = message.role === 'assistant' ? getAssistantMessageUsage(message) : null
 
   return {
@@ -637,14 +637,14 @@ function toImportAgentMessage(message: Message | AssistantMessage, parts: Part[]
     modelId: usage?.modelId ?? null,
     providerId: usage?.providerId ?? null,
     tokens: usage?.tokens ?? null,
-    parts: parts.map(toImportAgentMessagePart),
+    parts: parts.map(toManagementAgentMessagePart),
   }
 }
 
-function toImportAgentMessageWithExistingParts(
+function toManagementAgentMessageWithExistingParts(
   message: Message | AssistantMessage,
-  parts: ImportAgentMessage['parts']
-): ImportAgentMessage {
+  parts: ManagementAgentMessage['parts']
+): ManagementAgentMessage {
   const usage = message.role === 'assistant' ? getAssistantMessageUsage(message) : null
 
   return {
@@ -683,14 +683,14 @@ function getAssistantMessageUsage(message: AssistantMessage) {
   }
 }
 
-function toImportAgentMessagePart(part: Part): ImportAgentMessage['parts'][number] {
+function toManagementAgentMessagePart(part: Part): ManagementAgentMessage['parts'][number] {
   switch (part.type) {
     case 'text':
       return { id: part.id, type: 'text', text: part.text }
     case 'reasoning':
       return { id: part.id, type: 'reasoning', text: part.text }
     case 'tool':
-      return toImportAgentToolPart(part)
+      return toManagementAgentToolPart(part)
     case 'file':
       return { id: part.id, type: 'file', filename: part.filename ?? null, path: part.source?.path ?? null }
     case 'step-start':
@@ -712,7 +712,7 @@ function toImportAgentMessagePart(part: Part): ImportAgentMessage['parts'][numbe
   }
 }
 
-function toImportAgentToolPart(part: ToolPart): ImportAgentMessage['parts'][number] {
+function toManagementAgentToolPart(part: ToolPart): ManagementAgentMessage['parts'][number] {
   switch (part.state.status) {
     case 'pending':
       return { id: part.id, type: 'tool', toolName: part.tool, status: 'pending', title: null, input: part.state.raw, output: null, errorMessage: null }
@@ -745,17 +745,17 @@ function getSdkErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : null
 }
 
-function toScope(session: { scopeType: string; targetFolderId: string | null }): ImportAgentScope {
+function toScope(session: { scopeType: string; targetFolderId: string | null }): ManagementAgentScope {
   return {
-    scopeType: session.scopeType as ImportAgentScope['scopeType'],
+    scopeType: session.scopeType as ManagementAgentScope['scopeType'],
     targetFolderId: session.targetFolderId,
   }
 }
 
 function requireSession(sessionId: string) {
-  const session = getImportAgentSession(sessionId)
+  const session = getManagementAgentSession(sessionId)
   if (!session) {
-    throw new Error('Import session not found.')
+    throw new Error('Management session not found.')
   }
 
   return session
@@ -765,16 +765,16 @@ function hashValue(value: string) {
   return createHash('sha1').update(value).digest('hex')
 }
 
-function getImportAgentBaseDirectory() {
-  if (!importAgentBaseDirectory) {
-    throw new Error('Import agent base directory is not configured.')
+function getManagementAgentBaseDirectory() {
+  if (!managementAgentBaseDirectory) {
+    throw new Error('Management agent base directory is not configured.')
   }
 
-  return importAgentBaseDirectory
+  return managementAgentBaseDirectory
 }
 
-function emitImportAgentState(state: ImportAgentWorkspaceState) {
-  emitGenericEvent({ type: 'import-agent-state-updated', state })
+function emitManagementAgentState(state: ManagementAgentWorkspaceState) {
+  emitGenericEvent({ type: 'management-agent-state-updated', state })
 }
 
 async function runPromptInBackground(input: {
@@ -794,7 +794,7 @@ async function runPromptInBackground(input: {
         system: input.systemPrompt,
         tools: {
           '*': false,
-          [`${IMPORT_AGENT_MCP_SERVER_NAME}_*`]: true,
+          [`${MANAGEMENT_AGENT_MCP_SERVER_NAME}_*`]: true,
         },
         parts: [
           ...(input.syntheticContext ? [{ type: 'text' as const, text: input.syntheticContext, synthetic: true }] : []),
@@ -803,9 +803,9 @@ async function runPromptInBackground(input: {
       },
     })
   } catch (error) {
-    const session = getImportAgentSession(input.sessionId)
+    const session = getManagementAgentSession(input.sessionId)
     if (session) {
-      updateImportAgentSession(session.id, {
+      updateManagementAgentSession(session.id, {
         status: 'error',
         latestErrorMessage: error instanceof Error ? error.message : String(error),
       })
@@ -816,14 +816,14 @@ async function runPromptInBackground(input: {
 }
 
 async function emitLiveSessionState(sessionId: string) {
-  const session = getImportAgentSession(sessionId)
+  const session = getManagementAgentSession(sessionId)
   if (!session) {
     return null
   }
 
-  const messagesBySessionId = await syncImportAgentSessionFromOpenCode(session.id).catch(() => ({} as Record<string, ImportAgentMessage[]>))
-  const state = await loadImportAgentWorkspaceStateWithOpenCode(toScope(session), { messagesBySessionId })
-  emitImportAgentState(state)
+  const messagesBySessionId = await syncManagementAgentSessionFromOpenCode(session.id).catch(() => ({} as Record<string, ManagementAgentMessage[]>))
+  const state = await loadManagementAgentWorkspaceStateWithOpenCode(toScope(session), { messagesBySessionId })
+  emitManagementAgentState(state)
   return state
 }
 
@@ -834,18 +834,18 @@ async function handleGlobalEvent(event: GlobalEvent) {
     return
   }
 
-  const session = getImportAgentSessionByOpenCodeSessionId(opencodeSessionId)
+  const session = getManagementAgentSessionByOpenCodeSessionId(opencodeSessionId)
   if (!session) {
     return
   }
 
   if (payload.type === 'session.status') {
-    updateImportAgentSession(session.id, { status: toUiSessionStatus(payload.properties.status) })
+    updateManagementAgentSession(session.id, { status: toUiSessionStatus(payload.properties.status) })
   } else if (payload.type === 'session.idle') {
-    updateImportAgentSession(session.id, { status: 'idle' })
+    updateManagementAgentSession(session.id, { status: 'idle' })
   } else if (payload.type === 'session.updated' || payload.type === 'session.created') {
     const existingMessages = liveMessagesBySessionId.get(session.id) ?? []
-    updateImportAgentSession(session.id, {
+    updateManagementAgentSession(session.id, {
       title: payload.properties.info.title,
       status: 'idle',
       latestErrorMessage: getLatestErrorMessage(existingMessages),
@@ -857,14 +857,14 @@ async function handleGlobalEvent(event: GlobalEvent) {
     liveMessagesBySessionId.set(session.id, sessionMessages)
     upsertMessage(
       session.id,
-      toImportAgentMessageWithExistingParts(
+      toManagementAgentMessageWithExistingParts(
         payload.properties.info,
         sessionMessages.find(message => message.id === payload.properties.info.id)?.parts ?? []
       )
     )
     updateLiveSessionSummary(session.id)
   } else if (payload.type === 'message.part.updated') {
-    upsertMessagePart(session.id, payload.properties.part.messageID, toImportAgentMessagePart(payload.properties.part))
+    upsertMessagePart(session.id, payload.properties.part.messageID, toManagementAgentMessagePart(payload.properties.part))
     updateLiveSessionSummary(session.id)
   } else if (payload.type === 'message.part.removed') {
     removeMessagePart(session.id, payload.properties.messageID, payload.properties.partID)
@@ -879,7 +879,7 @@ async function handleGlobalEvent(event: GlobalEvent) {
       updateLiveSessionSummary(session.id)
     }
   } else if (payload.type === 'session.error') {
-    updateImportAgentSession(session.id, {
+    updateManagementAgentSession(session.id, {
       status: 'error',
       latestErrorMessage: getSdkErrorMessage(payload.properties.error) ?? 'OpenCode session failed.',
     })
@@ -888,7 +888,7 @@ async function handleGlobalEvent(event: GlobalEvent) {
   await emitLiveSessionState(session.id)
 }
 
-function upsertMessage(sessionId: string, message: ImportAgentMessage) {
+function upsertMessage(sessionId: string, message: ManagementAgentMessage) {
   const existingMessages = liveMessagesBySessionId.get(sessionId)
   if (!existingMessages) {
     liveMessagesBySessionId.set(sessionId, [message])
@@ -907,7 +907,7 @@ function upsertMessage(sessionId: string, message: ImportAgentMessage) {
   }
 }
 
-function upsertMessagePart(sessionId: string, messageId: string, part: ImportAgentMessage['parts'][number]) {
+function upsertMessagePart(sessionId: string, messageId: string, part: ManagementAgentMessage['parts'][number]) {
   const messages = liveMessagesBySessionId.get(sessionId)
   if (!messages) {
     liveMessagesBySessionId.set(sessionId, [
@@ -965,13 +965,13 @@ function removeMessagePart(sessionId: string, messageId: string, partId: string)
 }
 
 function updateLiveSessionSummary(sessionId: string) {
-  const session = getImportAgentSession(sessionId)
+  const session = getManagementAgentSession(sessionId)
   if (!session) {
     return
   }
 
   const messages = liveMessagesBySessionId.get(session.id) ?? []
-  updateImportAgentSession(session.id, {
+  updateManagementAgentSession(session.id, {
     latestErrorMessage: getLatestErrorMessage(messages),
   })
 }
@@ -1005,14 +1005,14 @@ function getEventSessionId(event: Event) {
   }
 }
 
-async function loadImportAgentWorkspaceStateWithOpenCode(
-  scope: ImportAgentScope,
+async function loadManagementAgentWorkspaceStateWithOpenCode(
+  scope: ManagementAgentScope,
   options?: {
-    messagesBySessionId?: Record<string, ImportAgentMessage[]>
+    messagesBySessionId?: Record<string, ManagementAgentMessage[]>
   }
 ) {
-  const workspaceState = await loadImportAgentWorkspaceState(scope)
-  const messagesBySessionId: Record<string, ImportAgentMessage[]> = {
+  const workspaceState = await loadManagementAgentWorkspaceState(scope)
+  const messagesBySessionId: Record<string, ManagementAgentMessage[]> = {
     ...Object.fromEntries(liveMessagesBySessionId),
     ...(options?.messagesBySessionId ?? {}),
   }
@@ -1034,12 +1034,12 @@ async function loadImportAgentWorkspaceStateWithOpenCode(
       messagesBySessionId[session.id] = requireSdkData(
         messagesResult.data,
         'OpenCode did not return the session messages.'
-      ).map(message => toImportAgentMessage(message.info, message.parts))
+      ).map(message => toManagementAgentMessage(message.info, message.parts))
       liveMessagesBySessionId.set(session.id, messagesBySessionId[session.id] ?? [])
     })
   )
 
-  return await loadImportAgentWorkspaceState(scope, { messagesBySessionId })
+  return await loadManagementAgentWorkspaceState(scope, { messagesBySessionId })
 }
 
 function toGenericError(error: unknown): GenericResult<never> {

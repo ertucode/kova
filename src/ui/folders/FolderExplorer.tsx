@@ -49,7 +49,7 @@ import { OpenApiImportDialog } from './OpenApiImportDialog'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
-import { openImportAgentDialog } from './ImportAgentDialog'
+import { openManagementAgentDialog } from './ManagementAgentDialog'
 import { tagsStore } from './tagsStore'
 
 type DropPlacement = ExplorerDropTarget['placement']
@@ -675,10 +675,10 @@ function CreateMenuButton() {
           <li>
             <button
               type="button"
-              onClick={() => runAction(() => openImportAgentDialog({ scopeType: 'workspace', targetFolderId: null }))}
+              onClick={() => runAction(() => openManagementAgentDialog({ scopeType: 'workspace', targetFolderId: null }))}
             >
               <SparklesIcon className="size-4" />
-              Import with Agent
+              Manage with AI
             </button>
           </li>
           <li>

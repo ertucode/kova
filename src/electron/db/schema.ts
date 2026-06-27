@@ -521,7 +521,7 @@ export const websocketExamples = sqliteTable(
   ]
 )
 
-export const importAgentSessions = sqliteTable(
+export const managementAgentSessions = sqliteTable(
   'import_agent_sessions',
   {
     id: text('id').primaryKey(),
@@ -554,7 +554,7 @@ export const importAgentSessions = sqliteTable(
 )
 
 
-export const importAgentPlans = sqliteTable(
+export const managementAgentPlans = sqliteTable(
   'import_agent_plans',
   {
     id: text('id').primaryKey(),
@@ -568,7 +568,7 @@ export const importAgentPlans = sqliteTable(
   table => [
     foreignKey({
       columns: [table.sessionId],
-      foreignColumns: [importAgentSessions.id],
+      foreignColumns: [managementAgentSessions.id],
       name: 'import_agent_plans_session_id_fkey',
     }),
     index('import_agent_plans_session_idx').on(table.sessionId, table.updatedAt),
