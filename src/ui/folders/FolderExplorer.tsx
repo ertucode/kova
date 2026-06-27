@@ -18,7 +18,6 @@ import {
   MoreHorizontalIcon,
   PackageIcon,
   SearchIcon,
-  SparklesIcon,
   TagIcon,
   Undo2Icon,
   XIcon,
@@ -53,7 +52,6 @@ import { OpenApiImportDialog } from './OpenApiImportDialog'
 import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog'
 import { PostmanImportDialog } from './PostmanImportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
-import { openManagementAgentDialog } from './ManagementAgentDialog'
 import { tagsStore } from './tagsStore'
 
 type DropPlacement = ExplorerDropTarget['placement']
