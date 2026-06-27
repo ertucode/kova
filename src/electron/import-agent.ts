@@ -16,7 +16,6 @@ import {
 import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import {
-  normalizeImportAgentPlan,
   type AbortImportAgentSessionInput,
   type ApplyImportAgentPlanInput,
   type CreateImportAgentSessionInput,
@@ -39,8 +38,9 @@ import {
   updateImportAgentSession,
 } from './db/import-agent.js'
 import { listEnvironments } from './db/environments.js'
+import { listExplorerItems } from './db/explorer.js'
+import { IMPORT_AGENT_MCP_SERVER_NAME, startImportAgentMcpServer } from './import-agent-mcp-server.js'
 import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
-import { requireImportAgentToolBridge } from './import-agent-bridge-state.js'
 
 type RawImportAgentSession = Session & {
   cost?: number
@@ -70,6 +70,8 @@ type ImportAgentServerRuntime = {
   eventLoopStarted: boolean
   eventLoopPromise: Promise<void> | null
   globalEventAbortController: AbortController
+  mcpServer: Awaited<ReturnType<typeof startImportAgentMcpServer>>
+  mcpRegisteredDirectories: Set<string>
 }
 
 let importAgentBaseDirectory: string | null = null
@@ -94,6 +96,7 @@ export async function shutdownImportAgentServer() {
     runtime.globalEventAbortController.abort()
     await runtime.eventLoopPromise?.catch(() => undefined)
     runtime.ownedServer?.close()
+    await runtime.mcpServer.close().catch(() => undefined)
   } finally {
     serverRuntimePromise = null
     liveMessagesBySessionId.clear()
@@ -267,7 +270,6 @@ async function ensureOpencodeSessionId(sessionId: string, selectedModel: string 
 }
 
 async function buildSystemPrompt(sessionId: string) {
-  const bridge = requireImportAgentToolBridge()
   const session = getImportAgentSession(sessionId)
   if (!session) {
     throw new Error('Import session not found.')
@@ -276,27 +278,20 @@ async function buildSystemPrompt(sessionId: string) {
   const scopeLabel = session.scopeType === 'folder'
     ? `folder scope rooted at ${session.targetFolderId}`
     : 'workspace scope'
-  const baseQuery = `sessionId=${encodeURIComponent(session.id)}`
+  const currentFolderId = session.scopeType === 'folder' ? session.targetFolderId : null
+  const currentFolderPath = currentFolderId ? await getFolderPathById(currentFolderId) : []
 
   return [
     'You are Kova\'s Import with Agent assistant.',
     'Your job is to inspect the current Kova workspace, understand the user\'s API import request, and keep the live draft import plan up to date.',
     'The Kova draft plan is the only source of truth for pending changes. Do not return final JSON in chat as the source of truth.',
-    'Never mutate Kova data directly. You may inspect workspace state and replace or clear the current draft plan only through the Kova bridge commands below.',
-    'Do not edit files, create files, or use unrelated shell commands. Prefer the Kova bridge commands over anything else.',
+    'Never mutate Kova data directly. You may inspect workspace state and replace or clear the current draft plan only through the available Kova import agent MCP tools.',
+    'Do not edit files, create files, or use unrelated tools. Prefer the Kova import agent MCP tools over anything else.',
     `Current import scope: ${scopeLabel}. When the draft uses parentFolderId: null, it means the root of this import scope.`,
-    'When you update the draft, replace the entire plan with one complete PUT request.',
+    `Current scope folderId: ${currentFolderId ?? 'null'}.`,
+    `Current scope folderPath from workspace root: ${JSON.stringify(currentFolderPath)}.`,
+    'When you update the draft, replace the entire plan with one complete draft update.',
     'If the agent is unsure which environment should receive variables, keep the draft apply-safe by adding explicit questions instead of guessing.',
-    '',
-    'Use bash with exact curl commands like these:',
-    `List explorer items: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/explorer?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
-    `List explorer subtree by folderId: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/explorer?${baseQuery}&folderId=<FOLDER_ID>`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
-    `Get a request: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/request?${baseQuery}&requestId=<REQUEST_ID>`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
-    `List environments: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/environments?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
-    `Get current draft: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/draft?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
-    `Set current draft: curl -fsS -X PUT ${JSON.stringify(`${bridge.url}/import-agent/draft?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)} -H ${JSON.stringify('Content-Type: application/json')} --data '<PLAN_JSON>'`,
-    `Clear current draft: curl -fsS -X DELETE ${JSON.stringify(`${bridge.url}/import-agent/draft?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
-    `List applied plans: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/plans/applied?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
     '',
     'Draft plan JSON shape:',
     JSON.stringify(
@@ -362,10 +357,12 @@ async function getClientForSession(sessionId: string) {
   const directory = await getSessionWorkspaceDirectory(sessionId)
   const existingClient = runtime.clientsByDirectory.get(directory)
   if (existingClient) {
+    await ensureImportAgentMcpRegistration(existingClient, runtime.mcpServer, directory, runtime, sessionId)
     return existingClient
   }
 
   const client = createOpencodeClient({ baseUrl: runtime.baseUrl, directory })
+  await ensureImportAgentMcpRegistration(client, runtime.mcpServer, directory, runtime, sessionId)
   runtime.clientsByDirectory.set(directory, client)
   return client
 }
@@ -384,6 +381,7 @@ async function getServerRuntime(): Promise<ImportAgentServerRuntime> {
 async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
   const spawnConfig = await resolveOpenCodeSpawnConfig()
   const importAgentServerPort = await getConfiguredOpenCodeServerPort()
+  const mcpServer = await startImportAgentMcpServer()
   process.env.PATH = spawnConfig.env.PATH
   process.env.OPENCODE_DISABLE_CLAUDE_CODE = 'true'
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = 'true'
@@ -403,15 +401,20 @@ async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
       config: {
         permission: {
           edit: 'deny',
-          bash: 'allow',
+          bash: 'deny',
           webfetch: 'deny',
           doom_loop: 'deny',
           external_directory: 'deny',
+        },
+        tools: {
+          '*': false,
+          [`${IMPORT_AGENT_MCP_SERVER_NAME}_*`]: true,
         },
       },
     })
   } catch (error) {
     if (!(await tryReuseExistingServer(baseUrl, importAgentServerPort, error))) {
+      await mcpServer.close().catch(() => undefined)
       throw error
     }
   } finally {
@@ -428,10 +431,67 @@ async function createServerRuntime(): Promise<ImportAgentServerRuntime> {
     eventLoopStarted: false,
     eventLoopPromise: null,
     globalEventAbortController: new AbortController(),
+    mcpServer,
+    mcpRegisteredDirectories: new Set(),
   }
 
-  startGlobalEventLoop(runtime)
-  return runtime
+  try {
+    startGlobalEventLoop(runtime)
+    return runtime
+  } catch (error) {
+    runtime.globalEventAbortController.abort()
+    runtime.ownedServer?.close()
+    await runtime.mcpServer.close().catch(() => undefined)
+    throw error
+  }
+}
+
+async function ensureImportAgentMcpRegistration(
+  client: ReturnType<typeof createOpencodeClient>,
+  mcpServer: Awaited<ReturnType<typeof startImportAgentMcpServer>>,
+  directory?: string,
+  runtime?: ImportAgentServerRuntime,
+  sessionId?: string
+) {
+  if (directory && runtime?.mcpRegisteredDirectories.has(directory)) {
+    return
+  }
+
+  const mcpServerUrl = sessionId ? `${mcpServer.url}?sessionId=${encodeURIComponent(sessionId)}` : mcpServer.url
+
+  const result = await client.mcp.add({
+    body: {
+      name: IMPORT_AGENT_MCP_SERVER_NAME,
+      config: {
+        type: 'remote',
+        url: mcpServerUrl,
+        headers: {
+          Authorization: `Bearer ${mcpServer.token}`,
+        },
+        enabled: true,
+        oauth: false,
+        timeout: 10_000,
+      },
+    },
+    ...(directory ? { query: { directory } } : {}),
+  })
+
+  const status = requireSdkData(result.data, 'OpenCode did not return the MCP server status.')[IMPORT_AGENT_MCP_SERVER_NAME]
+  if (status?.status === 'connected') {
+    if (directory && runtime) {
+      runtime.mcpRegisteredDirectories.add(directory)
+    }
+    return
+  }
+
+  await client.mcp.connect({
+    path: { name: IMPORT_AGENT_MCP_SERVER_NAME },
+    ...(directory ? { query: { directory } } : {}),
+  })
+
+  if (directory && runtime) {
+    runtime.mcpRegisteredDirectories.add(directory)
+  }
 }
 
 function startGlobalEventLoop(runtime: ImportAgentServerRuntime) {
@@ -501,6 +561,29 @@ async function getSessionWorkspaceDirectory(sessionId: string) {
 
 function buildImportAgentSessionTitle(scope: ImportAgentScope) {
   return scope.scopeType === 'folder' ? `Folder import ${scope.targetFolderId}` : 'Workspace import'
+}
+
+async function getFolderPathById(folderId: string) {
+  const explorer = await listExplorerItems()
+  const folderMap = new Map(
+    explorer
+      .filter((item): item is Extract<(typeof explorer)[number], { itemType: 'folder' }> => item.itemType === 'folder')
+      .map(item => [item.id, item] as const)
+  )
+  const pathSegments: string[] = []
+  let currentFolderId: string | null = folderId
+
+  while (currentFolderId) {
+    const folder = folderMap.get(currentFolderId)
+    if (!folder) {
+      break
+    }
+
+    pathSegments.unshift(folder.name)
+    currentFolderId = folder.parentFolderId
+  }
+
+  return pathSegments
 }
 
 function parseSelectedModel(value: string | null) {
@@ -709,6 +792,10 @@ async function runPromptInBackground(input: {
       body: {
         model: parseSelectedModel(input.model),
         system: input.systemPrompt,
+        tools: {
+          '*': false,
+          [`${IMPORT_AGENT_MCP_SERVER_NAME}_*`]: true,
+        },
         parts: [
           ...(input.syntheticContext ? [{ type: 'text' as const, text: input.syntheticContext, synthetic: true }] : []),
           { type: 'text' as const, text: input.message },

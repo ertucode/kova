@@ -143,10 +143,10 @@ export type ApplyImportAgentPlanInput = {
   sessionId: string
 }
 
-const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
-const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www-form-urlencoded', 'none', 'graphql']
-const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
-const RESPONSE_BODY_VIEWS: ResponseBodyView[] = ['raw', 'table', 'visualizer']
+export const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+export const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www-form-urlencoded', 'none', 'graphql']
+export const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
+export const RESPONSE_BODY_VIEWS: ResponseBodyView[] = ['raw', 'table', 'visualizer']
 
 export function createEmptyImportAgentPlan(): ImportAgentPlan {
   return {

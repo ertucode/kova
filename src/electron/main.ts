@@ -140,13 +140,10 @@ import {
   sendImportAgentMessage,
   shutdownImportAgentServer,
 } from './import-agent.js'
-import { startImportAgentToolBridge } from './import-agent-tool-bridge.js'
-import { configureImportAgentToolBridge } from './import-agent-bridge-state.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
 let scriptAiDiagnosticsBridge: Awaited<ReturnType<typeof startScriptAiDiagnosticsBridge>> | null = null
-let importAgentToolBridge: Awaited<ReturnType<typeof startImportAgentToolBridge>> | null = null
 
 app.on('open-file', (event, path) => {
   event.preventDefault()
@@ -163,9 +160,6 @@ app.on('open-file', (event, path) => {
 app.once('will-quit', () => {
   void scriptAiDiagnosticsBridge?.close().catch(error => {
     console.error('Failed to close Script AI diagnostics bridge', error)
-  })
-  void importAgentToolBridge?.close().catch(error => {
-    console.error('Failed to close Import Agent tool bridge', error)
   })
   void shutdownScriptAiServer()
   void shutdownImportAgentServer()
@@ -369,16 +363,6 @@ app.on('ready', async () => {
     })
   } catch (error) {
     console.error('Failed to start Script AI diagnostics bridge', error)
-  }
-
-  try {
-    importAgentToolBridge = await startImportAgentToolBridge()
-    configureImportAgentToolBridge({
-      url: importAgentToolBridge.url,
-      token: importAgentToolBridge.token,
-    })
-  } catch (error) {
-    console.error('Failed to start Import Agent tool bridge', error)
   }
 
   // Use pending path from open-file event if available, otherwise check argv
