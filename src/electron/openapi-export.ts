@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getAuthHeaders, getAuthQueryParams, resolveInheritedAuth, type HttpAuth } from '../common/Auth.js'
+import { normalizeJson5ToJson } from '../common/Json5.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import type { ExplorerItem } from '../common/Explorer.js'
@@ -171,8 +172,7 @@ export async function exportOpenApiSpec(input: ExportOpenApiSpecInput): Promise<
 export function analyzeOpenApiExportSource(source: OpenApiExportSource): ExportAnalysis {
   const warnings = new Map<OpenApiExportWarningCode, { count: number; examples: string[] }>()
   const httpRequests = source.requests.filter(request => request.requestType === 'http')
-  const graphqlRequests = httpRequests.filter(request => request.bodyType === 'graphql')
-  const exportableHttpRequests = httpRequests.filter(request => request.bodyType !== 'graphql')
+  const exportableHttpRequests = httpRequests
   const websocketRequests = source.requests.filter(request => request.requestType === 'websocket')
   const foldersWithHeaders = source.folders.filter(folder => hasKeyValueContent(folder.headers))
   const foldersWithScripts = source.folders.filter(folder => folder.preRequestScript.trim() || folder.postRequestScript.trim())
@@ -186,13 +186,14 @@ export function analyzeOpenApiExportSource(source: OpenApiExportSource): ExportA
   })
   const requestsWithDisabledRows = exportableHttpRequests.filter(request => countDisabledRowsForRequest(request) > 0)
   const servers = Array.from(new Set(exportableHttpRequests.map(request => splitRequestUrl(request.url).server).filter((value): value is string => Boolean(value))))
+  const mergedGraphqlOperations = countMergedGraphqlOperations(exportableHttpRequests)
   const duplicateOperations = countDuplicateOperations(exportableHttpRequests)
 
   if (websocketRequests.length > 0) {
     addWarning(warnings, 'websocket-requests-skipped', websocketRequests.length, websocketRequests.slice(0, 5).map(request => request.name))
   }
-  if (graphqlRequests.length > 0) {
-    addWarning(warnings, 'graphql-requests-skipped', graphqlRequests.length, graphqlRequests.slice(0, 5).map(request => request.name))
+  if (mergedGraphqlOperations.count > 0) {
+    addWarning(warnings, 'graphql-requests-merged-by-endpoint', mergedGraphqlOperations.count, mergedGraphqlOperations.examples)
   }
   if (foldersWithHeaders.length > 0) {
     addWarning(warnings, 'folder-headers-not-exported', foldersWithHeaders.length, foldersWithHeaders.slice(0, 5).map(folder => folder.name))
@@ -234,26 +235,26 @@ export function analyzeOpenApiExportSource(source: OpenApiExportSource): ExportA
 export function buildOpenApiExportDocument(source: OpenApiExportSource, specName: string): OpenApiDocument {
   const paths: Record<string, OpenApiPathItem> = {}
   const securitySchemes: Record<string, OpenApiSecurityScheme> = {}
-  const httpRequests = source.requests.filter(request => request.requestType === 'http' && request.bodyType !== 'graphql')
+  const httpRequests = source.requests.filter(request => request.requestType === 'http')
   const operationServers = new Set<string>()
   const useFolderTags = shouldUseImmediateFolderTags(source)
 
-  for (const request of httpRequests) {
-    const { pathName, server } = splitRequestUrl(request.url)
-    const method = request.method.toLowerCase() as Lowercase<HttpRequestRecord['method']>
-
-    if (paths[pathName]?.[method]) {
+  for (const group of groupRequestsByPathMethod(httpRequests)) {
+    const pathItem = paths[group.pathName] ?? {}
+    if (pathItem[group.method]) {
       continue
     }
 
-    const operation = buildOperation(source, request, useFolderTags, securitySchemes, server)
-    if (server) {
+    const operation = shouldMergeGraphqlOperationGroup(group.requests)
+      ? buildMergedGraphqlOperation(source, group.requests, useFolderTags, securitySchemes)
+      : buildOperation(source, group.requests[0], useFolderTags, securitySchemes, group.servers[0] ?? null)
+
+    for (const server of group.servers) {
       operationServers.add(server)
     }
 
-    const pathItem = paths[pathName] ?? {}
-    pathItem[method] = operation
-    paths[pathName] = pathItem
+    pathItem[group.method] = operation
+    paths[group.pathName] = pathItem
   }
 
   const sharedServers = Array.from(operationServers)
@@ -417,7 +418,9 @@ function buildOperation(
   request: RequestExportRecord,
   useFolderTags: boolean,
   securitySchemes: Record<string, OpenApiSecurityScheme>,
-  server: string | null
+  server: string | null,
+  examples: RequestExampleRecord[] = source.examplesByRequestId.get(request.id) ?? [],
+  mergedGraphqlRequests: RequestExportRecord[] = []
 ): OpenApiOperation {
   const pathParams = parseKeyValueRows(request.pathParams)
   const queryParams = parseKeyValueRows(request.searchParams)
@@ -487,10 +490,12 @@ function buildOperation(
     })
   }
 
-  const requestBody = buildRequestBody(request, source.examplesByRequestId.get(request.id) ?? [])
+  const requestBody = mergedGraphqlRequests.length > 0
+    ? buildGraphqlRequestBody([request, ...mergedGraphqlRequests], examples)
+    : buildRequestBody(request, examples)
   const operation: OpenApiOperation = {
     summary: request.name,
-    responses: buildResponses(source.examplesByRequestId.get(request.id) ?? []),
+    responses: buildResponses(examples),
   }
 
   if (useFolderTags) {
@@ -525,6 +530,10 @@ function buildRequestBody(request: RequestExportRecord, examples: RequestExample
     return undefined
   }
 
+  if (request.bodyType === 'graphql') {
+    return buildGraphqlRequestBody([request], examples)
+  }
+
   if (request.bodyType === 'raw') {
     const contentType = request.rawType === 'json' ? 'application/json' : 'text/plain'
     return {
@@ -550,6 +559,30 @@ function buildRequestBody(request: RequestExportRecord, examples: RequestExample
         schema,
         example,
         examples: exampleMap,
+      },
+    },
+  }
+}
+
+function buildGraphqlRequestBody(requests: RequestExportRecord[], examples: RequestExampleRecord[]): OpenApiRequestBody {
+  const primaryRequest = requests[0]
+  const requestExamples = buildGraphqlRequestExampleMap(requests, examples)
+
+  return {
+    required: true,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+            variables: { type: 'object', additionalProperties: true },
+            operationName: { type: 'string' },
+          },
+          additionalProperties: false,
+        },
+        example: buildGraphqlRequestPayload(primaryRequest.graphqlQuery ?? '', primaryRequest.graphqlVariables ?? ''),
+        examples: requestExamples,
       },
     },
   }
@@ -658,21 +691,50 @@ function countDisabledRowsForRequest(request: RequestExportRecord) {
 function countDuplicateOperations(requests: RequestExportRecord[]) {
   const seen = new Set<string>()
   const examples: string[] = []
+  let count = 0
 
   for (const request of requests) {
     const { pathName } = splitRequestUrl(request.url)
     const key = `${request.method} ${pathName}`
     if (seen.has(key)) {
+      const groupedRequests = requests.filter(candidate => {
+        const candidatePath = splitRequestUrl(candidate.url).pathName
+        return candidate.method === request.method && candidatePath === pathName
+      })
+      if (shouldMergeGraphqlOperationGroup(groupedRequests)) {
+        continue
+      }
+
       if (!examples.includes(key) && examples.length < 5) {
         examples.push(key)
       }
+      count += 1
       continue
     }
 
     seen.add(key)
   }
 
-  return { count: requests.length - seen.size, examples }
+  return { count, examples }
+}
+
+function countMergedGraphqlOperations(requests: RequestExportRecord[]) {
+  const examples: string[] = []
+  let count = 0
+
+  for (const group of groupRequestsByPathMethod(requests)) {
+    if (!shouldMergeGraphqlOperationGroup(group.requests)) {
+      continue
+    }
+
+    count += group.requests.length - 1
+    const example = `${group.requests[0].method} ${group.pathName}`
+    if (!examples.includes(example) && examples.length < 5) {
+      examples.push(example)
+    }
+  }
+
+  return { count, examples }
 }
 
 function buildObjectSchemaFromRows(rows: ReturnType<typeof parseKeyValueRows>): OpenApiSchema {
@@ -695,6 +757,27 @@ function buildRequestExampleMap(examples: RequestExampleRecord[], rawType: Reque
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
+function buildGraphqlRequestExampleMap(requests: RequestExportRecord[], examples: RequestExampleRecord[]) {
+  const entries = new Map<string, { value: unknown }>()
+
+  if (requests.length > 1) {
+    for (const request of requests) {
+      setUniqueExampleEntry(entries, request.name, buildGraphqlRequestPayload(request.graphqlQuery ?? '', request.graphqlVariables ?? ''))
+    }
+  }
+
+  for (const example of examples) {
+    const query = example.graphqlQuery ?? ''
+    if (!query.trim()) {
+      continue
+    }
+
+    setUniqueExampleEntry(entries, example.name, buildGraphqlRequestPayload(query, example.graphqlVariables ?? ''))
+  }
+
+  return entries.size > 0 ? Object.fromEntries(entries.entries()) : undefined
+}
+
 function buildStructuredRequestExampleMap(examples: RequestExampleRecord[]) {
   const entries = examples
     .filter(example => example.requestBody.trim())
@@ -713,6 +796,37 @@ function parseRawBodyExample(value: string, rawType: RequestExportRecord['rawTyp
   } catch {
     return value
   }
+}
+
+function buildGraphqlRequestPayload(query: string, variablesSource: string) {
+  const payload: Record<string, unknown> = {
+    query,
+  }
+  const variables = parseGraphqlVariablesExample(variablesSource)
+  if (variables) {
+    payload.variables = variables
+  }
+
+  return payload
+}
+
+function parseGraphqlVariablesExample(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  try {
+    const normalized = normalizeJson5ToJson(trimmed)
+    const parsed = JSON.parse(normalized) as unknown
+    if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
 }
 
 function inferResponseContentType(responseHeaders: string, responseBody: string) {
@@ -751,6 +865,67 @@ function toExampleKey(value: string) {
   return normalized || 'example'
 }
 
+function setUniqueExampleEntry(entries: Map<string, { value: unknown }>, value: string, example: unknown) {
+  const baseKey = toExampleKey(value)
+  let key = baseKey
+  let suffix = 2
+
+  while (entries.has(key)) {
+    key = `${baseKey}_${suffix}`
+    suffix += 1
+  }
+
+  entries.set(key, { value: example })
+}
+
+function shouldMergeGraphqlOperationGroup(requests: RequestExportRecord[]) {
+  return requests.length > 1 && requests.every(request => request.bodyType === 'graphql')
+}
+
+function buildMergedGraphqlOperation(
+  source: OpenApiExportSource,
+  requests: RequestExportRecord[],
+  useFolderTags: boolean,
+  securitySchemes: Record<string, OpenApiSecurityScheme>
+) {
+  const primaryRequest = requests[0]
+  const examples = requests.flatMap(request => source.examplesByRequestId.get(request.id) ?? [])
+  const operation = buildOperation(source, primaryRequest, useFolderTags, securitySchemes, null, examples, requests.slice(1))
+  const servers = Array.from(new Set(requests.map(request => splitRequestUrl(request.url).server).filter((value): value is string => Boolean(value))))
+  if (servers.length > 0) {
+    operation.servers = servers.map(url => ({ url }))
+  }
+
+  return operation
+}
+
+function groupRequestsByPathMethod(requests: RequestExportRecord[]) {
+  const groups = new Map<string, { pathName: string; method: Lowercase<HttpRequestRecord['method']>; requests: RequestExportRecord[]; servers: string[] }>()
+
+  for (const request of requests) {
+    const { pathName, server } = splitRequestUrl(request.url)
+    const method = request.method.toLowerCase() as Lowercase<HttpRequestRecord['method']>
+    const key = `${method} ${pathName}`
+    const current = groups.get(key)
+    if (current) {
+      current.requests.push(request)
+      if (server && !current.servers.includes(server)) {
+        current.servers.push(server)
+      }
+      continue
+    }
+
+    groups.set(key, {
+      pathName,
+      method,
+      requests: [request],
+      servers: server ? [server] : [],
+    })
+  }
+
+  return Array.from(groups.values())
+}
+
 function addWarning(
   warnings: Map<OpenApiExportWarningCode, { count: number; examples: string[] }>,
   code: OpenApiExportWarningCode,
@@ -781,7 +956,7 @@ function buildWarnings(warnings: Map<OpenApiExportWarningCode, { count: number; 
 
 const warningMessages: Record<OpenApiExportWarningCode, string> = {
   'websocket-requests-skipped': 'WebSocket requests are skipped because OpenAPI export only supports HTTP requests.',
-  'graphql-requests-skipped': 'GraphQL requests are skipped because OpenAPI export in Kova only models generic HTTP request bodies.',
+  'graphql-requests-merged-by-endpoint': 'GraphQL requests that share the same path and method are merged into one OpenAPI operation with multiple request examples.',
   'folder-headers-not-exported': 'Folder-level headers are not exported because OpenAPI has no equivalent folder header model.',
   'folder-scripts-not-exported': 'Folder scripts are not exported because OpenAPI has no script runtime model.',
   'request-scripts-not-exported': 'Request scripts are not exported because OpenAPI has no script runtime model.',

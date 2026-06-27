@@ -5,7 +5,7 @@ export type OpenApiExportTarget =
 
 export type OpenApiExportWarningCode =
   | 'websocket-requests-skipped'
-  | 'graphql-requests-skipped'
+  | 'graphql-requests-merged-by-endpoint'
   | 'folder-headers-not-exported'
   | 'folder-scripts-not-exported'
   | 'request-scripts-not-exported'

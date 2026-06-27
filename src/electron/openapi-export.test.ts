@@ -199,6 +199,81 @@ describe('openapi export', () => {
     })
   })
 
+  it('exports graphql requests as json payloads', () => {
+    const document = buildOpenApiExportDocument({
+      scope: 'request',
+      folderId: null,
+      requestId: 'request-1',
+      suggestedSpecName: 'Viewer',
+      folders: [],
+      requests: [
+        {
+          id: 'request-1',
+          name: 'Viewer',
+          requestType: 'http',
+          method: 'POST',
+          url: 'https://api.example.com/graphql',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          testScript: '',
+          responseVisualizer: '',
+          responseTableAccessor: '',
+          preferredResponseBodyView: 'raw',
+          headers: 'content-type:application/json',
+          body: '',
+          bodyType: 'graphql',
+          rawType: 'json',
+          graphqlQuery: 'query Viewer { viewer { id } }',
+          graphqlVariables: '{"id":"123"}',
+          websocketSubprotocols: '',
+          websocketOnOpenMessage: '',
+          websocketAutoSendEnabled: false,
+          websocketAutoSendMessage: '',
+          websocketAutoSendIntervalSeconds: 0,
+          saveToHistory: true,
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 0,
+        },
+      ],
+      examplesByRequestId: new Map([['request-1', [{ id: 'example-1', requestId: 'request-1', name: 'Lookup', position: 0, requestHeaders: '', requestBody: '', requestBodyType: 'graphql', requestRawType: 'json', graphqlQuery: 'query ViewerById($id: ID!) { viewer(id: $id) { id } }', graphqlVariables: '{"id":"456"}', responseStatus: 200, responseStatusText: 'OK', responseHeaders: 'content-type:application/json', responseBody: '{"data":{"viewer":{"id":"456"}}}', createdAt: 1, updatedAt: 1, deletedAt: null }]]]),
+      ancestorFoldersByRequestId: new Map([['request-1', []]]),
+    }, 'Viewer')
+
+    expect(document.paths['/graphql']?.post?.requestBody).toEqual({
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string' },
+              variables: { type: 'object', additionalProperties: true },
+              operationName: { type: 'string' },
+            },
+            additionalProperties: false,
+          },
+          example: {
+            query: 'query Viewer { viewer { id } }',
+            variables: { id: '123' },
+          },
+          examples: {
+            Lookup: {
+              value: {
+                query: 'query ViewerById($id: ID!) { viewer(id: $id) { id } }',
+                variables: { id: '456' },
+              },
+            },
+          },
+        },
+      },
+    })
+  })
+
   it('reports skipped websocket requests, duplicates, disabled rows, and mixed servers', () => {
     const analysis = analyzeOpenApiExportSource({
       scope: 'workspace',
@@ -312,11 +387,101 @@ describe('openapi export', () => {
     ]))
   })
 
-  it('reports skipped graphql requests', () => {
-    const analysis = analyzeOpenApiExportSource({
-      scope: 'request',
+  it('merges graphql requests that share the same endpoint', () => {
+    const document = buildOpenApiExportDocument({
+      scope: 'workspace',
       folderId: null,
-      requestId: 'request-1',
+      requestId: null,
+      suggestedSpecName: 'GraphQL',
+      folders: [],
+      requests: [
+        {
+          id: 'request-1',
+          name: 'Viewer',
+          requestType: 'http',
+          method: 'POST',
+          url: 'https://api.example.com/graphql',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          testScript: '',
+          responseVisualizer: '',
+          responseTableAccessor: '',
+          preferredResponseBodyView: 'raw',
+          headers: 'content-type:application/json',
+          body: '',
+          bodyType: 'graphql',
+          rawType: 'json',
+          graphqlQuery: 'query Viewer { viewer { id } }',
+          graphqlVariables: '',
+          websocketSubprotocols: '',
+          websocketOnOpenMessage: '',
+          websocketAutoSendEnabled: false,
+          websocketAutoSendMessage: '',
+          websocketAutoSendIntervalSeconds: 0,
+          saveToHistory: true,
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 0,
+        },
+        {
+          id: 'request-2',
+          name: 'Viewer By Id',
+          requestType: 'http',
+          method: 'POST',
+          url: 'https://api.example.com/graphql',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          testScript: '',
+          responseVisualizer: '',
+          responseTableAccessor: '',
+          preferredResponseBodyView: 'raw',
+          headers: 'content-type:application/json',
+          body: '',
+          bodyType: 'graphql',
+          rawType: 'json',
+          graphqlQuery: 'query ViewerById($id: ID!) { viewer(id: $id) { id } }',
+          graphqlVariables: '{"id":"123"}',
+          websocketSubprotocols: '',
+          websocketOnOpenMessage: '',
+          websocketAutoSendEnabled: false,
+          websocketAutoSendMessage: '',
+          websocketAutoSendIntervalSeconds: 0,
+          saveToHistory: true,
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 1,
+        },
+      ],
+      examplesByRequestId: new Map(),
+      ancestorFoldersByRequestId: new Map([['request-1', []], ['request-2', []]]),
+    }, 'GraphQL')
+
+    expect(document.paths['/graphql']?.post?.requestBody?.content['application/json']?.examples).toEqual({
+      Viewer: {
+        value: {
+          query: 'query Viewer { viewer { id } }',
+        },
+      },
+      Viewer_By_Id: {
+        value: {
+          query: 'query ViewerById($id: ID!) { viewer(id: $id) { id } }',
+          variables: { id: '123' },
+        },
+      },
+    })
+
+    const analysis = analyzeOpenApiExportSource({
+      scope: 'workspace',
+      folderId: null,
+      requestId: null,
       suggestedSpecName: 'GraphQL',
       folders: [],
       requests: [
@@ -352,12 +517,44 @@ describe('openapi export', () => {
           parentFolderId: null,
           position: 0,
         },
+        {
+          id: 'request-2',
+          name: 'GraphQL Viewer By Id',
+          requestType: 'http',
+          method: 'POST',
+          url: 'https://api.example.com/graphql',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          testScript: '',
+          responseVisualizer: '',
+          responseTableAccessor: '',
+          preferredResponseBodyView: 'raw',
+          headers: 'content-type:application/json',
+          body: '',
+          bodyType: 'graphql',
+          rawType: 'json',
+          graphqlQuery: 'query ViewerById($id: ID!) { viewer(id: $id) { id } }',
+          graphqlVariables: '{"id":"123"}',
+          websocketSubprotocols: '',
+          websocketOnOpenMessage: '',
+          websocketAutoSendEnabled: false,
+          websocketAutoSendMessage: '',
+          websocketAutoSendIntervalSeconds: 0,
+          saveToHistory: true,
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 1,
+        },
       ],
       examplesByRequestId: new Map(),
-      ancestorFoldersByRequestId: new Map([['request-1', []]]),
+      ancestorFoldersByRequestId: new Map([['request-1', []], ['request-2', []]]),
     })
 
-    expect(analysis.requestCount).toBe(0)
-    expect(analysis.warnings.map(warning => warning.code)).toContain('graphql-requests-skipped')
+    expect(analysis.requestCount).toBe(2)
+    expect(analysis.warnings.map(warning => warning.code)).toContain('graphql-requests-merged-by-endpoint')
   })
 })
