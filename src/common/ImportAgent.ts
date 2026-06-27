@@ -6,6 +6,7 @@ import {
   type ResponseBodyView,
 } from './Requests.js'
 import type { ScriptAiMessage, ScriptAiMessagePart } from './ScriptAi.js'
+import type { TaggableItemType } from './Tags.js'
 
 export type ImportAgentScopeType = 'workspace' | 'folder'
 export type ImportAgentSessionStatus = 'idle' | 'busy' | 'error'
@@ -31,8 +32,11 @@ export type ImportAgentWarning = {
 export type ImportAgentFolderPlanItem = {
   id: string
   parentFolderId: string | null
+  parentScope?: ImportAgentParentScope
   name: string
 }
+
+export type ImportAgentParentScope = 'session-root' | 'workspace-root'
 
 export type ImportAgentRequestPlanFields = {
   name: string
@@ -59,6 +63,7 @@ export type ImportAgentRequestPlanFields = {
 export type ImportAgentRequestCreatePlanItem = ImportAgentRequestPlanFields & {
   id: string
   parentFolderId: string | null
+  parentScope?: ImportAgentParentScope
 }
 
 export type ImportAgentRequestUpdatePlanItem = ImportAgentRequestPlanFields & {
@@ -76,6 +81,32 @@ export type ImportAgentEnvironmentUpdatePlanItem = {
   variables: ImportAgentEnvironmentVariablePlanItem[]
 }
 
+export type ImportAgentTagCreatePlanItem = {
+  id: string
+  name: string
+  color: string | null
+}
+
+export type ImportAgentTagUpdatePlanItem = {
+  tagId: string
+  name: string
+  color: string | null
+}
+
+export type ImportAgentItemTagUpdatePlanItem = {
+  itemType: TaggableItemType
+  itemId: string
+  tagIds: string[]
+}
+
+export type ImportAgentTagItemUpdatePlanItem = {
+  tagId: string
+  items: Array<{
+    itemType: TaggableItemType
+    itemId: string
+  }>
+}
+
 export type ImportAgentPlan = {
   summary: string
   questions: ImportAgentQuestion[]
@@ -84,6 +115,10 @@ export type ImportAgentPlan = {
   requestsToCreate: ImportAgentRequestCreatePlanItem[]
   requestsToUpdate: ImportAgentRequestUpdatePlanItem[]
   environmentUpdates: ImportAgentEnvironmentUpdatePlanItem[]
+  tagsToCreate: ImportAgentTagCreatePlanItem[]
+  tagsToUpdate: ImportAgentTagUpdatePlanItem[]
+  itemTagUpdates: ImportAgentItemTagUpdatePlanItem[]
+  tagItemUpdates: ImportAgentTagItemUpdatePlanItem[]
 }
 
 export type ImportAgentMessage = ScriptAiMessage
@@ -157,6 +192,10 @@ export function createEmptyImportAgentPlan(): ImportAgentPlan {
     requestsToCreate: [],
     requestsToUpdate: [],
     environmentUpdates: [],
+    tagsToCreate: [],
+    tagsToUpdate: [],
+    itemTagUpdates: [],
+    tagItemUpdates: [],
   }
 }
 
@@ -181,6 +220,18 @@ export function normalizeImportAgentPlan(value: unknown): ImportAgentPlan {
     environmentUpdates: toArray(candidate.environmentUpdates)
       .map(normalizeEnvironmentUpdatePlanItem)
       .filter(environmentUpdate => environmentUpdate.environmentId),
+    tagsToCreate: toArray(candidate.tagsToCreate)
+      .map(normalizeTagCreatePlanItem)
+      .filter(tag => tag.name),
+    tagsToUpdate: toArray(candidate.tagsToUpdate)
+      .map(normalizeTagUpdatePlanItem)
+      .filter(tag => tag.tagId),
+    itemTagUpdates: toArray(candidate.itemTagUpdates)
+      .map(normalizeItemTagUpdatePlanItem)
+      .filter(itemTagUpdate => itemTagUpdate.itemId),
+    tagItemUpdates: toArray(candidate.tagItemUpdates)
+      .map(normalizeTagItemUpdatePlanItem)
+      .filter(tagItemUpdate => tagItemUpdate.tagId),
   }
 }
 
@@ -206,6 +257,7 @@ function normalizeFolderPlanItem(value: unknown): ImportAgentFolderPlanItem {
   return {
     id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
     parentFolderId: toNullableTrimmedString(candidate.parentFolderId),
+    parentScope: normalizeParentScope(candidate.parentScope),
     name: toTrimmedString(candidate.name),
   }
 }
@@ -215,7 +267,53 @@ function normalizeRequestCreatePlanItem(value: unknown): ImportAgentRequestCreat
   return {
     id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
     parentFolderId: toNullableTrimmedString(candidate.parentFolderId),
+    parentScope: normalizeParentScope(candidate.parentScope),
     ...normalizeRequestPlanFields(candidate),
+  }
+}
+
+function normalizeTagCreatePlanItem(value: unknown): ImportAgentTagCreatePlanItem {
+  const candidate = toRecord(value)
+  return {
+    id: toOptionalTrimmedString(candidate.id) ?? crypto.randomUUID(),
+    name: toTrimmedString(candidate.name),
+    color: toNullableTrimmedString(candidate.color),
+  }
+}
+
+function normalizeTagUpdatePlanItem(value: unknown): ImportAgentTagUpdatePlanItem {
+  const candidate = toRecord(value)
+  return {
+    tagId: toTrimmedString(candidate.tagId),
+    name: toTrimmedString(candidate.name),
+    color: toNullableTrimmedString(candidate.color),
+  }
+}
+
+function normalizeItemTagUpdatePlanItem(value: unknown): ImportAgentItemTagUpdatePlanItem {
+  const candidate = toRecord(value)
+  return {
+    itemType: normalizeTaggableItemType(candidate.itemType),
+    itemId: toTrimmedString(candidate.itemId),
+    tagIds: toArray(candidate.tagIds).map(toTrimmedString).filter(Boolean),
+  }
+}
+
+function normalizeTagItemUpdatePlanItem(value: unknown): ImportAgentTagItemUpdatePlanItem {
+  const candidate = toRecord(value)
+  return {
+    tagId: toTrimmedString(candidate.tagId),
+    items: toArray(candidate.items)
+      .map(normalizeTagItemRef)
+      .filter(item => item.itemId),
+  }
+}
+
+function normalizeTagItemRef(value: unknown): { itemType: TaggableItemType; itemId: string } {
+  const candidate = toRecord(value)
+  return {
+    itemType: normalizeTaggableItemType(candidate.itemType),
+    itemId: toTrimmedString(candidate.itemId),
   }
 }
 
@@ -256,6 +354,14 @@ function normalizeRequestPlanFields(candidate: Record<string, unknown>): ImportA
       : 'raw',
     saveToHistory: typeof candidate.saveToHistory === 'boolean' ? candidate.saveToHistory : true,
   }
+}
+
+function normalizeParentScope(value: unknown): ImportAgentParentScope | undefined {
+  return value === 'session-root' || value === 'workspace-root' ? value : undefined
+}
+
+function normalizeTaggableItemType(value: unknown): TaggableItemType {
+  return value === 'folder' ? 'folder' : 'request'
 }
 
 function normalizeEnvironmentUpdatePlanItem(value: unknown): ImportAgentEnvironmentUpdatePlanItem {

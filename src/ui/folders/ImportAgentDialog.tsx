@@ -1,20 +1,29 @@
 import { LoaderCircleIcon, PlusIcon, SparklesIcon, SquareIcon } from 'lucide-react'
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useSelector } from '@xstate/store/react'
 import { errorResponseToMessage } from '@common/GenericError'
 import type {
+  ImportAgentItemTagUpdatePlanItem,
   ImportAgentMessagePart,
   ImportAgentPlanRecord,
   ImportAgentRequestCreatePlanItem,
   ImportAgentRequestUpdatePlanItem,
   ImportAgentScope,
+  ImportAgentTagItemUpdatePlanItem,
   ImportAgentWorkspaceState,
 } from '@common/ImportAgent'
+import type { ExplorerItem } from '@common/Explorer'
+import type { TagRecord } from '@common/Tags'
 import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
+import { ChangesCoordinator } from './changesCoordinator'
+import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
+import { TagsCoordinator } from './tagsCoordinator'
+import { tagsStore } from './tagsStore'
 
 type ImportAgentDialogProps = {
   scope: ImportAgentScope
@@ -28,6 +37,8 @@ export function openImportAgentDialog(scope: ImportAgentScope) {
 
 export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
   const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
+  const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
+  const tagItems = useSelector(tagsStore, state => state.context.items)
   const [workspaceState, setWorkspaceState] = useState<ImportAgentWorkspaceState | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(readSelectedSessionId(scope))
   const [selectedModel, setSelectedModel] = useState('')
@@ -206,7 +217,12 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
     }
 
     applyWorkspaceState(result.data)
-    await Promise.all([FolderExplorerCoordinator.loadItems(), EnvironmentCoordinator.loadEnvironments()])
+    await Promise.all([
+      FolderExplorerCoordinator.loadItems(),
+      EnvironmentCoordinator.loadEnvironments(),
+      TagsCoordinator.loadTags(),
+      ChangesCoordinator.loadOperations(),
+    ])
   }
 
   function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -293,7 +309,7 @@ export function ImportAgentDialog({ scope }: ImportAgentDialogProps) {
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/50">Draft Changes</div>
             </div>
             <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-              {visiblePlan ? <PlanView planRecord={visiblePlan} /> : <EmptyPanel message="No draft plan yet." />}
+              {visiblePlan ? <PlanView planRecord={visiblePlan} explorerItems={explorerItems} tagItems={tagItems} /> : <EmptyPanel message="No draft plan yet." />}
             </div>
           </aside>
         </div>
@@ -383,25 +399,69 @@ function EmptyPanel({ message }: { message: string }) {
   return <div className="grid h-full min-h-[180px] place-items-center text-center text-sm text-base-content/52">{message}</div>
 }
 
-function PlanView({ planRecord }: { planRecord: ImportAgentPlanRecord }) {
+function PlanView({
+  planRecord,
+  explorerItems,
+  tagItems,
+}: {
+  planRecord: ImportAgentPlanRecord
+  explorerItems: ExplorerItem[]
+  tagItems: TagRecord[]
+}) {
   const plan = planRecord.plan
+  const explorerItemMap = useMemo(
+    () => new Map(explorerItems.map(item => [`${item.itemType}:${item.id}`, item] as const)),
+    [explorerItems]
+  )
+  const tagMap = useMemo(() => new Map(tagItems.map(tag => [tag.id, tag] as const)), [tagItems])
+  const sections = [
+    plan.questions.length > 0
+      ? <PlanList key="questions" title="Questions" items={plan.questions.map(question => `${question.label}${question.details ? `\n${question.details}` : ''}`)} tone="error" />
+      : null,
+    plan.warnings.length > 0
+      ? <PlanList key="warnings" title="Warnings" items={plan.warnings.map(warning => warning.message)} tone="warning" />
+      : null,
+    plan.foldersToCreate.length > 0
+      ? <PlanList key="folders" title="Folders to Create" items={plan.foldersToCreate.map(folder => `${folder.name}\n${formatPlannedParent(folder.parentFolderId, folder.parentScope, explorerItemMap)}`)} />
+      : null,
+    plan.requestsToCreate.length > 0
+      ? <RequestPlanSection key="requests-create" title="Requests to Create" requests={plan.requestsToCreate} />
+      : null,
+    plan.requestsToUpdate.length > 0
+      ? <RequestPlanSection key="requests-update" title="Requests to Update" requests={plan.requestsToUpdate} />
+      : null,
+    plan.environmentUpdates.length > 0
+      ? <PlanList key="environments" title="Environment Updates" items={plan.environmentUpdates.map(update => `${update.environmentName || update.environmentId}\n${update.variables.map(variable => `${variable.key}=${variable.value}`).join('\n')}`)} />
+      : null,
+    plan.tagsToCreate.length > 0
+      ? <PlanList key="tags-create" title="Tags to Create" items={plan.tagsToCreate.map(tag => formatTagSummary(tag.name, tag.color))} />
+      : null,
+    plan.tagsToUpdate.length > 0
+      ? <PlanList key="tags-update" title="Tags to Update" items={plan.tagsToUpdate.map(tag => `${getTagLabel(tagMap, tag.tagId)}\n${formatTagSummary(tag.name, tag.color)}`)} />
+      : null,
+    plan.itemTagUpdates.length > 0
+      ? <PlanList key="item-tags" title="Item Tag Updates" items={plan.itemTagUpdates.map(update => formatItemTagUpdate(update, explorerItemMap, tagMap))} />
+      : null,
+    plan.tagItemUpdates.length > 0
+      ? <PlanList key="tag-items" title="Tag Item Updates" items={plan.tagItemUpdates.map(update => formatTagItemUpdate(update, explorerItemMap, tagMap))} />
+      : null,
+  ].filter(section => section !== null)
+
+  const summary = plan.summary.trim()
 
   return (
     <div className="space-y-4 text-sm">
-      <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">Summary</div>
-          {planRecord.kind === 'applied' ? <span className="badge badge-success badge-sm">Applied</span> : <span className="badge badge-ghost badge-sm">Draft</span>}
-        </div>
-        <div className="mt-2 whitespace-pre-wrap text-base-content/75">{plan.summary || 'No summary yet.'}</div>
-      </section>
+      {summary ? (
+        <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">Summary</div>
+            {planRecord.kind === 'applied' ? <span className="badge badge-success badge-sm">Applied</span> : <span className="badge badge-ghost badge-sm">Draft</span>}
+          </div>
+          <div className="mt-2 whitespace-pre-wrap text-base-content/75">{summary}</div>
+        </section>
+      ) : null}
 
-      <PlanList title="Questions" items={plan.questions.map(question => `${question.label}${question.details ? `\n${question.details}` : ''}`)} tone="error" emptyMessage="No unresolved questions." />
-      <PlanList title="Warnings" items={plan.warnings.map(warning => warning.message)} tone="warning" emptyMessage="No warnings." />
-      <PlanList title="Folders to Create" items={plan.foldersToCreate.map(folder => folder.name)} emptyMessage="No folders planned." />
-      <RequestPlanSection title="Requests to Create" requests={plan.requestsToCreate} emptyMessage="No request creations planned." />
-      <RequestPlanSection title="Requests to Update" requests={plan.requestsToUpdate} emptyMessage="No request updates planned." />
-      <PlanList title="Environment Updates" items={plan.environmentUpdates.map(update => `${update.environmentName || update.environmentId}\n${update.variables.map(variable => `${variable.key}=${variable.value}`).join('\n')}`)} emptyMessage="No environment updates planned." />
+      {sections.length > 0 ? sections : <EmptyPanel message="No planned changes yet." />}
     </div>
   )
 }
@@ -409,24 +469,18 @@ function PlanView({ planRecord }: { planRecord: ImportAgentPlanRecord }) {
 function RequestPlanSection({
   title,
   requests,
-  emptyMessage,
 }: {
   title: string
   requests: Array<ImportAgentRequestCreatePlanItem | ImportAgentRequestUpdatePlanItem>
-  emptyMessage: string
 }) {
   return (
     <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">{title}</div>
-      {requests.length ? (
-        <div className="mt-3 space-y-3">
-          {requests.map(request => (
-            <RequestPlanCard key={'requestId' in request ? request.requestId : request.id} request={request} />
-          ))}
-        </div>
-      ) : (
-        <div className="mt-2 text-base-content/55">{emptyMessage}</div>
-      )}
+      <div className="mt-3 space-y-3">
+        {requests.map(request => (
+          <RequestPlanCard key={'requestId' in request ? request.requestId : request.id} request={request} />
+        ))}
+      </div>
     </section>
   )
 }
@@ -526,23 +580,77 @@ function getRequestAuthSummary(request: ImportAgentRequestCreatePlanItem | Impor
   }
 }
 
-function PlanList({ title, items, emptyMessage, tone = 'default' }: { title: string; items: string[]; emptyMessage: string; tone?: 'default' | 'warning' | 'error' }) {
+function PlanList({ title, items, tone = 'default' }: { title: string; items: string[]; tone?: 'default' | 'warning' | 'error' }) {
   const toneClassName = tone === 'error' ? 'border-error/20 bg-error/5' : tone === 'warning' ? 'border-warning/20 bg-warning/5' : 'border-base-content/10 bg-base-100/70'
 
   return (
     <section className={`rounded-xl border p-3 ${toneClassName}`}>
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">{title}</div>
-      {items.length ? (
-        <div className="mt-2 space-y-2">
-          {items.map(item => (
-            <pre key={item} className="whitespace-pre-wrap break-words font-sans text-[13px] leading-5 text-base-content/78">{item}</pre>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-2 text-base-content/55">{emptyMessage}</div>
-      )}
+      <div className="mt-2 space-y-2">
+        {items.map(item => (
+          <pre key={item} className="whitespace-pre-wrap break-words font-sans text-[13px] leading-5 text-base-content/78">{item}</pre>
+        ))}
+      </div>
     </section>
   )
+}
+
+function formatPlannedParent(
+  parentFolderId: string | null,
+  parentScope: 'session-root' | 'workspace-root' | undefined,
+  explorerItemMap: Map<string, ExplorerItem>
+) {
+  if (parentFolderId) {
+    const folder = explorerItemMap.get(`folder:${parentFolderId}`)
+    return `Parent: ${folder?.name ?? parentFolderId}`
+  }
+
+  if (parentScope === 'workspace-root') {
+    return 'Parent: Workspace root'
+  }
+
+  if (parentScope === 'session-root') {
+    return 'Parent: Session root'
+  }
+
+  return 'Parent: Default root'
+}
+
+function formatTagSummary(name: string, color: string | null) {
+  return color ? `${name}\nColor: ${color}` : `${name}\nColor: none`
+}
+
+function getTagLabel(tagMap: Map<string, TagRecord>, tagId: string) {
+  return tagMap.get(tagId)?.name ?? tagId
+}
+
+function getExplorerItemLabel(explorerItemMap: Map<string, ExplorerItem>, itemType: 'folder' | 'request', itemId: string) {
+  const item = explorerItemMap.get(`${itemType}:${itemId}`)
+  if (!item) {
+    return itemId
+  }
+
+  return item.name
+}
+
+function formatItemTagUpdate(
+  update: ImportAgentItemTagUpdatePlanItem,
+  explorerItemMap: Map<string, ExplorerItem>,
+  tagMap: Map<string, TagRecord>
+) {
+  const tagLabels = update.tagIds.length > 0 ? update.tagIds.map(tagId => getTagLabel(tagMap, tagId)).join(', ') : 'none'
+  return `${getExplorerItemLabel(explorerItemMap, update.itemType, update.itemId)}\nTags: ${tagLabels}`
+}
+
+function formatTagItemUpdate(
+  update: ImportAgentTagItemUpdatePlanItem,
+  explorerItemMap: Map<string, ExplorerItem>,
+  tagMap: Map<string, TagRecord>
+) {
+  const itemLabels = update.items.length > 0
+    ? update.items.map(item => `${item.itemType}: ${getExplorerItemLabel(explorerItemMap, item.itemType, item.itemId)}`).join('\n')
+    : 'none'
+  return `${getTagLabel(tagMap, update.tagId)}\nItems:\n${itemLabels}`
 }
 
 function TranscriptPart({ part }: { part: ImportAgentMessagePart }) {

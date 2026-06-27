@@ -2,8 +2,10 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { createDefaultHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
 import {
+  type ImportAgentParentScope,
   normalizeImportAgentPlan,
   type ImportAgentMessage,
+  type ImportAgentItemTagUpdatePlanItem,
   type ImportAgentPlan,
   type ImportAgentPlanRecord,
   type ImportAgentRequestCreatePlanItem,
@@ -12,11 +14,14 @@ import {
   type ImportAgentScopeType,
   type ImportAgentSessionState,
   type ImportAgentSessionStatus,
+  type ImportAgentTagCreatePlanItem,
+  type ImportAgentTagItemUpdatePlanItem,
+  type ImportAgentTagUpdatePlanItem,
   type ImportAgentWorkspaceState,
 } from '../../common/ImportAgent.js'
+import { normalizeTagColor, type TaggableItemType } from '../../common/Tags.js'
 import { getDb } from './index.js'
-import { listExplorerItems } from './explorer.js'
-import { environments, folders, importAgentPlans, importAgentSessions, requests, treeItems } from './schema.js'
+import { environments, folders, importAgentPlans, importAgentSessions, requests, tagAssignments, tags, treeItems } from './schema.js'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../../common/KeyValueRows.js'
 
 type Database = BetterSQLite3Database<any>
@@ -228,45 +233,47 @@ export async function applyImportAgentDraftPlan(sessionId: string) {
     throw new Error('Resolve all draft questions before applying changes.')
   }
 
-  const explorerItems = await listExplorerItems()
-  const allowedFolderIds = collectAllowedFolderIds(explorerItems, session.scopeType as ImportAgentScopeType, session.targetFolderId)
-  const allowedRequestIds = new Set(
-    explorerItems
-      .filter(item => item.itemType === 'request' && allowedFolderIds.has(item.parentFolderId ?? 'workspace-root'))
-      .map(item => item.id)
-  )
-
   db.transaction(tx => {
     const folderIdMap = new Map<string, string>()
+    const tagIdMap = new Map<string, string>()
     for (const folder of plan.foldersToCreate) {
-      const parentFolderId = resolvePlanParentFolderId(folder.parentFolderId, folderIdMap, session)
-      if (!allowedFolderIds.has(parentFolderId ?? 'workspace-root')) {
-        throw new Error(`Folder "${folder.name}" is outside the import scope.`)
-      }
+      const parentFolderId = resolvePlanParentFolderId(folder.parentFolderId, folder.parentScope, folderIdMap, session)
 
       const createdId = insertFolderFromPlan(tx, parentFolderId, folder.name)
       folderIdMap.set(folder.id, createdId)
-      allowedFolderIds.add(createdId)
     }
 
     for (const request of plan.requestsToCreate) {
-      const parentFolderId = resolvePlanParentFolderId(request.parentFolderId, folderIdMap, session)
-      if (!allowedFolderIds.has(parentFolderId ?? 'workspace-root')) {
-        throw new Error(`Request "${request.name}" is outside the import scope.`)
-      }
+      const parentFolderId = resolvePlanParentFolderId(request.parentFolderId, request.parentScope, folderIdMap, session)
 
       insertRequestFromPlan(tx, parentFolderId, request)
     }
 
     for (const request of plan.requestsToUpdate) {
-      if (!allowedRequestIds.has(request.requestId)) {
-        throw new Error(`Request "${request.requestId}" is outside the import scope.`)
-      }
-
       updateRequestFromPlan(tx, request)
     }
+
     for (const environmentUpdate of plan.environmentUpdates) {
       applyEnvironmentUpdate(tx, environmentUpdate.environmentId, environmentUpdate.variables)
+    }
+
+    for (const tag of plan.tagsToCreate) {
+      const createdId = insertTagFromPlan(tx, tag)
+      tagIdMap.set(tag.id, createdId)
+    }
+
+    for (const tag of plan.tagsToUpdate) {
+      updateTagFromPlan(tx, tag, tagIdMap)
+    }
+
+    ensureNoTagAssignmentConflicts(plan.itemTagUpdates, plan.tagItemUpdates)
+
+    for (const itemTagUpdate of plan.itemTagUpdates) {
+      applyItemTagUpdate(tx, itemTagUpdate, tagIdMap)
+    }
+
+    for (const tagItemUpdate of plan.tagItemUpdates) {
+      applyTagItemUpdate(tx, tagItemUpdate, tagIdMap)
     }
 
     const now = Date.now()
@@ -434,12 +441,124 @@ function applyEnvironmentUpdate(tx: Database, environmentId: string, variables: 
     .run()
 }
 
-function resolvePlanParentFolderId(parentFolderId: string | null, folderIdMap: Map<string, string>, session: ImportAgentSessionRow) {
+function insertTagFromPlan(tx: Database, tag: ImportAgentTagCreatePlanItem) {
+  const name = tag.name.trim()
+  if (!name) {
+    throw new Error('Tag name is required')
+  }
+
+  const existing = getActiveTagByName(tx, name)
+  if (existing) {
+    throw new Error(`Tag name ${name} is already used`)
+  }
+
+  const now = Date.now()
+  const tagId = crypto.randomUUID()
+  tx.insert(tags)
+    .values({
+      id: tagId,
+      name,
+      color: normalizeTagColor(tag.color),
+      position: getNextTagPosition(tx),
+      createdAt: now,
+      deletedAt: null,
+    })
+    .run()
+  return tagId
+}
+
+function updateTagFromPlan(tx: Database, tag: ImportAgentTagUpdatePlanItem, tagIdMap: Map<string, string>) {
+  const resolvedTagId = resolvePlanTagId(tag.tagId, tagIdMap)
+  const name = tag.name.trim()
+  if (!name) {
+    throw new Error('Tag name is required')
+  }
+
+  const existing = tx.select().from(tags).where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt))).get()
+  if (!existing) {
+    throw new Error('Tag not found')
+  }
+
+  const duplicate = getActiveTagByName(tx, name, resolvedTagId)
+  if (duplicate) {
+    throw new Error(`Tag name ${name} is already used`)
+  }
+
+  tx.update(tags)
+    .set({ name, color: normalizeTagColor(tag.color) })
+    .where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt)))
+    .run()
+}
+
+function applyItemTagUpdate(tx: Database, itemTagUpdate: ImportAgentItemTagUpdatePlanItem, tagIdMap: Map<string, string>) {
+  ensureItemExists(tx, itemTagUpdate.itemType, itemTagUpdate.itemId)
+  const resolvedTagIds = getValidatedPlanTagIds(tx, itemTagUpdate.tagIds, tagIdMap)
+
+  tx.delete(tagAssignments)
+    .where(and(eq(tagAssignments.itemType, itemTagUpdate.itemType), eq(tagAssignments.itemId, itemTagUpdate.itemId)))
+    .run()
+
+  resolvedTagIds.forEach(tagId => {
+    tx.insert(tagAssignments)
+      .values({
+        id: crypto.randomUUID(),
+        tagId,
+        itemType: itemTagUpdate.itemType,
+        itemId: itemTagUpdate.itemId,
+        createdAt: Date.now(),
+      })
+      .run()
+  })
+}
+
+function applyTagItemUpdate(tx: Database, tagItemUpdate: ImportAgentTagItemUpdatePlanItem, tagIdMap: Map<string, string>) {
+  const resolvedTagId = resolvePlanTagId(tagItemUpdate.tagId, tagIdMap)
+  const tag = tx.select({ id: tags.id }).from(tags).where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt))).get()
+  if (!tag) {
+    throw new Error('Tag not found')
+  }
+
+  const dedupedItems = Array.from(new Map(
+    tagItemUpdate.items.map(item => [`${item.itemType}:${item.itemId}`, item])
+  ).values())
+
+  dedupedItems.forEach(item => ensureItemExists(tx, item.itemType, item.itemId))
+
+  tx.delete(tagAssignments).where(eq(tagAssignments.tagId, resolvedTagId)).run()
+
+  dedupedItems.forEach(item => {
+    tx.insert(tagAssignments)
+      .values({
+        id: crypto.randomUUID(),
+        tagId: resolvedTagId,
+        itemType: item.itemType,
+        itemId: item.itemId,
+        createdAt: Date.now(),
+      })
+      .run()
+  })
+}
+
+function resolvePlanParentFolderId(
+  parentFolderId: string | null,
+  parentScope: ImportAgentParentScope | undefined,
+  folderIdMap: Map<string, string>,
+  session: ImportAgentSessionRow
+) {
   if (parentFolderId === null) {
-    return session.scopeType === 'folder' ? session.targetFolderId : null
+    return resolvePlanRootFolderId(session, parentScope)
   }
 
   return folderIdMap.get(parentFolderId) ?? parentFolderId
+}
+
+function resolvePlanRootFolderId(session: ImportAgentSessionRow, parentScope: ImportAgentParentScope | undefined) {
+  const resolvedParentScope = parentScope ?? (session.scopeType === 'folder' ? 'session-root' : 'workspace-root')
+  if (resolvedParentScope === 'workspace-root') {
+    return null
+  }
+
+  return session.scopeType === 'folder' ? session.targetFolderId : null
 }
 
 function getNextTreePosition(tx: Database, parentFolderId: string | null) {
@@ -452,38 +571,68 @@ function getNextTreePosition(tx: Database, parentFolderId: string | null) {
   return siblings.length === 0 ? 0 : Math.max(...siblings.map(item => item.position)) + 1
 }
 
-function collectAllowedFolderIds(
-  explorerItems: Awaited<ReturnType<typeof listExplorerItems>>,
-  scopeType: ImportAgentScopeType,
-  targetFolderId: string | null
+function getNextTagPosition(tx: Database) {
+  const rows = tx.select({ position: tags.position }).from(tags).where(isNull(tags.deletedAt)).all()
+  if (rows.length === 0) {
+    return 0
+  }
+
+  return Math.max(...rows.map(row => row.position)) + 1
+}
+
+function getActiveTagByName(tx: Database, name: string, excludeId?: string) {
+  const rows = tx.select().from(tags).where(isNull(tags.deletedAt)).all()
+  return rows.find(row => row.name === name && row.id !== excludeId) ?? null
+}
+
+function resolvePlanTagId(tagId: string, tagIdMap: Map<string, string>) {
+  return tagIdMap.get(tagId) ?? tagId
+}
+
+function getValidatedPlanTagIds(tx: Database, tagIds: string[], tagIdMap: Map<string, string>) {
+  const dedupedTagIds = Array.from(new Set(tagIds.map(tagId => resolvePlanTagId(tagId, tagIdMap))))
+  if (dedupedTagIds.length === 0) {
+    return dedupedTagIds
+  }
+
+  const activeTags = tx
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(inArray(tags.id, dedupedTagIds), isNull(tags.deletedAt)))
+    .all()
+    .map(row => row.id)
+
+  if (activeTags.length !== dedupedTagIds.length) {
+    throw new Error('One or more tags were not found')
+  }
+
+  return dedupedTagIds
+}
+
+function ensureItemExists(tx: Database, itemType: TaggableItemType, itemId: string) {
+  const exists =
+    itemType === 'folder'
+      ? tx.select({ id: folders.id }).from(folders).where(and(eq(folders.id, itemId), isNull(folders.deletedAt))).get()
+      : tx.select({ id: requests.id }).from(requests).where(and(eq(requests.id, itemId), isNull(requests.deletedAt))).get()
+
+  if (!exists) {
+    throw new Error(itemType === 'folder' ? 'Folder not found' : 'Request not found')
+  }
+}
+
+function ensureNoTagAssignmentConflicts(
+  itemTagUpdates: ImportAgentItemTagUpdatePlanItem[],
+  tagItemUpdates: ImportAgentTagItemUpdatePlanItem[]
 ) {
-  const allowedFolderIds = new Set<string>()
-  if (scopeType === 'workspace') {
-    allowedFolderIds.add('workspace-root')
-    for (const item of explorerItems) {
-      if (item.itemType === 'folder') {
-        allowedFolderIds.add(item.id)
-      }
-    }
-    return allowedFolderIds
-  }
-
-  if (!targetFolderId) {
-    throw new Error('Folder import scope is missing its target folder.')
-  }
-
-  allowedFolderIds.add(targetFolderId)
-  const pending = [targetFolderId]
-  while (pending.length > 0) {
-    const currentFolderId = pending.pop() ?? null
-    for (const item of explorerItems) {
-      if (item.itemType === 'folder' && item.parentFolderId === currentFolderId) {
-        allowedFolderIds.add(item.id)
-        pending.push(item.id)
+  const directlyUpdatedItemKeys = new Set(itemTagUpdates.map(itemTagUpdate => `${itemTagUpdate.itemType}:${itemTagUpdate.itemId}`))
+  for (const tagItemUpdate of tagItemUpdates) {
+    for (const item of tagItemUpdate.items) {
+      const itemKey = `${item.itemType}:${item.itemId}`
+      if (directlyUpdatedItemKeys.has(itemKey)) {
+        throw new Error(`Conflicting tag assignment updates for ${itemKey}`)
       }
     }
   }
-  return allowedFolderIds
 }
 
 function toImportAgentPlanRecord(row: ImportAgentPlanRow): ImportAgentPlanRecord {

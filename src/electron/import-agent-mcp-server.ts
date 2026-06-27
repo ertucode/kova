@@ -7,6 +7,8 @@ import { AUTH_LOCATIONS } from '../common/Auth.js'
 import type { ExplorerItem } from '../common/Explorer.js'
 import { errorResponseToMessage, GenericError, type GenericResult } from '../common/GenericError.js'
 import {
+  createEmptyImportAgentPlan,
+  type ImportAgentPlan,
   normalizeImportAgentPlan,
   REQUEST_BODY_TYPES,
   REQUEST_METHODS,
@@ -23,6 +25,7 @@ import {
   listAppliedImportAgentPlans,
   setCurrentImportAgentDraftPlan,
 } from './db/import-agent.js'
+import { listTagAssignments, listTags } from './db/tags.js'
 
 export const IMPORT_AGENT_MCP_SERVER_NAME = 'kova_import_agent'
 
@@ -36,7 +39,16 @@ const MCP_PATHNAME = '/mcp'
 
 const folderIdSchema = z.string().trim().min(1)
 const nullableFolderIdSchema = folderIdSchema.nullable()
+const parentScopeSchema = z.enum(['session-root', 'workspace-root']).optional()
 const folderPathSchema = z.array(z.string().trim().min(1)).min(1)
+const tagIdSchema = z.string().trim().min(1)
+const tagNameSchema = z.string()
+const tagColorSchema = z.string().trim().min(1).nullable()
+const taggableItemTypeSchema = z.enum(['folder', 'request'])
+const tagItemRefSchema = z.object({
+  itemType: taggableItemTypeSchema,
+  itemId: z.string().trim().min(1),
+})
 const authSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('inherit') }),
   z.object({ type: z.literal('noauth') }),
@@ -71,6 +83,7 @@ const warningSchema = z.object({
 const folderPlanItemSchema = z.object({
   id: z.string().trim().min(1),
   parentFolderId: nullableFolderIdSchema,
+  parentScope: parentScopeSchema,
   name: z.string(),
 })
 const requestPlanFieldsSchema = z.object({
@@ -97,6 +110,7 @@ const requestPlanFieldsSchema = z.object({
 const requestCreatePlanItemSchema = requestPlanFieldsSchema.extend({
   id: z.string().trim().min(1),
   parentFolderId: nullableFolderIdSchema,
+  parentScope: parentScopeSchema,
 })
 const requestUpdatePlanItemSchema = requestPlanFieldsSchema.extend({
   requestId: z.string().trim().min(1),
@@ -110,6 +124,25 @@ const environmentUpdateSchema = z.object({
   environmentName: z.string(),
   variables: z.array(environmentVariableSchema),
 })
+const tagCreatePlanItemSchema = z.object({
+  id: tagIdSchema,
+  name: tagNameSchema,
+  color: tagColorSchema,
+})
+const tagUpdatePlanItemSchema = z.object({
+  tagId: tagIdSchema,
+  name: tagNameSchema,
+  color: tagColorSchema,
+})
+const itemTagUpdatePlanItemSchema = z.object({
+  itemType: taggableItemTypeSchema,
+  itemId: z.string().trim().min(1),
+  tagIds: z.array(tagIdSchema),
+})
+const tagItemUpdatePlanItemSchema = z.object({
+  tagId: tagIdSchema,
+  items: z.array(tagItemRefSchema),
+})
 const importAgentPlanSchema = z.object({
   summary: z.string(),
   questions: z.array(questionSchema),
@@ -118,6 +151,10 @@ const importAgentPlanSchema = z.object({
   requestsToCreate: z.array(requestCreatePlanItemSchema),
   requestsToUpdate: z.array(requestUpdatePlanItemSchema),
   environmentUpdates: z.array(environmentUpdateSchema),
+  tagsToCreate: z.array(tagCreatePlanItemSchema).optional(),
+  tagsToUpdate: z.array(tagUpdatePlanItemSchema).optional(),
+  itemTagUpdates: z.array(itemTagUpdatePlanItemSchema).optional(),
+  tagItemUpdates: z.array(tagItemUpdatePlanItemSchema).optional(),
 })
 
 export async function startImportAgentMcpServer(): Promise<ImportAgentMcpServer> {
@@ -223,6 +260,17 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
     })
   }
 
+  async function updateDraft(
+    updater: (draft: ImportAgentPlan) => { draft: ImportAgentPlan; result: Record<string, unknown> }
+  ) {
+    const resolvedSessionId = requireBoundImportAgentSessionId(boundSessionId)
+    requireImportAgentSession(resolvedSessionId)
+    const currentDraft = getCurrentImportAgentDraftPlan(resolvedSessionId)?.plan ?? createEmptyImportAgentPlan()
+    const updated = updater(currentDraft)
+    setCurrentImportAgentDraftPlan(resolvedSessionId, normalizeImportAgentPlan(updated.draft))
+    return toToolResult(updated.result)
+  }
+
   server.registerTool(
     'list_explorer_items_by_folder_id',
     {
@@ -277,6 +325,64 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
   )
 
   server.registerTool(
+    'list_tags',
+    {
+      description: 'List all tags available to the import agent.',
+      inputSchema: {},
+    },
+    async () => {
+      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      return toToolResult({ tags: await listTags() })
+    }
+  )
+
+  server.registerTool(
+    'get_tag_details',
+    {
+      description: 'Get a tag, its direct assignments, and tagged explorer items by tag ID.',
+      inputSchema: {
+        tagId: tagIdSchema.describe('Tag ID to load'),
+      },
+    },
+    async ({ tagId }) => {
+      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      const [tags, assignments, explorerItems] = await Promise.all([listTags(), listTagAssignments(), listExplorerItems()])
+      const tag = tags.find(currentTag => currentTag.id === tagId) ?? null
+      if (!tag) {
+        throw new Error('Tag not found.')
+      }
+
+      const tagAssignments = assignments.filter(assignment => assignment.tagId === tagId)
+      return toToolResult({
+        tag,
+        assignments: tagAssignments,
+        items: getTaggedExplorerItems(tagAssignments, explorerItems),
+      })
+    }
+  )
+
+  server.registerTool(
+    'list_explorer_items_by_tag_id',
+    {
+      description: 'List directly tagged folders and requests by tag ID.',
+      inputSchema: {
+        tagId: tagIdSchema.describe('Tag ID to list explorer items for'),
+      },
+    },
+    async ({ tagId }) => {
+      requireImportAgentSession(requireBoundImportAgentSessionId(boundSessionId))
+      const [tags, assignments, explorerItems] = await Promise.all([listTags(), listTagAssignments(), listExplorerItems()])
+      const tag = tags.find(currentTag => currentTag.id === tagId) ?? null
+      if (!tag) {
+        throw new Error('Tag not found.')
+      }
+
+      const tagAssignments = assignments.filter(assignment => assignment.tagId === tagId)
+      return toToolResult({ tag, items: getTaggedExplorerItems(tagAssignments, explorerItems) })
+    }
+  )
+
+  server.registerTool(
     'get_current_draft',
     {
       description: 'Get the current draft import plan for a session.',
@@ -304,6 +410,70 @@ function createImportAgentMcpServer(boundSessionId: string | null) {
         draft: setCurrentImportAgentDraftPlan(resolvedSessionId, normalizeImportAgentPlan(plan)),
       })
     }
+  )
+
+  server.registerTool(
+    'plan_add_tag',
+    {
+      description: 'Plan creation of a new tag in the current draft.',
+      inputSchema: tagCreatePlanItemSchema,
+    },
+    input =>
+      updateDraft(draft => ({
+        draft: {
+          ...draft,
+          tagsToCreate: overwriteBy(draft.tagsToCreate, input, tag => tag.id),
+        },
+        result: { plannedTag: input },
+      }))
+  )
+
+  server.registerTool(
+    'plan_update_tag',
+    {
+      description: 'Plan an update to an existing tag in the current draft.',
+      inputSchema: tagUpdatePlanItemSchema,
+    },
+    input =>
+      updateDraft(draft => ({
+        draft: {
+          ...draft,
+          tagsToUpdate: overwriteBy(draft.tagsToUpdate, input, tag => tag.tagId),
+        },
+        result: { plannedTagUpdate: input },
+      }))
+  )
+
+  server.registerTool(
+    'plan_replace_item_tags',
+    {
+      description: 'Plan replacement of all tags on a folder or request.',
+      inputSchema: itemTagUpdatePlanItemSchema,
+    },
+    input =>
+      updateDraft(draft => ({
+        draft: {
+          ...draft,
+          itemTagUpdates: overwriteBy(draft.itemTagUpdates, input, item => `${item.itemType}:${item.itemId}`),
+        },
+        result: { plannedItemTagUpdate: input },
+      }))
+  )
+
+  server.registerTool(
+    'plan_replace_tag_items',
+    {
+      description: 'Plan replacement of all items assigned to a tag.',
+      inputSchema: tagItemUpdatePlanItemSchema,
+    },
+    input =>
+      updateDraft(draft => ({
+        draft: {
+          ...draft,
+          tagItemUpdates: overwriteBy(draft.tagItemUpdates, input, item => item.tagId),
+        },
+        result: { plannedTagItemUpdate: input },
+      }))
   )
 
   server.registerTool(
@@ -358,6 +528,25 @@ function toToolResult<T extends Record<string, unknown>>(value: T) {
     content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }],
     structuredContent: value,
   }
+}
+
+function overwriteBy<T>(items: T[], nextItem: T, getKey: (item: T) => string) {
+  const nextKey = getKey(nextItem)
+  return [...items.filter(item => getKey(item) !== nextKey), nextItem]
+}
+
+function getTaggedExplorerItems(
+  assignments: Awaited<ReturnType<typeof listTagAssignments>>,
+  explorerItems: Awaited<ReturnType<typeof listExplorerItems>>
+) {
+  const itemKeys = new Set(assignments.map(assignment => `${assignment.itemType}:${assignment.itemId}`))
+  return addExplorerPaths(
+    explorerItems.filter(
+      (item): item is Extract<ExplorerItem, { itemType: 'folder' | 'request' }> =>
+        (item.itemType === 'folder' || item.itemType === 'request') && itemKeys.has(`${item.itemType}:${item.id}`)
+    ),
+    explorerItems
+  )
 }
 
 function resolveExplorerFolderSelection(input: {
