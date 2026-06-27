@@ -290,6 +290,7 @@ async function buildSystemPrompt(sessionId: string) {
     '',
     'Use bash with exact curl commands like these:',
     `List explorer items: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/explorer?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
+    `List explorer subtree by folderId: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/explorer?${baseQuery}&folderId=<FOLDER_ID>`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
     `Get a request: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/request?${baseQuery}&requestId=<REQUEST_ID>`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
     `List environments: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/environments?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
     `Get current draft: curl -fsS ${JSON.stringify(`${bridge.url}/import-agent/draft?${baseQuery}`)} -H ${JSON.stringify(`Authorization: Bearer ${bridge.token}`)}`,
