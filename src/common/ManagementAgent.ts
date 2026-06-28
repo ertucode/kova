@@ -1,5 +1,13 @@
 import { createDefaultHttpAuth, normalizeHttpAuth, type HttpAuth } from './Auth.js'
 import {
+  createDefaultFolderRequestRunConfig,
+  FOLDER_REQUEST_EXECUTION_MODES,
+  FOLDER_REQUEST_SELECTION_MODES,
+  type FolderRequestExecutionMode,
+  type FolderRequestRunConfig,
+  type FolderRequestSelectionMode,
+} from './FolderRuns.js'
+import {
   type RequestBodyType,
   type RequestMethod,
   type RequestRawType,
@@ -35,6 +43,17 @@ export type ManagementAgentFolderPlanItem = {
   parentFolderId: string | null
   parentScope?: ManagementAgentParentScope
   name: string
+}
+
+export type ManagementAgentFolderUpdatePlanItem = {
+  folderId: string
+  name: string
+  description: string
+  headers: string
+  auth: HttpAuth
+  preRequestScript: string
+  postRequestScript: string
+  runConfig: FolderRequestRunConfig
 }
 
 export type ManagementAgentParentScope = 'session-root' | 'workspace-root'
@@ -113,8 +132,11 @@ export type ManagementAgentPlan = {
   questions: ManagementAgentQuestion[]
   warnings: ManagementAgentWarning[]
   foldersToCreate: ManagementAgentFolderPlanItem[]
+  foldersToUpdate: ManagementAgentFolderUpdatePlanItem[]
   requestsToCreate: ManagementAgentRequestCreatePlanItem[]
   requestsToUpdate: ManagementAgentRequestUpdatePlanItem[]
+  requestsToDelete: Array<{ requestId: string }>
+  foldersToDelete: Array<{ folderId: string }>
   environmentUpdates: ManagementAgentEnvironmentUpdatePlanItem[]
   tagsToCreate: ManagementAgentTagCreatePlanItem[]
   tagsToUpdate: ManagementAgentTagUpdatePlanItem[]
@@ -190,8 +212,11 @@ export function createEmptyManagementAgentPlan(): ManagementAgentPlan {
     questions: [],
     warnings: [],
     foldersToCreate: [],
+    foldersToUpdate: [],
     requestsToCreate: [],
     requestsToUpdate: [],
+    requestsToDelete: [],
+    foldersToDelete: [],
     environmentUpdates: [],
     tagsToCreate: [],
     tagsToUpdate: [],
@@ -212,12 +237,21 @@ export function normalizeManagementAgentPlan(value: unknown): ManagementAgentPla
     questions: toArray(candidate.questions).map(normalizeQuestion).filter(question => question.label),
     warnings: toArray(candidate.warnings).map(normalizeWarning).filter(warning => warning.message),
     foldersToCreate: toArray(candidate.foldersToCreate).map(normalizeFolderPlanItem).filter(folder => folder.name),
+    foldersToUpdate: toArray(candidate.foldersToUpdate)
+      .map(normalizeFolderUpdatePlanItem)
+      .filter(folder => folder.folderId),
     requestsToCreate: toArray(candidate.requestsToCreate)
       .map(normalizeRequestCreatePlanItem)
       .filter(request => request.name),
     requestsToUpdate: toArray(candidate.requestsToUpdate)
       .map(normalizeRequestUpdatePlanItem)
       .filter(request => request.requestId),
+    requestsToDelete: toArray(candidate.requestsToDelete)
+      .map(normalizeRequestDeletePlanItem)
+      .filter(request => request.requestId),
+    foldersToDelete: toArray(candidate.foldersToDelete)
+      .map(normalizeFolderDeletePlanItem)
+      .filter(folder => folder.folderId),
     environmentUpdates: toArray(candidate.environmentUpdates)
       .map(normalizeEnvironmentUpdatePlanItem)
       .filter(environmentUpdate => environmentUpdate.environmentId),
@@ -260,6 +294,20 @@ function normalizeFolderPlanItem(value: unknown): ManagementAgentFolderPlanItem 
     parentFolderId: toNullableTrimmedString(candidate.parentFolderId),
     parentScope: normalizeParentScope(candidate.parentScope),
     name: toTrimmedString(candidate.name),
+  }
+}
+
+function normalizeFolderUpdatePlanItem(value: unknown): ManagementAgentFolderUpdatePlanItem {
+  const candidate = toRecord(value)
+  return {
+    folderId: toTrimmedString(candidate.folderId),
+    name: toTrimmedString(candidate.name),
+    description: toStringValue(candidate.description),
+    headers: toStringValue(candidate.headers),
+    auth: normalizeHttpAuth(candidate.auth),
+    preRequestScript: toStringValue(candidate.preRequestScript),
+    postRequestScript: toStringValue(candidate.postRequestScript),
+    runConfig: normalizeFolderRunConfig(candidate.runConfig),
   }
 }
 
@@ -326,6 +374,20 @@ function normalizeRequestUpdatePlanItem(value: unknown): ManagementAgentRequestU
   }
 }
 
+function normalizeRequestDeletePlanItem(value: unknown): { requestId: string } {
+  const candidate = toRecord(value)
+  return {
+    requestId: toTrimmedString(candidate.requestId),
+  }
+}
+
+function normalizeFolderDeletePlanItem(value: unknown): { folderId: string } {
+  const candidate = toRecord(value)
+  return {
+    folderId: toTrimmedString(candidate.folderId),
+  }
+}
+
 function normalizeRequestPlanFields(candidate: Record<string, unknown>): ManagementAgentRequestPlanFields {
   const method = toTrimmedString(candidate.method).toUpperCase()
   const bodyType = toTrimmedString(candidate.bodyType)
@@ -379,6 +441,25 @@ function normalizeEnvironmentUpdatePlanItem(value: unknown): ManagementAgentEnvi
         }
       })
       .filter(variable => variable.key),
+  }
+}
+
+function normalizeFolderRunConfig(value: unknown): FolderRequestRunConfig {
+  const candidate = toRecord(value)
+  const selectionMode = toTrimmedString(candidate.selectionMode)
+  const executionMode = toTrimmedString(candidate.executionMode)
+  const defaults = createDefaultFolderRequestRunConfig()
+
+  return {
+    selectionMode: FOLDER_REQUEST_SELECTION_MODES.includes(selectionMode as FolderRequestSelectionMode)
+      ? (selectionMode as FolderRequestSelectionMode)
+      : defaults.selectionMode,
+    selectedRequestIds: toArray(candidate.selectedRequestIds).map(toTrimmedString).filter(Boolean),
+    executionMode: FOLDER_REQUEST_EXECUTION_MODES.includes(executionMode as FolderRequestExecutionMode)
+      ? (executionMode as FolderRequestExecutionMode)
+      : defaults.executionMode,
+    continueOnFailure:
+      typeof candidate.continueOnFailure === 'boolean' ? candidate.continueOnFailure : defaults.continueOnFailure,
   }
 }
 

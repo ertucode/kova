@@ -5,6 +5,7 @@ import { errorResponseToMessage, GenericError, type GenericResult } from '../../
 import type { ExplorerItem } from '../../common/Explorer.js'
 import { listEnvironments } from '../db/environments.js'
 import { listExplorerItems } from '../db/explorer.js'
+import { getFolder } from '../db/folders.js'
 import { getRequest } from '../db/requests.js'
 import type { ManagementAgentMcpContext } from './context.js'
 
@@ -70,6 +71,25 @@ export function registerExplorerTools(server: McpServer, context: ManagementAgen
       }),
     },
     ({ folderPath }) => listExplorerItemsHelper({ folderPath })
+  )
+
+  server.registerTool(
+    'get_folder',
+    {
+      description: 'Get a folder by ID for a management-agent session.',
+      inputSchema: {
+        folderId: folderIdSchema.describe('Folder ID to load'),
+      },
+    },
+    async ({ folderId }) => {
+      context.requireSession()
+      const result = await getFolder({ id: folderId })
+      if (!result.success) {
+        throw new Error(errorResponseToMessage(result.error))
+      }
+
+      return context.toToolResult({ folder: result.data })
+    }
   )
 
   server.registerTool(

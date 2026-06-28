@@ -6,6 +6,7 @@ import { createManagementAgentMcpContext } from './management-agent-mcp/context.
 import { registerDraftTools } from './management-agent-mcp/draft-tools.js'
 import { registerExplorerTools } from './management-agent-mcp/explorer-tools.js'
 import { registerHistoryTools } from './management-agent-mcp/history-tools.js'
+import { registerSharedScriptTools } from './management-agent-mcp/shared-script-tools.js'
 import { registerTagTools } from './management-agent-mcp/tag-tools.js'
 
 export const MANAGEMENT_AGENT_MCP_SERVER_NAME = 'kova_management_agent'
@@ -93,6 +94,7 @@ function createManagementAgentMcpServer(boundSessionId: string | null) {
 
   const context = createManagementAgentMcpContext(boundSessionId)
   registerExplorerTools(server, context)
+  registerSharedScriptTools(server, context)
   registerTagTools(server, context)
   registerDraftTools(server, context)
   registerHistoryTools(server, context)

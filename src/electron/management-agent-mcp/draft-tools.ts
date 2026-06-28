@@ -1,10 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { AUTH_LOCATIONS } from '../../common/Auth.js'
+import { FOLDER_REQUEST_EXECUTION_MODES, FOLDER_REQUEST_SELECTION_MODES } from '../../common/FolderRuns.js'
 import {
+  type ManagementAgentFolderUpdatePlanItem,
   type ManagementAgentFolderPlanItem,
   type ManagementAgentPlan,
-  type ManagementAgentRequestCreatePlanItem,
   normalizeManagementAgentPlan,
   REQUEST_BODY_TYPES,
   REQUEST_METHODS,
@@ -56,6 +57,22 @@ const folderPlanItemSchema = z.object({
   parentScope: parentScopeSchema,
   name: z.string(),
 })
+const folderRunConfigSchema = z.object({
+  selectionMode: z.enum(FOLDER_REQUEST_SELECTION_MODES),
+  selectedRequestIds: z.array(z.string().trim().min(1)),
+  executionMode: z.enum(FOLDER_REQUEST_EXECUTION_MODES),
+  continueOnFailure: z.boolean(),
+})
+const folderUpdatePlanItemSchema = z.object({
+  folderId: z.string().trim().min(1),
+  name: z.string(),
+  description: z.string(),
+  headers: z.string(),
+  auth: authSchema,
+  preRequestScript: z.string(),
+  postRequestScript: z.string(),
+  runConfig: folderRunConfigSchema,
+})
 const requestPlanFieldsSchema = z.object({
   name: z.string(),
   method: z.enum(REQUEST_METHODS),
@@ -84,6 +101,12 @@ const requestCreatePlanItemSchema = requestPlanFieldsSchema.extend({
 })
 const requestUpdatePlanItemSchema = requestPlanFieldsSchema.extend({
   requestId: z.string().trim().min(1),
+})
+const requestDeletePlanItemSchema = z.object({
+  requestId: z.string().trim().min(1),
+})
+const folderDeletePlanItemSchema = z.object({
+  folderId: z.string().trim().min(1),
 })
 const environmentVariableSchema = z.object({
   key: z.string(),
@@ -135,8 +158,11 @@ const managementAgentPlanSchema = z.object({
   questions: z.array(questionSchema),
   warnings: z.array(warningSchema),
   foldersToCreate: z.array(folderPlanItemSchema),
+  foldersToUpdate: z.array(folderUpdatePlanItemSchema).optional(),
   requestsToCreate: z.array(requestCreatePlanItemSchema),
   requestsToUpdate: z.array(requestUpdatePlanItemSchema),
+  requestsToDelete: z.array(requestDeletePlanItemSchema).optional(),
+  foldersToDelete: z.array(folderDeletePlanItemSchema).optional(),
   environmentUpdates: z.array(environmentUpdateSchema),
   tagsToCreate: z.array(tagCreatePlanItemSchema).optional(),
   tagsToUpdate: z.array(tagUpdatePlanItemSchema).optional(),
@@ -216,6 +242,38 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
   )
 
   server.registerTool(
+    'plan_update_folder',
+    {
+      description: 'Plan an update to an existing folder in the current draft.',
+      inputSchema: folderUpdatePlanItemSchema,
+    },
+    input => context.updateDraft(draft => planFolderUpdateOnDraft(draft, input))
+  )
+
+  server.registerTool(
+    'plan_remove_folder_update',
+    {
+      description: 'Remove a planned folder update from the current draft.',
+      inputSchema: {
+        folderId: z.string().trim().min(1),
+      },
+    },
+    ({ folderId }) =>
+      context.updateDraft(draft => ({
+        draft: {
+          ...draft,
+          foldersToUpdate: removeOneByOrThrow(
+            draft.foldersToUpdate,
+            folderId,
+            folder => folder.folderId,
+            'Planned folder update not found.'
+          ),
+        },
+        result: { removedFolderId: folderId },
+      }))
+  )
+
+  server.registerTool(
     'plan_add_request',
     {
       description: 'Plan creation of a request in the current draft.',
@@ -248,6 +306,24 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
   )
 
   server.registerTool(
+    'plan_delete_request',
+    {
+      description: 'Plan deletion of an existing request from the workspace.',
+      inputSchema: requestDeletePlanItemSchema,
+    },
+    input => context.updateDraft(draft => planRequestDeletionOnDraft(draft, input.requestId))
+  )
+
+  server.registerTool(
+    'plan_delete_folder',
+    {
+      description: 'Plan deletion of an existing folder from the workspace.',
+      inputSchema: folderDeletePlanItemSchema,
+    },
+    input => context.updateDraft(draft => planFolderDeletionOnDraft(draft, input.folderId))
+  )
+
+  server.registerTool(
     'plan_set_environment_update',
     {
       description: 'Plan the full variable update for one environment in the current draft.',
@@ -260,6 +336,48 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
           environmentUpdates: overwriteBy(draft.environmentUpdates, input, environment => environment.environmentId),
         },
         result: { plannedEnvironmentUpdate: input },
+      }))
+  )
+
+  server.registerTool(
+    'plan_remove_request_deletion',
+    {
+      description: 'Remove a planned request deletion from the current draft.',
+      inputSchema: requestDeletePlanItemSchema,
+    },
+    ({ requestId }) =>
+      context.updateDraft(draft => ({
+        draft: {
+          ...draft,
+          requestsToDelete: removeOneByOrThrow(
+            draft.requestsToDelete,
+            requestId,
+            request => request.requestId,
+            'Planned request deletion not found.'
+          ),
+        },
+        result: { removedRequestId: requestId },
+      }))
+  )
+
+  server.registerTool(
+    'plan_remove_folder_deletion',
+    {
+      description: 'Remove a planned folder deletion from the current draft.',
+      inputSchema: folderDeletePlanItemSchema,
+    },
+    ({ folderId }) =>
+      context.updateDraft(draft => ({
+        draft: {
+          ...draft,
+          foldersToDelete: removeOneByOrThrow(
+            draft.foldersToDelete,
+            folderId,
+            folder => folder.folderId,
+            'Planned folder deletion not found.'
+          ),
+        },
+        result: { removedFolderId: folderId },
       }))
   )
 
@@ -395,6 +513,39 @@ export function removeFolderCreationFromDraft(draft: ManagementAgentPlan, id: st
       removedFolderIds: Array.from(removedFolderIds),
       removedRequestIds,
     },
+  }
+}
+
+export function planFolderUpdateOnDraft(draft: ManagementAgentPlan, input: ManagementAgentFolderUpdatePlanItem) {
+  return {
+    draft: {
+      ...draft,
+      foldersToUpdate: overwriteBy(draft.foldersToUpdate, input, folder => folder.folderId),
+      foldersToDelete: draft.foldersToDelete.filter(folder => folder.folderId !== input.folderId),
+    },
+    result: { plannedFolderUpdate: input },
+  }
+}
+
+export function planRequestDeletionOnDraft(draft: ManagementAgentPlan, requestId: string) {
+  return {
+    draft: {
+      ...draft,
+      requestsToUpdate: draft.requestsToUpdate.filter(request => request.requestId !== requestId),
+      requestsToDelete: overwriteBy(draft.requestsToDelete, { requestId }, request => request.requestId),
+    },
+    result: { plannedRequestDeletion: { requestId } },
+  }
+}
+
+export function planFolderDeletionOnDraft(draft: ManagementAgentPlan, folderId: string) {
+  return {
+    draft: {
+      ...draft,
+      foldersToUpdate: draft.foldersToUpdate.filter(folder => folder.folderId !== folderId),
+      foldersToDelete: overwriteBy(draft.foldersToDelete, { folderId }, folder => folder.folderId),
+    },
+    result: { plannedFolderDeletion: { folderId } },
   }
 }
 

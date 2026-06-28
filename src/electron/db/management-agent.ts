@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { createDefaultHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
 import {
+  type ManagementAgentFolderUpdatePlanItem,
   type ManagementAgentParentScope,
   normalizeManagementAgentPlan,
   type ManagementAgentMessage,
@@ -21,7 +22,18 @@ import {
 } from '../../common/ManagementAgent.js'
 import { normalizeTagColor, type TaggableItemType } from '../../common/Tags.js'
 import { getDb } from './index.js'
-import { environments, folders, managementAgentPlans, managementAgentSessions, requests, tagAssignments, tags, treeItems } from './schema.js'
+import {
+  environments,
+  folders,
+  managementAgentPlans,
+  managementAgentSessions,
+  requestExamples,
+  requests,
+  tagAssignments,
+  tags,
+  treeItems,
+  websocketExamples,
+} from './schema.js'
 import { parseKeyValueRows, stringifyKeyValueRows } from '../../common/KeyValueRows.js'
 
 type Database = BetterSQLite3Database<any>
@@ -256,6 +268,10 @@ export async function applyManagementAgentDraftPlan(sessionId: string) {
       folderIdMap.set(folder.id, createdId)
     }
 
+    for (const folder of plan.foldersToUpdate) {
+      updateFolderFromPlan(tx, folder)
+    }
+
     for (const request of plan.requestsToCreate) {
       const parentFolderId = resolvePlanParentFolderId(request.parentFolderId, request.parentScope, folderIdMap, session)
 
@@ -264,6 +280,10 @@ export async function applyManagementAgentDraftPlan(sessionId: string) {
 
     for (const request of plan.requestsToUpdate) {
       updateRequestFromPlan(tx, request)
+    }
+
+    for (const request of plan.requestsToDelete) {
+      deleteRequestFromPlan(tx, request.requestId)
     }
 
     for (const environmentUpdate of plan.environmentUpdates) {
@@ -287,6 +307,10 @@ export async function applyManagementAgentDraftPlan(sessionId: string) {
 
     for (const tagItemUpdate of plan.tagItemUpdates) {
       applyTagItemUpdate(tx, tagItemUpdate, tagIdMap)
+    }
+
+    for (const folder of plan.foldersToDelete) {
+      deleteFolderFromPlan(tx, folder.folderId)
     }
 
     const now = Date.now()
@@ -340,6 +364,21 @@ function insertFolderFromPlan(tx: Database, parentFolderId: string | null, name:
     })
     .run()
   return folderId
+}
+
+function updateFolderFromPlan(tx: Database, folder: ManagementAgentFolderUpdatePlanItem) {
+  tx.update(folders)
+    .set({
+      name: folder.name,
+      description: folder.description,
+      headers: folder.headers,
+      authJson: serializeHttpAuth(folder.auth),
+      preRequestScript: folder.preRequestScript,
+      postRequestScript: folder.postRequestScript,
+      runConfigJson: JSON.stringify(folder.runConfig),
+    })
+    .where(and(eq(folders.id, folder.folderId), isNull(folders.deletedAt)))
+    .run()
 }
 
 function insertRequestFromPlan(tx: Database, parentFolderId: string | null, request: ManagementAgentRequestCreatePlanItem) {
@@ -419,6 +458,39 @@ function updateRequestFromPlan(tx: Database, request: ManagementAgentRequestUpda
       saveToHistory: request.saveToHistory,
     })
     .where(and(eq(requests.id, request.requestId), isNull(requests.deletedAt)))
+    .run()
+}
+
+function deleteRequestFromPlan(tx: Database, requestId: string) {
+  const request = tx
+    .select({ id: requests.id })
+    .from(requests)
+    .where(and(eq(requests.id, requestId), isNull(requests.deletedAt)))
+    .get()
+
+  if (!request) {
+    throw new Error('Request not found')
+  }
+
+  const now = Date.now()
+  tx.update(requests)
+    .set({ deletedAt: now })
+    .where(and(eq(requests.id, requestId), isNull(requests.deletedAt)))
+    .run()
+
+  tx.update(treeItems)
+    .set({ deletedAt: now })
+    .where(and(eq(treeItems.itemType, 'request'), eq(treeItems.itemId, requestId), isNull(treeItems.deletedAt)))
+    .run()
+
+  tx.update(requestExamples)
+    .set({ deletedAt: now })
+    .where(and(eq(requestExamples.requestId, requestId), isNull(requestExamples.deletedAt)))
+    .run()
+
+  tx.update(websocketExamples)
+    .set({ deletedAt: now })
+    .where(and(eq(websocketExamples.requestId, requestId), isNull(websocketExamples.deletedAt)))
     .run()
 }
 
@@ -635,6 +707,80 @@ function ensureItemExists(tx: Database, itemType: TaggableItemType, itemId: stri
   if (!exists) {
     throw new Error(itemType === 'folder' ? 'Folder not found' : 'Request not found')
   }
+}
+
+function deleteFolderFromPlan(tx: Database, rootFolderId: string) {
+  const rootFolder = tx
+    .select({ id: folders.id })
+    .from(folders)
+    .where(and(eq(folders.id, rootFolderId), isNull(folders.deletedAt)))
+    .get()
+
+  if (!rootFolder) {
+    throw new Error('Folder not found')
+  }
+
+  const folderRows = tx
+    .select({ id: folders.id, parentId: folders.parentId })
+    .from(folders)
+    .where(isNull(folders.deletedAt))
+    .all()
+
+  const subtreeFolderIds = new Set<string>([rootFolderId])
+  let changed = true
+  while (changed) {
+    changed = false
+    folderRows.forEach(folder => {
+      if (folder.parentId && subtreeFolderIds.has(folder.parentId) && !subtreeFolderIds.has(folder.id)) {
+        subtreeFolderIds.add(folder.id)
+        changed = true
+      }
+    })
+  }
+
+  const folderIds = Array.from(subtreeFolderIds)
+  const requestIds = tx
+    .select({ itemId: treeItems.itemId })
+    .from(treeItems)
+    .where(and(eq(treeItems.itemType, 'request'), inArray(treeItems.parentFolderId, folderIds), isNull(treeItems.deletedAt)))
+    .all()
+    .map(row => row.itemId)
+
+  const now = Date.now()
+  tx.update(folders)
+    .set({ deletedAt: now })
+    .where(and(inArray(folders.id, folderIds), isNull(folders.deletedAt)))
+    .run()
+
+  tx.update(treeItems)
+    .set({ deletedAt: now })
+    .where(
+      and(
+        isNull(treeItems.deletedAt),
+        inArray(treeItems.itemType, ['folder', 'request']),
+        inArray(treeItems.itemId, [...folderIds, ...requestIds])
+      )
+    )
+    .run()
+
+  if (requestIds.length === 0) {
+    return
+  }
+
+  tx.update(requests)
+    .set({ deletedAt: now })
+    .where(and(inArray(requests.id, requestIds), isNull(requests.deletedAt)))
+    .run()
+
+  tx.update(requestExamples)
+    .set({ deletedAt: now })
+    .where(and(inArray(requestExamples.requestId, requestIds), isNull(requestExamples.deletedAt)))
+    .run()
+
+  tx.update(websocketExamples)
+    .set({ deletedAt: now })
+    .where(and(inArray(websocketExamples.requestId, requestIds), isNull(websocketExamples.deletedAt)))
+    .run()
 }
 
 function ensureNoTagAssignmentConflicts(

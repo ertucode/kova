@@ -310,6 +310,23 @@ async function buildSystemPrompt(sessionId: string) {
         questions: [{ id: 'question-1', label: 'question title', details: 'what must be clarified' }],
         warnings: [{ id: 'warning-1', message: 'warning text' }],
         foldersToCreate: [{ id: 'folder-1', parentFolderId: null, name: 'Folder Name' }],
+        foldersToUpdate: [
+          {
+            folderId: 'existing-folder-id',
+            name: 'Updated Folder Name',
+            description: '',
+            headers: '',
+            auth: { type: 'inherit' },
+            preRequestScript: '',
+            postRequestScript: '',
+            runConfig: {
+              selectionMode: 'tests-only',
+              selectedRequestIds: [],
+              executionMode: 'sequential',
+              continueOnFailure: true,
+            },
+          },
+        ],
         requestsToCreate: [
           {
             id: 'request-1',
@@ -336,6 +353,8 @@ async function buildSystemPrompt(sessionId: string) {
           },
         ],
         requestsToUpdate: [],
+        requestsToDelete: [{ requestId: 'request-id' }],
+        foldersToDelete: [{ folderId: 'folder-id' }],
         environmentUpdates: [{ environmentId: 'env-id', environmentName: 'Local', variables: [{ key: 'baseUrl', value: 'https://api.example.com' }] }],
       },
       null,

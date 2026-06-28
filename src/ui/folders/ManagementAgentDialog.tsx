@@ -425,11 +425,20 @@ function PlanView({
     plan.foldersToCreate.length > 0
       ? <PlanList key="folders" title="Folders to Create" items={plan.foldersToCreate.map(folder => `${folder.name}\n${formatPlannedParent(folder.parentFolderId, folder.parentScope, explorerItemMap)}`)} />
       : null,
+    plan.foldersToUpdate.length > 0
+      ? <PlanList key="folders-update" title="Folders to Update" items={plan.foldersToUpdate.map(folder => formatFolderUpdate(folder.folderId, folder.name, explorerItemMap))} />
+      : null,
     plan.requestsToCreate.length > 0
       ? <RequestPlanSection key="requests-create" title="Requests to Create" requests={plan.requestsToCreate} />
       : null,
     plan.requestsToUpdate.length > 0
       ? <RequestPlanSection key="requests-update" title="Requests to Update" requests={plan.requestsToUpdate} />
+      : null,
+    plan.requestsToDelete.length > 0
+      ? <PlanList key="requests-delete" title="Requests to Delete" items={plan.requestsToDelete.map(request => formatDeletionTarget(explorerItemMap, 'request', request.requestId))} />
+      : null,
+    plan.foldersToDelete.length > 0
+      ? <PlanList key="folders-delete" title="Folders to Delete" items={plan.foldersToDelete.map(folder => formatDeletionTarget(explorerItemMap, 'folder', folder.folderId))} />
       : null,
     plan.environmentUpdates.length > 0
       ? <PlanList key="environments" title="Environment Updates" items={plan.environmentUpdates.map(update => `${update.environmentName || update.environmentId}\n${update.variables.map(variable => `${variable.key}=${variable.value}`).join('\n')}`)} />
@@ -619,6 +628,19 @@ function formatPlannedParent(
 
 function formatTagSummary(name: string, color: string | null) {
   return color ? `${name}\nColor: ${color}` : `${name}\nColor: none`
+}
+
+function formatFolderUpdate(folderId: string, nextName: string, explorerItemMap: Map<string, ExplorerItem>) {
+  const currentName = getExplorerItemLabel(explorerItemMap, 'folder', folderId)
+  return `${currentName}\nNext name: ${nextName}`
+}
+
+function formatDeletionTarget(
+  explorerItemMap: Map<string, ExplorerItem>,
+  itemType: 'folder' | 'request',
+  itemId: string
+) {
+  return `${itemType}: ${getExplorerItemLabel(explorerItemMap, itemType, itemId)}`
 }
 
 function getTagLabel(tagMap: Map<string, TagRecord>, tagId: string) {
