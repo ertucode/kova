@@ -21,7 +21,9 @@ import {
   type ManagementAgentWorkspaceState,
 } from '../../common/ManagementAgent.js'
 import { normalizeTagColor, type TaggableItemType } from '../../common/Tags.js'
+import { deleteFolderWithOperation } from './folders.js'
 import { getDb } from './index.js'
+import { deleteRequestWithOperation } from './requests.js'
 import {
   environments,
   folders,
@@ -461,37 +463,8 @@ function updateRequestFromPlan(tx: Database, request: ManagementAgentRequestUpda
     .run()
 }
 
-function deleteRequestFromPlan(tx: Database, requestId: string) {
-  const request = tx
-    .select({ id: requests.id })
-    .from(requests)
-    .where(and(eq(requests.id, requestId), isNull(requests.deletedAt)))
-    .get()
-
-  if (!request) {
-    throw new Error('Request not found')
-  }
-
-  const now = Date.now()
-  tx.update(requests)
-    .set({ deletedAt: now })
-    .where(and(eq(requests.id, requestId), isNull(requests.deletedAt)))
-    .run()
-
-  tx.update(treeItems)
-    .set({ deletedAt: now })
-    .where(and(eq(treeItems.itemType, 'request'), eq(treeItems.itemId, requestId), isNull(treeItems.deletedAt)))
-    .run()
-
-  tx.update(requestExamples)
-    .set({ deletedAt: now })
-    .where(and(eq(requestExamples.requestId, requestId), isNull(requestExamples.deletedAt)))
-    .run()
-
-  tx.update(websocketExamples)
-    .set({ deletedAt: now })
-    .where(and(eq(websocketExamples.requestId, requestId), isNull(websocketExamples.deletedAt)))
-    .run()
+export function deleteRequestFromPlan(tx: Database, requestId: string) {
+  deleteRequestWithOperation(tx, requestId)
 }
 
 function applyEnvironmentUpdate(tx: Database, environmentId: string, variables: Array<{ key: string; value: string }>) {
@@ -709,78 +682,8 @@ function ensureItemExists(tx: Database, itemType: TaggableItemType, itemId: stri
   }
 }
 
-function deleteFolderFromPlan(tx: Database, rootFolderId: string) {
-  const rootFolder = tx
-    .select({ id: folders.id })
-    .from(folders)
-    .where(and(eq(folders.id, rootFolderId), isNull(folders.deletedAt)))
-    .get()
-
-  if (!rootFolder) {
-    throw new Error('Folder not found')
-  }
-
-  const folderRows = tx
-    .select({ id: folders.id, parentId: folders.parentId })
-    .from(folders)
-    .where(isNull(folders.deletedAt))
-    .all()
-
-  const subtreeFolderIds = new Set<string>([rootFolderId])
-  let changed = true
-  while (changed) {
-    changed = false
-    folderRows.forEach(folder => {
-      if (folder.parentId && subtreeFolderIds.has(folder.parentId) && !subtreeFolderIds.has(folder.id)) {
-        subtreeFolderIds.add(folder.id)
-        changed = true
-      }
-    })
-  }
-
-  const folderIds = Array.from(subtreeFolderIds)
-  const requestIds = tx
-    .select({ itemId: treeItems.itemId })
-    .from(treeItems)
-    .where(and(eq(treeItems.itemType, 'request'), inArray(treeItems.parentFolderId, folderIds), isNull(treeItems.deletedAt)))
-    .all()
-    .map(row => row.itemId)
-
-  const now = Date.now()
-  tx.update(folders)
-    .set({ deletedAt: now })
-    .where(and(inArray(folders.id, folderIds), isNull(folders.deletedAt)))
-    .run()
-
-  tx.update(treeItems)
-    .set({ deletedAt: now })
-    .where(
-      and(
-        isNull(treeItems.deletedAt),
-        inArray(treeItems.itemType, ['folder', 'request']),
-        inArray(treeItems.itemId, [...folderIds, ...requestIds])
-      )
-    )
-    .run()
-
-  if (requestIds.length === 0) {
-    return
-  }
-
-  tx.update(requests)
-    .set({ deletedAt: now })
-    .where(and(inArray(requests.id, requestIds), isNull(requests.deletedAt)))
-    .run()
-
-  tx.update(requestExamples)
-    .set({ deletedAt: now })
-    .where(and(inArray(requestExamples.requestId, requestIds), isNull(requestExamples.deletedAt)))
-    .run()
-
-  tx.update(websocketExamples)
-    .set({ deletedAt: now })
-    .where(and(inArray(websocketExamples.requestId, requestIds), isNull(websocketExamples.deletedAt)))
-    .run()
+export function deleteFolderFromPlan(tx: Database, rootFolderId: string) {
+  deleteFolderWithOperation(tx, rootFolderId)
 }
 
 function ensureNoTagAssignmentConflicts(

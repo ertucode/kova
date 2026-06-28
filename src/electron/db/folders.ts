@@ -156,92 +156,9 @@ export async function deleteFolder(input: DeleteFolderInput): Promise<GenericRes
 
   try {
     const deleted = db.transaction(tx => {
-      const rootFolder = tx
-        .select({ id: folders.id, name: folders.name })
-        .from(folders)
-        .where(and(eq(folders.id, input.id), isNull(folders.deletedAt)))
-        .get()
-
-      if (!rootFolder) {
-        throw new Error('Folder not found')
+      return {
+        operation: deleteFolderWithOperation(tx, input.id),
       }
-
-      const folderRows = tx
-        .select({ id: folders.id, parentId: folders.parentId })
-        .from(folders)
-        .where(isNull(folders.deletedAt))
-        .all()
-
-      const subtreeFolderIds = new Set<string>([input.id])
-      let changed = true
-      while (changed) {
-        changed = false
-        folderRows.forEach(folder => {
-          if (folder.parentId && subtreeFolderIds.has(folder.parentId) && !subtreeFolderIds.has(folder.id)) {
-            subtreeFolderIds.add(folder.id)
-            changed = true
-          }
-        })
-      }
-
-      const folderIds = Array.from(subtreeFolderIds)
-      const requestIds = tx
-        .select({ itemId: treeItems.itemId })
-        .from(treeItems)
-        .where(and(eq(treeItems.itemType, 'request'), inArray(treeItems.parentFolderId, folderIds), isNull(treeItems.deletedAt)))
-        .all()
-        .map(row => row.itemId)
-
-      const now = Date.now()
-      const operation = insertOperation(tx, {
-        operationType: 'delete-folder',
-        title: `Deleted folder ${rootFolder.name}`,
-        summary: requestIds.length === 0 ? 'Folder deleted.' : `Deleted folder and ${requestIds.length} request${requestIds.length === 1 ? '' : 's'}.`,
-        createdAt: now,
-        metadata: {
-          rootItemType: 'folder',
-          rootItemId: rootFolder.id,
-          rootItemName: rootFolder.name,
-          deletedAt: now,
-          folderIds,
-          requestIds,
-        },
-      })
-
-      tx.update(folders)
-        .set({ deletedAt: now })
-        .where(and(inArray(folders.id, folderIds), isNull(folders.deletedAt)))
-        .run()
-
-      tx.update(treeItems)
-        .set({ deletedAt: now })
-        .where(
-          and(
-            isNull(treeItems.deletedAt),
-            inArray(treeItems.itemType, ['folder', 'request']),
-            inArray(treeItems.itemId, [...folderIds, ...requestIds])
-          )
-        )
-        .run()
-
-      if (requestIds.length > 0) {
-        tx.update(requests)
-          .set({ deletedAt: now })
-          .where(and(inArray(requests.id, requestIds), isNull(requests.deletedAt)))
-          .run()
-
-        tx.update(requestExamples)
-          .set({ deletedAt: now })
-          .where(and(inArray(requestExamples.requestId, requestIds), isNull(requestExamples.deletedAt)))
-          .run()
-
-        tx.update(websocketExamples)
-          .set({ deletedAt: now })
-          .where(and(inArray(websocketExamples.requestId, requestIds), isNull(websocketExamples.deletedAt)))
-          .run()
-      }
-
-      return { operation }
     })
 
     return Result.Success(deleted)
@@ -251,6 +168,95 @@ export async function deleteFolder(input: DeleteFolderInput): Promise<GenericRes
     }
     return GenericError.Unknown(error)
   }
+}
+
+export function deleteFolderWithOperation(tx: ReturnType<typeof getDb>, rootFolderId: string) {
+  const rootFolder = tx
+    .select({ id: folders.id, name: folders.name })
+    .from(folders)
+    .where(and(eq(folders.id, rootFolderId), isNull(folders.deletedAt)))
+    .get()
+
+  if (!rootFolder) {
+    throw new Error('Folder not found')
+  }
+
+  const folderRows = tx
+    .select({ id: folders.id, parentId: folders.parentId })
+    .from(folders)
+    .where(isNull(folders.deletedAt))
+    .all()
+
+  const subtreeFolderIds = new Set<string>([rootFolderId])
+  let changed = true
+  while (changed) {
+    changed = false
+    folderRows.forEach(folder => {
+      if (folder.parentId && subtreeFolderIds.has(folder.parentId) && !subtreeFolderIds.has(folder.id)) {
+        subtreeFolderIds.add(folder.id)
+        changed = true
+      }
+    })
+  }
+
+  const folderIds = Array.from(subtreeFolderIds)
+  const requestIds = tx
+    .select({ itemId: treeItems.itemId })
+    .from(treeItems)
+    .where(and(eq(treeItems.itemType, 'request'), inArray(treeItems.parentFolderId, folderIds), isNull(treeItems.deletedAt)))
+    .all()
+    .map(row => row.itemId)
+
+  const now = Date.now()
+  const operation = insertOperation(tx, {
+    operationType: 'delete-folder',
+    title: `Deleted folder ${rootFolder.name}`,
+    summary: requestIds.length === 0 ? 'Folder deleted.' : `Deleted folder and ${requestIds.length} request${requestIds.length === 1 ? '' : 's'}.`,
+    createdAt: now,
+    metadata: {
+      rootItemType: 'folder',
+      rootItemId: rootFolder.id,
+      rootItemName: rootFolder.name,
+      deletedAt: now,
+      folderIds,
+      requestIds,
+    },
+  })
+
+  tx.update(folders)
+    .set({ deletedAt: now })
+    .where(and(inArray(folders.id, folderIds), isNull(folders.deletedAt)))
+    .run()
+
+  tx.update(treeItems)
+    .set({ deletedAt: now })
+    .where(
+      and(
+        isNull(treeItems.deletedAt),
+        inArray(treeItems.itemType, ['folder', 'request']),
+        inArray(treeItems.itemId, [...folderIds, ...requestIds])
+      )
+    )
+    .run()
+
+  if (requestIds.length > 0) {
+    tx.update(requests)
+      .set({ deletedAt: now })
+      .where(and(inArray(requests.id, requestIds), isNull(requests.deletedAt)))
+      .run()
+
+    tx.update(requestExamples)
+      .set({ deletedAt: now })
+      .where(and(inArray(requestExamples.requestId, requestIds), isNull(requestExamples.deletedAt)))
+      .run()
+
+    tx.update(websocketExamples)
+      .set({ deletedAt: now })
+      .where(and(inArray(websocketExamples.requestId, requestIds), isNull(websocketExamples.deletedAt)))
+      .run()
+  }
+
+  return operation
 }
 
 export async function getFolderAncestorChain(folderId: string | null): Promise<FolderRecord[]> {

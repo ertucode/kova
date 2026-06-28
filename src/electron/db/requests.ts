@@ -246,47 +246,9 @@ export async function deleteRequest(input: DeleteRequestInput): Promise<GenericR
 
   try {
     const deleted = db.transaction(tx => {
-      const request = tx
-        .select({ id: requests.id, name: requests.name })
-        .from(requests)
-        .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
-        .get()
-
-      if (!request) {
-        throw new Error('Request not found')
+      return {
+        operation: deleteRequestWithOperation(tx, input.id),
       }
-
-      const now = Date.now()
-      const operation = insertOperation(tx, {
-        operationType: 'delete-request',
-        title: `Deleted request ${request.name}`,
-        summary: 'Request deleted.',
-        createdAt: now,
-        metadata: {
-          rootItemType: 'request',
-          rootItemId: request.id,
-          rootItemName: request.name,
-          deletedAt: now,
-          folderIds: [],
-          requestIds: [request.id],
-        },
-      })
-
-      const result = tx
-        .update(requests)
-        .set({ deletedAt: now })
-        .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
-        .run()
-
-      if (result.changes === 0) {
-        throw new Error('Request not found')
-      }
-
-      markTreeItemDeleted(tx, { itemType: 'request', itemId: input.id, deletedAt: now })
-      markRequestExamplesDeleted(input.id, now, tx)
-      markWebSocketExamplesDeleted(input.id, now, tx)
-
-      return { operation }
     })
 
     return Result.Success(deleted)
@@ -296,6 +258,50 @@ export async function deleteRequest(input: DeleteRequestInput): Promise<GenericR
     }
     return GenericError.Unknown(error)
   }
+}
+
+export function deleteRequestWithOperation(tx: ReturnType<typeof getDb>, requestId: string) {
+  const request = tx
+    .select({ id: requests.id, name: requests.name })
+    .from(requests)
+    .where(and(eq(requests.id, requestId), isNull(requests.deletedAt)))
+    .get()
+
+  if (!request) {
+    throw new Error('Request not found')
+  }
+
+  const now = Date.now()
+  const operation = insertOperation(tx, {
+    operationType: 'delete-request',
+    title: `Deleted request ${request.name}`,
+    summary: 'Request deleted.',
+    createdAt: now,
+    metadata: {
+      rootItemType: 'request',
+      rootItemId: request.id,
+      rootItemName: request.name,
+      deletedAt: now,
+      folderIds: [],
+      requestIds: [request.id],
+    },
+  })
+
+  const result = tx
+    .update(requests)
+    .set({ deletedAt: now })
+    .where(and(eq(requests.id, requestId), isNull(requests.deletedAt)))
+    .run()
+
+  if (result.changes === 0) {
+    throw new Error('Request not found')
+  }
+
+  markTreeItemDeleted(tx, { itemType: 'request', itemId: requestId, deletedAt: now })
+  markRequestExamplesDeleted(requestId, now, tx)
+  markWebSocketExamplesDeleted(requestId, now, tx)
+
+  return operation
 }
 
 export async function duplicateRequest(input: DuplicateRequestInput): Promise<GenericResult<HttpRequestRecord>> {
