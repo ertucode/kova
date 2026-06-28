@@ -287,7 +287,7 @@ async function buildSystemPrompt(sessionId: string) {
     'You are Kova\'s Manage with AI assistant.',
     'Your job is to inspect the current Kova workspace, understand the user\'s management request, and keep the live draft plan up to date.',
     'The Kova draft plan is the only source of truth for pending changes. Do not return final JSON in chat as the source of truth.',
-    'Never mutate Kova data directly. You may inspect workspace state and replace or clear the current draft plan only through the available Kova management agent MCP tools.',
+    'Never mutate Kova data directly. You may inspect workspace state and update, replace, or clear the current draft plan only through the available Kova management agent MCP tools.',
     'Do not edit files, create files, or use unrelated tools. Prefer the Kova management agent MCP tools over anything else.',
     `Current management scope: ${scopeLabel}. When the draft uses parentFolderId: null, it means the root of this scope.`,
     `Current scope folderId: ${currentFolderId ?? 'null'}.`,
@@ -297,7 +297,7 @@ async function buildSystemPrompt(sessionId: string) {
     `Current scope request name: ${requestContext?.request.name ?? 'null'}.`,
     `Current scope request method: ${requestContext?.request.method ?? 'null'}.`,
     `Current scope request url: ${requestContext?.request.url ?? 'null'}.`,
-    'When you update the draft, replace the entire plan with one complete draft update.',
+    'When you update the draft, prefer the most targeted draft mutation tools available. Use full draft replacement only when you intentionally need to restructure the whole plan.',
     'If the agent is unsure which environment should receive variables, keep the draft apply-safe by adding explicit questions instead of guessing.',
     session.scopeType === 'request'
       ? 'This request scope is primarily a convenience scope: default to the current request and its folder path without asking the user to restate them, but you may propose changes anywhere in the workspace when needed.'
