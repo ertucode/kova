@@ -63,6 +63,7 @@ describe('postman export', () => {
           websocketAutoSendEnabled: false,
           websocketAutoSendMessage: '',
           websocketAutoSendIntervalSeconds: 0,
+          ...mcpRequestFieldDefaults(),
           saveToHistory: true,
           createdAt: 1,
           deletedAt: null,
@@ -193,6 +194,7 @@ describe('postman export', () => {
           websocketAutoSendEnabled: false,
           websocketAutoSendMessage: '',
           websocketAutoSendIntervalSeconds: 0,
+          ...mcpRequestFieldDefaults(),
           saveToHistory: true,
           createdAt: 1,
           deletedAt: null,
@@ -243,6 +245,7 @@ describe('postman export', () => {
           websocketAutoSendEnabled: false,
           websocketAutoSendMessage: '',
           websocketAutoSendIntervalSeconds: 0,
+          ...mcpRequestFieldDefaults(),
           saveToHistory: true,
           createdAt: 1,
           deletedAt: null,
@@ -297,6 +300,7 @@ describe('postman export', () => {
           websocketAutoSendEnabled: false,
           websocketAutoSendMessage: '',
           websocketAutoSendIntervalSeconds: 0,
+          ...mcpRequestFieldDefaults(),
           saveToHistory: true,
           createdAt: 1,
           deletedAt: null,
@@ -317,3 +321,16 @@ describe('postman export', () => {
     })
   })
 })
+
+function mcpRequestFieldDefaults() {
+  return {
+    mcpTransport: undefined,
+    mcpServerUrl: undefined,
+    mcpAccessToken: undefined,
+    mcpSelectedToolName: undefined,
+    mcpSelectedResourceUri: undefined,
+    mcpSelectedPromptName: undefined,
+    mcpArguments: undefined,
+    mcpIntrospection: undefined,
+  }
+}

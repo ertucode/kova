@@ -287,6 +287,7 @@ describe('applyScriptCallRequestOverrides', () => {
         websocketAutoSendEnabled: false,
         websocketAutoSendMessage: '',
         websocketAutoSendIntervalSeconds: 0,
+        ...mcpRequestFieldDefaults(),
         saveToHistory: false,
         createdAt: 1,
         deletedAt: null,
@@ -422,6 +423,7 @@ describe('applyScriptCallRequestOverrides', () => {
         websocketAutoSendEnabled: false,
         websocketAutoSendMessage: '',
         websocketAutoSendIntervalSeconds: 0,
+        ...mcpRequestFieldDefaults(),
         saveToHistory: false,
         createdAt: 1,
         deletedAt: null,
@@ -538,6 +540,7 @@ describe('applyScriptCallRequestOverrides', () => {
         websocketAutoSendEnabled: false,
         websocketAutoSendMessage: '',
         websocketAutoSendIntervalSeconds: 0,
+        ...mcpRequestFieldDefaults(),
         saveToHistory: false,
         createdAt: 1,
         deletedAt: null,
@@ -661,5 +664,18 @@ function createPreparedRequest(input?: {
     },
     postRequestScriptSources: [],
     testScriptSources: [],
+  }
+}
+
+function mcpRequestFieldDefaults() {
+  return {
+    mcpTransport: undefined,
+    mcpServerUrl: undefined,
+    mcpAccessToken: undefined,
+    mcpSelectedToolName: undefined,
+    mcpSelectedResourceUri: undefined,
+    mcpSelectedPromptName: undefined,
+    mcpArguments: undefined,
+    mcpIntrospection: undefined,
   }
 }

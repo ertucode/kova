@@ -1,0 +1,1 @@
+ALTER TABLE `mcp_request_details` ADD `access_token` text DEFAULT '' NOT NULL;

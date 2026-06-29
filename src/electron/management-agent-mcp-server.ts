@@ -68,6 +68,13 @@ export async function startManagementAgentMcpServer(): Promise<ManagementAgentMc
     throw new Error('Management agent MCP server did not expose a TCP port.')
   }
 
+  if (process.env.NODE_ENV === 'development') {
+    console.info('[management-agent-mcp] listening', {
+      url: `http://127.0.0.1:${String(address.port)}${MCP_PATHNAME}`,
+      token,
+    })
+  }
+
   return {
     url: `http://127.0.0.1:${String(address.port)}${MCP_PATHNAME}`,
     token,

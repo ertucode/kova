@@ -655,6 +655,15 @@ function CreateMenuButton() {
           <li>
             <button
               type="button"
+              onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'mcp'))}
+            >
+              <FileCode2Icon className="size-4" />
+              Add MCP Request
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
               onClick={() =>
                 runAction(() => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'workspace' } }))
               }

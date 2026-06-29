@@ -16,7 +16,7 @@ export type ExplorerFolderItem = ExplorerItemBase & {
 export type ExplorerRequestItem = ExplorerItemBase & {
   itemType: 'request'
   parentFolderId: string | null
-  requestType: 'http' | 'websocket'
+  requestType: 'http' | 'websocket' | 'mcp'
   method: string
   url: string
 }

@@ -235,6 +235,9 @@ export function ExplorerRow({
                 }
               : undefined
           }
+          onAddMcpRequest={
+            node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'mcp') : undefined
+          }
           onAddWebSocketRequest={
             node.itemType === 'folder'
               ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'websocket')
@@ -317,9 +320,13 @@ function hasActiveDescendantFolderRun(node: TreeNode, activeRunIdByFolderId: Rec
   return false
 }
 
-export function RequestMethodTag({ method, requestType }: { method: string; requestType: 'http' | 'websocket' }) {
+export function RequestMethodTag({ method, requestType }: { method: string; requestType: 'http' | 'websocket' | 'mcp' }) {
   if (requestType === 'websocket') {
     return <div className="w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em] text-accent">WS</div>
+  }
+
+  if (requestType === 'mcp') {
+    return <div className="w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em] text-secondary">MCP</div>
   }
 
   const tone = getMethodTone(method)
@@ -459,6 +466,7 @@ function ExplorerMenu({
   onAddFolder,
   onAddHttpRequest,
   onAddRequestFromClipboard,
+  onAddMcpRequest,
   onAddWebSocketRequest,
   onFlattenFolder,
   onAssignTags,
@@ -473,6 +481,7 @@ function ExplorerMenu({
   onAddFolder?: () => void
   onAddHttpRequest?: () => void
   onAddRequestFromClipboard?: () => void | Promise<void>
+  onAddMcpRequest?: () => void
   onAddWebSocketRequest?: () => void
   onFlattenFolder?: () => void
   onAssignTags?: () => void
@@ -603,6 +612,9 @@ function ExplorerMenu({
         onAddWebSocketRequest
           ? { type: 'item', icon: <PlusIcon className="size-4" />, label: 'Add WebSocket', action: onAddWebSocketRequest }
           : null,
+        onAddMcpRequest
+          ? { type: 'item', icon: <PlusIcon className="size-4" />, label: 'Add MCP Request', action: onAddMcpRequest }
+          : null,
         { type: 'divider' },
         onAssignTags ? { type: 'item', icon: <TagIcon className="size-4" />, label: 'Assign Tags', action: onAssignTags } : null,
         onFlattenFolder
@@ -677,6 +689,7 @@ function ExplorerMenu({
     onAddFolder,
     onAddHttpRequest,
     onAddRequestFromClipboard,
+    onAddMcpRequest,
     onAddWebSocketRequest,
     onAssignTags,
     onDelete,

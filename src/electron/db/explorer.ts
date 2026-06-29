@@ -62,7 +62,7 @@ export async function listExplorerItems(): Promise<ExplorerItem[]> {
       id: request.id,
       parentFolderId: row.parentFolderId,
       name: request.name,
-      requestType: request.requestType as 'http' | 'websocket',
+      requestType: request.requestType as 'http' | 'websocket' | 'mcp',
       method: request.method,
       url: request.url,
       position: row.position,

@@ -15,7 +15,28 @@ export type SendRequestMetadata = {
   retryCount: number
 }
 
-export type RequestType = 'http' | 'websocket'
+export type RequestType = 'http' | 'websocket' | 'mcp'
+
+export type McpTransport = 'http'
+
+export type McpToolSummary = {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown> | null
+}
+
+export type McpResourceSummary = {
+  uri: string
+  name: string
+  description: string
+  mimeType: string | null
+}
+
+export type McpPromptSummary = {
+  name: string
+  description: string
+  arguments: Array<{ name: string; description: string; required: boolean }>
+}
 
 export type RequestBodyType = 'raw' | 'form-data' | 'x-www-form-urlencoded' | 'none' | 'graphql'
 
@@ -50,6 +71,14 @@ export type HttpRequestRecord = {
   websocketAutoSendEnabled: boolean
   websocketAutoSendMessage: string
   websocketAutoSendIntervalSeconds: number
+  mcpTransport: McpTransport | undefined
+  mcpServerUrl: string | undefined
+  mcpAccessToken: string | undefined
+  mcpSelectedToolName: string | undefined
+  mcpSelectedResourceUri: string | undefined
+  mcpSelectedPromptName: string | undefined
+  mcpArguments: string | undefined
+  mcpIntrospection: string | undefined
   saveToHistory: boolean
   createdAt: number
   deletedAt: number | null
@@ -92,6 +121,14 @@ export type UpdateRequestInput = {
   websocketAutoSendEnabled: boolean
   websocketAutoSendMessage: string
   websocketAutoSendIntervalSeconds: number
+  mcpTransport: McpTransport | undefined
+  mcpServerUrl: string | undefined
+  mcpAccessToken: string | undefined
+  mcpSelectedToolName: string | undefined
+  mcpSelectedResourceUri: string | undefined
+  mcpSelectedPromptName: string | undefined
+  mcpArguments: string | undefined
+  mcpIntrospection: string | undefined
   saveToHistory: boolean
 }
 
@@ -157,6 +194,31 @@ export type FetchGraphqlSchemaInput = {
 
 export type FetchGraphqlSchemaResponse = {
   schema: string
+}
+
+export type FetchMcpIntrospectionInput = {
+  requestId: string
+  transport: McpTransport
+  serverUrl: string
+  accessToken: string | undefined
+}
+
+export type InvokeMcpRequestInput = {
+  requestId: string
+  transport: McpTransport
+  serverUrl: string
+  accessToken: string | undefined
+  toolName: string
+  argumentsJson: string
+}
+
+export type FetchMcpIntrospectionResponse = {
+  serverName: string | null
+  serverVersion: string | null
+  tools: McpToolSummary[]
+  resources: McpResourceSummary[]
+  prompts: McpPromptSummary[]
+  introspection: string
 }
 
 export type CancelHttpRequestInput = {

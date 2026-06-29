@@ -15,7 +15,8 @@ import {
 } from './folderExplorerTypes'
 import type { RequestType } from '@common/Requests'
 
-const REQUEST_TYPES: RequestType[] = ['http', 'websocket']
+const REQUEST_TYPES: RequestType[] = ['http', 'websocket', 'mcp']
+const MCP_TRANSPORTS = ['http'] as const
 const RESPONSE_BODY_VIEWS = ['raw', 'table', 'visualizer'] as const
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
@@ -103,6 +104,14 @@ const requestDetailsDraftSchema = z.object({
   websocketAutoSendEnabled: z.boolean().default(false),
   websocketAutoSendMessage: z.string().default(''),
   websocketAutoSendIntervalSeconds: z.number().int().min(0).default(0),
+  mcpTransport: z.enum(MCP_TRANSPORTS).default('http'),
+  mcpServerUrl: z.string().default(''),
+  mcpAccessToken: z.string().default(''),
+  mcpSelectedToolName: z.string().default(''),
+  mcpSelectedResourceUri: z.string().default(''),
+  mcpSelectedPromptName: z.string().default(''),
+  mcpArguments: z.string().default(''),
+  mcpIntrospection: z.string().default(''),
   saveToHistory: z.boolean().default(true),
 })
 

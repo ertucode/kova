@@ -119,6 +119,14 @@ export function toRequestDetailsDraft(request: HttpRequestRecord): RequestDetail
     websocketAutoSendEnabled: request.websocketAutoSendEnabled,
     websocketAutoSendMessage: request.websocketAutoSendMessage,
     websocketAutoSendIntervalSeconds: request.websocketAutoSendIntervalSeconds,
+    mcpTransport: request.mcpTransport ?? 'http',
+    mcpServerUrl: request.mcpServerUrl ?? '',
+    mcpAccessToken: request.mcpAccessToken ?? '',
+    mcpSelectedToolName: request.mcpSelectedToolName ?? '',
+    mcpSelectedResourceUri: request.mcpSelectedResourceUri ?? '',
+    mcpSelectedPromptName: request.mcpSelectedPromptName ?? '',
+    mcpArguments: request.mcpArguments ?? '',
+    mcpIntrospection: request.mcpIntrospection ?? '',
     saveToHistory: request.saveToHistory,
   }
 }

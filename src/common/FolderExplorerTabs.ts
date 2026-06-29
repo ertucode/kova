@@ -7,8 +7,13 @@ export type RequestMetaTab =
   | 'headers'
   | 'auth'
   | 'path-params'
+  | 'explore'
+  | 'invoke'
+  | 'resources'
+  | 'prompts'
   | 'scripts'
   | 'tests'
+  | 'raw'
   | 'response-visualizer'
 
 export type FolderExplorerTabRecord = {

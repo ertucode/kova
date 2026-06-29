@@ -29,7 +29,7 @@ type FolderExplorerTabViewModel = {
   isSaving: boolean
   isDirty: boolean
   method: string | null
-  requestType: 'http' | 'websocket' | null
+  requestType: 'http' | 'websocket' | 'mcp' | null
   exampleType: 'http' | 'websocket' | null
 }
 
@@ -355,10 +355,14 @@ function RequestMethodGlyph({
   requestType,
 }: {
   method: string | null
-  requestType: 'http' | 'websocket' | null
+  requestType: 'http' | 'websocket' | 'mcp' | null
 }) {
   if (requestType === 'websocket') {
     return <span className="w-8 text-center text-[10px] font-semibold tracking-[0.12em] text-accent">WS</span>
+  }
+
+  if (requestType === 'mcp') {
+    return <span className="w-8 text-center text-[10px] font-semibold tracking-[0.12em] text-secondary">MCP</span>
   }
 
   if (!method) {

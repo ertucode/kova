@@ -13,6 +13,7 @@ import type {
   RequestMethod,
   RequestRawType,
   RequestType,
+  McpTransport,
   UpdateRequestInput,
   UpdateRequestResponseBodyViewPreferenceInput,
 } from '../../common/Requests.js'
@@ -21,15 +22,17 @@ import { getDb } from './index.js'
 import { markRequestExamplesDeleted } from './request-examples.js'
 import { markWebSocketExamplesDeleted } from './websocket-examples.js'
 import { insertOperation } from './operations.js'
-import { requests, treeItems } from './schema.js'
+import { mcpRequestDetails, requests, treeItems } from './schema.js'
 import { ensureParentFolderExists, insertTreeItem, insertTreeItemAtPosition, markTreeItemDeleted } from './tree-items.js'
 
 type RequestRow = typeof requests.$inferSelect
+type McpRequestDetailsRow = typeof mcpRequestDetails.$inferSelect
 
 const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 const REQUEST_BODY_TYPES: RequestBodyType[] = ['raw', 'form-data', 'x-www-form-urlencoded', 'none', 'graphql']
 const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
-const REQUEST_TYPES: RequestType[] = ['http', 'websocket']
+const REQUEST_TYPES: RequestType[] = ['http', 'websocket', 'mcp']
+const MCP_TRANSPORTS: McpTransport[] = ['http']
 const RESPONSE_BODY_VIEWS: ResponseBodyView[] = ['raw', 'table', 'visualizer']
 
 export async function createRequest(input: CreateRequestInput): Promise<GenericResult<HttpRequestRecord>> {
@@ -49,7 +52,7 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
       ensureParentFolderExists(tx, input.parentFolderId)
 
       const now = Date.now()
-        const request: RequestRow = {
+      const request: RequestRow = {
           id: crypto.randomUUID(),
           name,
         requestType: input.requestType,
@@ -83,11 +86,14 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
       }
 
       tx.insert(requests).values(request).run()
+      if (request.requestType === 'mcp') {
+        tx.insert(mcpRequestDetails).values(createDefaultMcpRequestDetailsRow(request.id)).run()
+      }
       insertTreeItem(tx, { parentFolderId: input.parentFolderId, itemType: 'request', itemId: request.id })
       return request
     })
 
-    return Result.Success(toRequestRecord(request))
+    return Result.Success(toRequestRecord(request, request.requestType === 'mcp' ? createDefaultMcpRequestDetailsRow(request.id) : null))
   } catch (error) {
     return GenericError.Unknown(error)
   }
@@ -97,17 +103,13 @@ export async function getRequest(input: GetRequestInput): Promise<GenericResult<
   const db = getDb()
 
   try {
-    const request = db
-      .select()
-      .from(requests)
-      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
-      .get()
+    const request = db.select().from(requests).where(and(eq(requests.id, input.id), isNull(requests.deletedAt))).get()
 
     if (!request) {
       return GenericError.Message('Request not found')
     }
 
-    return Result.Success(toRequestRecord(request))
+    return Result.Success(toRequestRecord(request, getMcpRequestDetailsOrNull(db, request.id, request.requestType as RequestType)))
   } catch (error) {
     return GenericError.Unknown(error)
   }
@@ -152,54 +154,97 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
       return GenericError.Message('Invalid preferred response body view')
     }
 
-    const result = db
-      .update(requests)
-      .set({
-        name,
-        requestType: input.requestType,
-        method: input.method,
-        url: input.url,
-        pathParams: input.pathParams,
-        searchParams: input.searchParams,
-        authJson: serializeHttpAuth(input.auth),
-        preRequestScript: input.preRequestScript,
-        postRequestScript: input.postRequestScript,
-        testScript: input.testScript,
-        responseVisualizer: input.responseVisualizer,
-        responseTableAccessor: input.responseTableAccessor,
-        preferredResponseBodyView: input.preferredResponseBodyView,
-        headers: input.headers,
-        body: input.body,
-        bodyType: input.bodyType,
-        rawType: input.rawType,
-        graphqlQuery: input.graphqlQuery,
-        graphqlVariables: input.graphqlVariables,
-        graphqlSchema: input.graphqlSchema,
-        websocketSubprotocols: input.websocketSubprotocols,
-        websocketOnOpenMessage: input.websocketOnOpenMessage,
-        websocketAutoSendEnabled: input.websocketAutoSendEnabled,
-        websocketAutoSendMessage: input.websocketAutoSendMessage,
-        websocketAutoSendIntervalSeconds: input.websocketAutoSendIntervalSeconds,
-        saveToHistory: input.saveToHistory,
-      })
-      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
-      .run()
+    const mcpTransport = input.mcpTransport ?? 'http'
+    if (!MCP_TRANSPORTS.includes(mcpTransport)) {
+      return GenericError.Message('Invalid MCP transport')
+    }
+
+    const mcpServerUrl = input.mcpServerUrl ?? ''
+    const mcpAccessToken = input.mcpAccessToken ?? ''
+    const mcpSelectedToolName = input.mcpSelectedToolName ?? ''
+    const mcpSelectedResourceUri = input.mcpSelectedResourceUri ?? ''
+    const mcpSelectedPromptName = input.mcpSelectedPromptName ?? ''
+    const mcpArguments = input.mcpArguments ?? ''
+    const mcpIntrospection = input.mcpIntrospection ?? ''
+
+    const result = db.transaction(tx => {
+      const updateResult = tx
+        .update(requests)
+        .set({
+          name,
+          requestType: input.requestType,
+          method: input.method,
+          url: input.url,
+          pathParams: input.pathParams,
+          searchParams: input.searchParams,
+          authJson: serializeHttpAuth(input.auth),
+          preRequestScript: input.preRequestScript,
+          postRequestScript: input.postRequestScript,
+          testScript: input.testScript,
+          responseVisualizer: input.responseVisualizer,
+          responseTableAccessor: input.responseTableAccessor,
+          preferredResponseBodyView: input.preferredResponseBodyView,
+          headers: input.headers,
+          body: input.body,
+          bodyType: input.bodyType,
+          rawType: input.rawType,
+          graphqlQuery: input.graphqlQuery,
+          graphqlVariables: input.graphqlVariables,
+          graphqlSchema: input.graphqlSchema,
+          websocketSubprotocols: input.websocketSubprotocols,
+          websocketOnOpenMessage: input.websocketOnOpenMessage,
+          websocketAutoSendEnabled: input.websocketAutoSendEnabled,
+          websocketAutoSendMessage: input.websocketAutoSendMessage,
+          websocketAutoSendIntervalSeconds: input.websocketAutoSendIntervalSeconds,
+          saveToHistory: input.saveToHistory,
+        })
+        .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
+        .run()
+
+      if (input.requestType === 'mcp') {
+        tx
+          .insert(mcpRequestDetails)
+          .values({
+            requestId: input.id,
+            transport: mcpTransport,
+            serverUrl: mcpServerUrl,
+            accessToken: mcpAccessToken,
+            selectedToolName: mcpSelectedToolName,
+            selectedResourceUri: mcpSelectedResourceUri,
+            selectedPromptName: mcpSelectedPromptName,
+            argumentsJson: mcpArguments,
+            introspectionJson: mcpIntrospection,
+          })
+          .onConflictDoUpdate({
+            target: mcpRequestDetails.requestId,
+            set: {
+              transport: mcpTransport,
+              serverUrl: mcpServerUrl,
+              accessToken: mcpAccessToken,
+              selectedToolName: mcpSelectedToolName,
+              selectedResourceUri: mcpSelectedResourceUri,
+              selectedPromptName: mcpSelectedPromptName,
+              argumentsJson: mcpArguments,
+              introspectionJson: mcpIntrospection,
+            },
+          })
+          .run()
+      }
+
+      return updateResult
+    })
 
     if (result.changes === 0) {
       return GenericError.Message('Request not found')
     }
 
-    const request = db
-      .select()
-      .from(requests)
-      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
-      .get()
+    const request = db.select().from(requests).where(and(eq(requests.id, input.id), isNull(requests.deletedAt))).get()
 
     if (!request) {
       return GenericError.Message('Request not found')
     }
 
-    return Result.Success(toRequestRecord(request))
+    return Result.Success(toRequestRecord(request, getMcpRequestDetailsOrNull(db, request.id, request.requestType as RequestType)))
   } catch (error) {
     return GenericError.Unknown(error)
   }
@@ -225,17 +270,13 @@ export async function updateRequestResponseBodyViewPreference(
       return GenericError.Message('Request not found')
     }
 
-    const request = db
-      .select()
-      .from(requests)
-      .where(and(eq(requests.id, input.id), isNull(requests.deletedAt)))
-      .get()
+    const request = db.select().from(requests).where(and(eq(requests.id, input.id), isNull(requests.deletedAt))).get()
 
     if (!request) {
       return GenericError.Message('Request not found')
     }
 
-    return Result.Success(toRequestRecord(request))
+    return Result.Success(toRequestRecord(request, getMcpRequestDetailsOrNull(db, request.id, request.requestType as RequestType)))
   } catch (error) {
     return GenericError.Unknown(error)
   }
@@ -297,6 +338,8 @@ export function deleteRequestWithOperation(tx: ReturnType<typeof getDb>, request
     throw new Error('Request not found')
   }
 
+  tx.delete(mcpRequestDetails).where(eq(mcpRequestDetails.requestId, requestId)).run()
+
   markTreeItemDeleted(tx, { itemType: 'request', itemId: requestId, deletedAt: now })
   markRequestExamplesDeleted(requestId, now, tx)
   markWebSocketExamplesDeleted(requestId, now, tx)
@@ -355,6 +398,24 @@ export async function duplicateRequest(input: DuplicateRequestInput): Promise<Ge
       }
 
       tx.insert(requests).values(request).run()
+      if (request.requestType === 'mcp') {
+        const sourceMcpRequestDetails = tx
+          .select()
+          .from(mcpRequestDetails)
+          .where(eq(mcpRequestDetails.requestId, sourceRequest.id))
+          .get()
+        tx
+          .insert(mcpRequestDetails)
+          .values(
+            sourceMcpRequestDetails
+              ? {
+                  ...sourceMcpRequestDetails,
+                  requestId: request.id,
+                }
+              : createDefaultMcpRequestDetailsRow(request.id)
+          )
+          .run()
+      }
       insertTreeItemAtPosition(tx, {
         parentFolderId: sourceTreeItem.parentFolderId,
         itemType: 'request',
@@ -364,13 +425,15 @@ export async function duplicateRequest(input: DuplicateRequestInput): Promise<Ge
       return request
     })
 
-    return Result.Success(toRequestRecord(duplicated))
+    return Result.Success(
+      toRequestRecord(duplicated, duplicated.requestType === 'mcp' ? getMcpRequestDetailsOrNull(db, duplicated.id, 'mcp') : null)
+    )
   } catch (error) {
     return GenericError.Unknown(error)
   }
 }
 
-function toRequestRecord(request: RequestRow): HttpRequestRecord {
+function toRequestRecord(request: RequestRow, mcpDetails: McpRequestDetailsRow | null): HttpRequestRecord {
   return {
     id: request.id,
     name: request.name,
@@ -400,10 +463,44 @@ function toRequestRecord(request: RequestRow): HttpRequestRecord {
     websocketAutoSendEnabled: request.websocketAutoSendEnabled,
     websocketAutoSendMessage: request.websocketAutoSendMessage,
     websocketAutoSendIntervalSeconds: request.websocketAutoSendIntervalSeconds,
+    mcpTransport: mcpDetails ? toMcpTransport(mcpDetails.transport) : 'http',
+    mcpServerUrl: mcpDetails?.serverUrl ?? '',
+    mcpAccessToken: mcpDetails?.accessToken ?? '',
+    mcpSelectedToolName: mcpDetails?.selectedToolName ?? '',
+    mcpSelectedResourceUri: mcpDetails?.selectedResourceUri ?? '',
+    mcpSelectedPromptName: mcpDetails?.selectedPromptName ?? '',
+    mcpArguments: mcpDetails?.argumentsJson ?? '',
+    mcpIntrospection: mcpDetails?.introspectionJson ?? '',
     saveToHistory: request.saveToHistory,
     createdAt: request.createdAt,
     deletedAt: request.deletedAt,
   }
+}
+
+function createDefaultMcpRequestDetailsRow(requestId: string): McpRequestDetailsRow {
+  return {
+    requestId,
+    transport: 'http',
+    serverUrl: '',
+    accessToken: '',
+    selectedToolName: '',
+    selectedResourceUri: '',
+    selectedPromptName: '',
+    argumentsJson: '',
+    introspectionJson: '',
+  }
+}
+
+function getMcpRequestDetailsOrNull(db: ReturnType<typeof getDb>, requestId: string, requestType: RequestType) {
+  if (requestType !== 'mcp') {
+    return null
+  }
+
+  return db.select().from(mcpRequestDetails).where(eq(mcpRequestDetails.requestId, requestId)).get() ?? null
+}
+
+function toMcpTransport(value: string): McpTransport {
+  return MCP_TRANSPORTS.includes(value as McpTransport) ? (value as McpTransport) : 'http'
 }
 
 function buildDuplicateRequestName(db: ReturnType<typeof getDb>, parentFolderId: string | null, sourceName: string) {

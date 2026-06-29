@@ -4,7 +4,7 @@ import type { FolderRecord } from '@common/Folders'
 import type { FolderRequestRunConfig } from '@common/FolderRuns'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import type { RequestExampleRecord } from '@common/RequestExamples'
-import type { HttpRequestRecord, RequestBodyType, RequestMethod, RequestRawType, RequestType } from '@common/Requests'
+import type { HttpRequestRecord, McpTransport, RequestBodyType, RequestMethod, RequestRawType, RequestType } from '@common/Requests'
 import type { WebSocketExampleRecord } from '@common/WebSocketExamples'
 
 export type TreeNode = ExplorerItem & {
@@ -69,6 +69,14 @@ export type RequestDetailsDraft = {
   websocketAutoSendEnabled: boolean
   websocketAutoSendMessage: string
   websocketAutoSendIntervalSeconds: number
+  mcpTransport: McpTransport
+  mcpServerUrl: string
+  mcpAccessToken: string
+  mcpSelectedToolName: string
+  mcpSelectedResourceUri: string
+  mcpSelectedPromptName: string
+  mcpArguments: string
+  mcpIntrospection: string
   saveToHistory: boolean
 }
 

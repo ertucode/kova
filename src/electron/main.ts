@@ -82,6 +82,7 @@ import {
   updateTag,
 } from './db/tags.js'
 import { cancelHttpRequest, fetchGraphqlSchema, sendRequest } from './send-request.js'
+import { fetchMcpIntrospection, invokeMcpRequest } from './mcp-runtime.js'
 import { cancelFolderRun, runFolderRequests } from './folder-request-runner.js'
 import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
@@ -865,6 +866,14 @@ app.on('ready', async () => {
       },
       makeRequest: makeRequestBridge,
     })
+  })
+
+  ipcHandle('fetchMcpIntrospection', async input => {
+    return fetchMcpIntrospection(input)
+  })
+
+  ipcHandle('invokeMcpRequest', async input => {
+    return invokeMcpRequest(input)
   })
 
   ipcHandle('cancelHttpRequest', async input => {

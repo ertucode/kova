@@ -8,6 +8,7 @@ import { RequestDetailsFields } from './RequestDetailsFields'
 import { UnsavedChangesDebugDialog } from './UnsavedChangesDebugDialog'
 import { WebSocketRequestDetailsFields } from './WebSocketRequestDetailsFields'
 import { WebSocketExampleDetailsFields } from './WebSocketExampleDetailsFields'
+import { McpRequestDetailsFields } from './McpRequestDetailsFields'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type EditorEntry } from './folderExplorerEditorStore'
@@ -144,6 +145,8 @@ export function DetailsPanel() {
           ) : renderDraft.itemType === 'request' ? (
             renderDraft.requestType === 'websocket' ? (
               <WebSocketRequestDetailsFields draft={renderDraft} />
+            ) : renderDraft.requestType === 'mcp' ? (
+              <McpRequestDetailsFields draft={renderDraft} />
             ) : (
               <RequestDetailsFields draft={renderDraft} />
             )

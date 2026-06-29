@@ -70,6 +70,21 @@ export const requests = sqliteTable(
   ]
 )
 
+export const mcpRequestDetails = sqliteTable(
+  'mcp_request_details',
+  {
+    requestId: text('request_id').primaryKey(),
+    transport: text('transport').notNull().default('http'),
+    serverUrl: text('server_url').notNull().default(''),
+    accessToken: text('access_token').notNull().default(''),
+    selectedToolName: text('selected_tool_name').notNull().default(''),
+    selectedResourceUri: text('selected_resource_uri').notNull().default(''),
+    selectedPromptName: text('selected_prompt_name').notNull().default(''),
+    argumentsJson: text('arguments_json').notNull().default(''),
+    introspectionJson: text('introspection_json').notNull().default(''),
+  }
+)
+
 export const environments = sqliteTable(
   'environments',
   {

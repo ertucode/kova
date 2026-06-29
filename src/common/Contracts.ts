@@ -59,6 +59,9 @@ import {
   type DuplicateRequestInput,
   type FetchGraphqlSchemaInput,
   type FetchGraphqlSchemaResponse,
+  type InvokeMcpRequestInput,
+  type FetchMcpIntrospectionInput,
+  type FetchMcpIntrospectionResponse,
   type DeleteRequestHistoryEntryInput,
   type DeleteRequestInput,
   type GetRequestHistoryCountInput,
@@ -293,6 +296,8 @@ export type EventResponseMapping = {
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
   fetchGraphqlSchema: Promise<GenericResult<FetchGraphqlSchemaResponse>>
+  invokeMcpRequest: Promise<GenericResult<SendRequestResponse>>
+  fetchMcpIntrospection: Promise<GenericResult<FetchMcpIntrospectionResponse>>
   cancelHttpRequest: Promise<GenericResult<void>>
   generateRequestCode: Promise<GenericResult<GenerateRequestCodeResponse>>
   loadScriptAiWorkspace: Promise<GenericResult<ScriptAiWorkspaceState>>
@@ -444,6 +449,8 @@ export type EventRequestMapping = {
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
   fetchGraphqlSchema: FetchGraphqlSchemaInput
+  invokeMcpRequest: InvokeMcpRequestInput
+  fetchMcpIntrospection: FetchMcpIntrospectionInput
   cancelHttpRequest: CancelHttpRequestInput
   generateRequestCode: GenerateRequestCodeInput
   loadScriptAiWorkspace: LoadScriptAiWorkspaceInput
@@ -609,6 +616,8 @@ export type WindowElectron = {
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
   fetchGraphqlSchema: (input: FetchGraphqlSchemaInput) => Promise<GenericResult<FetchGraphqlSchemaResponse>>
+  invokeMcpRequest: (input: InvokeMcpRequestInput) => Promise<GenericResult<SendRequestResponse>>
+  fetchMcpIntrospection: (input: FetchMcpIntrospectionInput) => Promise<GenericResult<FetchMcpIntrospectionResponse>>
   cancelHttpRequest: (input: CancelHttpRequestInput) => Promise<GenericResult<void>>
   generateRequestCode: (input: GenerateRequestCodeInput) => Promise<GenericResult<GenerateRequestCodeResponse>>
   loadScriptAiWorkspace: (input: LoadScriptAiWorkspaceInput) => Promise<GenericResult<ScriptAiWorkspaceState>>

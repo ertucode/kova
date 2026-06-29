@@ -571,6 +571,14 @@ function selectionsMatch(left: Selection | null, right: Selection | null) {
       websocketAutoSendEnabled: createResult.data.websocketAutoSendEnabled,
       websocketAutoSendMessage: createResult.data.websocketAutoSendMessage,
       websocketAutoSendIntervalSeconds: createResult.data.websocketAutoSendIntervalSeconds,
+      mcpTransport: createResult.data.mcpTransport,
+      mcpServerUrl: createResult.data.mcpServerUrl,
+      mcpAccessToken: createResult.data.mcpAccessToken,
+      mcpSelectedToolName: createResult.data.mcpSelectedToolName,
+      mcpSelectedResourceUri: createResult.data.mcpSelectedResourceUri,
+      mcpSelectedPromptName: createResult.data.mcpSelectedPromptName,
+      mcpArguments: createResult.data.mcpArguments,
+      mcpIntrospection: createResult.data.mcpIntrospection,
       saveToHistory: createResult.data.saveToHistory,
     })
     if (!updateResult.success) {
@@ -1391,6 +1399,14 @@ async function saveItem(selection: Selection, options?: { skipFormatting?: boole
             websocketAutoSendEnabled: draft.websocketAutoSendEnabled,
             websocketAutoSendMessage: draft.websocketAutoSendMessage,
             websocketAutoSendIntervalSeconds: draft.websocketAutoSendIntervalSeconds,
+            mcpTransport: draft.mcpTransport,
+            mcpServerUrl: draft.mcpServerUrl,
+            mcpAccessToken: draft.mcpAccessToken,
+            mcpSelectedToolName: draft.mcpSelectedToolName,
+            mcpSelectedResourceUri: draft.mcpSelectedResourceUri,
+            mcpSelectedPromptName: draft.mcpSelectedPromptName,
+            mcpArguments: draft.mcpArguments,
+            mcpIntrospection: draft.mcpIntrospection,
             saveToHistory: draft.saveToHistory,
           })
         : draft.exampleType === 'websocket'

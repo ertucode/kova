@@ -119,6 +119,8 @@ electron.contextBridge.exposeInMainWorld('electron', {
   moveExplorerItem: input => ipcInvoke('moveExplorerItem', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
   fetchGraphqlSchema: input => ipcInvoke('fetchGraphqlSchema', input),
+  invokeMcpRequest: input => ipcInvoke('invokeMcpRequest', input),
+  fetchMcpIntrospection: input => ipcInvoke('fetchMcpIntrospection', input),
   cancelHttpRequest: input => ipcInvoke('cancelHttpRequest', input),
   generateRequestCode: input => ipcInvoke('generateRequestCode', input),
   loadScriptAiWorkspace: input => ipcInvoke('loadScriptAiWorkspace', input),
