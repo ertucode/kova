@@ -41,6 +41,7 @@ import { parseKeyValueRows, stringifyKeyValueRows } from '../../common/KeyValueR
 type Database = BetterSQLite3Database<any>
 type ManagementAgentSessionRow = typeof managementAgentSessions.$inferSelect
 type ManagementAgentPlanRow = typeof managementAgentPlans.$inferSelect
+type RequestUpdateRow = Partial<typeof requests.$inferInsert>
 
 export async function createManagementAgentSessionRecord(input: ManagementAgentScope & { title: string; selectedModel: string | null }) {
   const db = getDb()
@@ -435,30 +436,74 @@ function insertRequestFromPlan(tx: Database, parentFolderId: string | null, requ
     .run()
 }
 
-function updateRequestFromPlan(tx: Database, request: ManagementAgentRequestUpdatePlanItem) {
+export function updateRequestFromPlan(tx: Database, request: ManagementAgentRequestUpdatePlanItem) {
+  const nextRequestValues: RequestUpdateRow = {}
+
+  if ('name' in request) {
+    nextRequestValues.name = request.name
+  }
+  if ('method' in request) {
+    nextRequestValues.method = request.method
+  }
+  if ('url' in request) {
+    nextRequestValues.url = request.url
+  }
+  if ('pathParams' in request) {
+    nextRequestValues.pathParams = request.pathParams
+  }
+  if ('searchParams' in request) {
+    nextRequestValues.searchParams = request.searchParams
+  }
+  if ('auth' in request) {
+    nextRequestValues.authJson = serializeHttpAuth(request.auth ?? createDefaultHttpAuth())
+  }
+  if ('preRequestScript' in request) {
+    nextRequestValues.preRequestScript = request.preRequestScript
+  }
+  if ('postRequestScript' in request) {
+    nextRequestValues.postRequestScript = request.postRequestScript
+  }
+  if ('testScript' in request) {
+    nextRequestValues.testScript = request.testScript
+  }
+  if ('responseVisualizer' in request) {
+    nextRequestValues.responseVisualizer = request.responseVisualizer
+  }
+  if ('responseTableAccessor' in request) {
+    nextRequestValues.responseTableAccessor = request.responseTableAccessor
+  }
+  if ('preferredResponseBodyView' in request) {
+    nextRequestValues.preferredResponseBodyView = request.preferredResponseBodyView
+    nextRequestValues.prefersResponseVisualizer = request.preferredResponseBodyView === 'visualizer'
+  }
+  if ('headers' in request) {
+    nextRequestValues.headers = request.headers
+  }
+  if ('body' in request) {
+    nextRequestValues.body = request.body
+  }
+  if ('bodyType' in request) {
+    nextRequestValues.bodyType = request.bodyType
+  }
+  if ('rawType' in request) {
+    nextRequestValues.rawType = request.rawType
+  }
+  if ('graphqlQuery' in request) {
+    nextRequestValues.graphqlQuery = request.graphqlQuery
+  }
+  if ('graphqlVariables' in request) {
+    nextRequestValues.graphqlVariables = request.graphqlVariables
+  }
+  if ('saveToHistory' in request) {
+    nextRequestValues.saveToHistory = request.saveToHistory
+  }
+
+  if (Object.keys(nextRequestValues).length === 0) {
+    return
+  }
+
   tx.update(requests)
-    .set({
-      name: request.name,
-      method: request.method,
-      url: request.url,
-      pathParams: request.pathParams,
-      searchParams: request.searchParams,
-      authJson: serializeHttpAuth(request.auth),
-      preRequestScript: request.preRequestScript,
-      postRequestScript: request.postRequestScript,
-      testScript: request.testScript,
-      responseVisualizer: request.responseVisualizer,
-      responseTableAccessor: request.responseTableAccessor,
-      preferredResponseBodyView: request.preferredResponseBodyView,
-      prefersResponseVisualizer: request.preferredResponseBodyView === 'visualizer',
-      headers: request.headers,
-      body: request.body,
-      bodyType: request.bodyType,
-      rawType: request.rawType,
-      graphqlQuery: request.graphqlQuery,
-      graphqlVariables: request.graphqlVariables,
-      saveToHistory: request.saveToHistory,
-    })
+    .set(nextRequestValues)
     .where(and(eq(requests.id, request.requestId), isNull(requests.deletedAt)))
     .run()
 }

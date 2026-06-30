@@ -2,10 +2,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { AUTH_LOCATIONS } from '../../common/Auth.js'
 import { FOLDER_REQUEST_EXECUTION_MODES, FOLDER_REQUEST_SELECTION_MODES } from '../../common/FolderRuns.js'
+import { Typescript } from '../../common/Typescript.js'
 import {
   type ManagementAgentFolderUpdatePlanItem,
   type ManagementAgentFolderPlanItem,
   type ManagementAgentPlan,
+  type ManagementAgentRequestUpdatePlanItem,
   normalizeManagementAgentPlan,
   REQUEST_BODY_TYPES,
   REQUEST_METHODS,
@@ -102,6 +104,32 @@ const requestCreatePlanItemSchema = requestPlanFieldsSchema.extend({
 const requestUpdatePlanItemSchema = requestPlanFieldsSchema.extend({
   requestId: z.string().trim().min(1),
 })
+const requestFieldChangeSchema = z.discriminatedUnion('field', [
+  z.object({ field: z.literal('name'), value: z.string() }),
+  z.object({ field: z.literal('method'), value: z.enum(REQUEST_METHODS) }),
+  z.object({ field: z.literal('url'), value: z.string() }),
+  z.object({ field: z.literal('pathParams'), value: z.string() }),
+  z.object({ field: z.literal('searchParams'), value: z.string() }),
+  z.object({ field: z.literal('auth'), value: authSchema }),
+  z.object({ field: z.literal('headers'), value: z.string() }),
+  z.object({ field: z.literal('body'), value: z.string() }),
+  z.object({ field: z.literal('bodyType'), value: z.enum(REQUEST_BODY_TYPES) }),
+  z.object({ field: z.literal('rawType'), value: z.enum(REQUEST_RAW_TYPES) }),
+  z.object({ field: z.literal('graphqlQuery'), value: z.string() }),
+  z.object({ field: z.literal('graphqlVariables'), value: z.string() }),
+  z.object({ field: z.literal('preRequestScript'), value: z.string() }),
+  z.object({ field: z.literal('postRequestScript'), value: z.string() }),
+  z.object({ field: z.literal('testScript'), value: z.string() }),
+  z.object({ field: z.literal('responseVisualizer'), value: z.string() }),
+  z.object({ field: z.literal('responseTableAccessor'), value: z.string() }),
+  z.object({ field: z.literal('preferredResponseBodyView'), value: z.enum(RESPONSE_BODY_VIEWS) }),
+  z.object({ field: z.literal('saveToHistory'), value: z.boolean() }),
+])
+const requestFieldChangeListSchema = z.object({
+  requestId: z.string().trim().min(1),
+  changes: z.array(requestFieldChangeSchema).min(1).describe('Only include fields that should change. Do not include unchanged fields.'),
+})
+type RequestFieldChange = z.infer<typeof requestFieldChangeSchema>
 const requestDeletePlanItemSchema = z.object({
   requestId: z.string().trim().min(1),
 })
@@ -160,7 +188,7 @@ const managementAgentPlanSchema = z.object({
   foldersToCreate: z.array(folderPlanItemSchema),
   foldersToUpdate: z.array(folderUpdatePlanItemSchema).optional(),
   requestsToCreate: z.array(requestCreatePlanItemSchema),
-  requestsToUpdate: z.array(requestUpdatePlanItemSchema),
+  requestsToUpdate: z.array(requestPlanFieldsSchema.partial().extend({ requestId: z.string().trim().min(1) })),
   requestsToDelete: z.array(requestDeletePlanItemSchema).optional(),
   foldersToDelete: z.array(folderDeletePlanItemSchema).optional(),
   environmentUpdates: z.array(environmentUpdateSchema),
@@ -292,17 +320,19 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
   server.registerTool(
     'plan_update_request',
     {
-      description: 'Plan an update to an existing request in the current draft.',
+      description: 'Plan a full replacement update to an existing request. Send every editable request field. If only some fields should change, use plan_change_request_fields instead.',
       inputSchema: requestUpdatePlanItemSchema,
     },
-    input =>
-      context.updateDraft(draft => ({
-        draft: {
-          ...draft,
-          requestsToUpdate: overwriteBy(draft.requestsToUpdate, input, request => request.requestId),
-        },
-        result: { plannedRequestUpdate: input },
-      }))
+    input => context.updateDraft(draft => planRequestUpdateOnDraft(draft, input))
+  )
+
+  server.registerTool(
+    'plan_change_request_fields',
+    {
+      description: 'Plan changes to specific request fields only. Do not send unchanged fields. Each change must name one field and its new value.',
+      inputSchema: requestFieldChangeListSchema,
+    },
+    input => context.updateDraft(draft => planRequestUpdateOnDraft(draft, requestFieldChangesToUpdatePlanItem(input)))
   )
 
   server.registerTool(
@@ -546,6 +576,99 @@ export function planFolderDeletionOnDraft(draft: ManagementAgentPlan, folderId: 
       foldersToDelete: overwriteBy(draft.foldersToDelete, { folderId }, folder => folder.folderId),
     },
     result: { plannedFolderDeletion: { folderId } },
+  }
+}
+
+export function planRequestUpdateOnDraft(draft: ManagementAgentPlan, input: typeof draft.requestsToUpdate[number]) {
+  return {
+    draft: {
+      ...draft,
+      requestsToUpdate: overwriteBy(draft.requestsToUpdate, input, request => request.requestId),
+    },
+    result: { plannedRequestUpdate: input },
+  }
+}
+
+export function requestFieldChangesToUpdatePlanItem(input: {
+  requestId: string
+  changes: RequestFieldChange[]
+}): ManagementAgentRequestUpdatePlanItem {
+  const nextUpdate: ManagementAgentRequestUpdatePlanItem = { requestId: input.requestId }
+  const seenFields = new Set<string>()
+
+  for (const change of input.changes) {
+    if (seenFields.has(change.field)) {
+      throw new Error(`Duplicate request field change "${change.field}".`)
+    }
+
+    seenFields.add(change.field)
+    assignRequestFieldChange(nextUpdate, change)
+  }
+
+  return nextUpdate
+}
+
+function assignRequestFieldChange(target: ManagementAgentRequestUpdatePlanItem, change: RequestFieldChange) {
+  switch (change.field) {
+    case 'name':
+      target.name = change.value
+      return
+    case 'method':
+      target.method = change.value
+      return
+    case 'url':
+      target.url = change.value
+      return
+    case 'pathParams':
+      target.pathParams = change.value
+      return
+    case 'searchParams':
+      target.searchParams = change.value
+      return
+    case 'auth':
+      target.auth = change.value
+      return
+    case 'headers':
+      target.headers = change.value
+      return
+    case 'body':
+      target.body = change.value
+      return
+    case 'bodyType':
+      target.bodyType = change.value
+      return
+    case 'rawType':
+      target.rawType = change.value
+      return
+    case 'graphqlQuery':
+      target.graphqlQuery = change.value
+      return
+    case 'graphqlVariables':
+      target.graphqlVariables = change.value
+      return
+    case 'preRequestScript':
+      target.preRequestScript = change.value
+      return
+    case 'postRequestScript':
+      target.postRequestScript = change.value
+      return
+    case 'testScript':
+      target.testScript = change.value
+      return
+    case 'responseVisualizer':
+      target.responseVisualizer = change.value
+      return
+    case 'responseTableAccessor':
+      target.responseTableAccessor = change.value
+      return
+    case 'preferredResponseBodyView':
+      target.preferredResponseBodyView = change.value
+      return
+    case 'saveToHistory':
+      target.saveToHistory = change.value
+      return
+    default:
+      return Typescript.assertUnreachable(change)
   }
 }
 

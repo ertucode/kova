@@ -426,13 +426,13 @@ function PlanView({
       ? <PlanList key="folders" title="Folders to Create" items={plan.foldersToCreate.map(folder => `${folder.name}\n${formatPlannedParent(folder.parentFolderId, folder.parentScope, explorerItemMap)}`)} />
       : null,
     plan.foldersToUpdate.length > 0
-      ? <PlanList key="folders-update" title="Folders to Update" items={plan.foldersToUpdate.map(folder => formatFolderUpdate(folder.folderId, folder.name, explorerItemMap))} />
+      ? <FolderUpdateSection key="folders-update" title="Folders to Update" folders={plan.foldersToUpdate} explorerItemMap={explorerItemMap} />
       : null,
     plan.requestsToCreate.length > 0
-      ? <RequestPlanSection key="requests-create" title="Requests to Create" requests={plan.requestsToCreate} />
+      ? <RequestPlanSection key="requests-create" title="Requests to Create" requests={plan.requestsToCreate} explorerItemMap={explorerItemMap} />
       : null,
     plan.requestsToUpdate.length > 0
-      ? <RequestPlanSection key="requests-update" title="Requests to Update" requests={plan.requestsToUpdate} />
+      ? <RequestPlanSection key="requests-update" title="Requests to Update" requests={plan.requestsToUpdate} explorerItemMap={explorerItemMap} />
       : null,
     plan.requestsToDelete.length > 0
       ? <PlanList key="requests-delete" title="Requests to Delete" items={plan.requestsToDelete.map(request => formatDeletionTarget(explorerItemMap, 'request', request.requestId))} />
@@ -441,13 +441,13 @@ function PlanView({
       ? <PlanList key="folders-delete" title="Folders to Delete" items={plan.foldersToDelete.map(folder => formatDeletionTarget(explorerItemMap, 'folder', folder.folderId))} />
       : null,
     plan.environmentUpdates.length > 0
-      ? <PlanList key="environments" title="Environment Updates" items={plan.environmentUpdates.map(update => `${update.environmentName || update.environmentId}\n${update.variables.map(variable => `${variable.key}=${variable.value}`).join('\n')}`)} />
+      ? <EnvironmentUpdateSection key="environments" title="Environment Updates" updates={plan.environmentUpdates} />
       : null,
     plan.tagsToCreate.length > 0
       ? <PlanList key="tags-create" title="Tags to Create" items={plan.tagsToCreate.map(tag => formatTagSummary(tag.name, tag.color))} />
       : null,
     plan.tagsToUpdate.length > 0
-      ? <PlanList key="tags-update" title="Tags to Update" items={plan.tagsToUpdate.map(tag => `${getTagLabel(tagMap, tag.tagId)}\n${formatTagSummary(tag.name, tag.color)}`)} />
+      ? <TagUpdateSection key="tags-update" title="Tags to Update" tags={plan.tagsToUpdate} tagMap={tagMap} />
       : null,
     plan.itemTagUpdates.length > 0
       ? <PlanList key="item-tags" title="Item Tag Updates" items={plan.itemTagUpdates.map(update => formatItemTagUpdate(update, explorerItemMap, tagMap))} />
@@ -479,50 +479,154 @@ function PlanView({
 function RequestPlanSection({
   title,
   requests,
+  explorerItemMap,
 }: {
   title: string
   requests: Array<ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem>
+  explorerItemMap: Map<string, ExplorerItem>
 }) {
   return (
     <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">{title}</div>
       <div className="mt-3 space-y-3">
         {requests.map(request => (
-          <RequestPlanCard key={'requestId' in request ? request.requestId : request.id} request={request} />
+          <RequestPlanCard key={'requestId' in request ? request.requestId : request.id} request={request} explorerItemMap={explorerItemMap} />
         ))}
       </div>
     </section>
   )
 }
 
-function RequestPlanCard({ request }: { request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem }) {
+function FolderUpdateSection({
+  title,
+  folders,
+  explorerItemMap,
+}: {
+  title: string
+  folders: ManagementAgentPlanRecord['plan']['foldersToUpdate']
+  explorerItemMap: Map<string, ExplorerItem>
+}) {
+  return (
+    <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">{title}</div>
+      <div className="mt-3 space-y-3">
+        {folders.map(folder => (
+          <div key={folder.folderId} className="rounded-xl border border-base-content/10 bg-base-100/80 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">Folder update</div>
+            <div className="mt-1 text-sm font-medium text-base-content">{getExplorerItemLabel(explorerItemMap, 'folder', folder.folderId)}</div>
+            <FieldBlock label="Name" value={folder.name} />
+            <FieldBlock label="Description" value={folder.description} />
+            <FieldBlock label="Headers" value={folder.headers} emptyValue="No headers." code />
+            <FieldBlock label="Pre-request Script" value={folder.preRequestScript} code />
+            <FieldBlock label="Post-request Script" value={folder.postRequestScript} code />
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-base-content/68">
+              <InlineMeta label="Auth" value={getAuthSummary(folder.auth)} />
+              <InlineMeta label="Selection" value={folder.runConfig.selectionMode} />
+              <InlineMeta label="Execution" value={folder.runConfig.executionMode} />
+              <InlineMeta label="Continue On Failure" value={folder.runConfig.continueOnFailure ? 'yes' : 'no'} />
+            </div>
+            {folder.runConfig.selectedRequestIds.length > 0 ? <FieldBlock label="Selected Requests" value={folder.runConfig.selectedRequestIds.join('\n')} code /> : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function EnvironmentUpdateSection({ title, updates }: { title: string; updates: ManagementAgentPlanRecord['plan']['environmentUpdates'] }) {
+  return (
+    <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">{title}</div>
+      <div className="mt-3 space-y-3">
+        {updates.map(update => (
+          <div key={update.environmentId} className="rounded-xl border border-base-content/10 bg-base-100/80 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">Environment update</div>
+            <div className="mt-1 text-sm font-medium text-base-content">{update.environmentName || update.environmentId}</div>
+            <FieldBlock label="Variables" value={update.variables.map(variable => `${variable.key}=${variable.value}`).join('\n')} code />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function TagUpdateSection({
+  title,
+  tags,
+  tagMap,
+}: {
+  title: string
+  tags: ManagementAgentPlanRecord['plan']['tagsToUpdate']
+  tagMap: Map<string, TagRecord>
+}) {
+  return (
+    <section className="rounded-xl border border-base-content/10 bg-base-100/70 p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">{title}</div>
+      <div className="mt-3 space-y-3">
+        {tags.map(tag => (
+          <div key={tag.tagId} className="rounded-xl border border-base-content/10 bg-base-100/80 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">Tag update</div>
+            <div className="mt-1 text-sm font-medium text-base-content">{getTagLabel(tagMap, tag.tagId)}</div>
+            <FieldBlock label="Name" value={tag.name} />
+            <InlineMeta label="Color" value={tag.color ?? 'none'} />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function RequestPlanCard({
+  request,
+  explorerItemMap,
+}: {
+  request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem
+  explorerItemMap: Map<string, ExplorerItem>
+}) {
+  const isRequestUpdate = 'requestId' in request
   const authSummary = getRequestAuthSummary(request)
+  const requestLabel = isRequestUpdate ? getExplorerItemLabel(explorerItemMap, 'request', request.requestId) : request.name || 'Untitled Request'
+  const metaItems = [
+    !isRequestUpdate || 'method' in request ? { label: 'Method', value: request.method ?? 'GET' } : null,
+    !isRequestUpdate || authSummary ? { label: 'Auth', value: authSummary ?? 'inherit' } : null,
+    !isRequestUpdate || 'bodyType' in request ? { label: 'Body Type', value: request.bodyType ?? 'none' } : null,
+    !isRequestUpdate || 'rawType' in request ? { label: 'Raw Type', value: request.rawType ?? 'json' } : null,
+    !isRequestUpdate || 'preferredResponseBodyView' in request ? { label: 'Response View', value: request.preferredResponseBodyView ?? 'raw' } : null,
+    !isRequestUpdate || 'saveToHistory' in request ? { label: 'Save History', value: request.saveToHistory ? 'yes' : 'no' } : null,
+  ].filter(item => item !== null)
 
   return (
     <div className="rounded-xl border border-base-content/10 bg-base-100/80 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">{request.method}</div>
-          <div className="mt-1 text-sm font-medium text-base-content">{request.name || 'Untitled Request'}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">{isRequestUpdate ? 'Request update' : request.method}</div>
+          <div className="mt-1 text-sm font-medium text-base-content">{requestLabel}</div>
         </div>
-        <div className="text-right text-[11px] text-base-content/45">{request.bodyType} body</div>
+        {!isRequestUpdate ? <div className="text-right text-[11px] text-base-content/45">{request.bodyType} body</div> : null}
       </div>
 
-      <FieldBlock label="URL" value={request.url} />
-      <FieldBlock label="Headers" value={request.headers} emptyValue="No headers." code />
-      <FieldBlock label="Body" value={getRequestBodyPreview(request)} emptyValue="No body." code />
+      {!isRequestUpdate || 'name' in request ? <FieldBlock label="Name" value={request.name ?? ''} /> : null}
+      {!isRequestUpdate || 'url' in request ? <FieldBlock label="URL" value={request.url ?? ''} /> : null}
+      {!isRequestUpdate || 'headers' in request ? <FieldBlock label="Headers" value={request.headers ?? ''} emptyValue="No headers." code /> : null}
+      {!isRequestUpdate || hasRequestBodyPreview(request) ? <FieldBlock label="Body" value={getRequestBodyPreview(request)} emptyValue="No body." code /> : null}
+      {!isRequestUpdate || 'preRequestScript' in request ? <FieldBlock label="Pre-request Script" value={request.preRequestScript ?? ''} code /> : null}
+      {!isRequestUpdate || 'postRequestScript' in request ? <FieldBlock label="Post-request Script" value={request.postRequestScript ?? ''} code /> : null}
+      {!isRequestUpdate || 'testScript' in request ? <FieldBlock label="Test Script" value={request.testScript ?? ''} code /> : null}
+      {!isRequestUpdate || 'responseVisualizer' in request ? <FieldBlock label="Response Visualizer" value={request.responseVisualizer ?? ''} code /> : null}
+      {!isRequestUpdate || 'responseTableAccessor' in request ? <FieldBlock label="Response Table Accessor" value={request.responseTableAccessor ?? ''} code /> : null}
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-base-content/68">
-        <InlineMeta label="Auth" value={authSummary} />
-        <InlineMeta label="Raw Type" value={request.rawType} />
-        <InlineMeta label="Response View" value={request.preferredResponseBodyView} />
-        <InlineMeta label="Save History" value={request.saveToHistory ? 'yes' : 'no'} />
-      </div>
+      {metaItems.length > 0 ? (
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-base-content/68">
+          {metaItems.map(item => (
+            <InlineMeta key={item.label} label={item.label} value={item.value} />
+          ))}
+        </div>
+      ) : null}
 
-      {request.searchParams.trim() ? <FieldBlock label="Search Params" value={request.searchParams} code /> : null}
-      {request.pathParams.trim() ? <FieldBlock label="Path Params" value={request.pathParams} code /> : null}
-      {request.graphqlQuery.trim() ? <FieldBlock label="GraphQL Query" value={request.graphqlQuery} code /> : null}
-      {request.graphqlVariables.trim() ? <FieldBlock label="GraphQL Variables" value={request.graphqlVariables} code /> : null}
+      {!isRequestUpdate || request.searchParams?.trim() ? <FieldBlock label="Search Params" value={request.searchParams ?? ''} code /> : null}
+      {!isRequestUpdate || request.pathParams?.trim() ? <FieldBlock label="Path Params" value={request.pathParams ?? ''} code /> : null}
+      {!isRequestUpdate || request.graphqlQuery?.trim() ? <FieldBlock label="GraphQL Query" value={request.graphqlQuery ?? ''} code /> : null}
+      {!isRequestUpdate || request.graphqlVariables?.trim() ? <FieldBlock label="GraphQL Variables" value={request.graphqlVariables ?? ''} code /> : null}
     </div>
   )
 }
@@ -566,28 +670,46 @@ function InlineMeta({ label, value }: { label: string; value: string }) {
 }
 
 function getRequestBodyPreview(request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem) {
-  if (request.bodyType === 'graphql') {
-    return [request.graphqlQuery.trim() ? `Query:\n${request.graphqlQuery}` : null, request.graphqlVariables.trim() ? `Variables:\n${request.graphqlVariables}` : null]
+  if (request.bodyType === 'graphql' || ('requestId' in request && ('graphqlQuery' in request || 'graphqlVariables' in request))) {
+    return [request.graphqlQuery?.trim() ? `Query:\n${request.graphqlQuery}` : null, request.graphqlVariables?.trim() ? `Variables:\n${request.graphqlVariables}` : null]
       .filter(Boolean)
       .join('\n\n')
   }
 
-  return request.body
+  return request.body ?? ''
 }
 
 function getRequestAuthSummary(request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem) {
-  switch (request.auth.type) {
+  if (!request.auth) {
+    return null
+  }
+
+  return getAuthSummary(request.auth)
+}
+
+function getAuthSummary(auth: NonNullable<ManagementAgentRequestCreatePlanItem['auth']>) {
+  switch (auth.type) {
     case 'inherit':
       return 'inherit'
     case 'noauth':
       return 'none'
     case 'bearer':
-      return request.auth.token.trim() ? 'bearer token set' : 'bearer token empty'
+      return auth.token.trim() ? 'bearer token set' : 'bearer token empty'
     case 'apikey':
-      return request.auth.key.trim() ? `api key via ${request.auth.addTo}` : 'api key incomplete'
+      return auth.key.trim() ? `api key via ${auth.addTo}` : 'api key incomplete'
     case 'basic':
-      return request.auth.username.trim() || request.auth.password.trim() ? 'basic auth set' : 'basic auth empty'
+      return auth.username.trim() || auth.password.trim() ? 'basic auth set' : 'basic auth empty'
+    default:
+      return Typescript.assertUnreachable(auth)
   }
+}
+
+function hasRequestBodyPreview(request: ManagementAgentRequestCreatePlanItem | ManagementAgentRequestUpdatePlanItem) {
+  if (!('requestId' in request)) {
+    return true
+  }
+
+  return 'body' in request || 'bodyType' in request || 'graphqlQuery' in request || 'graphqlVariables' in request
 }
 
 function PlanList({ title, items, tone = 'default' }: { title: string; items: string[]; tone?: 'default' | 'warning' | 'error' }) {
@@ -628,11 +750,6 @@ function formatPlannedParent(
 
 function formatTagSummary(name: string, color: string | null) {
   return color ? `${name}\nColor: ${color}` : `${name}\nColor: none`
-}
-
-function formatFolderUpdate(folderId: string, nextName: string, explorerItemMap: Map<string, ExplorerItem>) {
-  const currentName = getExplorerItemLabel(explorerItemMap, 'folder', folderId)
-  return `${currentName}\nNext name: ${nextName}`
 }
 
 function formatDeletionTarget(

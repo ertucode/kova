@@ -1,8 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import type { EnvironmentRecord } from '../../common/Environments.js'
 import { Typescript } from '../../common/Typescript.js'
 import { errorResponseToMessage, GenericError, type GenericResult } from '../../common/GenericError.js'
 import type { ExplorerItem } from '../../common/Explorer.js'
+import { parseKeyValueRows } from '../../common/KeyValueRows.js'
 import { listEnvironments } from '../db/environments.js'
 import { listExplorerItems } from '../db/explorer.js'
 import { getFolder } from '../db/folders.js'
@@ -14,6 +16,8 @@ const nullableFolderIdSchema = folderIdSchema.nullable()
 const parentScopeSchema = z.enum(['session-root', 'workspace-root']).optional()
 const folderPathSchema = z.array(z.string().trim().min(1))
 const explorerQuerySchema = z.string().trim().min(1)
+const environmentQuerySchema = z.string().trim().min(1)
+const environmentVariableNameSchema = z.string().trim().min(1)
 
 export function registerExplorerTools(server: McpServer, context: ManagementAgentMcpContext) {
   async function listExplorerItemsHelper({
@@ -139,14 +143,60 @@ export function registerExplorerTools(server: McpServer, context: ManagementAgen
   server.registerTool(
     'list_environments',
     {
-      description: 'List all environments available to the management agent.',
+      description: 'List all environments available to the management agent without returning variable values. Use get_environment_value to read one variable value when needed.',
       inputSchema: {},
     },
     async () => {
       context.requireSession()
-      return context.toToolResult({ environments: await listEnvironments() })
+      return context.toToolResult({ environments: summarizeEnvironmentsForAgent(await listEnvironments()) })
     }
   )
+
+  server.registerTool(
+    'get_environment_value',
+    {
+      description: 'Get one environment variable value by exact environment ID or exact environment name. Use this only for the specific variable you need.',
+      inputSchema: {
+        environment: environmentQuerySchema.describe('Exact environment ID or exact environment name.'),
+        name: environmentVariableNameSchema.describe('Exact variable name to read.'),
+      },
+    },
+    async ({ environment, name }) => {
+      context.requireSession()
+      return context.toToolResult(getEnvironmentValueFromRecords(await listEnvironments(), environment, name))
+    }
+  )
+}
+
+export function summarizeEnvironmentsForAgent(environments: EnvironmentRecord[]) {
+  return environments.map(environment => ({
+    id: environment.id,
+    name: environment.name,
+    variableNames: parseKeyValueRows(environment.variables)
+      .filter(row => row.key.trim())
+      .map(row => row.key.trim()),
+  }))
+}
+
+export function getEnvironmentValueFromRecords(environments: EnvironmentRecord[], environmentQuery: string, variableName: string) {
+  const environment = environments.find(item => item.id === environmentQuery || item.name === environmentQuery)
+  if (!environment) {
+    throw new Error('Environment not found.')
+  }
+
+  const variable = parseKeyValueRows(environment.variables).find(
+    row => row.key.trim() === variableName
+  )
+  if (!variable) {
+    throw new Error('Environment variable not found.')
+  }
+
+  return {
+    environmentId: environment.id,
+    environmentName: environment.name,
+    name: variable.key.trim(),
+    value: variable.value,
+  }
 }
 
 export function resolveExplorerFolderSelection(input: {

@@ -4,6 +4,8 @@ import {
   planFolderDeletionOnDraft,
   planFolderUpdateOnDraft,
   planRequestDeletionOnDraft,
+  planRequestUpdateOnDraft,
+  requestFieldChangesToUpdatePlanItem,
   removeFolderCreationFromDraft,
 } from './draft-tools.js'
 
@@ -192,5 +194,40 @@ describe('removeFolderCreationFromDraft', () => {
 
     expect(result.draft.foldersToUpdate).toEqual([])
     expect(result.draft.foldersToDelete).toEqual([{ folderId: 'folder-1' }])
+  })
+
+  it('stores only the provided fields for a planned request patch', () => {
+    const plan = createEmptyManagementAgentPlan()
+
+    const result = planRequestUpdateOnDraft(
+      plan,
+      requestFieldChangesToUpdatePlanItem({
+        requestId: 'request-1',
+        changes: [
+          { field: 'url', value: 'https://example.com/patched' },
+          { field: 'preferredResponseBodyView', value: 'visualizer' },
+        ],
+      })
+    )
+
+    expect(result.draft.requestsToUpdate).toEqual([
+      {
+        requestId: 'request-1',
+        url: 'https://example.com/patched',
+        preferredResponseBodyView: 'visualizer',
+      },
+    ])
+  })
+
+  it('throws when the same request field is changed more than once', () => {
+    expect(() =>
+      requestFieldChangesToUpdatePlanItem({
+        requestId: 'request-1',
+        changes: [
+          { field: 'url', value: 'https://example.com/one' },
+          { field: 'url', value: 'https://example.com/two' },
+        ],
+      })
+    ).toThrow('Duplicate request field change "url".')
   })
 })

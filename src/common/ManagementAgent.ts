@@ -86,7 +86,9 @@ export type ManagementAgentRequestCreatePlanItem = ManagementAgentRequestPlanFie
   parentScope?: ManagementAgentParentScope
 }
 
-export type ManagementAgentRequestUpdatePlanItem = ManagementAgentRequestPlanFields & {
+export type ManagementAgentRequestUpdatePlanFields = Partial<ManagementAgentRequestPlanFields>
+
+export type ManagementAgentRequestUpdatePlanItem = ManagementAgentRequestUpdatePlanFields & {
   requestId: string
 }
 
@@ -370,7 +372,7 @@ function normalizeRequestUpdatePlanItem(value: unknown): ManagementAgentRequestU
   const candidate = toRecord(value)
   return {
     requestId: toTrimmedString(candidate.requestId),
-    ...normalizeRequestPlanFields(candidate),
+    ...normalizeRequestUpdatePlanFields(candidate),
   }
 }
 
@@ -417,6 +419,78 @@ function normalizeRequestPlanFields(candidate: Record<string, unknown>): Managem
       : 'raw',
     saveToHistory: typeof candidate.saveToHistory === 'boolean' ? candidate.saveToHistory : true,
   }
+}
+
+function normalizeRequestUpdatePlanFields(candidate: Record<string, unknown>): ManagementAgentRequestUpdatePlanFields {
+  const normalizedFields: ManagementAgentRequestUpdatePlanFields = {}
+
+  if (hasOwn(candidate, 'name')) {
+    normalizedFields.name = toTrimmedString(candidate.name)
+  }
+  if (hasOwn(candidate, 'method')) {
+    const method = toTrimmedString(candidate.method).toUpperCase()
+    normalizedFields.method = REQUEST_METHODS.includes(method as RequestMethod) ? (method as RequestMethod) : 'GET'
+  }
+  if (hasOwn(candidate, 'url')) {
+    normalizedFields.url = toTrimmedString(candidate.url)
+  }
+  if (hasOwn(candidate, 'pathParams')) {
+    normalizedFields.pathParams = toStringValue(candidate.pathParams)
+  }
+  if (hasOwn(candidate, 'searchParams')) {
+    normalizedFields.searchParams = toStringValue(candidate.searchParams)
+  }
+  if (hasOwn(candidate, 'auth')) {
+    normalizedFields.auth = normalizeHttpAuth(candidate.auth)
+  }
+  if (hasOwn(candidate, 'headers')) {
+    normalizedFields.headers = toStringValue(candidate.headers)
+  }
+  if (hasOwn(candidate, 'body')) {
+    normalizedFields.body = toStringValue(candidate.body)
+  }
+  if (hasOwn(candidate, 'bodyType')) {
+    const bodyType = toTrimmedString(candidate.bodyType)
+    normalizedFields.bodyType = REQUEST_BODY_TYPES.includes(bodyType as RequestBodyType)
+      ? (bodyType as RequestBodyType)
+      : 'none'
+  }
+  if (hasOwn(candidate, 'rawType')) {
+    const rawType = toTrimmedString(candidate.rawType)
+    normalizedFields.rawType = REQUEST_RAW_TYPES.includes(rawType as RequestRawType) ? (rawType as RequestRawType) : 'json'
+  }
+  if (hasOwn(candidate, 'graphqlQuery')) {
+    normalizedFields.graphqlQuery = toStringValue(candidate.graphqlQuery)
+  }
+  if (hasOwn(candidate, 'graphqlVariables')) {
+    normalizedFields.graphqlVariables = toStringValue(candidate.graphqlVariables)
+  }
+  if (hasOwn(candidate, 'preRequestScript')) {
+    normalizedFields.preRequestScript = toStringValue(candidate.preRequestScript)
+  }
+  if (hasOwn(candidate, 'postRequestScript')) {
+    normalizedFields.postRequestScript = toStringValue(candidate.postRequestScript)
+  }
+  if (hasOwn(candidate, 'testScript')) {
+    normalizedFields.testScript = toStringValue(candidate.testScript)
+  }
+  if (hasOwn(candidate, 'responseVisualizer')) {
+    normalizedFields.responseVisualizer = toStringValue(candidate.responseVisualizer)
+  }
+  if (hasOwn(candidate, 'responseTableAccessor')) {
+    normalizedFields.responseTableAccessor = toStringValue(candidate.responseTableAccessor)
+  }
+  if (hasOwn(candidate, 'preferredResponseBodyView')) {
+    const preferredResponseBodyView = toTrimmedString(candidate.preferredResponseBodyView)
+    normalizedFields.preferredResponseBodyView = RESPONSE_BODY_VIEWS.includes(preferredResponseBodyView as ResponseBodyView)
+      ? (preferredResponseBodyView as ResponseBodyView)
+      : 'raw'
+  }
+  if (hasOwn(candidate, 'saveToHistory')) {
+    normalizedFields.saveToHistory = typeof candidate.saveToHistory === 'boolean' ? candidate.saveToHistory : true
+  }
+
+  return normalizedFields
 }
 
 function normalizeParentScope(value: unknown): ManagementAgentParentScope | undefined {
@@ -469,6 +543,10 @@ function toRecord(value: unknown): Record<string, unknown> {
 
 function toArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
+}
+
+function hasOwn(candidate: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(candidate, key)
 }
 
 function toTrimmedString(value: unknown) {
