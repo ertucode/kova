@@ -53,7 +53,7 @@ export function toScriptAutocompleteResult(
   code: string,
   completions: ts.WithMetadata<ts.CompletionInfo>
 ) {
-  const replacementFrom = completions.optionalReplacementSpan ? completions.optionalReplacementSpan.start : position
+  const replacementFrom = getScriptAutocompleteReplacementFrom(code, position, completions)
   const query = code.slice(replacementFrom, position)
   const rankedEntries = rankScriptAutocompleteEntries(completions.entries, query)
   const options = hydrateScriptAutocompleteOptions(service, fileName, position, rankedEntries)
@@ -65,12 +65,28 @@ export function toScriptAutocompleteResult(
   }
 }
 
+export function getScriptAutocompleteReplacementFrom(
+  code: string,
+  position: number,
+  completions?: Pick<ts.CompletionInfo, 'optionalReplacementSpan'>
+) {
+  const identifierMatch = code.slice(0, position).match(/[A-Za-z_$][\w$]*$/)
+  const identifierReplacementFrom = identifierMatch ? position - identifierMatch[0].length : position
+
+  if (!completions?.optionalReplacementSpan) {
+    return identifierReplacementFrom
+  }
+
+  return Math.min(completions.optionalReplacementSpan.start, identifierReplacementFrom)
+}
+
 export function rankScriptAutocompleteEntries(entries: readonly ts.CompletionEntry[], query: string) {
   const rankedEntries: RankedScriptAutocompleteEntry[] = []
+  const normalizedQuery = query.trim().toLowerCase()
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index]
-    if (!entry || !isAllowedEntry(entry)) {
+    if (!entry || !isAllowedEntry(entry, normalizedQuery)) {
       continue
     }
 
@@ -112,8 +128,12 @@ export function hydrateScriptAutocompleteOptions(
   return options
 }
 
-function isAllowedEntry(entry: ts.CompletionEntry) {
+function isAllowedEntry(entry: ts.CompletionEntry, normalizedQuery: string) {
   if (entry.kind === ts.ScriptElementKind.keyword && blockedKeywordCompletions.has(entry.name)) {
+    return false
+  }
+
+  if (normalizedQuery !== '' && !entry.name.toLowerCase().includes(normalizedQuery)) {
     return false
   }
 

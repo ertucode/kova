@@ -66,6 +66,8 @@ describe('script runtime autocomplete performance', () => {
 
     expect(viewJsx.raw.labels).toContain('CodeEditor')
     expect(visualizerJsx.raw.labels).toContain('CodeEditor')
+    expect(viewJsx.endToEnd.labels).toContain('CodeEditor')
+    expect(visualizerJsx.endToEnd.labels).toContain('CodeEditor')
     expect(viewDocument.raw.labels.length).toBeGreaterThan(0)
     expect(viewDocument.endToEnd.labels.length).toBeGreaterThan(0)
   }, 15000)

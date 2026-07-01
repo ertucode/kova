@@ -79,6 +79,20 @@ describe('script runtime DOM completions', () => {
     expect(diagnostics).toEqual([])
   })
 
+  it('offers CodeEditor while typing a JSX tag in response-visualizer completions', async () => {
+    const code = ['export default function View() {', '  return <CodeEd', '}'].join('\n')
+    const completionLabels = await getShapedCompletionLabels({ phase: 'response-visualizer' }, code, code.indexOf('CodeEd') + 'CodeEd'.length)
+
+    expect(completionLabels).toContain('CodeEditor')
+  })
+
+  it('offers CodeEditor while typing a JSX tag in view-runtime completions', async () => {
+    const code = ['export default function View() {', '  return <CodeEd', '}'].join('\n')
+    const completionLabels = await getShapedCompletionLabels({ phase: 'view-runtime' }, code, code.indexOf('CodeEd') + 'CodeEd'.length)
+
+    expect(completionLabels).toContain('CodeEditor')
+  })
+
   it('shows concrete hover info for intrinsic JSX elements', async () => {
     const code = ['export default function View() {', '  return <div>Hello</div>', '}'].join('\n')
     const hoverText = await getQuickInfoDisplayText({ phase: 'view-runtime' }, code, code.indexOf('div') + 1)
@@ -161,6 +175,30 @@ async function getCompletionLabelsAt(
   })
 
   return completions?.entries.map(entry => entry.name) ?? []
+}
+
+async function getShapedCompletionLabels(
+  runtimeContext:
+    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
+    | { targets: ['response-visualizer', 'view-runtime'] }
+    | { targets: ['pre-request', 'test'] },
+  code: string,
+  position = code.length
+) {
+  const phaseState = await createPhaseState(runtimeContext, code)
+  const completions = phaseState.service.getCompletionsAtPosition(phaseState.userFileName, position, {
+    includeCompletionsForModuleExports: false,
+    includeCompletionsWithInsertText: true,
+    includeCompletionsWithSnippetText: true,
+  })
+
+  if (!completions) {
+    return []
+  }
+
+  return toScriptAutocompleteResult(phaseState.service, phaseState.userFileName, position, code, completions).options.map(
+    option => option.label
+  )
 }
 
 async function getQuickInfoDisplayText(

@@ -1,5 +1,6 @@
 import { buildScriptRuntimeDeclarationPayload } from '../../../scripts/utils/scriptRuntimeDeclarationBuilder.js'
 import {
+  getScriptAutocompleteReplacementFrom,
   hydrateScriptAutocompleteOptions,
   rankScriptAutocompleteEntries,
   toScriptAutocompleteResult,
@@ -37,12 +38,15 @@ const declarationFilesPromise = buildScriptRuntimeDeclarationPayload({
 }).then(createScriptRuntimeDeclarationFiles)
 
 export async function prepareAutocompleteScenario(phase: RuntimePhase, code: string): Promise<PreparedScenario> {
+  const cursorMarker = '|'
+  const position = code.indexOf(cursorMarker)
+  const normalizedCode = position === -1 ? code : `${code.slice(0, position)}${code.slice(position + cursorMarker.length)}`
   const declarationFiles = await declarationFilesPromise
   const phaseStateManager = createScriptRuntimePhaseStateManager(async () => declarationFiles)
   const phaseState = await phaseStateManager.getOrCreatePhaseState({ phase })
 
   updateScriptRuntimePhaseSource(phaseState, {
-    code,
+    code: normalizedCode,
     requestPaths: [],
     sharedScripts: [],
     packages: [],
@@ -50,8 +54,8 @@ export async function prepareAutocompleteScenario(phase: RuntimePhase, code: str
 
   return {
     phaseState,
-    code,
-    position: code.length,
+    code: normalizedCode,
+    position: position === -1 ? normalizedCode.length : position,
   }
 }
 
@@ -104,7 +108,7 @@ export function createJsxScenario(tagPrefix: string) {
   return [
     'export default function View() {',
     '  return (',
-    `    <${tagPrefix}`,
+    `    <${tagPrefix}|`,
     '  )',
     '}',
   ].join('\n')
@@ -218,7 +222,7 @@ function getRequiredCompletions(scenario: PreparedScenario) {
 }
 
 function getCompletionQuery(scenario: PreparedScenario, completions: NonNullable<ReturnType<typeof getCompletions>>) {
-  const replacementFrom = completions.optionalReplacementSpan ? completions.optionalReplacementSpan.start : scenario.position
+  const replacementFrom = getScriptAutocompleteReplacementFrom(scenario.code, scenario.position, completions)
   return scenario.code.slice(replacementFrom, scenario.position)
 }
 
