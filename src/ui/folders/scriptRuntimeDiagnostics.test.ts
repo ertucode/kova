@@ -61,6 +61,24 @@ describe('script runtime DOM completions', () => {
     expect(diagnostics).toEqual([])
   })
 
+  it('accepts CodeEditor as a JSX component in response-visualizer diagnostics', async () => {
+    const diagnostics = await getDiagnostics(
+      { phase: 'response-visualizer' },
+      ['export default function View() {', '  return <CodeEditor value="{}" language="json" />', '}'].join('\n')
+    )
+
+    expect(diagnostics).toEqual([])
+  })
+
+  it('accepts CodeEditor as a JSX component in view-runtime diagnostics', async () => {
+    const diagnostics = await getDiagnostics(
+      { phase: 'view-runtime' },
+      ['export default function View() {', '  return <CodeEditor value="{}" language="json" />', '}'].join('\n')
+    )
+
+    expect(diagnostics).toEqual([])
+  })
+
   it('shows concrete hover info for intrinsic JSX elements', async () => {
     const code = ['export default function View() {', '  return <div>Hello</div>', '}'].join('\n')
     const hoverText = await getQuickInfoDisplayText({ phase: 'view-runtime' }, code, code.indexOf('div') + 1)
@@ -119,7 +137,7 @@ describe('script runtime DOM completions', () => {
 
 async function getCompletionLabels(
   runtimeContext:
-    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
     | { targets: ['response-visualizer', 'view-runtime'] }
     | { targets: ['pre-request', 'test'] },
   code: string
@@ -129,7 +147,7 @@ async function getCompletionLabels(
 
 async function getCompletionLabelsAt(
   runtimeContext:
-    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
     | { targets: ['response-visualizer', 'view-runtime'] }
     | { targets: ['pre-request', 'test'] },
   code: string,
@@ -147,7 +165,7 @@ async function getCompletionLabelsAt(
 
 async function getQuickInfoDisplayText(
   runtimeContext:
-    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
     | { targets: ['response-visualizer', 'view-runtime'] }
     | { targets: ['pre-request', 'test'] },
   code: string,
@@ -161,7 +179,7 @@ async function getQuickInfoDisplayText(
 
 async function getDiagnostics(
   runtimeContext:
-    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
     | { targets: ['response-visualizer', 'view-runtime'] }
     | { targets: ['pre-request', 'test'] },
   code: string
@@ -174,7 +192,7 @@ async function getDiagnostics(
 
 async function createPhaseState(
   runtimeContext:
-    | { phase: 'view-runtime' | 'pre-request' | 'test' }
+    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
     | { targets: ['response-visualizer', 'view-runtime'] }
     | { targets: ['pre-request', 'test'] },
   code: string

@@ -376,12 +376,6 @@ type SetStateAction<T> = T | ((previousState: T) => T)
 type Dispatch<T> = (value: T) => void
 type DependencyList = readonly unknown[]
 type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml' | 'graphql'
-type ReactElementLike = {
-  readonly type: unknown
-  readonly props: unknown
-  readonly key: string | number | null
-}
-
 interface RefObject<T> {
   current: T
 }
@@ -475,8 +469,8 @@ declare const useId: ReactApi['useId']
 declare const useReducer: ReactApi['useReducer']
 declare const useDeferredValue: ReactApi['useDeferredValue']
 declare const startTransition: ReactApi['startTransition']
-declare function Table(props: TableProps): ReactElementLike | null
-declare function CodeEditor(props: CodeEditorProps): ReactElementLike | null
+declare function Table(props: TableProps): JSX.Element | null
+declare function CodeEditor(props: CodeEditorProps): JSX.Element | null
 `
 
 const viewRuntimeDeclarations = String.raw`
