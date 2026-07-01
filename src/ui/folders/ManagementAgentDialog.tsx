@@ -4,7 +4,6 @@ import { useSelector } from '@xstate/store/react'
 import { errorResponseToMessage } from '@common/GenericError'
 import type {
   ManagementAgentItemTagUpdatePlanItem,
-  ManagementAgentMessagePart,
   ManagementAgentPlanRecord,
   ManagementAgentRequestCreatePlanItem,
   ManagementAgentRequestUpdatePlanItem,
@@ -20,6 +19,7 @@ import { dialogActions } from '@/global/dialogStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
 import { ChangesCoordinator } from './changesCoordinator'
+import { AiTranscriptView } from './AiTranscriptView'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
@@ -289,11 +289,10 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
             <div ref={transcriptContainerRef} className="h-full overflow-auto px-4 py-3">
               {selectedSessionState ? (
                 selectedSessionState.messages.length ? (
-                  <div className="space-y-2 text-xs">
-                    {selectedSessionState.messages.flatMap(message =>
-                      message.parts.map(part => <TranscriptPart key={`${message.id}-${part.id}`} part={part} />)
-                    )}
-                  </div>
+                  <AiTranscriptView
+                    messages={selectedSessionState.messages}
+                    emptyMessage="No messages yet for this session."
+                  />
                 ) : (
                   <EmptyPanel message="No messages yet for this session." />
                 )
@@ -791,80 +790,6 @@ function formatTagItemUpdate(
     ? update.items.map(item => `${item.itemType}: ${getExplorerItemLabel(explorerItemMap, item.itemType, item.itemId)}`).join('\n')
     : 'none'
   return `${getTagLabel(tagMap, update.tagId)}\nItems:\n${itemLabels}`
-}
-
-function TranscriptPart({ part }: { part: ManagementAgentMessagePart }) {
-  return (
-    <details className="bg-base-200/20 text-[12px]" open={part.type === 'text'}>
-      <summary className={[ 'cursor-pointer list-none px-2 py-1 font-medium', part.type === 'text' ? 'text-base-content' : 'text-base-content/55' ].join(' ')}>
-        {getTranscriptPartTitle(part)}
-      </summary>
-      <div className="border-t border-base-content/8 px-3 py-2">
-        <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/72">{getTranscriptPartContent(part)}</pre>
-      </div>
-    </details>
-  )
-}
-
-function getTranscriptPartTitle(part: ManagementAgentMessagePart) {
-  switch (part.type) {
-    case 'text':
-      return getFirstLine(part.text) || 'Text'
-    case 'reasoning':
-      return getFirstLine(part.text) || 'Reasoning'
-    case 'tool':
-      return [part.title, part.toolName, part.status].filter(Boolean).join(' • ')
-    case 'file':
-      return part.path ?? part.filename ?? 'File attachment'
-    case 'step-start':
-      return 'Step started'
-    case 'step-finish':
-      return 'Step finished'
-    case 'snapshot':
-      return 'Snapshot'
-    case 'patch':
-      return part.files.length === 1 ? 'Patch - 1 file' : `Patch - ${String(part.files.length)} files`
-    case 'agent':
-      return `Agent: ${part.name}`
-    case 'subtask':
-      return `Subtask: ${part.description}`
-    case 'retry':
-      return 'Retry'
-    case 'compaction':
-      return 'Compaction'
-  }
-}
-
-function getTranscriptPartContent(part: ManagementAgentMessagePart) {
-  switch (part.type) {
-    case 'text':
-    case 'reasoning':
-      return part.text
-    case 'tool':
-      return [part.input ? `Input:\n${part.input}` : null, part.output ? `Output:\n${part.output}` : null, part.errorMessage ? `Error:\n${part.errorMessage}` : null].filter(Boolean).join('\n\n') || 'No details yet.'
-    case 'file':
-      return part.path ?? part.filename ?? 'File attachment'
-    case 'step-start':
-      return 'Step started.'
-    case 'step-finish':
-      return 'Step finished.'
-    case 'snapshot':
-      return 'Snapshot created.'
-    case 'patch':
-      return part.files.join('\n') || 'Patch generated.'
-    case 'agent':
-      return part.name
-    case 'subtask':
-      return `${part.description}\n\n${part.prompt}`
-    case 'retry':
-      return 'Retry requested.'
-    case 'compaction':
-      return 'Compaction happened.'
-  }
-}
-
-function getFirstLine(value: string) {
-  return value.trim().split('\n')[0] ?? ''
 }
 
 function readSelectedSessionId(scope: ManagementAgentScope) {

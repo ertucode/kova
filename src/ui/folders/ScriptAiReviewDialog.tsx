@@ -2,8 +2,6 @@ import {
   getPrimaryScriptAiPhase,
   type ScriptAiMessage,
   getScriptAiTargetKey,
-  type ScriptAiMessagePatchDiff,
-  type ScriptAiMessagePart,
   type ScriptAiTarget,
 } from '@common/ScriptAi'
 import { ChevronDownIcon, LoaderCircleIcon, PlusIcon, SparklesIcon, SquareIcon } from 'lucide-react'
@@ -16,8 +14,7 @@ import { buildScriptDocumentationPromptForTarget, getScriptDocumentationForTarge
 import { appSettingsStore } from '@/global/appSettingsStore'
 import { useOpenCodeModels } from '@/global/useOpenCodeModels'
 import { ScriptAiMergeEditor } from './ScriptAiMergeEditor'
-import type { CodeEditorLanguage } from './CodeEditor'
-import { clsx } from '@/lib/functions/clsx'
+import { AiTranscriptView } from './AiTranscriptView'
 import { getPatchDiffKey, scriptAiReviewStore, ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 
 type ScriptAiReviewDialogProps = {
@@ -31,18 +28,6 @@ type ScriptAiReviewDialogProps = {
     }
   ) => Promise<boolean | void> | boolean | void
 }
-
-type TranscriptRow =
-  | {
-      id: string
-      type: 'divider'
-    }
-  | {
-      id: string
-      type: 'part'
-      messageId: string
-      part: ScriptAiMessagePart
-    }
 
 export function openScriptAiReviewDialog(props: ScriptAiReviewDialogProps) {
   dialogActions.open({ component: ScriptAiReviewDialog, props })
@@ -81,19 +66,14 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
   const selectedMessages = selectedSessionId ? (workspaceState?.messagesBySessionId[selectedSessionId] ?? []) : []
   const selectedSession = workspaceState?.sessions.find(session => session.id === selectedSessionId) ?? null
   const selectedSessionContextStats = getSelectedSessionContextStats(selectedMessages, modelInfoById)
-  const transcriptRows: TranscriptRow[] = selectedMessages.flatMap(message =>
-    message.parts.flatMap<TranscriptRow>(part => {
-      if (part.type === 'step-start') {
-        return [{ id: `${message.id}-${part.id}-divider`, type: 'divider' as const }]
-      }
-
-      if (part.type === 'step-finish') {
-        return []
-      }
-
-      return [{ id: `${message.id}-${part.id}`, type: 'part' as const, messageId: message.id, part }]
-    })
-  )
+  const patchDiffStateByMessageId = selectedSessionId
+    ? Object.fromEntries(
+        selectedMessages.map(message => [
+          message.id,
+          patchDiffsByMessageKey[getPatchDiffKey(selectedSessionId, message.id)] ?? null,
+        ])
+      )
+    : {}
   const isSelectedSessionBusy = selectedSession?.status === 'busy' || selectedSession?.status === 'retry'
 
   useEffect(() => {
@@ -223,25 +203,11 @@ export function ScriptAiReviewDialog({ target, currentCode, onApply }: ScriptAiR
           <div ref={transcriptContainerRef} className="min-h-0 flex-1 overflow-auto px-4 py-3">
             {selectedSessionId ? (
               selectedMessages.length ? (
-                <div className="space-y-2 text-xs">
-                  {transcriptRows.map(row =>
-                    row.type === 'divider' ? (
-                      <div key={row.id} className="my-2 border-t border-base-content/10" />
-                    ) : isApplyPatchToolPart(row.part) ? (
-                      <ApplyPatchToolTranscriptPart key={row.id} part={row.part} />
-                    ) : row.part.type === 'patch' && selectedSessionId ? (
-                      <PatchTranscriptPart
-                        key={row.id}
-                        part={row.part}
-                        patchDiffState={
-                          patchDiffsByMessageKey[getPatchDiffKey(selectedSessionId, row.messageId)] ?? null
-                        }
-                      />
-                    ) : (
-                      <TranscriptPart key={row.id} part={row.part} />
-                    )
-                  )}
-                </div>
+                <AiTranscriptView
+                  messages={selectedMessages}
+                  emptyMessage="No messages yet for this session."
+                  patchDiffStateByMessageId={patchDiffStateByMessageId}
+                />
               ) : (
                 <div className="grid h-full place-items-center text-sm text-base-content/52">
                   No messages yet for this session.
@@ -424,391 +390,6 @@ function FlatButton({
       {children}
     </button>
   )
-}
-
-function PatchTranscriptPart({
-  part,
-  patchDiffState,
-}: {
-  part: Extract<ScriptAiMessagePart, { type: 'patch' }>
-  patchDiffState: {
-    isLoading: boolean
-    errorMessage: string | null
-    diffs: ScriptAiMessagePatchDiff[] | null
-  } | null
-}) {
-  const patchTitle = part.files.length === 1 ? 'Patch - 1 file' : `Patch - ${String(part.files.length)} files`
-  const combinedPatch = patchDiffState?.diffs ? getCombinedPatchText(patchDiffState.diffs) : ''
-
-  return (
-    <div className="space-y-2 border border-base-content/8 bg-base-200/20 px-3 py-2 text-[12px]">
-      <div className="font-medium text-base-content">{patchTitle}</div>
-      {part.files.length ? (
-        <div className="whitespace-pre-wrap break-words text-[11px] leading-5 text-base-content/55">
-          {part.files.join('\n')}
-        </div>
-      ) : null}
-      <div className="max-h-80 overflow-auto border border-base-content/8 bg-base-100/70 px-3 py-2">
-        {patchDiffState?.isLoading ? (
-          <div className="text-base-content/55">Loading patch...</div>
-        ) : patchDiffState?.errorMessage ? (
-          <div className="text-error">{patchDiffState.errorMessage}</div>
-        ) : combinedPatch ? (
-          <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/70">{combinedPatch}</pre>
-        ) : (
-          <div className="text-base-content/55">No diff text available for this patch.</div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ApplyPatchToolTranscriptPart({ part }: { part: Extract<ScriptAiMessagePart, { type: 'tool' }> }) {
-  const patchText = getApplyPatchText(part.input)
-  const operations = patchText ? parseApplyPatchOperations(patchText) : []
-
-  if (operations.length) {
-    return (
-      <div className="space-y-3">
-        {operations.map((operation, index) => (
-          <ApplyPatchOperationView key={`${operation.path}-${String(index)}`} operation={operation} />
-        ))}
-      </div>
-    )
-  }
-
-  if (!patchText) {
-    return null
-  }
-
-  return (
-    <div className="max-h-80 overflow-auto border border-base-content/8 bg-base-100/70 px-3 py-2">
-      <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/70">{patchText}</pre>
-    </div>
-  )
-}
-
-function ApplyPatchOperationView({ operation }: { operation: ParsedApplyPatchOperation }) {
-  if (!operation.originalText && !operation.modifiedText) {
-    return <div className="text-base-content/55">No line diff available.</div>
-  }
-
-  return (
-    <div className="min-h-0 ">
-      <ScriptAiMergeEditor
-        originalValue={operation.originalText}
-        modifiedValue={operation.modifiedText}
-        language={getCodeEditorLanguageForPath(operation.path)}
-        onModifiedChange={() => undefined}
-        readOnlyModified
-      />
-    </div>
-  )
-}
-
-function TranscriptPart({ part }: { part: ScriptAiMessagePart }) {
-  return (
-    <details className="bg-base-200/20 text-[12px]" open={false}>
-      <summary
-        className={clsx(
-          'cursor-pointer list-none px-2 py-1 font-medium text-base-content',
-          part.type !== 'text' && 'text-base-content/50'
-        )}
-      >
-        {getTranscriptPartTitle(part)}
-      </summary>
-      <div className="border-t border-base-content/8 px-3 py-2">
-        <pre className="whitespace-pre-wrap break-words leading-5 text-base-content/70">
-          {getTranscriptPartContent(part)}
-        </pre>
-      </div>
-    </details>
-  )
-}
-
-function getTranscriptPartTitle(part: ScriptAiMessagePart) {
-  switch (part.type) {
-    case 'text':
-      return getFirstLine(part.text) || 'Text'
-    case 'reasoning':
-      return getFirstLine(part.text) || 'Reasoning'
-    case 'tool':
-      return getToolTranscriptPartTitle(part)
-    case 'file':
-      return part.path ?? part.filename ?? 'File attachment'
-    case 'step-start':
-      return ''
-    case 'step-finish':
-      return ''
-    case 'snapshot':
-      return 'Snapshot'
-    case 'patch':
-      return part.files.length === 1 ? 'Patch - 1 file' : `Patch - ${String(part.files.length)} files`
-    case 'agent':
-      return `Agent: ${part.name}`
-    case 'subtask':
-      return `Subtask: ${part.description}`
-    case 'retry':
-      return 'Retry'
-    case 'compaction':
-      return 'Compaction'
-  }
-}
-
-function getToolTranscriptPartTitle(part: Extract<ScriptAiMessagePart, { type: 'tool' }>) {
-  const readRange = part.toolName === 'read' ? getReadToolRangeLabel(part.input) : null
-  return [part.title, part.toolName, readRange, part.status].filter(Boolean).join(' • ')
-}
-
-function getReadToolRangeLabel(input: string | null) {
-  if (!input) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(input) as { offset?: unknown; limit?: unknown }
-    const hasOffset = typeof parsed.offset === 'number' && Number.isFinite(parsed.offset)
-    const hasLimit = typeof parsed.limit === 'number' && Number.isFinite(parsed.limit)
-
-    if (!hasOffset && !hasLimit) {
-      return null
-    }
-
-    const parts = [hasOffset ? `offset ${String(parsed.offset)}` : null, hasLimit ? `limit ${String(parsed.limit)}` : null].filter(Boolean)
-    return parts.join(' • ')
-  } catch {
-    return null
-  }
-}
-
-function getTranscriptPartContent(part: ScriptAiMessagePart) {
-  switch (part.type) {
-    case 'text':
-      return part.text
-    case 'reasoning':
-      return part.text
-    case 'tool':
-      return (
-        [
-          part.input ? `Input:\n${part.input}` : null,
-          part.output ? `Output:\n${part.output}` : null,
-          part.errorMessage ? `Error:\n${part.errorMessage}` : null,
-        ]
-          .filter(Boolean)
-          .join('\n\n') || 'No details yet.'
-      )
-    case 'file':
-      return part.path ?? part.filename ?? 'File attachment'
-    case 'step-start':
-      return 'Step started.'
-    case 'step-finish':
-      return 'Step finished.'
-    case 'snapshot':
-      return 'Snapshot created.'
-    case 'patch':
-      return part.files.join('\n') || 'Patch generated.'
-    case 'agent':
-      return part.name
-    case 'subtask':
-      return `${part.description}\n\n${part.prompt}`
-    case 'retry':
-      return 'Retry requested.'
-    case 'compaction':
-      return 'Compaction happened.'
-  }
-}
-
-function getFirstLine(value: string) {
-  return value.trim().split('\n')[0] ?? ''
-}
-
-function getCombinedPatchText(diffs: ScriptAiMessagePatchDiff[]) {
-  return diffs
-    .map(diff => {
-      const heading = [diff.status, diff.file].filter(Boolean).join(' ')
-      return [heading || null, diff.patch].filter(Boolean).join('\n')
-    })
-    .filter(Boolean)
-    .join('\n\n')
-}
-
-function isApplyPatchToolPart(part: ScriptAiMessagePart): part is Extract<ScriptAiMessagePart, { type: 'tool' }> {
-  return part.type === 'tool' && part.toolName === 'apply_patch' && Boolean(getApplyPatchText(part.input))
-}
-
-function getApplyPatchText(input: string | null) {
-  if (!input) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(input) as { patchText?: unknown }
-    if (typeof parsed.patchText === 'string' && parsed.patchText.trim()) {
-      return parsed.patchText
-    }
-  } catch {
-    // Fall through to raw string parsing.
-  }
-
-  const patchStartIndex = input.indexOf('*** Begin Patch')
-  if (patchStartIndex >= 0) {
-    return input.slice(patchStartIndex).trim()
-  }
-
-  return input.trim() || null
-}
-
-type ParsedApplyPatchOperation = {
-  type: 'add' | 'update' | 'delete'
-  path: string
-  originalText: string
-  modifiedText: string
-}
-
-function parseApplyPatchOperations(patchText: string): ParsedApplyPatchOperation[] {
-  const lines = patchText.split('\n')
-  const operations: ParsedApplyPatchOperation[] = []
-  let currentOperation: ParsedApplyPatchOperation | null = null
-  let currentOriginalLines: string[] = []
-  let currentModifiedLines: string[] = []
-  let isInHunk = false
-
-  const flushCurrentOperation = () => {
-    if (!currentOperation) {
-      return
-    }
-
-    currentOperation.originalText = trimTrailingEmptyLines(currentOriginalLines).join('\n')
-    currentOperation.modifiedText = trimTrailingEmptyLines(currentModifiedLines).join('\n')
-    operations.push(currentOperation)
-    currentOperation = null
-    currentOriginalLines = []
-    currentModifiedLines = []
-    isInHunk = false
-  }
-
-  for (const line of lines) {
-    if (line.startsWith('*** Add File: ')) {
-      flushCurrentOperation()
-      currentOperation = {
-        type: 'add',
-        path: line.slice('*** Add File: '.length).trim(),
-        originalText: '',
-        modifiedText: '',
-      }
-      continue
-    }
-
-    if (line.startsWith('*** Update File: ')) {
-      flushCurrentOperation()
-      currentOperation = {
-        type: 'update',
-        path: line.slice('*** Update File: '.length).trim(),
-        originalText: '',
-        modifiedText: '',
-      }
-      continue
-    }
-
-    if (line.startsWith('*** Delete File: ')) {
-      flushCurrentOperation()
-      currentOperation = {
-        type: 'delete',
-        path: line.slice('*** Delete File: '.length).trim(),
-        originalText: '',
-        modifiedText: '',
-      }
-      continue
-    }
-
-    if (line.startsWith('*** Move to: ') || line === '*** Begin Patch' || line === '*** End Patch') {
-      continue
-    }
-
-    if (!currentOperation) {
-      continue
-    }
-
-    if (line.startsWith('@@')) {
-      isInHunk = true
-      continue
-    }
-
-    if (currentOperation.type === 'add') {
-      if (line.startsWith('+')) {
-        currentModifiedLines.push(line.slice(1))
-      }
-      continue
-    }
-
-    if (currentOperation.type === 'delete') {
-      continue
-    }
-
-    if (!isInHunk) {
-      continue
-    }
-
-    if (line.startsWith('+')) {
-      currentModifiedLines.push(line.slice(1))
-      continue
-    }
-
-    if (line.startsWith('-')) {
-      currentOriginalLines.push(line.slice(1))
-      continue
-    }
-
-    if (line.startsWith(' ')) {
-      const value = line.slice(1)
-      currentOriginalLines.push(value)
-      currentModifiedLines.push(value)
-      continue
-    }
-  }
-
-  flushCurrentOperation()
-  return operations
-}
-
-function trimTrailingEmptyLines(lines: string[]) {
-  const nextLines = [...lines]
-  while (nextLines.length > 0 && nextLines.at(-1) === '') {
-    nextLines.pop()
-  }
-  return nextLines
-}
-
-function getCodeEditorLanguageForPath(path: string): CodeEditorLanguage {
-  if (path.endsWith('.jsx') || path.endsWith('.tsx')) {
-    return 'jsx'
-  }
-
-  if (path.endsWith('.js') || path.endsWith('.ts') || path.endsWith('.mjs') || path.endsWith('.cjs')) {
-    return 'javascript'
-  }
-
-  if (path.endsWith('.json')) {
-    return 'json'
-  }
-
-  if (path.endsWith('.json5')) {
-    return 'json5'
-  }
-
-  if (path.endsWith('.html')) {
-    return 'html'
-  }
-
-  if (path.endsWith('.css')) {
-    return 'css'
-  }
-
-  if (path.endsWith('.xml') || path.endsWith('.svg')) {
-    return 'xml'
-  }
-
-  return 'plain'
 }
 
 function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {
