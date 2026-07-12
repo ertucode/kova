@@ -38,7 +38,7 @@ import { ScriptAiIconButton } from './ScriptAiIconButton'
 import type { FolderRequestRunConfig, FolderRunHistoryRecord, FolderRunRecord } from '@common/FolderRuns'
 import type { ExplorerItem } from '@common/Explorer'
 import type { RequestExecutionRecord, RequestScriptError } from '@common/Requests'
-import { ResponseTestsPanel } from './RequestDetailsResponsePanel'
+import { RequestExecutionDetails } from './RequestExecutionPanels'
 
 const EMPTY_FOLDER_RUN_HISTORY: FolderRunHistoryRecord[] = []
 const FOLDER_RUN_HISTORY_PAGE_SIZE = 4
@@ -968,8 +968,9 @@ function buildFolderRunRecordFromHistory(
 
 function FolderRunRequestResult({ request }: { request: FolderRunRecord['requests'][number] }) {
   const [expanded, setExpanded] = useState(request.status === 'failed')
-  const testRun = request.execution?.testRun ?? null
-  const hasDetails = testRun !== null || request.error !== null
+  const [responseBodyExpanded, setResponseBodyExpanded] = useState(true)
+  const execution = request.execution
+  const hasDetails = execution !== null
 
   return (
     <div className="rounded-xl border border-base-content/8 bg-base-100 text-sm">
@@ -995,9 +996,9 @@ function FolderRunRequestResult({ request }: { request: FolderRunRecord['request
         </span>
         <span className="text-xs font-semibold text-info">{request.method}</span>
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">{request.requestName}</span>
-        {testRun ? (
+        {execution?.testRun ? (
           <span className="text-xs text-base-content/45">
-            {testRun.passedCount}/{testRun.totalCount} tests passed
+            {execution.testRun.passedCount}/{execution.testRun.totalCount} tests passed
           </span>
         ) : null}
         <span className={getRunStatusClassName(request.status)}>{request.status}</span>
@@ -1005,10 +1006,12 @@ function FolderRunRequestResult({ request }: { request: FolderRunRecord['request
 
       {expanded && hasDetails ? (
         <div className="border-t border-base-content/8 px-3 pb-3 pt-2">
-          {testRun ? (
-            <ResponseTestsPanel testRun={testRun} onJumpToScriptError={noopJumpToFolderRunScriptError} />
-          ) : null}
-          {request.error ? <div className="mt-2 text-xs text-error">{request.error}</div> : null}
+          <RequestExecutionDetails
+            execution={execution}
+            onJumpToScriptError={noopJumpToFolderRunScriptError}
+            responseBodyExpanded={responseBodyExpanded}
+            onToggleResponseBody={() => setResponseBodyExpanded(current => !current)}
+          />
         </div>
       ) : null}
     </div>

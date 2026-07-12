@@ -27,6 +27,7 @@ import { RequestExecutionCoordinator, requestExecutionStore } from './requestExe
 import { SseTranscript } from './SseTranscript'
 import { formatBytes } from '@common/formatBytes'
 import { EnvironmentCoordinator } from './environmentCoordinator'
+import { ResponseTestsPanel } from './RequestDetailsResponsePanel'
 
 export function HistoryPanel() {
   const history = useSelector(requestExecutionStore, state => state.context.history)
@@ -183,7 +184,6 @@ export function ExecutionCard({
   const tone = getExecutionTone(execution)
   const requestTime = useMemo(() => formatTimestamp(execution.request.sentAt), [execution.request.sentAt])
   const consoleEntries = execution.consoleEntries ?? []
-  const scriptErrors = execution.scriptErrors ?? []
   const testRun = execution.testRun
   const canDelete = execution.folderRunId === null || execution.folderRunId === undefined
 
@@ -272,19 +272,52 @@ export function ExecutionCard({
 
       {expanded ? (
         <div className="max-h-[500px] min-w-0 overflow-y-auto border-t border-base-content/10 px-4 py-4">
-          <ConsoleEntriesSection entries={consoleEntries} />
-          <ExecutionSection title="Request" value={formatExecutionRequest(execution)} />
-          <ExecutionVariablesSection variables={execution.request.variables ?? {}} />
-          <ExecutionResponseSection
+          <RequestExecutionDetails
             execution={execution}
-            bodyExpanded={responseBodyExpanded}
-            onToggleBody={() => setResponseBodyExpanded(current => !current)}
+            onJumpToScriptError={undefined}
+            responseBodyExpanded={responseBodyExpanded}
+            onToggleResponseBody={() => setResponseBodyExpanded(current => !current)}
           />
-          {testRun ? <TestRunSection testRun={testRun} /> : null}
-          {scriptErrors.length > 0 ? <ScriptErrorsSection errors={scriptErrors} /> : null}
         </div>
       ) : null}
     </div>
+  )
+}
+
+export function RequestExecutionDetails({
+  execution,
+  onJumpToScriptError,
+  responseBodyExpanded,
+  onToggleResponseBody,
+}: {
+  execution: RequestExecutionRecord
+  onJumpToScriptError?: (error: RequestScriptError) => void
+  responseBodyExpanded: boolean
+  onToggleResponseBody: () => void
+}) {
+  const consoleEntries = execution.consoleEntries ?? []
+  const scriptErrors = execution.scriptErrors ?? []
+  const testRun = execution.testRun
+
+  return (
+    <>
+      <ConsoleEntriesSection entries={consoleEntries} />
+      <ExecutionSection title="Request" value={formatExecutionRequest(execution)} />
+      <ExecutionVariablesSection variables={execution.request.variables ?? {}} />
+      <ExecutionResponseSection
+        execution={execution}
+        bodyExpanded={responseBodyExpanded}
+        onToggleBody={onToggleResponseBody}
+      />
+      {testRun ? (
+        onJumpToScriptError ? (
+          <ResponseTestsPanel testRun={testRun} onJumpToScriptError={onJumpToScriptError} />
+        ) : (
+          <TestRunSection testRun={testRun} />
+        )
+      ) : null}
+      {scriptErrors.length > 0 ? <ScriptErrorsSection errors={scriptErrors} /> : null}
+    </>
   )
 }
 
