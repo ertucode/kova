@@ -1,7 +1,6 @@
 import { LoaderCircleIcon, PlusIcon, SparklesIcon, SquareIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useSelector } from '@xstate/store/react'
-import { errorResponseToMessage } from '@common/GenericError'
 import type {
   ManagementAgentItemTagUpdatePlanItem,
   ManagementAgentPlanRecord,
@@ -9,7 +8,6 @@ import type {
   ManagementAgentRequestUpdatePlanItem,
   ManagementAgentScope,
   ManagementAgentTagItemUpdatePlanItem,
-  ManagementAgentWorkspaceState,
 } from '@common/ManagementAgent'
 import type { ExplorerItem } from '@common/Explorer'
 import type { TagRecord } from '@common/Tags'
@@ -23,6 +21,11 @@ import { AiTranscriptView } from './AiTranscriptView'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { EnvironmentCoordinator } from './environmentCoordinator'
+import {
+  getManagementAgentScopeKey,
+  managementAgentDialogStore,
+  ManagementAgentDialogCoordinator,
+} from './managementAgentDialogStore'
 import { TagsCoordinator } from './tagsCoordinator'
 import { tagsStore } from './tagsStore'
 
@@ -31,6 +34,7 @@ type ManagementAgentDialogProps = {
 }
 
 const EMPTY_PROMPT_HISTORY: string[] = []
+const PROMPT_TEXTAREA_MAX_HEIGHT_PX = 240
 
 export function openManagementAgentDialog(scope: ManagementAgentScope) {
   dialogActions.open({ component: ManagementAgentDialog, props: { scope } })
@@ -40,18 +44,20 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
   const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const tagItems = useSelector(tagsStore, state => state.context.items)
-  const [workspaceState, setWorkspaceState] = useState<ManagementAgentWorkspaceState | null>(null)
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(readSelectedSessionId(scope))
-  const [selectedModel, setSelectedModel] = useState('')
-  const [prompt, setPrompt] = useState('')
-  const [promptHistory, setPromptHistory] = useState<string[]>(EMPTY_PROMPT_HISTORY)
   const [promptHistoryIndex, setPromptHistoryIndex] = useState<number | null>(null)
   const [promptHistoryDraft, setPromptHistoryDraft] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const transcriptContainerRef = useRef<HTMLDivElement | null>(null)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
+  const scopeKey = getManagementAgentScopeKey(scope)
+  const dialogEntry = useSelector(managementAgentDialogStore, state => state.context.entriesByScopeKey[scopeKey] ?? null)
+  const workspaceState = dialogEntry?.workspaceState ?? null
+  const selectedSessionId = dialogEntry?.selectedSessionId ?? null
+  const selectedModel = dialogEntry?.selectedModel ?? ''
+  const prompt = dialogEntry?.prompt ?? ''
+  const promptHistory = dialogEntry?.promptHistory ?? EMPTY_PROMPT_HISTORY
+  const isLoading = dialogEntry?.isLoading ?? false
+  const isSubmitting = dialogEntry?.isSubmitting ?? false
+  const errorMessage = dialogEntry?.errorMessage ?? null
 
   const sessions = workspaceState?.sessions ?? []
   const selectedSessionState = sessions.find(sessionState => sessionState.session.id === selectedSessionId) ?? sessions[0] ?? null
@@ -66,7 +72,12 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
   )
 
   useEffect(() => {
-    void loadWorkspace()
+    setPromptHistoryIndex(null)
+    setPromptHistoryDraft('')
+  }, [scopeKey])
+
+  useEffect(() => {
+    void ManagementAgentDialogCoordinator.loadWorkspace(scope)
   }, [scope.scopeType, scope.targetFolderId, scope.targetRequestId])
 
   useEffect(() => {
@@ -79,7 +90,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
         return
       }
 
-      applyWorkspaceState(event.state)
+      ManagementAgentDialogCoordinator.applyWorkspaceState(event.state)
     })
   }, [scope.scopeType, scope.targetFolderId, scope.targetRequestId])
 
@@ -99,131 +110,33 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
     }
 
     textarea.style.height = '0px'
-    textarea.style.height = `${textarea.scrollHeight}px`
+    const nextHeight = Math.min(textarea.scrollHeight, PROMPT_TEXTAREA_MAX_HEIGHT_PX)
+    textarea.style.height = `${nextHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > PROMPT_TEXTAREA_MAX_HEIGHT_PX ? 'auto' : 'hidden'
   }, [prompt])
 
-  useEffect(() => {
-    const nextSelectedModel = selectedSession?.selectedModel ?? ''
-    setSelectedModel(current => (current === nextSelectedModel ? current : nextSelectedModel))
-  }, [selectedSession?.selectedModel])
-
-  function applyWorkspaceState(nextState: ManagementAgentWorkspaceState, options?: { selectedSessionId?: string | null }) {
-    setWorkspaceState(nextState)
-    setSelectedSessionId(currentSelectedSessionId => {
-      const requestedSelectedSessionId = options?.selectedSessionId
-      const nextSelected = requestedSelectedSessionId !== undefined
-        ? requestedSelectedSessionId
-        : currentSelectedSessionId && nextState.sessions.some(sessionState => sessionState.session.id === currentSelectedSessionId)
-        ? currentSelectedSessionId
-        : nextState.sessions[0]?.session.id ?? null
-      writeSelectedSessionId(scope, nextSelected)
-      return nextSelected
-    })
-    setIsLoading(false)
-    setIsSubmitting(false)
-  }
-
-  async function loadWorkspace() {
-    setIsLoading(true)
-    setErrorMessage(null)
-    const result = await getWindowElectron().loadManagementAgentWorkspace(scope)
-    if (!result.success) {
-      setIsLoading(false)
-      setErrorMessage(errorResponseToMessage(result.error))
-      return
-    }
-
-    applyWorkspaceState(result.data)
-  }
-
-  async function createSession() {
-    setErrorMessage(null)
-    setIsSubmitting(true)
-    const existingSessionIds = new Set((workspaceState?.sessions ?? []).map(sessionState => sessionState.session.id))
-    const result = await getWindowElectron().createManagementAgentSession({ ...scope, model: selectedModel || null })
-    if (!result.success) {
-      setIsSubmitting(false)
-      setErrorMessage(errorResponseToMessage(result.error))
-      return null
-    }
-
-    const createdSessionId =
-      result.data.sessions.find(sessionState => !existingSessionIds.has(sessionState.session.id))?.session.id
-      ?? result.data.sessions[0]?.session.id
-      ?? null
-
-    setPrompt('')
-    setPromptHistory([])
-    applyWorkspaceState(result.data, { selectedSessionId: createdSessionId })
-    return createdSessionId
-  }
-
-  async function sendPrompt() {
-    const nextSessionId = selectedSession ? selectedSession.id : await createSession()
-    const trimmedPrompt = prompt.trim()
-    if (!trimmedPrompt || !nextSessionId) {
-      return
-    }
-
-    setPrompt('')
-    setPromptHistory(currentHistory => [...currentHistory, trimmedPrompt])
-    setPromptHistoryIndex(null)
-    setPromptHistoryDraft('')
-    setErrorMessage(null)
-    setIsSubmitting(true)
-
-    const result = await getWindowElectron().sendManagementAgentMessage({
-      sessionId: nextSessionId,
-      message: trimmedPrompt,
-      model: selectedModel || null,
-    })
-
-    if (!result.success) {
-      setIsSubmitting(false)
-      setPrompt(trimmedPrompt)
-      setErrorMessage(errorResponseToMessage(result.error))
-      return
-    }
-
-    applyWorkspaceState(result.data)
-  }
-
-  async function abortSelectedSession() {
-    if (!selectedSessionId) {
-      return
-    }
-
-    setErrorMessage(null)
-    const result = await getWindowElectron().abortManagementAgentSession({ sessionId: selectedSessionId })
-    if (!result.success) {
-      setErrorMessage(errorResponseToMessage(result.error))
-      return
-    }
-
-    applyWorkspaceState(result.data)
-  }
-
   async function applyDraft() {
-    if (!selectedSessionId || !canApply) {
+    if (!canApply) {
       return
     }
 
-    setErrorMessage(null)
-    setIsSubmitting(true)
-    const result = await getWindowElectron().applyManagementAgentPlan({ sessionId: selectedSessionId })
-    if (!result.success) {
-      setIsSubmitting(false)
-      setErrorMessage(errorResponseToMessage(result.error))
+    const didApply = await ManagementAgentDialogCoordinator.applyDraft(scope)
+    if (!didApply) {
       return
     }
 
-    applyWorkspaceState(result.data)
     await Promise.all([
       FolderExplorerCoordinator.loadItems(),
       EnvironmentCoordinator.loadEnvironments(),
       TagsCoordinator.loadTags(),
       ChangesCoordinator.loadOperations(),
     ])
+  }
+
+  function submitPrompt() {
+    setPromptHistoryIndex(null)
+    setPromptHistoryDraft('')
+    void ManagementAgentDialogCoordinator.sendPrompt(scope)
   }
 
   function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -238,7 +151,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
         if (currentIndex === null) {
           setPromptHistoryDraft(prompt)
         }
-        setPrompt(promptHistory[nextIndex] ?? '')
+        managementAgentDialogStore.trigger.promptChanged({ scopeKey, prompt: promptHistory[nextIndex] ?? '' })
         return nextIndex
       })
       return
@@ -252,12 +165,12 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
         }
 
         if (currentIndex >= promptHistory.length - 1) {
-          setPrompt(promptHistoryDraft)
+          managementAgentDialogStore.trigger.promptChanged({ scopeKey, prompt: promptHistoryDraft })
           return null
         }
 
         const nextIndex = currentIndex + 1
-        setPrompt(promptHistory[nextIndex] ?? '')
+        managementAgentDialogStore.trigger.promptChanged({ scopeKey, prompt: promptHistory[nextIndex] ?? '' })
         return nextIndex
       })
       return
@@ -266,12 +179,12 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       if (isSelectedSessionBusy) {
-        void abortSelectedSession()
+        void ManagementAgentDialogCoordinator.abortSelectedSession(scope)
         return
       }
 
       if (!isSubmitting && prompt.trim()) {
-        void sendPrompt()
+        submitPrompt()
       }
     }
   }
@@ -321,8 +234,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
               value={selectedSessionId ?? ''}
               onChange={event => {
                 const nextSessionId = event.target.value || null
-                setSelectedSessionId(nextSessionId)
-                writeSelectedSessionId(scope, nextSessionId)
+                ManagementAgentDialogCoordinator.selectSession(scopeKey, nextSessionId)
               }}
               disabled={isLoading || isSubmitting}
             >
@@ -334,7 +246,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
               ))}
             </select>
 
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void createSession()} disabled={isLoading || isSubmitting}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void ManagementAgentDialogCoordinator.createSession(scope)} disabled={isLoading || isSubmitting}>
               <PlusIcon className="size-4" />
               New Session
             </button>
@@ -342,7 +254,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
             <select
               className="min-h-10 min-w-[240px] bg-base-100 text-sm outline-none"
               value={selectedModel}
-              onChange={event => setSelectedModel(event.target.value)}
+              onChange={event => ManagementAgentDialogCoordinator.setSelectedModel(scopeKey, event.target.value)}
               disabled={modelsLoading || isSubmitting}
             >
               <option value="">OpenCode default</option>
@@ -356,7 +268,14 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
             <button
               type="button"
               className="btn btn-primary btn-sm ml-auto"
-              onClick={() => void (isSelectedSessionBusy ? abortSelectedSession() : sendPrompt())}
+              onClick={() => {
+                if (isSelectedSessionBusy) {
+                  void ManagementAgentDialogCoordinator.abortSelectedSession(scope)
+                  return
+                }
+
+                submitPrompt()
+              }}
               disabled={isLoading || (isSelectedSessionBusy ? !selectedSessionId : isSubmitting || !prompt.trim())}
             >
               {isSelectedSessionBusy ? <SquareIcon className="size-4" /> : isSubmitting ? <LoaderCircleIcon className="size-4 animate-spin" /> : <SparklesIcon className="size-4" />}
@@ -370,11 +289,11 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
 
           <textarea
             ref={promptRef}
-            className="min-h-12 w-full resize-none border-0 bg-base-100 px-3 py-3 font-mono text-sm leading-6 text-base-content outline-none placeholder:text-base-content/40"
-              placeholder="Describe what you want to organize, update, or create in Kova."
+            className="min-h-12 max-h-[240px] w-full resize-none overflow-y-auto border-0 bg-base-100 px-3 py-3 font-mono text-sm leading-6 text-base-content outline-none placeholder:text-base-content/40"
+            placeholder="Describe what you want to organize, update, or create in Kova."
             value={prompt}
             onChange={event => {
-              setPrompt(event.target.value)
+              managementAgentDialogStore.trigger.promptChanged({ scopeKey, prompt: event.target.value })
               setPromptHistoryIndex(null)
               setPromptHistoryDraft(event.target.value)
             }}
@@ -790,26 +709,6 @@ function formatTagItemUpdate(
     ? update.items.map(item => `${item.itemType}: ${getExplorerItemLabel(explorerItemMap, item.itemType, item.itemId)}`).join('\n')
     : 'none'
   return `${getTagLabel(tagMap, update.tagId)}\nItems:\n${itemLabels}`
-}
-
-function readSelectedSessionId(scope: ManagementAgentScope) {
-  return window.localStorage.getItem(getSelectedSessionStorageKey(scope))
-}
-
-function writeSelectedSessionId(scope: ManagementAgentScope, sessionId: string | null) {
-  const key = getSelectedSessionStorageKey(scope)
-  if (!sessionId) {
-    window.localStorage.removeItem(key)
-    return
-  }
-
-  window.localStorage.setItem(key, sessionId)
-}
-
-function getSelectedSessionStorageKey(scope: ManagementAgentScope) {
-  return scope.scopeType === 'request'
-    ? `management-agent-selected-session:request:${scope.targetRequestId ?? 'no-request'}`
-    : `management-agent-selected-session:${scope.scopeType}:${scope.targetFolderId ?? 'no-folder'}`
 }
 
 function getManagementAgentDialogTitle(scope: ManagementAgentScope) {
