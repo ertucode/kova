@@ -737,6 +737,29 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     [updateRequestDraft]
   )
 
+  useEffect(() => {
+    return getWindowElectron().onGenericEvent(event => {
+      if (event.type !== 'fix-request-search-param-value') {
+        return
+      }
+
+      const rows = parseKeyValueRows(draftRef.current.searchParams)
+      const row = rows.find(candidate => candidate.id === event.rowId)
+      if (!row) {
+        return
+      }
+
+      const nextValue = decodeSearchParamValue(row.value)
+      if (nextValue === null || nextValue === row.value) {
+        return
+      }
+
+      updateSearchParams(
+        stringifyKeyValueRows(rows.map(candidate => (candidate.id === event.rowId ? { ...candidate, value: nextValue } : candidate)))
+      )
+    })
+  }, [updateSearchParams])
+
   const formatBody = async () => {
     const latestDraft = draftRef.current
 
@@ -2036,7 +2059,7 @@ const SearchParamsTab = memo(function SearchParamsTab({
   valueEditorRefreshKey?: string
 }) {
   return (
-    <div data-testid="search-params-tab">
+    <div data-testid="search-params-tab" data-context-scope="request-search-params">
       <KeyValueEditor
         label={null}
         value={value}
@@ -2077,6 +2100,14 @@ function getUsedRequestVariableNames(draft: RequestDetailsDraft) {
 
 function shouldDefaultToSearchParamsTab(draft: RequestDetailsDraft) {
   return draft.bodyType === 'none' && draft.searchParams.trim().length > 0
+}
+
+function decodeSearchParamValue(value: string) {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, ' '))
+  } catch {
+    return null
+  }
 }
 
 function MethodBadge({ method }: { method: RequestMethod }) {

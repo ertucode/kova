@@ -12,6 +12,9 @@ export type GenericEvent = {
   path: string
   fileToSelect?: $Maybe<string>
 } | {
+  type: 'fix-request-search-param-value'
+  rowId: string
+} | {
   type: 'cookies-updated'
 } | {
   type: 'environments-updated'

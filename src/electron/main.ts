@@ -337,8 +337,8 @@ app.on('ready', async () => {
   app.on('web-contents-created', (_event, contents) => {
     // if (contents.getType() === 'webview') return
 
-    contents.on('context-menu', (_contextEvent, params) => {
-      const template = buildContextMenuTemplate(contents, params)
+    contents.on('context-menu', async (_contextEvent, params) => {
+      const template = await buildContextMenuTemplate(contents, params)
       if (!template.length) return
 
       const window = BrowserWindow.fromWebContents(contents)
@@ -1303,13 +1303,30 @@ app.on('ready', async () => {
   })
 })
 
-function buildContextMenuTemplate(
+async function buildContextMenuTemplate(
   contents: Electron.WebContents,
   params: Electron.ContextMenuParams
-): Electron.MenuItemConstructorOptions[] {
+): Promise<Electron.MenuItemConstructorOptions[]> {
   const template: Electron.MenuItemConstructorOptions[] = []
+  const searchParamContextTarget = params.isEditable ? await getSearchParamContextTarget(contents, params) : null
+
+  if (searchParamContextTarget) {
+    template.push({
+      label: 'Decode Value',
+      click: () => {
+        contents.send('generic:event', {
+          type: 'fix-request-search-param-value',
+          rowId: searchParamContextTarget.rowId,
+        })
+      },
+    })
+  }
 
   if (params.isEditable) {
+    if (template.length) {
+      template.push({ type: 'separator' })
+    }
+
     template.push(
       { role: 'undo', enabled: params.editFlags.canUndo },
       { role: 'redo', enabled: params.editFlags.canRedo },
@@ -1357,6 +1374,49 @@ function buildContextMenuTemplate(
   }
 
   return template
+}
+
+async function getSearchParamContextTarget(contents: Electron.WebContents, params: Electron.ContextMenuParams) {
+  try {
+    return await contents.executeJavaScript(
+      `(() => {
+        const target = document.elementFromPoint(${JSON.stringify(params.x)}, ${JSON.stringify(params.y)})
+        if (!(target instanceof HTMLElement)) {
+          return null
+        }
+
+        const searchParamsScope = target.closest('[data-context-scope="request-search-params"]')
+        if (!(searchParamsScope instanceof HTMLElement)) {
+          return null
+        }
+
+        const valueField = target.closest('[data-key-value-field="value"][data-key-value-row-id][data-key-value-current-value]')
+        if (!(valueField instanceof HTMLElement)) {
+          return null
+        }
+
+        const rowId = valueField.dataset.keyValueRowId
+        const value = valueField.dataset.keyValueCurrentValue
+        if (!rowId || value === undefined) {
+          return null
+        }
+
+        try {
+          const decodedValue = decodeURIComponent(value.replace(/\\+/g, ' '))
+          if (decodedValue === value) {
+            return null
+          }
+
+          return { rowId }
+        } catch {
+          return null
+        }
+      })()`,
+      true
+    )
+  } catch {
+    return null
+  }
 }
 
 function createScriptRequestBridge(webContents: Electron.WebContents) {

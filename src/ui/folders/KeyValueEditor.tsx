@@ -753,6 +753,7 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
               <div
                 data-key-value-field="value"
                 data-key-value-row-id={row.id}
+                data-key-value-current-value={row.value}
                 onFocusCapture={() => setFocusedRowId(row.id)}
               >
                 <CodeEditor

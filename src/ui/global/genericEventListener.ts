@@ -11,6 +11,8 @@ import { dialogActions } from './dialogStore'
 export function subscribeToGenericEvents() {
   getWindowElectron().onGenericEvent(e => {
     if (e.type === 'reload-path') {
+    } else if (e.type === 'fix-request-search-param-value') {
+      return
     } else if (e.type === 'cookies-updated') {
       void CookiesCoordinator.loadCookies()
     } else if (e.type === 'environments-updated') {
