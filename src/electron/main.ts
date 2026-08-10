@@ -3,7 +3,7 @@ import path from 'path'
 import os, { homedir } from 'os'
 import { constants as fsConstants } from 'fs'
 import fsSync from 'fs'
-import { copyFile, mkdir, rename, unlink } from 'fs/promises'
+import { copyFile, mkdir, rename, unlink, writeFile } from 'fs/promises'
 import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { TaskManager } from './TaskManager.js'
@@ -141,6 +141,7 @@ import {
   sendManagementAgentMessage,
   shutdownManagementAgentServer,
 } from './management-agent.js'
+import type { SaveTextToFileInput } from '../common/TextFileSave.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -399,6 +400,24 @@ app.on('ready', async () => {
     }
 
     return Result.Success({ filePath: result.filePaths[0] })
+  })
+
+  ipcHandle('saveTextToFile', async (input: SaveTextToFileInput, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.SaveDialogOptions = {
+      defaultPath: input.suggestedFileName,
+      filters: input.filters,
+    }
+    const result = window
+      ? await dialog.showSaveDialog(window, dialogOptions)
+      : await dialog.showSaveDialog(dialogOptions)
+
+    if (result.canceled || !result.filePath) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    await writeFile(result.filePath, input.content, 'utf8')
+    return Result.Success({ filePath: result.filePath })
   })
 
   ipcHandle('runCommand', runCommand)

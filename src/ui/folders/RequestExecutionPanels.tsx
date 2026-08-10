@@ -28,6 +28,8 @@ import { SseTranscript } from './SseTranscript'
 import { formatBytes } from '@common/formatBytes'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { ResponseTestsPanel } from './RequestDetailsResponsePanel'
+import { useHoldAction } from '@/lib/hooks/useHoldAction'
+import { saveHttpResponseBodyToFile, saveWebSocketTranscriptToFile } from './saveResponseToFile'
 
 export function HistoryPanel() {
   const history = useSelector(requestExecutionStore, state => state.context.history)
@@ -186,6 +188,11 @@ export function ExecutionCard({
   const consoleEntries = execution.consoleEntries ?? []
   const testRun = execution.testRun
   const canDelete = execution.folderRunId === null || execution.folderRunId === undefined
+  const saveAsExampleButtonProps = useHoldAction({
+    onClick: () => saveExecutionAsExample(execution),
+    onHold: () => saveExecutionResponseToFile(execution),
+    disabled: !execution.response,
+  })
 
   return (
     <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
@@ -234,12 +241,19 @@ export function ExecutionCard({
           <button
             type="button"
             className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
-            onClick={event => {
+            onPointerDown={event => {
               event.stopPropagation()
-              void saveExecutionAsExample(execution)
+              saveAsExampleButtonProps.onPointerDown()
             }}
-            aria-label="Save as example"
-            title="Save as Example"
+            onPointerUp={event => {
+              event.stopPropagation()
+              saveAsExampleButtonProps.onPointerUp()
+            }}
+            onPointerLeave={saveAsExampleButtonProps.onPointerLeave}
+            onPointerCancel={saveAsExampleButtonProps.onPointerCancel}
+            onKeyDown={saveAsExampleButtonProps.onKeyDown}
+            aria-label="Save as example. Hold to save to file"
+            title="Save as Example (Hold to Save to File)"
           >
             <SaveIcon className="size-4" />
           </button>
@@ -345,6 +359,11 @@ function TestRunSection({ testRun }: { testRun: RequestTestRun }) {
 function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) {
   const [expanded, setExpanded] = useState(false)
   const connectedTime = useMemo(() => formatTimestamp(session.connectedAt), [session.connectedAt])
+  const saveAsExampleButtonProps = useHoldAction({
+    onClick: () => saveWebSocketSessionAsExample(session),
+    onHold: () => saveWebSocketSessionToFile(session),
+    disabled: session.messages.length === 0,
+  })
 
   return (
     <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100/50">
@@ -388,12 +407,19 @@ function WebSocketHistoryCard({ session }: { session: WebSocketSessionRecord }) 
           <button
             type="button"
             className="rounded-xl p-2 text-base-content/35 transition hover:bg-base-100/80 hover:text-base-content"
-            onClick={event => {
+            onPointerDown={event => {
               event.stopPropagation()
-              void saveWebSocketSessionAsExample(session)
+              saveAsExampleButtonProps.onPointerDown()
             }}
-            aria-label="Save as example"
-            title="Save as Example"
+            onPointerUp={event => {
+              event.stopPropagation()
+              saveAsExampleButtonProps.onPointerUp()
+            }}
+            onPointerLeave={saveAsExampleButtonProps.onPointerLeave}
+            onPointerCancel={saveAsExampleButtonProps.onPointerCancel}
+            onKeyDown={saveAsExampleButtonProps.onKeyDown}
+            aria-label="Save as example. Hold to save to file"
+            title="Save as Example (Hold to Save to File)"
           >
             <SaveIcon className="size-4" />
           </button>
@@ -681,6 +707,18 @@ async function saveExecutionAsExample(execution: RequestExecutionRecord) {
   })
 }
 
+async function saveExecutionResponseToFile(execution: RequestExecutionRecord) {
+  if (!execution.response) {
+    return
+  }
+
+  await saveHttpResponseBodyToFile({
+    requestName: execution.requestName,
+    headers: execution.response.headers,
+    body: execution.response.body,
+  })
+}
+
 async function openRequestFromHistory(requestId: string) {
   EnvironmentCoordinator.setSidebarTab('requests')
   await FolderExplorerCoordinator.selectItem({ itemType: 'request', id: requestId })
@@ -713,6 +751,18 @@ async function saveWebSocketSessionAsExample(session: WebSocketSessionRecord) {
     severity: 'success',
     title: 'Example saved',
     message: `Saved transcript example for ${session.requestName}.`,
+  })
+}
+
+async function saveWebSocketSessionToFile(session: WebSocketSessionRecord) {
+  const lastSentMessage = [...session.messages].reverse().find(message => message.direction === 'sent')
+
+  await saveWebSocketTranscriptToFile({
+    requestName: session.requestName,
+    requestHeaders: session.requestHeaders,
+    requestBody: lastSentMessage?.body ?? '',
+    connectedAt: session.connectedAt,
+    messages: session.messages,
   })
 }
 

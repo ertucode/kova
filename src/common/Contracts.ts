@@ -133,6 +133,7 @@ import {
   type PickOpenApiSpecExportFileInput,
   type PickOpenApiSpecExportFileResponse,
 } from './OpenApiExport.js'
+import { type SaveTextToFileInput, type SaveTextToFileResponse } from './TextFileSave.js'
 import { type GenerateRequestCodeInput, type GenerateRequestCodeResponse } from './RequestCodegen.js'
 import {
   type AbortScriptAiSessionInput,
@@ -233,6 +234,7 @@ export type EventResponseMapping = {
   openShell: Promise<void>
   openFileLocation: Promise<GenericResult<void>>
   pickFilePath: Promise<GenericResult<{ filePath: string }>>
+  saveTextToFile: Promise<GenericResult<SaveTextToFileResponse>>
   runCommand: Promise<GenericResult<void>>
   resolveScriptPrompt: Promise<void>
   resolveScriptMakeRequest: Promise<void>
@@ -387,6 +389,7 @@ export type EventRequestMapping = {
   openShell: string
   openFileLocation: string
   pickFilePath: { defaultPath?: string }
+  saveTextToFile: SaveTextToFileInput
   runCommand: { name: string; filePath: string; parameters: any }
   resolveScriptPrompt: ScriptPromptResponse
   resolveScriptMakeRequest: ScriptRequestBridgeResponse
@@ -550,6 +553,7 @@ export type WindowElectron = {
   openShell: (url: string) => Promise<void>
   openFileLocation: (filePath: string) => Promise<GenericResult<void>>
   pickFilePath: (input?: { defaultPath?: string }) => Promise<GenericResult<{ filePath: string }>>
+  saveTextToFile: (input: SaveTextToFileInput) => Promise<GenericResult<SaveTextToFileResponse>>
   getWindowArgs: () => string
   runCommand: (opts: { name: string; filePath: string; parameters: any }) => Promise<GenericResult<void>>
   resolveScriptPrompt: (input: ScriptPromptResponse) => Promise<void>

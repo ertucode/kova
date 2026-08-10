@@ -39,6 +39,8 @@ import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { buildImportedWebSocketUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
 import { formatBytes } from '@common/formatBytes'
+import { useHoldAction } from '@/lib/hooks/useHoldAction'
+import { saveWebSocketTranscriptToFile } from './saveResponseToFile'
 
 type WebSocketMetaTab = 'overview' | 'search-params' | 'automation'
 type MessageFilter = 'all' | 'sent' | 'received'
@@ -418,6 +420,26 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     await FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
     toast.show({ severity: 'success', title: 'Example saved', message: `Saved transcript example for ${draft.name}.` })
   }
+
+  async function handleSaveToFile() {
+    if (!session) {
+      return
+    }
+
+    await saveWebSocketTranscriptToFile({
+      requestName: draft.name,
+      requestHeaders: draft.headers,
+      requestBody: draft.body,
+      connectedAt: session.connectedAt,
+      messages: session.messages,
+    })
+  }
+
+  const saveAsExampleButtonProps = useHoldAction({
+    onClick: handleSaveAsExample,
+    onHold: handleSaveToFile,
+    disabled: !session || session.messages.length === 0,
+  })
 
   function startResize(event: ReactPointerEvent<HTMLButtonElement>) {
     resizeStateRef.current = {
@@ -837,10 +859,12 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
                 <button
                   type="button"
                   className="rounded-xl border border-base-content/10 bg-base-100/70 px-3 py-2 text-xs font-medium uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
-                  onClick={() => void handleSaveAsExample()}
+                  title="Save As Example (Hold to Save To File)"
+                  aria-label="Save as example. Hold to save to file"
+                  {...saveAsExampleButtonProps}
                   disabled={!session || session.messages.length === 0}
                 >
-                  Save as Example
+                  Save As Example(Hold To Save To File)
                 </button>
                 <button
                   type="button"

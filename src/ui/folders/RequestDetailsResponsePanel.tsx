@@ -43,6 +43,8 @@ import { createJsonResponsePathExtension } from './requestDetailsJsonResponsePat
 import { resolveResponseTableRows, type ParsedStructuredResponse } from './requestDetailsResponseTable'
 import { formatHtml } from '@common/formatHtml'
 import { formatBytes } from '@common/formatBytes'
+import { useHoldAction } from '@/lib/hooks/useHoldAction'
+import { saveHttpResponseBodyToFile } from './saveResponseToFile'
 
 const readOnlyCodeEditorOnChange = () => undefined
 const jsonResponsePathExtension = createJsonResponsePathExtension()
@@ -198,6 +200,30 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
     sseStream,
   ])
 
+  const saveCurrentResponseToFile = useCallback(async () => {
+    const responseSource = response
+      ? {
+          headers: response.headers,
+          body: response.body,
+        }
+      : sseStream && sseStream.body.trim()
+        ? {
+            headers: sseStream.headers,
+            body: sseStream.body,
+          }
+        : null
+
+    if (!responseSource) {
+      return
+    }
+
+    await saveHttpResponseBodyToFile({
+      requestName,
+      headers: responseSource.headers,
+      body: responseSource.body,
+    })
+  }, [requestName, response, sseStream])
+
   const updateResponseTableAccessor = useCallback((value: string) => {
     const { selected, entries } = folderExplorerEditorStore.getSnapshot().context
     if (!selected) {
@@ -335,6 +361,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
               onSaveAsExample={
                 response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseAsExample() : undefined
               }
+              onSaveToFile={response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseToFile() : undefined}
             />
           ) : (
             <>
@@ -363,6 +390,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
                 testRun={response?.testRun ?? null}
                 onJumpToScriptError={onJumpToScriptError}
                 onSaveAsExample={response ? () => void saveCurrentResponseAsExample() : undefined}
+                onSaveToFile={response ? () => void saveCurrentResponseToFile() : undefined}
               />
             </>
           )}
@@ -525,6 +553,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   testRun,
   onJumpToScriptError,
   onSaveAsExample,
+  onSaveToFile,
 }: {
   value: string
   rawBody: string
@@ -560,6 +589,7 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   testRun: RequestTestRun | null
   onJumpToScriptError: (error: RequestScriptError) => void
   onSaveAsExample?: () => void
+  onSaveToFile?: () => void
 }) {
   const language = detectResponseLanguage(contentType, rawBody)
   const isImageResponse = isImageContentType(contentType)
@@ -584,6 +614,11 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
   const [section, setSection] = useState<'body' | 'headers' | 'tests'>('body')
   const bodyViewResetKeyRef = useRef<string | null>(null)
   const testsText = useMemo(() => formatTestRunDetails(testRun), [testRun])
+  const saveAsExampleButtonProps = useHoldAction({
+    onClick: onSaveAsExample ?? (() => undefined),
+    onHold: onSaveToFile ?? (() => undefined),
+    disabled: !onSaveAsExample || !onSaveToFile,
+  })
   const canCopyResponseSection =
     section === 'body'
       ? displayedRawBody.trim().length > 0
@@ -845,12 +880,12 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             </Tooltip>
           ) : null}
           {section === 'body' && onSaveAsExample ? (
-            <Tooltip content="Save as Example" placement="top" className="flex">
+            <Tooltip content="Save as Example (Hold to Save to File)" placement="top" className="flex">
               <button
                 type="button"
                 className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
-                onClick={onSaveAsExample}
-                aria-label="Save as example"
+                aria-label="Save as example. Hold to save to file"
+                {...saveAsExampleButtonProps}
               >
                 <SaveIcon className="h-4 w-4" />
               </button>
@@ -1425,6 +1460,7 @@ function SseResponsePanel({
   requestHistoryCount,
   events,
   onSaveAsExample,
+  onSaveToFile,
 }: {
   stream: HttpSseStreamState | null
   response: SendRequestResponse | null
@@ -1433,12 +1469,18 @@ function SseResponsePanel({
   requestHistoryCount: number | null
   events: SseEventRecord[]
   onSaveAsExample?: () => void
+  onSaveToFile?: () => void
 }) {
   const headerContentType = getResponseContentType(stream?.headers ?? response?.headers ?? '')
   const durationMs = stream?.durationMs ?? response?.durationMs ?? null
   const status = stream?.status ?? response?.status ?? null
   const statusText = stream?.statusText ?? response?.statusText ?? ''
   const statusTone = getStatusTone(status ?? undefined)
+  const saveAsExampleButtonProps = useHoldAction({
+    onClick: onSaveAsExample ?? (() => undefined),
+    onHold: onSaveToFile ?? (() => undefined),
+    disabled: !onSaveAsExample || !onSaveToFile,
+  })
   const [viewMode, setViewMode] = useState<'rows' | 'raw'>('rows')
   const [filterValue, setFilterValue] = useState('')
   const rawBody = stream?.body ?? response?.body ?? ''
@@ -1512,8 +1554,9 @@ function SseResponsePanel({
             <button
               type="button"
               className="rounded-lg bg-base-100/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/65 transition hover:border-base-content/20 hover:text-base-content"
-              onClick={onSaveAsExample}
-              title="Save as Example"
+              title="Save as Example (Hold to Save to File)"
+              aria-label="Save as example. Hold to save to file"
+              {...saveAsExampleButtonProps}
             >
               <SaveIcon className="h-4 w-4" />
             </button>
