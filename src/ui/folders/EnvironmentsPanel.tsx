@@ -15,10 +15,15 @@ export function EnvironmentsPanel() {
   const selectedId = useSelector(environmentEditorStore, state => state.context.selectedId)
   const focusEnvironmentId = useSelector(environmentEditorStore, state => state.context.focusEnvironmentId)
   const loading = useSelector(environmentEditorStore, state => state.context.loading)
-  const entry = useSelector(environmentEditorStore, state =>
-    state.context.selectedId ? (state.context.entries[state.context.selectedId] ?? null) : null
-  )
+  const entry = useSelector(environmentEditorStore, state => {
+    const selectedEnvironment = state.context.selectedId
+      ? state.context.items.find(item => item.id === state.context.selectedId && item.folderId == null)
+      : null
+    return selectedEnvironment ? (state.context.entries[selectedEnvironment.id] ?? null) : null
+  })
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const workspaceItems = items.filter(item => item.folderId == null)
+  const selectedWorkspaceId = workspaceItems.some(item => item.id === selectedId) ? selectedId : null
 
   const draft = entry?.current ?? null
   const isDirty = isEnvironmentEntryDirty(entry)
@@ -79,14 +84,14 @@ export function EnvironmentsPanel() {
                 type="button"
                 className="flex h-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-200 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() =>
-                  selectedId
+                  selectedWorkspaceId
                     ? dialogActions.open({
                         component: PostmanEnvironmentExportDialog,
-                        props: { environmentId: selectedId },
+                        props: { environmentId: selectedWorkspaceId },
                       })
                     : undefined
                 }
-                disabled={!selectedId}
+                disabled={!selectedWorkspaceId}
               >
                 Export
               </button>
@@ -106,12 +111,12 @@ export function EnvironmentsPanel() {
         <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
           {loading ? <div className="px-1 py-3 text-sm text-base-content/45">Loading environments...</div> : null}
 
-          {!loading && items.length === 0 ? (
+          {!loading && workspaceItems.length === 0 ? (
             <div className="px-1 py-3 text-sm text-base-content/45">No environments yet.</div>
           ) : null}
 
           <div className="space-y-2">
-            {items.map(item => {
+            {workspaceItems.map(item => {
               const isActive = activeEnvironmentIds.includes(item.id)
               const isSelected = item.id === selectedId
               const showDropBefore = dropIndicatorId === `${item.id}:before`
@@ -147,8 +152,8 @@ export function EnvironmentsPanel() {
                       event.preventDefault()
                       const rect = event.currentTarget.getBoundingClientRect()
                       const ratio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5
-                      const sourceIndex = items.findIndex(environment => environment.id === draggedEnvironmentId)
-                      const targetIndex = items.findIndex(environment => environment.id === item.id)
+                       const sourceIndex = workspaceItems.findIndex(environment => environment.id === draggedEnvironmentId)
+                       const targetIndex = workspaceItems.findIndex(environment => environment.id === item.id)
                       if (sourceIndex < 0 || targetIndex < 0) {
                         setDraggedEnvironmentId(null)
                         setDropIndicatorId(null)

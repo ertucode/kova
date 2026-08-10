@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { and, eq, isNull } from 'drizzle-orm'
 import { createDefaultHttpAuth, type HttpAuth } from '../common/Auth.js'
+import { normalizeEnvironmentColor } from '../common/Environments.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { stringifyKeyValueRows, type KeyValueRow } from '../common/KeyValueRows.js'
 import { syncUrlWithSearchParams } from '../common/PathParams.js'
@@ -16,19 +17,47 @@ import {
 } from '../common/PostmanImport.js'
 import { Result } from '../common/Result.js'
 import { getDb } from './db/index.js'
-import { folders, requestExamples, requests } from './db/schema.js'
+import { environments, folders, requestExamples, requests } from './db/schema.js'
 import { ensureParentFolderExists, insertTreeItem } from './db/tree-items.js'
+
+type PostmanVariable = {
+  key?: string
+  value?: string
+  disabled?: boolean
+  description?: string
+}
+
+type FolderEnvironmentMetadata = {
+  name?: unknown
+  variables?: unknown
+  color?: unknown
+  warnOnRequest?: unknown
+  priority?: unknown
+  position?: unknown
+  createdAt?: unknown
+}
+
+type ImportedFolderEnvironment = {
+  name: string
+  variables: string
+  color: string | null
+  warnOnRequest: boolean
+  priority: number
+  position: number
+  createdAt: number
+}
 
 type PostmanCollection = {
   info?: { name?: string }
   item?: PostmanItem[]
   event?: PostmanEvent[]
   auth?: PostmanAuth
-  variable?: Array<{ key?: string }>
+  variable?: PostmanVariable[]
   protocolProfileBehavior?: unknown
   _kova?: {
     exportedByKova?: unknown
     folderHeaders?: unknown
+    folderEnvironments?: unknown
   }
 }
 
@@ -39,10 +68,12 @@ type PostmanItem = {
   request?: PostmanRequest
   event?: PostmanEvent[]
   auth?: PostmanAuth
+  variable?: PostmanVariable[]
   protocolProfileBehavior?: unknown
   response?: PostmanResponse[]
   _kova?: {
     folderHeaders?: unknown
+    folderEnvironments?: unknown
   }
 }
 
@@ -226,7 +257,7 @@ export function analyzeCollectionDocument(collection: PostmanCollection): Import
   const hasCollectionAuth = hasSupportedOrUnsupportedAuth(collection.auth)
   const hasCollectionHeaders = readCollectionHeaders(collection).trim() !== ''
 
-  if (hasCollectionVariables) {
+  if (hasCollectionVariables && hasKovaFolderEnvironments(collection._kova)) {
     addWarning(warnings, 'collection-variables-ignored', collection.variable?.length ?? 0, [collectionName])
   }
 
@@ -305,7 +336,7 @@ export function importCollectionDocument(
 
     if (input.shouldCreateRootFolder) {
       const rootFolderId = crypto.randomUUID()
-      tx.insert(folders)
+        tx.insert(folders)
         .values({
           id: rootFolderId,
           parentId: null,
@@ -321,6 +352,7 @@ export function importCollectionDocument(
         })
         .run()
       insertTreeItem(tx, { parentFolderId: null, itemType: 'folder', itemId: rootFolderId })
+      insertImportedFolderEnvironments(tx, rootFolderId, readCollectionFolderEnvironments(collection, input.rootFolderName))
       createdRootFolderId = rootFolderId
       createdRootFolderName = input.rootFolderName
       targetFolderId = rootFolderId
@@ -370,6 +402,7 @@ function importItem(
       })
       .run()
     insertTreeItem(db, { parentFolderId, itemType: 'folder', itemId: folderId })
+    insertImportedFolderEnvironments(db, folderId, readItemFolderEnvironments(item, name))
 
     for (const child of item.item) {
       importItem(db, child, folderId, preserveScripts)
@@ -809,8 +842,129 @@ function readFolderHeaders(metadata: PostmanItem['_kova']) {
   return typeof metadata?.folderHeaders === 'string' ? metadata.folderHeaders : ''
 }
 
+export function readCollectionFolderEnvironments(collection: PostmanCollection, fallbackEnvironmentName: string) {
+  if (hasKovaFolderEnvironments(collection._kova)) {
+    return readKovaFolderEnvironments(collection._kova?.folderEnvironments)
+  }
+
+  return readPostmanCollectionVariables(collection.variable, fallbackEnvironmentName)
+}
+
+export function readItemFolderEnvironments(item: PostmanItem, fallbackEnvironmentName: string) {
+  if (hasKovaFolderEnvironments(item._kova)) {
+    return readKovaFolderEnvironments(item._kova?.folderEnvironments)
+  }
+
+  return readPostmanCollectionVariables(item.variable, fallbackEnvironmentName)
+}
+
 function readCollectionHeaders(collection: PostmanCollection) {
   return typeof collection._kova?.folderHeaders === 'string' ? collection._kova.folderHeaders : ''
+}
+
+function hasKovaFolderEnvironments(metadata: { folderEnvironments?: unknown } | undefined) {
+  return Object.prototype.hasOwnProperty.call(metadata ?? {}, 'folderEnvironments')
+}
+
+function readKovaFolderEnvironments(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as ImportedFolderEnvironment[]
+  }
+
+  return value.flatMap<ImportedFolderEnvironment>((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      return []
+    }
+
+    const metadata = entry as FolderEnvironmentMetadata
+    const name = typeof metadata.name === 'string' ? metadata.name.trim() : ''
+    const variables = typeof metadata.variables === 'string' ? metadata.variables : ''
+    const priority = typeof metadata.priority === 'number' && Number.isInteger(metadata.priority) ? metadata.priority : 0
+    const position = typeof metadata.position === 'number' && Number.isInteger(metadata.position) ? metadata.position : index
+    const createdAt = typeof metadata.createdAt === 'number' && Number.isInteger(metadata.createdAt) ? metadata.createdAt : index
+    if (!name) {
+      return []
+    }
+
+    return [{
+      name,
+      variables,
+      color: normalizeEnvironmentColor(typeof metadata.color === 'string' ? metadata.color : null),
+      warnOnRequest: metadata.warnOnRequest === true,
+      priority,
+      position,
+      createdAt,
+    }]
+  })
+}
+
+function readPostmanCollectionVariables(variables: PostmanVariable[] | undefined, fallbackEnvironmentName: string) {
+  if (!variables || variables.length === 0) {
+    return [] as ImportedFolderEnvironment[]
+  }
+
+  return [{
+    name: fallbackEnvironmentName.trim() || 'Imported Environment',
+    variables: stringifyKeyValueRows(
+      variables.map((variable, index) => ({
+        id: `collection-variable-${index}`,
+        enabled: !variable.disabled,
+        key: variable.key ?? '',
+        value: variable.value ?? '',
+        description: variable.description ?? '',
+      }))
+    ),
+    color: null,
+    warnOnRequest: false,
+    priority: 0,
+    position: 0,
+    createdAt: 0,
+  }]
+}
+
+function insertImportedFolderEnvironments(
+  db: ReturnType<typeof getDb>,
+  folderId: string,
+  folderEnvironmentsToInsert: ImportedFolderEnvironment[]
+) {
+  if (folderEnvironmentsToInsert.length === 0) {
+    return
+  }
+
+  const nextPosition = getNextEnvironmentPosition(db, folderId)
+  for (const [index, environment] of folderEnvironmentsToInsert
+    .slice()
+    .sort((left, right) => left.position - right.position || left.createdAt - right.createdAt)
+    .entries()) {
+    db.insert(environments)
+      .values({
+        id: crypto.randomUUID(),
+        folderId,
+        name: environment.name,
+        variables: environment.variables,
+        color: environment.color,
+        warnOnRequest: environment.warnOnRequest,
+        position: nextPosition + index,
+        priority: environment.priority,
+        createdAt: Date.now() + index,
+        deletedAt: null,
+      })
+      .run()
+  }
+}
+
+function getNextEnvironmentPosition(db: ReturnType<typeof getDb>, folderId: string) {
+  const scopedEnvironments = db
+    .select({ position: environments.position })
+    .from(environments)
+    .where(and(eq(environments.folderId, folderId), isNull(environments.deletedAt)))
+    .all()
+
+  if (scopedEnvironments.length === 0) {
+    return 0
+  }
+
+  return Math.max(...scopedEnvironments.map(environment => environment.position)) + 1
 }
 
 function hasScripts(events: PostmanEvent[] | undefined) {
@@ -845,7 +999,7 @@ function mapExampleRequest(
 const warningMessageByCode: Record<PostmanImportWarningCode, string> = {
   'scripts-commented': 'Postman scripts are imported as commented reference blocks so you can rewrite them safely.',
   'unsupported-script-api': 'Some scripts use Postman-specific APIs that do not exist in Kova.',
-  'collection-variables-ignored': 'Collection variables are ignored during import.',
+  'collection-variables-ignored': 'Collection variables are ignored when Kova folder-environment metadata is present.',
   'protocol-profile-ignored': 'protocolProfileBehavior settings are ignored.',
   'unsupported-auth': 'Some auth types are not supported and will not be imported as working auth configs.',
   'unsupported-body-mode': 'Some request body modes are not supported and will be imported without their original body behavior.',

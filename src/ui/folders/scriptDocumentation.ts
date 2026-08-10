@@ -166,6 +166,19 @@ const sharedSections: ScriptDocumentationSection[] = [
   },
 ]
 
+const folderEnvironmentSection: ScriptDocumentationSection = {
+  title: 'Folder Environment Variables',
+  description: 'Read and update folder-scoped environment values that apply through folder ancestry.',
+  entries: [
+    { label: 'folderEnv.get(name, environmentName?)', detail: 'Returns the effective folder-scoped value for a variable or null.' },
+    { label: 'folderEnv.has(name, environmentName?)', detail: 'Checks whether a folder-scoped variable exists.' },
+    {
+      label: 'folderEnv.set(name, value, environmentName?)',
+      detail: 'Updates an existing folder-scoped variable or creates it in the current folder environment stack.',
+    },
+  ],
+}
+
 const responseSection: ScriptDocumentationSection = {
   title: 'Response Object',
   description: 'Available only in post-request scripts.',
@@ -297,7 +310,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'Response data is not available in pre-request scripts.',
       'Zod is available globally as z.',
     ],
-    sections: [...sharedSections, callRequestSection],
+    sections: [...sharedSections, folderEnvironmentSection, callRequestSection],
     examples: [
       {
         title: 'Set an auth header',
@@ -348,7 +361,14 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
       'Environment changes made here are rolled back if the script throws.',
       'Zod is available globally as z.',
     ],
-    sections: [...sharedSections, responseSection, callRequestSection, navigateAndCallRequestSection, retryRequestSection],
+    sections: [
+      ...sharedSections,
+      folderEnvironmentSection,
+      responseSection,
+      callRequestSection,
+      navigateAndCallRequestSection,
+      retryRequestSection,
+    ],
     examples: [
       {
         title: 'Persist a token from JSON',
@@ -410,6 +430,7 @@ export const scriptDocumentationByPhase: Record<ScriptDocumentationPhase, Script
     ],
     sections: [
       ...sharedSections,
+      folderEnvironmentSection,
       responseSection,
       callRequestSection,
       navigateAndCallRequestSection,

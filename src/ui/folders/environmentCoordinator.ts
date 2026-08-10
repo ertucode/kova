@@ -2,6 +2,7 @@ import { errorResponseToMessage } from '@common/GenericError'
 import { getWindowElectron } from '@/getWindowElectron'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
+import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { environmentEditorStore, isEnvironmentEntryDirty } from './environmentEditorStore'
 import { folderExplorerEditorStore, saveFolderExplorerUiState, type SidebarTab } from './folderExplorerEditorStore'
 
@@ -14,7 +15,12 @@ export namespace EnvironmentCoordinator {
     try {
       const items = await getWindowElectron().listEnvironments()
       environmentEditorStore.trigger.listLoaded({ items })
-      folderExplorerEditorStore.trigger.activeEnvironmentIdsReconciled({ ids: items.map(item => item.id) })
+      folderExplorerEditorStore.trigger.activeEnvironmentIdsReconciled({
+        ids: items.filter(item => item.folderId == null).map(item => item.id),
+      })
+      folderExplorerEditorStore.trigger.inactiveFolderEnvironmentIdsReconciled({
+        ids: items.filter(item => item.folderId != null).map(item => item.id),
+      })
       persistUiState()
     } catch (error) {
       environmentEditorStore.trigger.loadingFinished()
@@ -31,12 +37,18 @@ export namespace EnvironmentCoordinator {
   }
 
   export function openEnvironmentDetails(id: string) {
+    const environment = environmentEditorStore.getSnapshot().context.items.find(item => item.id === id)
+    if (environment?.folderId) {
+      void FolderExplorerCoordinator.selectItem({ itemType: 'folder', id: environment.folderId })
+      return
+    }
+
     setSidebarTab('environments')
     selectEnvironment(id)
   }
 
-  export async function createEnvironment() {
-    const result = await getWindowElectron().createEnvironment({ name: 'New Environment' })
+  export async function createEnvironment(folderId?: string | null) {
+    const result = await getWindowElectron().createEnvironment({ name: 'New Environment', folderId })
     if (!result.success) {
       toast.show(result)
       return
@@ -129,7 +141,10 @@ export namespace EnvironmentCoordinator {
 
         environmentEditorStore.trigger.itemDeleted({ id })
         folderExplorerEditorStore.trigger.activeEnvironmentIdsReconciled({
-          ids: environmentEditorStore.getSnapshot().context.items.map(item => item.id),
+          ids: environmentEditorStore.getSnapshot().context.items.filter(item => item.folderId == null).map(item => item.id),
+        })
+        folderExplorerEditorStore.trigger.inactiveFolderEnvironmentIdsReconciled({
+          ids: environmentEditorStore.getSnapshot().context.items.filter(item => item.folderId != null).map(item => item.id),
         })
         persistUiState()
       },
@@ -137,6 +152,17 @@ export namespace EnvironmentCoordinator {
   }
 
   export function toggleActiveEnvironment(id: string) {
+    const environment = environmentEditorStore.getSnapshot().context.items.find(item => item.id === id)
+    if (!environment) {
+      return
+    }
+
+    if (environment.folderId != null) {
+      folderExplorerEditorStore.trigger.folderEnvironmentVisibilityToggled({ id })
+      persistUiState()
+      return
+    }
+
     folderExplorerEditorStore.trigger.activeEnvironmentToggled({ id })
     persistUiState()
   }

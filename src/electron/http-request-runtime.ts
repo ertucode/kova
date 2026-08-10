@@ -18,7 +18,7 @@ import { Result } from '../common/Result.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import type { ScriptClipboardBridge } from './script-clipboard.js'
 import { getCookieHeaderForUrl } from './db/cookies.js'
-import { getEnvironmentsByIds } from './db/environments.js'
+import { listVisibleEnvironments } from './db/environments.js'
 import { getRequestParentFolderId } from './db/explorer.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
@@ -130,10 +130,10 @@ export async function prepareHttpRequestBase(
     return requestResult
   }
 
-  const [activeEnvironments, parentFolderId] = await Promise.all([
-    input.environmentSnapshot ? Promise.resolve(input.environmentSnapshot) : getEnvironmentsByIds(input.activeEnvironmentIds),
-    getRequestParentFolderId(input.requestId),
-  ])
+  const parentFolderId = await getRequestParentFolderId(input.requestId)
+  const activeEnvironments = input.environmentSnapshot
+    ? input.environmentSnapshot
+    : await listVisibleEnvironments({ folderId: parentFolderId, activeEnvironmentIds: input.activeEnvironmentIds })
 
   if (requestResult.data.requestType !== 'http') {
     return GenericError.Message('Use the WebSocket connect flow for websocket requests')
@@ -164,6 +164,7 @@ export async function prepareHttpRequestBase(
     },
     requestMetadata: input.requestMetadata,
     environments: activeEnvironments,
+    folderEnvironments: activeEnvironments.filter(environment => environment.folderId != null),
     sharedScripts,
     scriptPackages: workspacePackages,
     toast: options?.toast,

@@ -6,7 +6,12 @@ import ts from 'typescript'
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping'
 import { z } from 'zod'
 import { getAuthQueryParams, resolveAuth, type HttpAuth } from '../common/Auth.js'
-import { buildEffectiveEnvironmentOwners, buildEnvironmentVariableMap, getResolvedEnvironmentValue } from '../common/EnvironmentVariables.js'
+import {
+  buildEffectiveEnvironmentOwners,
+  buildEnvironmentVariableMap,
+  getResolvedEnvironmentValue,
+  sortEnvironmentsForResolution,
+} from '../common/EnvironmentVariables.js'
 import { parseKeyValueRows, stringifyKeyValueRows, type KeyValueRow } from '../common/KeyValueRows.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
 import { resolveTemplateExpressions as resolveTemplateExpressionTokens, resolveTemplateVariables } from '../common/RequestVariables.js'
@@ -314,6 +319,7 @@ export function createRequestScriptRuntime(input: {
   request: RuntimeRequestState
   requestMetadata?: SendRequestMetadata
   environments: EnvironmentRecord[]
+  folderEnvironments?: EnvironmentRecord[]
   sharedScripts?: SharedScriptRecord[]
   scriptPackages?: ScriptRuntimePackage[]
   toast?: ScriptToastBridge
@@ -323,12 +329,18 @@ export function createRequestScriptRuntime(input: {
 }): ScriptRuntime {
   const requestScope = new Map<string, string>()
   const runtimeRequest: RuntimeRequestState = { ...input.request }
-  let environments = input.environments
-    .slice()
-    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)
-    .map(environment => ({ ...environment }))
-  let environmentValues = buildEnvironmentVariableMap(environments)
-  let environmentOwners = buildEffectiveEnvironmentOwners(environments)
+  const environmentSpecificityById = new Map(
+    input.environments.map((environment, index) => [environment.id, input.environments.length - index])
+  )
+  const getEnvironmentSpecificity = (environment: EnvironmentRecord) => environmentSpecificityById.get(environment.id) ?? 0
+  const folderEnvironmentIds = new Set((input.folderEnvironments ?? []).map(environment => environment.id))
+  const getFolderEnvironmentSpecificity = (environment: EnvironmentRecord) =>
+    folderEnvironmentIds.has(environment.id) ? getEnvironmentSpecificity(environment) : 0
+  let environments = sortEnvironmentsForResolution(input.environments, getEnvironmentSpecificity).map(environment => ({
+    ...environment,
+  }))
+  let environmentValues = buildEnvironmentVariableMap(environments, getEnvironmentSpecificity)
+  let environmentOwners = buildEffectiveEnvironmentOwners(environments, getEnvironmentSpecificity)
   let pendingEnvironmentIds = new Set<string>()
   const updatedEnvironmentIds = new Set<string>()
   const consoleEntries: RequestConsoleEntry[] = []
@@ -648,6 +660,7 @@ export function createRequestScriptRuntime(input: {
         const next = setEnvironmentValue({
           environments,
           owners: environmentOwners,
+          getSpecificity: getEnvironmentSpecificity,
           name,
           value,
           environmentName,
@@ -3166,6 +3179,7 @@ function capitalizeCookieSameSite(value: CookieSameSite) {
 function setEnvironmentValue(input: {
   environments: EnvironmentRecord[]
   owners: EnvironmentOwnerMap
+  getSpecificity: (environment: EnvironmentRecord) => number
   name: string
   value: string
   environmentName?: string
@@ -3202,8 +3216,8 @@ function setEnvironmentValue(input: {
 
   return {
     environments,
-    owners: buildEffectiveEnvironmentOwners(environments),
-    values: buildEnvironmentVariableMap(environments),
+    owners: buildEffectiveEnvironmentOwners(environments, input.getSpecificity),
+    values: buildEnvironmentVariableMap(environments, input.getSpecificity),
     updatedEnvironmentId,
   }
 }

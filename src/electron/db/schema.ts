@@ -90,6 +90,7 @@ export const environments = sqliteTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
+    folderId: text('folder_id'),
     variables: text('variables').notNull().default(''),
     color: text('color'),
     warnOnRequest: integer('warn_on_request', { mode: 'boolean' }).notNull().default(false),
@@ -100,6 +101,7 @@ export const environments = sqliteTable(
   },
   table => [
     index('environments_deleted_at_idx').on(table.deletedAt),
+    index('environments_folder_id_idx').on(table.folderId),
     index('environments_priority_idx').on(table.priority),
     index('environments_position_idx').on(table.position),
   ]

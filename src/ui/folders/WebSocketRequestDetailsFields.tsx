@@ -11,8 +11,6 @@ import {
   Trash2Icon,
   WifiOffIcon,
 } from 'lucide-react'
-import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
-import { buildEnvironmentVariableMap } from '@common/RequestVariables'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { syncSearchParamsWithUrl, syncUrlWithSearchParams } from '@common/PathParams'
 import type { WebSocketMessageRecord, WebSocketSavedMessageRecord } from '@common/Requests'
@@ -38,6 +36,7 @@ import { createTemplateCompletionSource, templateScriptExtension } from './codeE
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { buildImportedWebSocketUrlFields } from './requestUrlImport'
 import { buildPastedValue, isFullValueReplacement } from './urlPaste'
+import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
 import { formatBytes } from '@common/formatBytes'
 import { useHoldAction } from '@/lib/hooks/useHoldAction'
 import { saveWebSocketTranscriptToFile } from './saveResponseToFile'
@@ -58,6 +57,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
+  const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const selectedRequestFolderId = useSelector(folderExplorerTreeStore, state => {
     const request = state.context.items.find(
       (item): item is Extract<(typeof state.context.items)[number], { itemType: 'request' }> =>
@@ -66,6 +66,10 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     return request?.parentFolderId ?? null
   })
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const inactiveFolderEnvironmentIds = useSelector(
+    folderExplorerEditorStore,
+    state => state.context.inactiveFolderEnvironmentIds
+  )
   const responsePaneHeight = useSelector(folderExplorerEditorStore, state => state.context.responsePaneHeight)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
@@ -73,41 +77,38 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
     selectedRequestId ? (state.context.websocketSessionByRequestId[selectedRequestId] ?? null) : null
   )
   const { scripts: visibleSharedScripts } = useVisibleSharedScripts(selectedRequestFolderId)
+  const scopedEnvironments = useMemo(
+    () =>
+      buildEnvironmentScope({
+        environments,
+        environmentEntries,
+        activeEnvironmentIds,
+        inactiveFolderEnvironmentIds,
+        explorerItems,
+        folderId: selectedRequestFolderId,
+      }),
+    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedRequestFolderId]
+  )
 
-  const activeEnvironmentVariableNames = useMemo(() => {
-    const activeEnvironments = environments
-      .filter(environment => activeEnvironmentIds.includes(environment.id))
-      .map(environment => {
-        const nextDraft = environmentEntries[environment.id]?.current
-
-        return {
-          ...environment,
-          name: nextDraft?.name ?? environment.name,
-          variables: nextDraft?.variables ?? environment.variables,
-          priority: nextDraft?.priority ?? environment.priority,
-        }
-      })
-
-    return Object.keys(buildEnvironmentVariableMap(activeEnvironments))
-  }, [activeEnvironmentIds, environmentEntries, environments])
+  const activeEnvironmentVariableNames = scopedEnvironments.activeEnvironmentVariableNames
 
   const variableTooltipRows = useMemo(
     () =>
-      environments.map(environment => {
-        const nextDraft = environmentEntries[environment.id]?.current
-        const variables = nextDraft?.variables ?? environment.variables
+      scopedEnvironments.tooltipEnvironments.map(environment => {
         return {
           id: environment.id,
-          name: nextDraft?.name ?? environment.name,
-          isActive: activeEnvironmentIds.includes(environment.id),
-          priority: nextDraft?.priority ?? environment.priority,
+          name: environment.name,
+          isActive: environment.isActive,
+          canToggle: environment.scopeType === 'workspace',
+          scopeType: environment.scopeType,
+          scopeLabel: environment.scopeLabel,
+          resolutionRank: scopedEnvironments.specificityById.get(environment.id) ?? 0,
+          priority: environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(
-            Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])
-          ),
+          valueByVariableName: createVariableValueMap(environment),
         }
       }),
-    [activeEnvironmentIds, environmentEntries, environments]
+    [scopedEnvironments.tooltipEnvironments]
   )
 
   const variableAutocompleteItems = useMemo(
@@ -120,18 +121,12 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   )
 
   const activeEnvironmentVariableNamesRef = useRef(activeEnvironmentVariableNames)
-  const activeEnvironmentNamesRef = useRef(
-    environments
-      .filter(environment => activeEnvironmentIds.includes(environment.id))
-      .map(environment => environment.name)
-  )
+  const activeEnvironmentNamesRef = useRef(scopedEnvironments.activeEnvironmentNames)
   const variableTooltipRowsRef = useRef(variableTooltipRows)
   const variableAutocompleteItemsRef = useRef(variableAutocompleteItems)
   const visibleSharedScriptsRef = useRef(visibleSharedScripts)
 
-  activeEnvironmentNamesRef.current = environments
-    .filter(environment => activeEnvironmentIds.includes(environment.id))
-    .map(environment => environment.name)
+  activeEnvironmentNamesRef.current = scopedEnvironments.activeEnvironmentNames
   activeEnvironmentVariableNamesRef.current = activeEnvironmentVariableNames
   variableTooltipRowsRef.current = variableTooltipRows
   variableAutocompleteItemsRef.current = variableAutocompleteItems
@@ -1044,6 +1039,7 @@ function buildVariableAutocompleteItems(
   rows: Array<{
     name: string
     isActive: boolean
+    resolutionRank: number
     priority: number
     createdAt: number
     valueByVariableName: Map<string, string>
@@ -1062,7 +1058,10 @@ function buildVariableAutocompleteItems(
   const activeRowsByPriority = rows
     .filter(row => row.isActive)
     .slice()
-    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)
+    .sort(
+      (left, right) =>
+        right.resolutionRank - left.resolutionRank || right.priority - left.priority || right.createdAt - left.createdAt
+    )
 
   for (const row of rows) {
     for (const variableName of row.valueByVariableName.keys()) {

@@ -4,17 +4,34 @@ import { useSelector } from '@xstate/store/react'
 import { environmentEditorStore } from '@/folders/environmentEditorStore'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { folderExplorerEditorStore } from '@/folders/folderExplorerEditorStore'
+import { folderExplorerTreeStore } from '@/folders/folderExplorerTreeStore'
+import { buildEnvironmentScope, getSelectionEnvironmentFolderId } from '@/folders/environmentScope'
 import { dialogActions } from '@/global/dialogStore'
 import { AppSettingsDialog } from '@/global/AppSettingsDialog'
 import { ManagementAgentDialog } from '@/folders/ManagementAgentDialog'
 
 export function CustomTitleBar() {
   const environments = useSelector(environmentEditorStore, state => state.context.items)
+  const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const inactiveFolderEnvironmentIds = useSelector(
+    folderExplorerEditorStore,
+    state => state.context.inactiveFolderEnvironmentIds
+  )
+  const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const [isEnvMenuOpen, setIsEnvMenuOpen] = useState(false)
   const envMenuRef = useRef<HTMLDivElement>(null)
 
-  const activeEnvironments = environments.filter(environment => activeEnvironmentIds.includes(environment.id))
+  const currentFolderId = getSelectionEnvironmentFolderId(explorerItems, selected)
+  const { workspaceEnvironments, visibleFolderEnvironments, effectiveEnvironments } = buildEnvironmentScope({
+    environments,
+    environmentEntries,
+    activeEnvironmentIds,
+    inactiveFolderEnvironmentIds,
+    explorerItems,
+    folderId: currentFolderId,
+  })
 
   useEffect(() => {
     if (!isEnvMenuOpen) {
@@ -76,8 +93,8 @@ export function CustomTitleBar() {
               title="Toggle active environments"
             >
               <div className="flex max-w-[520px] min-w-0 items-center overflow-hidden rounded-full">
-                {activeEnvironments.length > 0 ? (
-                  <ActiveEnvironmentTokens environments={activeEnvironments} />
+                {effectiveEnvironments.length > 0 ? (
+                  <ActiveEnvironmentTokens environments={effectiveEnvironments} />
                 ) : (
                   <span className="px-1">No Active Envs</span>
                 )}
@@ -85,48 +102,93 @@ export function CustomTitleBar() {
             </button>
 
             {isEnvMenuOpen ? (
-              <div className="absolute left-1/2 top-[calc(100%+8px)] z-50 w-[280px] -translate-x-1/2 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100 shadow-2xl">
+              <div className="absolute left-1/2 top-[calc(100%+8px)] z-50 max-h-[100vh] w-[280px] -translate-x-1/2 overflow-hidden rounded-2xl border border-base-content/10 bg-base-100 shadow-2xl">
                 <div className="border-b border-base-content/10 px-3 py-2 text-sm font-medium text-base-content/60">
                   Environments
                 </div>
 
-                <div className="max-h-72 overflow-auto p-2">
-                  {environments.length === 0 ? (
+                <div className="max-h-[100vh] overflow-auto p-2">
+                  {workspaceEnvironments.length === 0 && visibleFolderEnvironments.length === 0 ? (
                     <div className="px-2 py-3 text-sm text-base-content/45">No environments available</div>
                   ) : (
-                    <div className="space-y-1">
-                      {environments.map(environment => {
-                        const isActive = activeEnvironmentIds.includes(environment.id)
-
-                        return (
-                          <button
-                            key={environment.id}
-                            type="button"
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-base-200"
-                            onClick={() => EnvironmentCoordinator.toggleActiveEnvironment(environment.id)}
-                          >
-                            <div
-                              className={[
-                                'flex size-4 shrink-0 items-center justify-center rounded border',
-                                isActive
-                                  ? 'border-success/30 bg-success/15 text-success'
-                                  : 'border-base-content/12 text-transparent',
-                              ].join(' ')}
+                    <div className="space-y-3">
+                      <div>
+                        <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-base-content/40">
+                          Workspace
+                        </div>
+                        <div className="space-y-1">
+                          {workspaceEnvironments.map(environment => (
+                            <button
+                              key={environment.id}
+                              type="button"
+                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-base-200"
+                              onClick={() => EnvironmentCoordinator.toggleActiveEnvironment(environment.id)}
                             >
-                              <CheckIcon className="size-3" />
-                            </div>
-                            <span className="min-w-0 flex-1 truncate text-base-content">{environment.name}</span>
-                            {environment.color ? (
-                              <span
-                                className="size-2.5 shrink-0 rounded-full ring-1 ring-base-content/10"
-                                style={{ backgroundColor: environment.color }}
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                            <span className="text-xs text-base-content/40">{environment.priority}</span>
-                          </button>
-                        )
-                      })}
+                              <div
+                                className={[
+                                  'flex size-4 shrink-0 items-center justify-center rounded border',
+                                  environment.isActive
+                                    ? 'border-success/30 bg-success/15 text-success'
+                                    : 'border-base-content/12 text-transparent',
+                                ].join(' ')}
+                              >
+                                <CheckIcon className="size-3" />
+                              </div>
+                              <span className="min-w-0 flex-1 truncate text-base-content">{environment.name}</span>
+                              {environment.color ? (
+                                <span
+                                  className="size-2.5 shrink-0 rounded-full ring-1 ring-base-content/10"
+                                  style={{ backgroundColor: environment.color }}
+                                  aria-hidden="true"
+                                />
+                              ) : null}
+                              <span className="text-xs text-base-content/40">{environment.priority}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {visibleFolderEnvironments.length > 0 ? (
+                        <div>
+                          <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-base-content/40">
+                            Folder
+                          </div>
+                          <div className="space-y-1">
+                            {visibleFolderEnvironments.map(environment => (
+                              <button
+                                key={environment.id}
+                                type="button"
+                                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-base-200"
+                                onClick={() => EnvironmentCoordinator.toggleActiveEnvironment(environment.id)}
+                              >
+                                <div
+                                  className={[
+                                    'flex size-4 shrink-0 items-center justify-center rounded border',
+                                    environment.isActive
+                                      ? 'border-success/30 bg-success/15 text-success'
+                                      : 'border-base-content/12 text-transparent',
+                                  ].join(' ')}
+                                  aria-hidden="true"
+                                >
+                                  <CheckIcon className="size-3" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-base-content">{environment.name}</div>
+                                  <div className="truncate text-xs text-base-content/40">{environment.scopeLabel}</div>
+                                </div>
+                                {environment.color ? (
+                                  <span
+                                    className="size-2.5 shrink-0 rounded-full ring-1 ring-base-content/10"
+                                    style={{ backgroundColor: environment.color }}
+                                    aria-hidden="true"
+                                  />
+                                ) : null}
+                                <span className="text-xs text-base-content/40">{environment.priority}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -172,7 +234,7 @@ export function CustomTitleBar() {
 function ActiveEnvironmentTokens({
   environments,
 }: {
-  environments: Array<{ id: string; name: string; color: string | null }>
+  environments: Array<{ id: string; name: string; color: string | null; scopeType: 'workspace' | 'folder'; scopeLabel: string | null }>
 }) {
   return (
     <>
@@ -186,8 +248,10 @@ function ActiveEnvironmentTokens({
             environment.color
               ? 'shadow-[inset_0_1px_0_color-mix(in_oklch,var(--color-base-100)_18%,transparent)]'
               : 'border border-base-content/10 bg-base-200/80 text-base-content/70',
+            environment.scopeType === 'folder' ? 'ring-1 ring-info/25' : '',
           ].join(' ')}
           style={environment.color ? { backgroundColor: environment.color } : undefined}
+          title={environment.scopeType === 'folder' ? environment.scopeLabel ?? environment.name : environment.name}
         >
           <span
             className={['block truncate', environment.color ? 'font-semibold' : ''].join(' ')}

@@ -1,6 +1,7 @@
 export type EnvironmentRecord = {
   id: string
   name: string
+  folderId?: string | null
   variables: string
   color: string | null
   warnOnRequest: boolean
@@ -12,6 +13,7 @@ export type EnvironmentRecord = {
 
 export type CreateEnvironmentInput = {
   name: string
+  folderId?: string | null
 }
 
 export type UpdateEnvironmentInput = {

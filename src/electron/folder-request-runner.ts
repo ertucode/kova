@@ -12,7 +12,7 @@ import type { ExplorerItem } from '../common/Explorer.js'
 import type { HttpRequestRecord, RequestExecutionRecord, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
 import { getFolder } from './db/folders.js'
-import { getEnvironmentsByIds } from './db/environments.js'
+import { listVisibleEnvironments } from './db/environments.js'
 import { listExplorerItems } from './db/explorer.js'
 import { getRequest } from './db/requests.js'
 import { listVisibleSharedScripts } from './db/shared-scripts.js'
@@ -111,8 +111,15 @@ async function executeRun(
   }
 
   if (input.config.executionMode === 'parallel') {
-    const environmentSnapshot = await getEnvironmentsByIds(input.activeEnvironmentIds)
-    await Promise.all(requests.map(request => executeRequest(state, request, input, options, environmentSnapshot)))
+    await Promise.all(
+      requests.map(async request => {
+        const environmentSnapshot = await listVisibleEnvironments({
+          folderId: request.item.parentFolderId,
+          activeEnvironmentIds: input.activeEnvironmentIds,
+        })
+        await executeRequest(state, request, input, options, environmentSnapshot)
+      })
+    )
   } else {
     for (const request of requests) {
       if (state.isCancelling) {

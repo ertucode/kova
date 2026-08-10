@@ -33,6 +33,7 @@ const persistedUiStateSchema = z.object({
   selected: selectionSchema.nullable(),
   expandedIds: z.array(z.string()),
   activeEnvironmentIds: z.array(z.string()),
+  inactiveFolderEnvironmentIds: z.array(z.string()).default([]),
   sidebarTab: z.union([
       z.literal('requests'),
       z.literal('views'),
@@ -174,6 +175,7 @@ type FolderExplorerEditorContext = {
   activeTabId: string | null
   expandedIds: string[]
   activeEnvironmentIds: string[]
+  inactiveFolderEnvironmentIds: string[]
   sidebarTab: SidebarTab
   responsePaneHeight: number
   entries: Record<string, EditorEntry>
@@ -209,6 +211,7 @@ export const folderExplorerEditorStore = createStore({
     activeTabId: null,
     expandedIds: persistedUiState.expandedIds,
     activeEnvironmentIds: persistedUiState.activeEnvironmentIds,
+    inactiveFolderEnvironmentIds: persistedUiState.inactiveFolderEnvironmentIds,
     sidebarTab: persistedUiState.sidebarTab,
     responsePaneHeight: persistedUiState.responsePaneHeight,
     entries: initialEntries,
@@ -264,6 +267,16 @@ export const folderExplorerEditorStore = createStore({
     activeEnvironmentIdsReconciled: (context, event: { ids: string[] }) => ({
       ...context,
       activeEnvironmentIds: context.activeEnvironmentIds.filter(id => event.ids.includes(id)),
+    }),
+    folderEnvironmentVisibilityToggled: (context, event: { id: string }) => ({
+      ...context,
+      inactiveFolderEnvironmentIds: context.inactiveFolderEnvironmentIds.includes(event.id)
+        ? context.inactiveFolderEnvironmentIds.filter(value => value !== event.id)
+        : [...context.inactiveFolderEnvironmentIds, event.id],
+    }),
+    inactiveFolderEnvironmentIdsReconciled: (context, event: { ids: string[] }) => ({
+      ...context,
+      inactiveFolderEnvironmentIds: context.inactiveFolderEnvironmentIds.filter(id => event.ids.includes(id)),
     }),
     entryLoadingStarted: (context, event: { key: string }) => ({
       ...context,
@@ -480,11 +493,19 @@ export function getSelectionFromTabs(tabs: FolderExplorerTabRecord[], activeTabI
 }
 
 export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {
-  const { activeEnvironmentIds, sidebarTab, responsePaneHeight } = folderExplorerEditorStore.getSnapshot().context
+  const { activeEnvironmentIds, inactiveFolderEnvironmentIds, sidebarTab, responsePaneHeight } =
+    folderExplorerEditorStore.getSnapshot().context
   try {
     localStorage.setItem(
       PERSISTED_UI_STATE_KEY,
-      JSON.stringify({ selected: selection, expandedIds, activeEnvironmentIds, sidebarTab, responsePaneHeight })
+      JSON.stringify({
+        selected: selection,
+        expandedIds,
+        activeEnvironmentIds,
+        inactiveFolderEnvironmentIds,
+        sidebarTab,
+        responsePaneHeight,
+      })
     )
   } catch {
     return
@@ -495,6 +516,7 @@ function loadFolderExplorerUiState(): {
   selected: Selection | null
   expandedIds: string[]
   activeEnvironmentIds: string[]
+  inactiveFolderEnvironmentIds: string[]
   sidebarTab: SidebarTab
   responsePaneHeight: number
 } {
@@ -505,6 +527,7 @@ function loadFolderExplorerUiState(): {
         selected: null,
         expandedIds: [],
         activeEnvironmentIds: [],
+        inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
       }
@@ -515,6 +538,7 @@ function loadFolderExplorerUiState(): {
         selected: null,
         expandedIds: [],
         activeEnvironmentIds: [],
+        inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
       }
@@ -526,11 +550,12 @@ function loadFolderExplorerUiState(): {
     }
   } catch {
     return {
-      selected: null,
-      expandedIds: [],
-      activeEnvironmentIds: [],
-      sidebarTab: 'requests',
-      responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+        selected: null,
+        expandedIds: [],
+        activeEnvironmentIds: [],
+        inactiveFolderEnvironmentIds: [],
+        sidebarTab: 'requests',
+        responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
     }
   }
 }

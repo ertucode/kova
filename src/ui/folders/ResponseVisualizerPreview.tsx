@@ -87,6 +87,7 @@ export function ResponseVisualizerPreview({
         .map(environment => ({
           id: environment.id,
           name: environment.name,
+          folderId: null,
           color: null,
           warnOnRequest: false,
           position: 0,

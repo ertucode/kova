@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeCollectionDocument, mapAuth, mapRequest, mapScripts } from './postman-import.js'
+import { analyzeCollectionDocument, mapAuth, mapRequest, mapScripts, readCollectionFolderEnvironments } from './postman-import.js'
 
 describe('postman import', () => {
   it('reports warnings for commented scripts and unsupported features', () => {
     const analysis = analyzeCollectionDocument({
       info: { name: 'Sample' },
-      _kova: { folderHeaders: 'x-team:api' },
+      _kova: { folderHeaders: 'x-team:api', folderEnvironments: [] },
       auth: { type: 'bearer', bearer: [{ key: 'token', value: '{{token}}' }] },
       event: [{ listen: 'test', script: { exec: ['pm.test("collection ok")'] } }],
       variable: [{ key: 'baseUrl' }],
@@ -155,5 +155,67 @@ describe('postman import', () => {
     expect(analysis.exportedByKova).toBe(true)
     expect(analysis.warnings.map(warning => warning.code)).not.toContain('scripts-commented')
     expect(analysis.warnings.map(warning => warning.code)).not.toContain('unsupported-script-api')
+  })
+
+  it('maps collection variables into a top-level folder environment when Kova metadata is absent', () => {
+    const importedEnvironments = readCollectionFolderEnvironments(
+      {
+        info: { name: 'Users' },
+        variable: [
+          { key: 'baseUrl', value: 'https://api.example.com' },
+          { key: 'token', value: 'secret', disabled: true, description: 'Access token' },
+        ],
+        item: [],
+      },
+      'Users'
+    )
+
+    expect(importedEnvironments).toEqual([
+      {
+        name: 'Users',
+        variables: 'baseUrl:https://api.example.com\n//token:secret // Access token',
+        color: null,
+        warnOnRequest: false,
+        priority: 0,
+        position: 0,
+        createdAt: 0,
+      },
+    ])
+  })
+
+  it('prefers Kova folder-environment metadata over collection variables during import', () => {
+    const importedEnvironments = readCollectionFolderEnvironments(
+      {
+        info: { name: 'Users' },
+        variable: [{ key: 'baseUrl', value: 'https://ignored.example.com' }],
+        _kova: {
+          folderEnvironments: [
+            {
+              name: 'Production',
+              variables: 'baseUrl:https://api.example.com',
+              color: '#3b82f6',
+              warnOnRequest: true,
+              priority: 2,
+              position: 0,
+              createdAt: 10,
+            },
+          ],
+        },
+        item: [],
+      },
+      'Users'
+    )
+
+    expect(importedEnvironments).toEqual([
+      {
+        name: 'Production',
+        variables: 'baseUrl:https://api.example.com',
+        color: '#3b82f6',
+        warnOnRequest: true,
+        priority: 2,
+        position: 0,
+        createdAt: 10,
+      },
+    ])
   })
 })

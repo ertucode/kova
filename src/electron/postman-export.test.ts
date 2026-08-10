@@ -25,6 +25,7 @@ describe('postman export', () => {
       ],
       requests: [],
       examplesByRequestId: new Map(),
+      folderEnvironmentsByFolderId: new Map(),
       orderedItems: [{ itemType: 'folder', id: 'folder-1', parentFolderId: null, name: 'Users', position: 0, createdAt: 1, deletedAt: null }],
     })
 
@@ -95,6 +96,7 @@ describe('postman export', () => {
           ],
         ],
       ]),
+      folderEnvironmentsByFolderId: new Map(),
       orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Create User', requestType: 'http', method: 'POST', url: 'https://api.example.com/users/:userId', position: 0, createdAt: 1, deletedAt: null }],
     }, 'Workspace')
 
@@ -145,6 +147,31 @@ describe('postman export', () => {
       ],
       requests: [],
       examplesByRequestId: new Map(),
+      folderEnvironmentsByFolderId: new Map([
+        [
+          'folder-1',
+          [
+            {
+              name: 'Production',
+              variables: 'baseUrl:https://api.example.com\napiKey:secret',
+              color: '#3b82f6',
+              warnOnRequest: true,
+              priority: 2,
+              position: 0,
+              createdAt: 10,
+            },
+            {
+              name: 'Fallback',
+              variables: 'baseUrl:https://fallback.example.com\ntimeout:30',
+              color: null,
+              warnOnRequest: false,
+              priority: 0,
+              position: 1,
+              createdAt: 9,
+            },
+          ],
+        ],
+      ]),
       orderedItems: [
         { itemType: 'folder', id: 'folder-1', parentFolderId: null, name: 'Users', position: 0, createdAt: 1, deletedAt: null },
         { itemType: 'folder', id: 'folder-2', parentFolderId: 'folder-1', name: 'Admin', position: 0, createdAt: 1, deletedAt: null },
@@ -158,7 +185,35 @@ describe('postman export', () => {
       { listen: 'prerequest', script: { exec: ['const token = kova.env.get("token")'], type: 'text/javascript' } },
       { listen: 'test', script: { exec: ['kova.test("ok", () => true)'], type: 'text/javascript' } },
     ])
-    expect(document._kova).toEqual({ exportedByKova: true, folderHeaders: 'x-team:api' })
+    expect(document.variable).toEqual([
+      { key: 'baseUrl', value: 'https://api.example.com' },
+      { key: 'apiKey', value: 'secret' },
+      { key: 'timeout', value: '30' },
+    ])
+    expect(document._kova).toEqual({
+      exportedByKova: true,
+      folderHeaders: 'x-team:api',
+      folderEnvironments: [
+        {
+          name: 'Production',
+          variables: 'baseUrl:https://api.example.com\napiKey:secret',
+          color: '#3b82f6',
+          warnOnRequest: true,
+          priority: 2,
+          position: 0,
+          createdAt: 10,
+        },
+        {
+          name: 'Fallback',
+          variables: 'baseUrl:https://fallback.example.com\ntimeout:30',
+          color: null,
+          warnOnRequest: false,
+          priority: 0,
+          position: 1,
+          createdAt: 9,
+        },
+      ],
+    })
     expect(document.item[0]?.name).toBe('Admin')
   })
 
@@ -203,6 +258,7 @@ describe('postman export', () => {
         },
       ],
       examplesByRequestId: new Map(),
+      folderEnvironmentsByFolderId: new Map(),
       orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Create User', requestType: 'http', method: 'POST', url: 'https://api.example.com/users', position: 0, createdAt: 1, deletedAt: null }],
     }, 'Create User')
 
@@ -254,6 +310,7 @@ describe('postman export', () => {
         },
       ],
       examplesByRequestId: new Map(),
+      folderEnvironmentsByFolderId: new Map(),
       orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Upload Avatar', requestType: 'http', method: 'POST', url: 'https://api.example.com/users/avatar', position: 0, createdAt: 1, deletedAt: null }],
     }, 'Upload Avatar')
 
@@ -309,6 +366,7 @@ describe('postman export', () => {
         },
       ],
       examplesByRequestId: new Map(),
+      folderEnvironmentsByFolderId: new Map(),
       orderedItems: [{ itemType: 'request', id: 'request-1', parentFolderId: null, name: 'Viewer', requestType: 'http', method: 'POST', url: 'https://api.example.com/graphql', position: 0, createdAt: 1, deletedAt: null }],
     }, 'Viewer')
 
@@ -319,6 +377,41 @@ describe('postman export', () => {
         variables: '{"id":"123"}',
       },
     })
+  })
+
+  it('warns when folder environments must be stored in metadata', () => {
+    const analysis = analyzeCollectionExportSource({
+      scope: 'folder',
+      folderId: 'folder-1',
+      requestId: null,
+      suggestedCollectionName: 'Users',
+      folders: [
+        {
+          id: 'folder-1',
+          name: 'Users',
+          description: '',
+          headers: '',
+          auth: { type: 'inherit' },
+          preRequestScript: '',
+          postRequestScript: '',
+          createdAt: 1,
+          deletedAt: null,
+          parentFolderId: null,
+          position: 0,
+        },
+      ],
+      requests: [],
+      examplesByRequestId: new Map(),
+      folderEnvironmentsByFolderId: new Map([
+        [
+          'folder-1',
+          [{ name: 'Production', variables: 'baseUrl:https://api.example.com', color: null, warnOnRequest: false, priority: 0, position: 0, createdAt: 1 }],
+        ],
+      ]),
+      orderedItems: [{ itemType: 'folder', id: 'folder-1', parentFolderId: null, name: 'Users', position: 0, createdAt: 1, deletedAt: null }],
+    })
+
+    expect(analysis.warnings.map(warning => warning.code)).toContain('folder-environments-stored-in-metadata')
   })
 })
 

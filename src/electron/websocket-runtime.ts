@@ -25,7 +25,7 @@ import type {
   WebSocketSessionRecord,
 } from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
-import { getEnvironmentsByIds } from './db/environments.js'
+import { listVisibleEnvironments } from './db/environments.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
 import { listScriptPackages } from './db/script-packages.js'
@@ -44,6 +44,7 @@ type ActiveWebSocketSession = {
   socket: WebSocket
   session: WebSocketSessionRecord
   activeEnvironmentIds: string[]
+  parentFolderId: string | null
   historyEnabled: boolean
   historyId: string | null
   autoSendIntervalId: ReturnType<typeof setInterval> | null
@@ -84,10 +85,11 @@ export async function connectWebSocket(
       })
     }
 
-    const [activeEnvironments, parentFolderId] = await Promise.all([
-      getEnvironmentsByIds(input.activeEnvironmentIds),
-      getRequestParentFolderId(input.requestId),
-    ])
+    const parentFolderId = await getRequestParentFolderId(input.requestId)
+    const activeEnvironments = await listVisibleEnvironments({
+      folderId: parentFolderId,
+      activeEnvironmentIds: input.activeEnvironmentIds,
+    })
 
     const [folders, sharedScripts, workspacePackages] = await Promise.all([
       getFolderAncestorChain(parentFolderId),
@@ -115,6 +117,7 @@ export async function connectWebSocket(
         retryCount: 0,
       },
       environments: activeEnvironments,
+      folderEnvironments: activeEnvironments.filter(environment => environment.folderId != null),
       sharedScripts,
       scriptPackages: workspacePackages,
       toast: options?.toast,
@@ -253,6 +256,7 @@ export async function connectWebSocket(
       socket,
       session,
       activeEnvironmentIds: input.activeEnvironmentIds,
+      parentFolderId,
       historyEnabled: input.saveToHistory,
       historyId: input.saveToHistory ? session.id : null,
       autoSendIntervalId: null,
@@ -592,7 +596,10 @@ async function sendResolvedWebSocketMessage(
     throw new Error('WebSocket is not connected')
   }
 
-  const activeEnvironments = await getEnvironmentsByIds(activeEnvironmentIds)
+  const activeEnvironments = await listVisibleEnvironments({
+    folderId: activeSession.parentFolderId,
+    activeEnvironmentIds,
+  })
   const variables = buildEnvironmentVariableMap(activeEnvironments)
   const missingVariables = findMissingTemplateVariables(body, variables)
   if (missingVariables.length > 0) {

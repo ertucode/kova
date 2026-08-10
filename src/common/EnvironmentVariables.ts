@@ -34,12 +34,13 @@ export function getResolvedEnvironmentValue(environment: Pick<EnvironmentRecord,
   return resolveEnvironmentVariables(environment).get(variableName.trim())?.value ?? null
 }
 
-export function buildEnvironmentVariableMap(environments: EnvironmentRecord[]) {
+export function buildEnvironmentVariableMap(
+  environments: EnvironmentRecord[],
+  getSpecificity: (environment: EnvironmentRecord) => number = () => 0
+) {
   const variables: Record<string, string> = {}
 
-  for (const environment of environments
-    .slice()
-    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)) {
+  for (const environment of sortEnvironmentsForResolution(environments, getSpecificity)) {
     for (const [key, value] of resolveEnvironmentVariables(environment)) {
       if (key in variables) {
         continue
@@ -52,10 +53,13 @@ export function buildEnvironmentVariableMap(environments: EnvironmentRecord[]) {
   return variables
 }
 
-export function buildEffectiveEnvironmentOwners(environments: EnvironmentRecord[]) {
+export function buildEffectiveEnvironmentOwners(
+  environments: EnvironmentRecord[],
+  getSpecificity: (environment: EnvironmentRecord) => number = () => 0
+) {
   const owners = new Map<string, string>()
 
-  for (const environment of environments.slice().sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)) {
+  for (const environment of sortEnvironmentsForResolution(environments, getSpecificity)) {
     for (const [key] of resolveEnvironmentVariables(environment)) {
       if (owners.has(key)) {
         continue
@@ -88,4 +92,18 @@ export function collectDuplicateEnvironmentKeys(environment: Pick<EnvironmentRec
 
 export function stringifyEnvironmentVariables(rows: KeyValueRow[]) {
   return stringifyKeyValueRows(rows)
+}
+
+export function sortEnvironmentsForResolution(
+  environments: EnvironmentRecord[],
+  getSpecificity: (environment: EnvironmentRecord) => number = () => 0
+) {
+  return environments.slice().sort((left, right) => {
+    const specificityDelta = getSpecificity(right) - getSpecificity(left)
+    if (specificityDelta !== 0) {
+      return specificityDelta
+    }
+
+    return right.priority - left.priority || right.createdAt - left.createdAt
+  })
 }

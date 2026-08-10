@@ -8,8 +8,7 @@ import { getAuthVariableSources } from '@common/Auth'
 import type { RequestMetaTab } from '@common/FolderExplorerTabs'
 import type { RequestScriptError, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
 import { parseCurlRequest } from '@common/curl'
-import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
-import { buildEnvironmentVariableMap, extractTemplateVariables } from '@common/RequestVariables'
+import { extractTemplateVariables } from '@common/RequestVariables'
 import {
   syncPathParamsWithUrl,
   syncSearchParamsWithUrl,
@@ -76,6 +75,7 @@ import type { PendingScriptSelection } from './scriptFormatOnSave'
 import { formatScriptValueForSave } from './scriptFormatOnSave'
 import { ScriptAiIconButton } from './ScriptAiIconButton'
 import { twMerge } from 'tailwind-merge'
+import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -117,54 +117,48 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     return request?.parentFolderId ?? null
   })
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const inactiveFolderEnvironmentIds = useSelector(
+    folderExplorerEditorStore,
+    state => state.context.inactiveFolderEnvironmentIds
+  )
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
   const { scripts: visibleSharedScripts } = useVisibleSharedScripts(selectedRequestFolderId)
   draftRef.current = draft
   selectedRequestIdRef.current = selectedRequestId
 
-  const activeEnvironmentNames = useMemo(
+  const scopedEnvironments = useMemo(
     () =>
-      environments
-        .filter(environment => activeEnvironmentIds.includes(environment.id))
-        .map(environment => environment.name),
-    [activeEnvironmentIds, environments]
+      buildEnvironmentScope({
+        environments,
+        environmentEntries,
+        activeEnvironmentIds,
+        inactiveFolderEnvironmentIds,
+        explorerItems,
+        folderId: selectedRequestFolderId,
+      }),
+    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedRequestFolderId]
   )
-
-  const activeEnvironmentVariableNames = useMemo(() => {
-    const activeEnvironments = environments
-      .filter(environment => activeEnvironmentIds.includes(environment.id))
-      .map(environment => {
-        const draft = environmentEntries[environment.id]?.current
-
-        return {
-          ...environment,
-          name: draft?.name ?? environment.name,
-          variables: draft?.variables ?? environment.variables,
-          priority: draft?.priority ?? environment.priority,
-        }
-      })
-
-    return Object.keys(buildEnvironmentVariableMap(activeEnvironments))
-  }, [activeEnvironmentIds, environmentEntries, environments])
+  const activeEnvironmentNames = scopedEnvironments.activeEnvironmentNames
+  const activeEnvironmentVariableNames = scopedEnvironments.activeEnvironmentVariableNames
 
   const variableTooltipRows = useMemo(
     () =>
-      environments.map(environment => {
-        const draft = environmentEntries[environment.id]?.current
-        const variables = draft?.variables ?? environment.variables
+      scopedEnvironments.tooltipEnvironments.map(environment => {
         return {
           id: environment.id,
-          name: draft?.name ?? environment.name,
-          isActive: activeEnvironmentIds.includes(environment.id),
-          priority: draft?.priority ?? environment.priority,
+          name: environment.name,
+          isActive: environment.isActive,
+          canToggle: environment.scopeType === 'workspace',
+          scopeType: environment.scopeType,
+          scopeLabel: environment.scopeLabel,
+          resolutionRank: scopedEnvironments.specificityById.get(environment.id) ?? 0,
+          priority: environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(
-            Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])
-          ),
+          valueByVariableName: createVariableValueMap(environment),
         }
       }),
-    [activeEnvironmentIds, environmentEntries, environments]
+    [scopedEnvironments.tooltipEnvironments]
   )
 
   const variableAutocompleteItems = useMemo(
@@ -2258,6 +2252,7 @@ function buildVariableAutocompleteItems(
   rows: Array<{
     name: string
     isActive: boolean
+    resolutionRank: number
     priority: number
     createdAt: number
     valueByVariableName: Map<string, string>
@@ -2276,7 +2271,10 @@ function buildVariableAutocompleteItems(
   const activeRowsByPriority = rows
     .filter(row => row.isActive)
     .slice()
-    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)
+    .sort(
+      (left, right) =>
+        right.resolutionRank - left.resolutionRank || right.priority - left.priority || right.createdAt - left.createdAt
+    )
 
   for (const row of rows) {
     for (const variableName of row.valueByVariableName.keys()) {

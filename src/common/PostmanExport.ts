@@ -3,7 +3,7 @@ export type PostmanCollectionExportTarget =
   | { scope: 'folder'; folderId: string }
   | { scope: 'request'; requestId: string }
 
-export type PostmanExportWarningCode = 'folder-headers-stored-in-metadata'
+export type PostmanExportWarningCode = 'folder-headers-stored-in-metadata' | 'folder-environments-stored-in-metadata'
 
 export type PostmanExportWarning = {
   code: PostmanExportWarningCode

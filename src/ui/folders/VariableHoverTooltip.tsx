@@ -4,8 +4,12 @@ export type VariableTooltipEnvironmentRow = {
   id: string
   name: string
   isActive: boolean
+  canToggle: boolean
+  scopeType: 'workspace' | 'folder'
+  scopeLabel: string | null
   value: string
   isEffective: boolean
+  resolutionRank: number
   priority: number
   createdAt: number
 }
@@ -78,12 +82,37 @@ export function VariableHoverTooltip({
               key={row.id}
               className="grid grid-cols-[auto_minmax(0,120px)_minmax(0,2fr)_auto] items-center gap-3 border-b border-base-content/10 px-3 py-2 last:border-b-0"
             >
-            <label className="flex items-center justify-center px-1">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm rounded-none border border-base-content/30 bg-base-100"
-                checked={row.isActive}
-                onChange={() => {
+              <div className="flex items-center justify-center px-1">
+                {row.canToggle ? (
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-sm rounded-none border border-base-content/30 bg-base-100"
+                    checked={row.isActive}
+                    onChange={() => {
+                      setDraftRows(current =>
+                        current.map(currentRow =>
+                          currentRow.id === row.id ? { ...currentRow, isActive: !currentRow.isActive } : currentRow
+                        )
+                      )
+                      onToggleEnvironment(row.id)
+                    }}
+                    aria-label={row.isActive ? `Deactivate ${row.name}` : `Activate ${row.name}`}
+                  />
+                ) : (
+                  <div className="rounded-full bg-info/12 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-info">
+                    Auto
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="min-w-0 text-left"
+                onClick={() => {
+                  if (!row.canToggle) {
+                    return
+                  }
+
                   setDraftRows(current =>
                     current.map(currentRow =>
                       currentRow.id === row.id ? { ...currentRow, isActive: !currentRow.isActive } : currentRow
@@ -91,34 +120,22 @@ export function VariableHoverTooltip({
                   )
                   onToggleEnvironment(row.id)
                 }}
-                aria-label={row.isActive ? `Deactivate ${row.name}` : `Activate ${row.name}`}
-              />
-            </label>
-
-            <button
-              type="button"
-              className="min-w-0 text-left"
-              onClick={() => {
-                setDraftRows(current =>
-                  current.map(currentRow =>
-                    currentRow.id === row.id ? { ...currentRow, isActive: !currentRow.isActive } : currentRow
-                  )
-                )
-                onToggleEnvironment(row.id)
-              }}
-              title={row.isActive ? `Deactivate ${row.name}` : `Activate ${row.name}`}
-            >
-              <div className="flex items-center gap-2">
-                <div className="truncate text-sm font-medium text-base-content">{row.name}</div>
-                {isEffective ? (
-                  <span
-                    className="size-2 shrink-0 rounded-full bg-info shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-info)_16%,transparent)]"
-                    aria-label="Effective environment"
-                    title="Effective environment"
-                  />
-                ) : null}
-              </div>
-            </button>
+                title={row.canToggle ? (row.isActive ? `Deactivate ${row.name}` : `Activate ${row.name}`) : row.scopeLabel ?? row.name}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="truncate text-sm font-medium text-base-content">{row.name}</div>
+                  {isEffective ? (
+                    <span
+                      className="size-2 shrink-0 rounded-full bg-info shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-info)_16%,transparent)]"
+                      aria-label="Effective environment"
+                      title="Effective environment"
+                    />
+                  ) : null}
+                </div>
+                <div className="mt-0.5 truncate text-xs text-base-content/45">
+                  {row.scopeType === 'folder' ? row.scopeLabel : 'Workspace'}
+                </div>
+              </button>
 
             <input
               className="input input-sm h-9 w-full rounded-xl border-base-content/10 bg-base-100/80"
@@ -164,5 +181,8 @@ export function VariableHoverTooltip({
 function getEffectiveEnvironmentId(rows: VariableTooltipEnvironmentRow[]) {
   return rows
     .filter(row => row.isActive && row.value.trim() !== '')
-    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)[0]?.id ?? null
+    .sort(
+      (left, right) =>
+        right.resolutionRank - left.resolutionRank || right.priority - left.priority || right.createdAt - left.createdAt
+    )[0]?.id ?? null
 }

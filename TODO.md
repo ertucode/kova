@@ -1,1 +1,0 @@
-- folder variables(collection variables)

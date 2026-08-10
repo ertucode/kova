@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, ChevronRightIcon, HistoryIcon, InfoIcon, PlayIcon, SquareIcon, Trash2Icon } from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, HistoryIcon, InfoIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
-import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
-import { buildEnvironmentVariableMap } from '@common/RequestVariables'
 import { dialogActions } from '@/global/dialogStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import type { FolderDetailsDraft } from './folderExplorerTypes'
@@ -39,6 +37,8 @@ import type { FolderRequestRunConfig, FolderRunHistoryRecord, FolderRunRecord } 
 import type { ExplorerItem } from '@common/Explorer'
 import type { RequestExecutionRecord, RequestScriptError } from '@common/Requests'
 import { RequestExecutionDetails } from './RequestExecutionPanels'
+import { FolderEnvironmentsSection } from './FolderEnvironmentsSection'
+import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
 
 const EMPTY_FOLDER_RUN_HISTORY: FolderRunHistoryRecord[] = []
 const FOLDER_RUN_HISTORY_PAGE_SIZE = 4
@@ -57,50 +57,45 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
     state.context.selected?.itemType === 'folder' ? state.context.selected.id : null
   )
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const inactiveFolderEnvironmentIds = useSelector(
+    folderExplorerEditorStore,
+    state => state.context.inactiveFolderEnvironmentIds
+  )
   const historyKeepLast = useSelector(requestExecutionStore, state => state.context.historyKeepLast)
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
-  const activeEnvironmentNames = useMemo(
+  const scopedEnvironments = useMemo(
     () =>
-      environments
-        .filter(environment => activeEnvironmentIds.includes(environment.id))
-        .map(environment => environment.name),
-    [activeEnvironmentIds, environments]
+      buildEnvironmentScope({
+        environments,
+        environmentEntries,
+        activeEnvironmentIds,
+        inactiveFolderEnvironmentIds,
+        explorerItems,
+        folderId: selectedFolderId,
+      }),
+    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedFolderId]
   )
-  const activeEnvironmentVariableNames = useMemo(() => {
-    const activeEnvironments = environments
-      .filter(environment => activeEnvironmentIds.includes(environment.id))
-      .map(environment => {
-        const draft = environmentEntries[environment.id]?.current
-
-        return {
-          ...environment,
-          name: draft?.name ?? environment.name,
-          variables: draft?.variables ?? environment.variables,
-          priority: draft?.priority ?? environment.priority,
-        }
-      })
-
-    return Object.keys(buildEnvironmentVariableMap(activeEnvironments))
-  }, [activeEnvironmentIds, environmentEntries, environments])
+  const activeEnvironmentNames = scopedEnvironments.activeEnvironmentNames
+  const activeEnvironmentVariableNames = scopedEnvironments.activeEnvironmentVariableNames
 
   const variableTooltipRows = useMemo(
     () =>
-      environments.map(environment => {
-        const nextDraft = environmentEntries[environment.id]?.current
-        const variables = nextDraft?.variables ?? environment.variables
+      scopedEnvironments.tooltipEnvironments.map(environment => {
         return {
           id: environment.id,
-          name: nextDraft?.name ?? environment.name,
-          isActive: activeEnvironmentIds.includes(environment.id),
-          priority: nextDraft?.priority ?? environment.priority,
+          name: environment.name,
+          isActive: environment.isActive,
+          canToggle: environment.scopeType === 'workspace',
+          scopeType: environment.scopeType,
+          scopeLabel: environment.scopeLabel,
+          resolutionRank: scopedEnvironments.specificityById.get(environment.id) ?? 0,
+          priority: environment.priority,
           createdAt: environment.createdAt,
-          valueByVariableName: new Map(
-            Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])
-          ),
+          valueByVariableName: createVariableValueMap(environment),
         }
       }),
-    [activeEnvironmentIds, environmentEntries, environments]
+    [scopedEnvironments.tooltipEnvironments]
   )
 
   const variableAutocompleteItems = useMemo<VariableAutocompleteItem[]>(
@@ -365,6 +360,27 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           onBlur={() => undefined}
         />
       </div>
+
+      {selectedFolderId ? (
+        <div className="shrink-0">
+          <DetailsSectionHeader
+            title="Folder Environments"
+            actions={
+              <button
+                type="button"
+                className="flex h-12 w-12 items-center justify-center border-l border-base-content/10 text-base-content/70 transition hover:bg-base-200 hover:text-base-content"
+                onClick={() => void EnvironmentCoordinator.createEnvironment(selectedFolderId)}
+                aria-label="Add folder environment"
+                title="Add folder environment"
+              >
+                <PlusIcon className="size-4" />
+              </button>
+            }
+          />
+
+          <FolderEnvironmentsSection folderId={selectedFolderId} />
+        </div>
+      ) : null}
 
       {selectedFolderId ? (
         <div className="shrink-0">
@@ -1110,6 +1126,7 @@ function buildVariableAutocompleteItems(
   rows: Array<{
     name: string
     isActive: boolean
+    resolutionRank: number
     priority: number
     createdAt: number
     valueByVariableName: Map<string, string>
@@ -1128,7 +1145,10 @@ function buildVariableAutocompleteItems(
   const activeRowsByPriority = rows
     .filter(row => row.isActive)
     .slice()
-    .sort((left, right) => right.priority - left.priority || right.createdAt - left.createdAt)
+    .sort(
+      (left, right) =>
+        right.resolutionRank - left.resolutionRank || right.priority - left.priority || right.createdAt - left.createdAt
+    )
 
   for (const row of rows) {
     for (const variableName of row.valueByVariableName.keys()) {

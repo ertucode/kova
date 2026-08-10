@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSelector } from '@xstate/store/react'
 import type { RequestMetaTab } from '@common/FolderExplorerTabs'
-import { resolveEnvironmentVariables } from '@common/EnvironmentVariables'
 import { errorResponseToMessage } from '@common/GenericError'
 import type { McpPromptSummary, McpResourceSummary, McpToolSummary } from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -18,6 +17,7 @@ import { RequestDetailsResponsePanel } from './RequestDetailsResponsePanel'
 import { requestExecutionStore } from './requestExecutionStore'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
+import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
 
 const MCP_META_TABS = ['explore', 'invoke', 'resources', 'prompts', 'scripts', 'tests', 'raw'] as const
 
@@ -31,8 +31,13 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const inactiveFolderEnvironmentIds = useSelector(
+    folderExplorerEditorStore,
+    state => state.context.inactiveFolderEnvironmentIds
+  )
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
+  const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const selectedRequestFolderId = useSelector(folderExplorerTreeStore, state => {
     const request = state.context.items.find(
       (item): item is Extract<(typeof state.context.items)[number], { itemType: 'request' }> =>
@@ -46,6 +51,18 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
     state.context.selected?.itemType === 'request'
       ? (state.context.tabs.find(tab => tab.id === state.context.activeTabId)?.requestMetaTab ?? null)
       : null
+  )
+  const scopedEnvironments = useMemo(
+    () =>
+      buildEnvironmentScope({
+        environments,
+        environmentEntries,
+        activeEnvironmentIds,
+        inactiveFolderEnvironmentIds,
+        explorerItems,
+        folderId: selectedRequestFolderId,
+      }),
+    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedRequestFolderId]
   )
 
   const metaTab = useMemo<McpMetaTab>(() => {
@@ -108,22 +125,17 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
   )
   const visualizerEnvironments = useMemo(
     () =>
-      environments.map(environment => {
-        const environmentDraft = environmentEntries[environment.id]?.current
-        const variables = environmentDraft?.variables ?? environment.variables
-
+      scopedEnvironments.tooltipEnvironments.map(environment => {
         return {
           id: environment.id,
-          name: environmentDraft?.name ?? environment.name,
-          isActive: activeEnvironmentIds.includes(environment.id),
-          priority: environmentDraft?.priority ?? environment.priority,
+          name: environment.name,
+          isActive: environment.isActive,
+          priority: environment.priority,
           createdAt: environment.createdAt,
-          values: Object.fromEntries(
-            Array.from(resolveEnvironmentVariables({ variables }).entries()).map(([key, row]) => [key, row.value])
-          ),
+          values: Object.fromEntries(createVariableValueMap(environment).entries()),
         }
       }),
-    [activeEnvironmentIds, environmentEntries, environments]
+    [scopedEnvironments.tooltipEnvironments]
   )
   const responsePanelRequestDraft = useMemo(
     () => ({

@@ -371,6 +371,10 @@ declare const request: ScriptRequestApi
 declare const requestMetadata: ScriptRequestMetadataApi
 `
 
+const requestScriptOnlyDeclarations = String.raw`
+declare const folderEnv: ScriptEnvironmentApi
+`
+
 const responseVisualizerDeclarations = String.raw`
 type SetStateAction<T> = T | ((previousState: T) => T)
 type Dispatch<T> = (value: T) => void
@@ -483,6 +487,10 @@ export function getScriptRuntimeDeclarations(context: ScriptRuntimeContext) {
 
   if (targets.every(target => target === 'pre-request' || target === 'post-request' || target === 'test' || target === 'response-visualizer')) {
     declarations = `${declarations}\n${requestDeclarations}`
+  }
+
+  if (targets.every(target => target === 'pre-request' || target === 'post-request' || target === 'test')) {
+    declarations = `${declarations}\n${requestScriptOnlyDeclarations}`
   }
 
   if (targets.every(target => target === 'pre-request' || target === 'post-request')) {

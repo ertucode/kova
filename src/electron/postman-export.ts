@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { buildEnvironmentVariableMap } from '../common/EnvironmentVariables.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import {
@@ -12,12 +13,14 @@ import {
   type PostmanExportWarningCode,
 } from '../common/PostmanExport.js'
 import type { HttpAuth } from '../common/Auth.js'
+import type { EnvironmentRecord } from '../common/Environments.js'
 import type { FolderRecord } from '../common/Folders.js'
 import type { ExplorerItem } from '../common/Explorer.js'
 import type { RequestExampleRecord } from '../common/RequestExamples.js'
 import type { HttpRequestRecord, RequestBodyType, RequestRawType } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
 import { listExplorerItems } from './db/explorer.js'
+import { listEnvironments } from './db/environments.js'
 import { getFolder } from './db/folders.js'
 import { listRequestExamplesByRequestIds } from './db/request-examples.js'
 import { getRequest } from './db/requests.js'
@@ -40,8 +43,11 @@ type CollectionExportSource = {
   folders: FolderExportRecord[]
   requests: RequestExportRecord[]
   examplesByRequestId: Map<string, RequestExampleRecord[]>
+  folderEnvironmentsByFolderId: Map<string, FolderEnvironmentMetadata[]>
   orderedItems: ExplorerItem[]
 }
+
+type FolderEnvironmentMetadata = Pick<EnvironmentRecord, 'name' | 'variables' | 'color' | 'warnOnRequest' | 'priority' | 'position' | 'createdAt'>
 
 type PostmanCollectionDocument = {
   info: {
@@ -51,10 +57,12 @@ type PostmanCollectionDocument = {
   description?: string
   auth?: PostmanAuth
   event?: PostmanEvent[]
+  variable?: PostmanKeyValue[]
   item: PostmanItem[]
   _kova?: {
     exportedByKova?: true
     folderHeaders?: string
+    folderEnvironments?: FolderEnvironmentMetadata[]
   }
 }
 
@@ -68,6 +76,7 @@ type PostmanItem = {
   event?: PostmanEvent[]
   _kova?: {
     folderHeaders?: string
+    folderEnvironments?: FolderEnvironmentMetadata[]
   }
 }
 
@@ -203,6 +212,7 @@ export async function exportPostmanCollection(input: ExportPostmanCollectionInpu
 export function analyzeCollectionExportSource(source: CollectionExportSource): ExportAnalysis {
   const warnings = new Map<PostmanExportWarningCode, { count: number; examples: string[] }>()
   const foldersWithHeaders = source.folders.filter(folder => parseKeyValueRows(folder.headers).some(row => row.key.trim() || row.value.trim() || row.description.trim()))
+  const foldersWithEnvironments = source.folders.filter(folder => (source.folderEnvironmentsByFolderId.get(folder.id)?.length ?? 0) > 0)
 
   if (foldersWithHeaders.length > 0) {
     addWarning(
@@ -210,6 +220,15 @@ export function analyzeCollectionExportSource(source: CollectionExportSource): E
       'folder-headers-stored-in-metadata',
       foldersWithHeaders.length,
       foldersWithHeaders.slice(0, 5).map(folder => folder.name)
+    )
+  }
+
+  if (foldersWithEnvironments.length > 0) {
+    addWarning(
+      warnings,
+      'folder-environments-stored-in-metadata',
+      foldersWithEnvironments.reduce((count, folder) => count + (source.folderEnvironmentsByFolderId.get(folder.id)?.length ?? 0), 0),
+      foldersWithEnvironments.slice(0, 5).map(folder => folder.name)
     )
   }
 
@@ -231,6 +250,7 @@ export function buildCollectionExportDocument(source: CollectionExportSource, co
   const childrenByParentId = new Map<string | null, ExplorerItem[]>()
   const rootFolder = source.scope === 'folder' && source.folderId ? folderById.get(source.folderId) ?? null : null
   const collectionHeaders = rootFolder?.headers ?? ''
+  const rootFolderEnvironments = rootFolder ? source.folderEnvironmentsByFolderId.get(rootFolder.id) ?? [] : []
   const rootParentFolderId = rootFolder?.id ?? null
 
   for (const item of source.orderedItems) {
@@ -252,7 +272,7 @@ export function buildCollectionExportDocument(source: CollectionExportSource, co
           return []
         }
 
-        return [buildFolderItem(folder, buildItems(folder.id))]
+        return [buildFolderItem(folder, buildItems(folder.id), source.folderEnvironmentsByFolderId.get(folder.id) ?? [])]
       }
 
       const request = requestById.get(item.id)
@@ -272,12 +292,14 @@ export function buildCollectionExportDocument(source: CollectionExportSource, co
     description: rootFolder?.description.trim() ? rootFolder.description : undefined,
     auth: rootFolder ? mapAuth(rootFolder.auth) : undefined,
     event: rootFolder ? buildEvents(rootFolder.preRequestScript, rootFolder.postRequestScript) : undefined,
+    variable: rootFolderEnvironments.length > 0 ? buildPostmanCollectionVariables(rootFolderEnvironments) : undefined,
     item: buildItems(rootParentFolderId),
     _kova: {
       exportedByKova: true,
       folderHeaders: parseKeyValueRows(collectionHeaders).some(row => row.key.trim() || row.value.trim() || row.description.trim())
         ? collectionHeaders
         : undefined,
+      folderEnvironments: rootFolderEnvironments.length > 0 ? rootFolderEnvironments : undefined,
     },
   }
 }
@@ -314,6 +336,7 @@ async function loadCollectionExportSource(target: AnalyzePostmanCollectionExport
   }))
 
   const filtered = filterExportItems(target, items, folders, requests)
+  const folderEnvironmentsByFolderId = buildFolderEnvironmentsByFolderId(await listEnvironments(), filtered.folders.map(folder => folder.id))
   const examples = await listRequestExamplesByRequestIds(filtered.requests.map(request => request.id))
   const examplesByRequestId = new Map<string, RequestExampleRecord[]>()
   for (const example of examples) {
@@ -337,6 +360,7 @@ async function loadCollectionExportSource(target: AnalyzePostmanCollectionExport
     folders: filtered.folders,
     requests: filtered.requests,
     examplesByRequestId,
+    folderEnvironmentsByFolderId,
     orderedItems: filtered.orderedItems,
   }
 }
@@ -432,7 +456,7 @@ function filterExportItems(
   }
 }
 
-function buildFolderItem(folder: FolderExportRecord, children: PostmanItem[]): PostmanItem {
+function buildFolderItem(folder: FolderExportRecord, children: PostmanItem[], folderEnvironments: FolderEnvironmentMetadata[]): PostmanItem {
   const postmanItem: PostmanItem = {
     name: folder.name,
     item: children,
@@ -450,7 +474,59 @@ function buildFolderItem(folder: FolderExportRecord, children: PostmanItem[]): P
     }
   }
 
+  if (folderEnvironments.length > 0) {
+    postmanItem._kova = {
+      ...postmanItem._kova,
+      folderEnvironments,
+    }
+  }
+
   return postmanItem
+}
+
+function buildFolderEnvironmentsByFolderId(environments: EnvironmentRecord[], folderIds: string[]) {
+  const includedFolderIds = new Set(folderIds)
+  const folderEnvironmentsByFolderId = new Map<string, FolderEnvironmentMetadata[]>()
+
+  for (const environment of environments) {
+    if (!environment.folderId || !includedFolderIds.has(environment.folderId)) {
+      continue
+    }
+
+    const rows = folderEnvironmentsByFolderId.get(environment.folderId) ?? []
+    rows.push({
+      name: environment.name,
+      variables: environment.variables,
+      color: environment.color,
+      warnOnRequest: environment.warnOnRequest,
+      priority: environment.priority,
+      position: environment.position,
+      createdAt: environment.createdAt,
+    })
+    folderEnvironmentsByFolderId.set(environment.folderId, rows)
+  }
+
+  return folderEnvironmentsByFolderId
+}
+
+function buildPostmanCollectionVariables(folderEnvironments: FolderEnvironmentMetadata[]): PostmanKeyValue[] | undefined {
+  const resolvedVariables = buildEnvironmentVariableMap(
+    folderEnvironments.map((environment, index) => ({
+      id: `folder-environment-${index}`,
+      name: environment.name,
+      folderId: null,
+      variables: environment.variables,
+      color: environment.color ?? null,
+      warnOnRequest: environment.warnOnRequest,
+      position: environment.position,
+      priority: environment.priority,
+      createdAt: environment.createdAt,
+      deletedAt: null,
+    }))
+  )
+
+  const variableEntries = Object.entries(resolvedVariables).map(([key, value]) => ({ key, value }))
+  return variableEntries.length > 0 ? variableEntries : undefined
 }
 
 function buildRequestItem(request: RequestExportRecord, examples: RequestExampleRecord[]): PostmanItem {
@@ -698,4 +774,5 @@ function buildWarnings(warnings: Map<PostmanExportWarningCode, { count: number; 
 
 const warningMessages: Record<PostmanExportWarningCode, string> = {
   'folder-headers-stored-in-metadata': 'Folder-level headers are stored in Kova metadata. Postman will ignore them unless you import the file back into Kova.',
+  'folder-environments-stored-in-metadata': 'Folder-level environments are stored in Kova metadata for full fidelity. Postman collection variables are also exported for the top-level folder when possible.',
 }
