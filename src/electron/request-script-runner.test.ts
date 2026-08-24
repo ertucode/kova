@@ -1573,6 +1573,34 @@ it('preserves token refresher ids when resolving auth template expressions', asy
     expect(errors[0]?.message).toContain('prompt.text value is required')
   })
 
+  it('throws a clear error when request.headers.set receives null', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Folder: ORTAKAPP',
+        script: "request.headers.set('x-device-id', null)",
+      },
+    ])
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.sourceName).toBe('Folder: ORTAKAPP')
+    expect(errors[0]?.message).toBe('request.headers.set expected header value to be a string, received null.')
+  })
+
   it('allows post-request scripts to trigger another request by path', async () => {
     const requestedPaths: string[][] = []
     const runtime = createRequestScriptRuntime({

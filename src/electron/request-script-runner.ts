@@ -1436,6 +1436,34 @@ function createEnvironmentApi(environmentContext: EnvironmentContext) {
   }
 }
 
+function normalizeScriptHeaderName(name: unknown, apiName: string) {
+  if (typeof name !== 'string') {
+    throw new Error(`${apiName} expected header name to be a string, received ${formatScriptArgumentValue(name)}`)
+  }
+
+  return name.trim()
+}
+
+function normalizeScriptHeaderValue(value: unknown, apiName: string) {
+  if (typeof value !== 'string') {
+    throw new Error(`${apiName} expected header value to be a string, received ${formatScriptArgumentValue(value)}.`)
+  }
+
+  return value
+}
+
+function formatScriptArgumentValue(value: unknown) {
+  if (value === null) {
+    return 'null'
+  }
+
+  if (value === undefined) {
+    return 'undefined'
+  }
+
+  return typeof value
+}
+
 function createPromptProxy(getPrompt: () => ReturnType<typeof createScriptPromptApi>) {
   return {
     text(options: ScriptPromptTextOptions) {
@@ -2965,26 +2993,32 @@ function createHeaderEditor(runtimeRequest: RuntimeRequestState): HeaderApi {
 
   return {
     get(name) {
-      const row = rows.find(item => item.enabled && item.key.trim().toLowerCase() === name.trim().toLowerCase())
+      const normalizedName = normalizeScriptHeaderName(name, 'request.headers.get')
+      const row = rows.find(item => item.enabled && item.key.trim().toLowerCase() === normalizedName.toLowerCase())
       return row?.value ?? null
     },
     set(name, value) {
-      const normalizedName = name.trim()
+      const normalizedName = normalizeScriptHeaderName(name, 'request.headers.set')
+      const normalizedValue = normalizeScriptHeaderValue(value, 'request.headers.set')
       const existingIndex = rows.findIndex(item => item.key.trim().toLowerCase() === normalizedName.toLowerCase())
       if (existingIndex >= 0) {
         rows = rows.map((row, index) =>
-          index === existingIndex ? { ...row, enabled: true, key: normalizedName, value, description: row.description } : row
+          index === existingIndex
+            ? { ...row, enabled: true, key: normalizedName, value: normalizedValue, description: row.description }
+            : row
         )
         return
       }
 
-      rows = [...rows, { id: crypto.randomUUID(), enabled: true, key: normalizedName, value, description: '' }]
+      rows = [...rows, { id: crypto.randomUUID(), enabled: true, key: normalizedName, value: normalizedValue, description: '' }]
     },
     delete(name) {
-      rows = rows.filter(item => item.key.trim().toLowerCase() !== name.trim().toLowerCase())
+      const normalizedName = normalizeScriptHeaderName(name, 'request.headers.delete')
+      rows = rows.filter(item => item.key.trim().toLowerCase() !== normalizedName.toLowerCase())
     },
     has(name) {
-      return rows.some(item => item.enabled && item.key.trim().toLowerCase() === name.trim().toLowerCase())
+      const normalizedName = normalizeScriptHeaderName(name, 'request.headers.has')
+      return rows.some(item => item.enabled && item.key.trim().toLowerCase() === normalizedName.toLowerCase())
     },
     entries() {
       return rows.filter(item => item.enabled).map(item => [item.key, item.value] satisfies [string, string])
@@ -3003,17 +3037,18 @@ function createResponseHeaderEditor(headers: string): HeaderApi {
 
   return {
     get(name) {
-      const normalizedName = name.trim().toLowerCase()
+      const normalizedName = normalizeScriptHeaderName(name, 'response.headers.get').toLowerCase()
       const entry = entries.find(([key]) => key.trim().toLowerCase() === normalizedName)
       return entry?.[1] ?? null
     },
     set(name, value) {
-      const normalizedName = name.trim()
+      const normalizedName = normalizeScriptHeaderName(name, 'response.headers.set')
+      const normalizedValue = normalizeScriptHeaderValue(value, 'response.headers.set')
       const normalizedLowercaseName = normalizedName.toLowerCase()
       const firstMatch = entries.findIndex(([key]) => key.trim().toLowerCase() === normalizedLowercaseName)
 
       if (firstMatch === -1) {
-        entries = [...entries, [normalizedName, value]]
+        entries = [...entries, [normalizedName, normalizedValue]]
         return
       }
 
@@ -3026,15 +3061,15 @@ function createResponseHeaderEditor(headers: string): HeaderApi {
           return []
         }
 
-        return [[normalizedName, value] satisfies [string, string]]
+        return [[normalizedName, normalizedValue] satisfies [string, string]]
       })
     },
     delete(name) {
-      const normalizedName = name.trim().toLowerCase()
+      const normalizedName = normalizeScriptHeaderName(name, 'response.headers.delete').toLowerCase()
       entries = entries.filter(([key]) => key.trim().toLowerCase() !== normalizedName)
     },
     has(name) {
-      const normalizedName = name.trim().toLowerCase()
+      const normalizedName = normalizeScriptHeaderName(name, 'response.headers.has').toLowerCase()
       return entries.some(([key]) => key.trim().toLowerCase() === normalizedName)
     },
     entries() {

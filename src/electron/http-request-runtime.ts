@@ -12,6 +12,7 @@ import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { normalizeJson5ToJson } from '../common/Json5.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
+import { formatRequestScriptErrorSummaries } from '../common/RequestScriptErrors.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import type { RequestMethod, RequestRawType, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
@@ -188,12 +189,9 @@ export async function prepareHttpRequestBase(
     { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
   ])
   if (preRequestScriptErrors.length > 0) {
-    return GenericError.Message(
-      preRequestScriptErrors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n'),
-      {
-        scriptErrors: preRequestScriptErrors,
-      }
-    )
+    return GenericError.Message(formatRequestScriptErrorSummaries(preRequestScriptErrors), {
+      scriptErrors: preRequestScriptErrors,
+    })
   }
 
   const variables = runtime.getResolvedVariables()

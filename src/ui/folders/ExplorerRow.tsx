@@ -60,7 +60,6 @@ export function ExplorerRow({
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
-  const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const isItemDirty = useSelector(folderExplorerEditorStore, state => {
     const entry = state.context.entries[`${node.itemType}:${node.id}`]
     if (!entry?.current || node.itemType === 'folder') {
@@ -210,7 +209,6 @@ export function ExplorerRow({
           itemType={node.itemType}
           parentFolderId={node.itemType === 'folder' || node.itemType === 'request' ? node.parentFolderId : null}
           requestType={node.itemType === 'request' ? node.requestType : undefined}
-          activeEnvironmentIds={activeEnvironmentIds}
           onAddFolder={
             node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('folder', node.id) : undefined
           }
@@ -462,7 +460,6 @@ function ExplorerMenu({
   itemType,
   parentFolderId,
   requestType,
-  activeEnvironmentIds,
   onAddFolder,
   onAddHttpRequest,
   onAddRequestFromClipboard,
@@ -477,7 +474,6 @@ function ExplorerMenu({
   itemType: ExplorerItem['itemType']
   parentFolderId: string | null
   requestType?: RequestType
-  activeEnvironmentIds: string[]
   onAddFolder?: () => void
   onAddHttpRequest?: () => void
   onAddRequestFromClipboard?: () => void | Promise<void>
@@ -568,7 +564,7 @@ function ExplorerMenu({
 
     const result = await getWindowElectron().generateRequestCode({
       requestId: itemId,
-      activeEnvironmentIds,
+      activeEnvironmentIds: folderExplorerEditorStore.getSnapshot().context.activeEnvironmentIds,
     })
     if (!result.success) {
       toast.show(result)

@@ -9,6 +9,7 @@ import {
 import { buildEnvironmentVariableMap } from '../common/EnvironmentVariables.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { applySearchParamsToUrl } from '../common/PathParams.js'
+import { formatRequestScriptErrorSummaries } from '../common/RequestScriptErrors.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
@@ -157,12 +158,9 @@ export async function connectWebSocket(
       { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
     ])
     if (preRequestScriptErrors.length > 0) {
-      return GenericError.Message(
-        preRequestScriptErrors.map(error => `${error.compactLabel} ${error.compactMessage}`).join('\n'),
-        {
-          scriptErrors: preRequestScriptErrors,
-        }
-      )
+      return GenericError.Message(formatRequestScriptErrorSummaries(preRequestScriptErrors), {
+        scriptErrors: preRequestScriptErrors,
+      })
     }
 
     const variables = runtime.getResolvedVariables()

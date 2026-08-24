@@ -1,1 +1,1 @@
-- copy as curl aktif env kullanmıyor??
+- copy as curl'de toast'da auth header'ı sanitize etmek için alan söyle veya env'leri doldurmamak için(placeholder)(invalid oluşturmamak önemli.).
