@@ -1,0 +1,1 @@
+- copy as curl aktif env kullanmıyor??

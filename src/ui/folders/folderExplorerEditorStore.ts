@@ -20,6 +20,7 @@ const MCP_TRANSPORTS = ['http'] as const
 const RESPONSE_BODY_VIEWS = ['raw', 'table', 'visualizer'] as const
 
 const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
+const DEFAULT_SIDEBAR_WIDTH = 340
 const DEFAULT_RESPONSE_PANE_HEIGHT = 320
 
 export type SidebarTab = 'requests' | 'views' | 'scripts' | 'environments' | 'history' | 'changes' | 'tags' | 'cookies' | 'packages'
@@ -46,6 +47,7 @@ const persistedUiStateSchema = z.object({
     z.literal('packages'),
     z.literal('console'),
   ]),
+  sidebarWidth: z.number().default(DEFAULT_SIDEBAR_WIDTH),
   responsePaneHeight: z.number(),
 })
 
@@ -177,6 +179,7 @@ type FolderExplorerEditorContext = {
   activeEnvironmentIds: string[]
   inactiveFolderEnvironmentIds: string[]
   sidebarTab: SidebarTab
+  sidebarWidth: number
   responsePaneHeight: number
   entries: Record<string, EditorEntry>
 }
@@ -213,6 +216,7 @@ export const folderExplorerEditorStore = createStore({
     activeEnvironmentIds: persistedUiState.activeEnvironmentIds,
     inactiveFolderEnvironmentIds: persistedUiState.inactiveFolderEnvironmentIds,
     sidebarTab: persistedUiState.sidebarTab,
+    sidebarWidth: persistedUiState.sidebarWidth,
     responsePaneHeight: persistedUiState.responsePaneHeight,
     entries: initialEntries,
   } as FolderExplorerEditorContext,
@@ -253,6 +257,10 @@ export const folderExplorerEditorStore = createStore({
     sidebarTabChanged: (context, event: { sidebarTab: SidebarTab }) => ({
       ...context,
       sidebarTab: event.sidebarTab,
+    }),
+    sidebarWidthChanged: (context, event: { width: number }) => ({
+      ...context,
+      sidebarWidth: event.width,
     }),
     responsePaneHeightChanged: (context, event: { height: number }) => ({
       ...context,
@@ -493,7 +501,7 @@ export function getSelectionFromTabs(tabs: FolderExplorerTabRecord[], activeTabI
 }
 
 export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {
-  const { activeEnvironmentIds, inactiveFolderEnvironmentIds, sidebarTab, responsePaneHeight } =
+  const { activeEnvironmentIds, inactiveFolderEnvironmentIds, sidebarTab, sidebarWidth, responsePaneHeight } =
     folderExplorerEditorStore.getSnapshot().context
   try {
     localStorage.setItem(
@@ -504,6 +512,7 @@ export function saveFolderExplorerUiState(selection: Selection | null, expandedI
         activeEnvironmentIds,
         inactiveFolderEnvironmentIds,
         sidebarTab,
+        sidebarWidth,
         responsePaneHeight,
       })
     )
@@ -518,6 +527,7 @@ function loadFolderExplorerUiState(): {
   activeEnvironmentIds: string[]
   inactiveFolderEnvironmentIds: string[]
   sidebarTab: SidebarTab
+  sidebarWidth: number
   responsePaneHeight: number
 } {
   try {
@@ -529,6 +539,7 @@ function loadFolderExplorerUiState(): {
         activeEnvironmentIds: [],
         inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
+        sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
       }
     }
@@ -540,6 +551,7 @@ function loadFolderExplorerUiState(): {
         activeEnvironmentIds: [],
         inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
+        sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
       }
     }
@@ -555,6 +567,7 @@ function loadFolderExplorerUiState(): {
         activeEnvironmentIds: [],
         inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
+        sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
     }
   }

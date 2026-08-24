@@ -6,6 +6,7 @@ import {
   useState,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { useSelector } from '@xstate/store/react'
 import {
@@ -43,7 +44,7 @@ import {
   type FolderTreeSearchSnapshot,
 } from './folderExplorerSearch'
 import { buildTree, toSelectionKey } from './folderExplorerUtils'
-import { folderExplorerEditorStore, type SidebarTab } from './folderExplorerEditorStore'
+import { folderExplorerEditorStore, saveFolderExplorerUiState, type SidebarTab } from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { dialogActions } from '@/global/dialogStore'
@@ -56,6 +57,8 @@ import { tagsStore } from './tagsStore'
 
 type DropPlacement = ExplorerDropTarget['placement']
 const TREE_SEARCH_DEBOUNCE_MS = 5
+const MIN_SIDEBAR_WIDTH = 130
+const MAX_SIDEBAR_WIDTH = 720
 
 type SearchSnapshot = FolderTreeSearchSnapshot
 
@@ -69,13 +72,16 @@ export function FolderExplorer() {
   const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const selectionScrollTarget = useSelector(folderExplorerEditorStore, state => state.context.selectionScrollTarget)
+  const sidebarWidth = useSelector(folderExplorerEditorStore, state => state.context.sidebarWidth)
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
   const [searchCollapsedIds, setSearchCollapsedIds] = useState<string[]>([])
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const pendingSearchQueryRef = useRef(searchQuery)
+  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   useEffect(() => {
     void FolderExplorerCoordinator.initialize()
@@ -164,6 +170,50 @@ export function FolderExplorer() {
     setSearchCollapsedIds([])
   }, [normalizedSearch])
 
+  useEffect(() => {
+    const clampedWidth = clampSidebarWidth(sidebarWidth)
+    if (clampedWidth !== sidebarWidth) {
+      folderExplorerEditorStore.trigger.sidebarWidthChanged({ width: clampedWidth })
+    }
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const resizeState = resizeStateRef.current
+      if (!resizeState) {
+        return
+      }
+
+      const deltaX = event.clientX - resizeState.startX
+      folderExplorerEditorStore.trigger.sidebarWidthChanged({
+        width: clampSidebarWidth(resizeState.startWidth + deltaX),
+      })
+    }
+
+    const handlePointerUp = () => {
+      const wasResizing = resizeStateRef.current !== null
+      resizeStateRef.current = null
+      setIsResizingSidebar(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+
+      if (wasResizing) {
+        const { selected, expandedIds } = folderExplorerEditorStore.getSnapshot().context
+        saveFolderExplorerUiState(selected, expandedIds)
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [])
+
   const handleToggleExpanded = (nodeId: string) => {
     if (!isSearchActive) {
       FolderExplorerCoordinator.toggleExpanded(nodeId)
@@ -178,6 +228,16 @@ export function FolderExplorer() {
 
       return current.includes(nodeId) ? current : [...current, nodeId]
     })
+  }
+
+  const startSidebarResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    resizeStateRef.current = {
+      startX: event.clientX,
+      startWidth: sidebarWidth,
+    }
+    setIsResizingSidebar(true)
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
   }
 
   useEffect(() => {
@@ -428,90 +488,107 @@ export function FolderExplorer() {
       <SidebarTabs sidebarTab={sidebarTab} />
 
       {sidebarTab === 'requests' ? (
-        <aside className="flex h-full w-[340px] min-w-[340px] flex-col border-r border-base-content/10 bg-base-100">
-          <div className="h-11 border-b border-base-content/10 px-2 py-1.5">
-            <div className="flex h-full items-center gap-2">
-              <CreateMenuButton />
+        <div className="relative h-full shrink-0" style={{ width: `${sidebarWidth}px` }}>
+          <aside className="flex h-full min-w-0 w-full flex-col border-r border-base-content/10 bg-base-100">
+            <div className="h-11 border-b border-base-content/10 px-2 py-1.5">
+              <div className="flex h-full items-center gap-2">
+                <CreateMenuButton />
 
-              <label className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
-                <SearchIcon className="size-4 shrink-0" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  id="folder-explorer-search-input"
-                  className="w-full bg-transparent outline-none placeholder:text-base-content/35"
-                  placeholder="Search folders and requests"
-                  value={localSearchQuery}
-                  onChange={event => setLocalSearchQuery(event.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                />
-                {localSearchQuery.length > 0 && (
-                  <button
-                    onClick={() => {
-                      setLocalSearchQuery('')
-                      searchInputRef.current?.focus()
-                    }}
-                  >
-                    <XIcon className="size-4 shrink-0" />
-                  </button>
-                )}
-              </label>
-            </div>
-          </div>
-
-          <div ref={sidebarScrollContainerRef} className="min-h-0 flex-1 overflow-auto py-3">
-            {createDraft?.parentFolderId === null ? (
-              <DraftRow
-                value={createDraft.name}
-                depth={0}
-                icon={createDraft.itemType}
-                onChange={FolderExplorerCoordinator.changeCreateName}
-                onSubmit={() => void FolderExplorerCoordinator.submitCreate()}
-                onCancel={FolderExplorerCoordinator.cancelCreate}
-              />
-            ) : null}
-
-            {items.length === 0 ? (
-              <EmptyState title="No items yet" description="Create your first folder or request to get started." />
-            ) : visibleRoots.length === 0 ? (
-              <EmptyState title="No matches" description="Try a different item name." />
-            ) : (
-              <div>
-                {visibleRoots.map(node => (
-                  <ExplorerRow
-                    key={`${node.itemType}:${node.id}`}
-                    node={node}
-                    depth={0}
-                    isExpanded={isNodeExpanded}
-                    canDrag={canDrag}
-                    draggedItem={draggedItem}
-                    dropTarget={dropTarget}
-                    onToggleExpanded={handleToggleExpanded}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    onRowDragOver={handleRowDragOver}
-                    onRowDrop={handleRowDrop}
+                <label className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-xl border border-base-content/10 bg-base-100/70 px-3 text-sm text-base-content/60 focus-within:border-base-content/25 focus-within:bg-base-100">
+                  <SearchIcon className="size-4 shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    id="folder-explorer-search-input"
+                    className="w-full bg-transparent outline-none placeholder:text-base-content/35"
+                    placeholder="Search folders and requests"
+                    value={localSearchQuery}
+                    onChange={event => setLocalSearchQuery(event.target.value)}
+                    onKeyDown={handleSearchKeyDown}
                   />
-                ))}
-
-                {canDrag && draggedItem ? (
-                  <div
-                    className={[
-                      'mx-3 mt-1 h-5 rounded-lg transition',
-                      dropTarget?.indicatorId === 'root:end' ? 'bg-base-content/8' : 'bg-transparent',
-                    ].join(' ')}
-                    onDragOver={handleRootEndDragOver}
-                    onDrop={event => void handleRootEndDrop(event)}
-                  >
-                    {dropTarget?.indicatorId === 'root:end' ? (
-                      <div className="translate-y-[9px] border-t border-primary" />
-                    ) : null}
-                  </div>
-                ) : null}
+                  {localSearchQuery.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setLocalSearchQuery('')
+                        searchInputRef.current?.focus()
+                      }}
+                    >
+                      <XIcon className="size-4 shrink-0" />
+                    </button>
+                  )}
+                </label>
               </div>
-            )}
-          </div>
-        </aside>
+            </div>
+
+            <div ref={sidebarScrollContainerRef} className="min-h-0 flex-1 overflow-auto py-3">
+              {createDraft?.parentFolderId === null ? (
+                <DraftRow
+                  value={createDraft.name}
+                  depth={0}
+                  icon={createDraft.itemType}
+                  onChange={FolderExplorerCoordinator.changeCreateName}
+                  onSubmit={() => void FolderExplorerCoordinator.submitCreate()}
+                  onCancel={FolderExplorerCoordinator.cancelCreate}
+                />
+              ) : null}
+
+              {items.length === 0 ? (
+                <EmptyState title="No items yet" description="Create your first folder or request to get started." />
+              ) : visibleRoots.length === 0 ? (
+                <EmptyState title="No matches" description="Try a different item name." />
+              ) : (
+                <div>
+                  {visibleRoots.map(node => (
+                    <ExplorerRow
+                      key={`${node.itemType}:${node.id}`}
+                      node={node}
+                      depth={0}
+                      isExpanded={isNodeExpanded}
+                      canDrag={canDrag}
+                      draggedItem={draggedItem}
+                      dropTarget={dropTarget}
+                      onToggleExpanded={handleToggleExpanded}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      onRowDragOver={handleRowDragOver}
+                      onRowDrop={handleRowDrop}
+                    />
+                  ))}
+
+                  {canDrag && draggedItem ? (
+                    <div
+                      className={[
+                        'mx-3 mt-1 h-5 rounded-lg transition',
+                        dropTarget?.indicatorId === 'root:end' ? 'bg-base-content/8' : 'bg-transparent',
+                      ].join(' ')}
+                      onDragOver={handleRootEndDragOver}
+                      onDrop={event => void handleRootEndDrop(event)}
+                    >
+                      {dropTarget?.indicatorId === 'root:end' ? (
+                        <div className="translate-y-[9px] border-t border-primary" />
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </aside>
+
+          <button
+            type="button"
+            className="group absolute inset-y-0 right-0 z-10 w-2 translate-x-1/2 cursor-ew-resize border-0 bg-transparent"
+            onPointerDown={startSidebarResize}
+            aria-label="Resize sidebar"
+            title="Resize sidebar"
+          >
+            <span
+              aria-hidden
+              className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${
+                isResizingSidebar ? 'bg-base-content/25' : 'bg-transparent group-hover:bg-base-content/10'
+              }`}
+            />
+          </button>
+        </div>
       ) : null}
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-base-100">
@@ -576,6 +653,10 @@ function collectExpandableNodeIds(nodes: TreeNode[]) {
   nodes.forEach(visit)
 
   return ids
+}
+
+function clampSidebarWidth(width: number) {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
 }
 
 function CreateMenuButton() {
