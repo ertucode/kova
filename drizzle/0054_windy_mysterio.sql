@@ -1,0 +1,1 @@
+ALTER TABLE `app_settings` ADD `request_code_copy_behavior` text DEFAULT 'resolved' NOT NULL;

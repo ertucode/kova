@@ -26,11 +26,14 @@ import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorS
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
+import { getRequestCodeCopyBehavior } from '@/global/appSettingsStore'
 import { tagsStore } from './tagsStore'
 import { TagDots } from './TagDots'
 import { AssignTagsDialog } from './AssignTagsDialog'
 import { folderRunStore } from './folderRunStore'
 import { openManagementAgentDialog } from './ManagementAgentDialog'
+import { Typescript } from '@common/Typescript'
+import type { RequestCodeGenerationMode } from '@common/RequestCodegen'
 
 export function ExplorerRow({
   node,
@@ -441,6 +444,62 @@ export function EmptyState({ title, description }: { title: string; description:
   )
 }
 
+function getAlternateRequestCodeGenerationModes(mode: RequestCodeGenerationMode): RequestCodeGenerationMode[] {
+  switch (mode) {
+    case 'resolved':
+      return ['mask-auth', 'mask-variables']
+    case 'mask-auth':
+      return ['resolved', 'mask-variables']
+    case 'mask-variables':
+      return ['resolved', 'mask-auth']
+    default:
+      return Typescript.assertUnreachable(mode)
+  }
+}
+
+function getRequestCodeGenerationModeLabel(mode: RequestCodeGenerationMode) {
+  switch (mode) {
+    case 'resolved':
+      return 'Resolved'
+    case 'mask-auth':
+      return 'Mask Auth'
+    case 'mask-variables':
+      return 'Mask Variables'
+    default:
+      return Typescript.assertUnreachable(mode)
+  }
+}
+
+function getRequestCodeCopiedTitle(mode: RequestCodeGenerationMode, format: 'curl' | 'fetch') {
+  const base = format === 'curl' ? 'cURL' : 'Fetch'
+
+  switch (mode) {
+    case 'resolved':
+      return `${base} copied`
+    case 'mask-auth':
+      return `${base} copied with auth masked`
+    case 'mask-variables':
+      return `${base} copied with variables masked`
+    default:
+      return Typescript.assertUnreachable(mode)
+  }
+}
+
+function getRequestCodeCopiedMessage(mode: RequestCodeGenerationMode, format: 'curl' | 'fetch') {
+  const noun = format === 'curl' ? 'cURL command' : 'fetch snippet'
+
+  switch (mode) {
+    case 'resolved':
+      return `Resolved ${noun} copied to clipboard.`
+    case 'mask-auth':
+      return `Auth-masked ${noun} copied to clipboard.`
+    case 'mask-variables':
+      return `Environment-masked ${noun} copied to clipboard.`
+    default:
+      return Typescript.assertUnreachable(mode)
+  }
+}
+
 type ExplorerMenuAction = () => void | Promise<void>
 
 type ExplorerMenuEntry =
@@ -562,9 +621,18 @@ function ExplorerMenu({
       return
     }
 
+    await copyRequestCodeForMode(getRequestCodeCopyBehavior(), format)
+  }
+
+  const copyRequestCodeForMode = async (mode: RequestCodeGenerationMode, format: 'curl' | 'fetch') => {
+    if (itemType !== 'request' || requestType !== 'http') {
+      return
+    }
+
     const result = await getWindowElectron().generateRequestCode({
       requestId: itemId,
       activeEnvironmentIds: folderExplorerEditorStore.getSnapshot().context.activeEnvironmentIds,
+      mode,
     })
     if (!result.success) {
       toast.show(result)
@@ -572,14 +640,17 @@ function ExplorerMenu({
     }
 
     try {
-      await navigator.clipboard.writeText(format === 'curl' ? result.data.curl : result.data.fetch)
+      await navigator.clipboard.writeText(result.data[format])
       toast.show({
         severity: 'success',
-        title: format === 'curl' ? 'cURL copied' : 'Fetch copied',
-        message:
-          format === 'curl'
-            ? 'Resolved cURL command copied to clipboard.'
-            : 'Resolved fetch snippet copied to clipboard.',
+        title: getRequestCodeCopiedTitle(mode, format),
+        message: getRequestCodeCopiedMessage(mode, format),
+        actions: getAlternateRequestCodeGenerationModes(mode).map(alternateMode => ({
+          label: getRequestCodeGenerationModeLabel(alternateMode),
+          onAction: () => {
+            void copyRequestCodeForMode(alternateMode, format)
+          },
+        })),
       })
     } catch {
       toast.show({

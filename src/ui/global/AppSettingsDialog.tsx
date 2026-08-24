@@ -4,10 +4,12 @@ import { errorResponseToMessage } from '@common/GenericError'
 import type { SupermavenStatus } from '@common/Supermaven'
 import { useSelector } from '@xstate/store/react'
 import {
+  APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS,
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+  DEFAULT_REQUEST_CODE_COPY_BEHAVIOR,
   DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_AI_SERVER_PORT,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
@@ -36,6 +38,9 @@ export function AppSettingsDialog() {
   const [supermavenEnabled, setSupermavenEnabled] = useState(DEFAULT_SUPERMAVEN_ENABLED)
   const [scriptAiModel, setScriptAiModel] = useState<string | null>(DEFAULT_SCRIPT_AI_MODEL)
   const [scriptAiServerPort, setScriptAiServerPort] = useState('')
+  const [requestCodeCopyBehavior, setRequestCodeCopyBehavior] = useState<(typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]>(
+    DEFAULT_REQUEST_CODE_COPY_BEHAVIOR
+  )
   const [supermavenStatus, setSupermavenStatus] = useState<SupermavenStatus | null>(null)
   const [supermavenStatusLoading, setSupermavenStatusLoading] = useState(false)
   const [databaseState, setDatabaseState] = useState<DatabaseConfigState | null>(null)
@@ -61,6 +66,7 @@ export function AppSettingsDialog() {
       setSupermavenEnabled(settings.supermavenEnabled)
       setScriptAiModel(settings.scriptAiModel)
       setScriptAiServerPort(settings.scriptAiServerPort === null ? '' : String(settings.scriptAiServerPort))
+      setRequestCodeCopyBehavior(settings.requestCodeCopyBehavior)
     }
   }, [settings])
 
@@ -104,6 +110,7 @@ export function AppSettingsDialog() {
       supermavenEnabled,
       scriptAiModel,
       scriptAiServerPort: nextScriptAiServerPort,
+      requestCodeCopyBehavior,
     })
 
     if (success) {
@@ -467,6 +474,31 @@ export function AppSettingsDialog() {
         </div>
 
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
+          <div className="text-sm font-medium text-base-content">Request code copy</div>
+          <p className="mt-1 text-sm text-base-content/60">
+            Choose the default behavior for <code>Copy as cURL</code> and <code>Copy as fetch</code>.
+          </p>
+
+          <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-base-content/10 bg-base-100/80">
+            {APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                className={[
+                  'px-4 py-2 text-sm font-medium transition',
+                  mode === requestCodeCopyBehavior
+                    ? 'bg-base-200 text-base-content'
+                    : 'border-l border-base-content/10 text-base-content/60 first:border-l-0 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => setRequestCodeCopyBehavior(mode)}
+              >
+                {formatRequestCodeCopyBehaviorLabel(mode)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
           <div className="text-sm font-medium text-base-content">Supermaven</div>
           <p className="mt-1 text-sm text-base-content/60">
             Enable Supermaven ghost completions for script editors. Suggestions are requested with <code>Option+L</code>.
@@ -812,4 +844,15 @@ function formatFileSize(sizeBytes: number | null) {
 
   const digits = unitIndex === 0 ? 0 : value >= 10 ? 1 : 2
   return `${value.toFixed(digits)} ${units[unitIndex]}`
+}
+
+function formatRequestCodeCopyBehaviorLabel(mode: (typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]) {
+  switch (mode) {
+    case 'resolved':
+      return 'Resolved'
+    case 'mask-auth':
+      return 'Mask Auth'
+    case 'mask-variables':
+      return 'Mask Variables'
+  }
 }

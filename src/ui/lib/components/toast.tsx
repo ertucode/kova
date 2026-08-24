@@ -23,6 +23,10 @@ export interface ToastOptions {
   closeOnOutsideClick?: boolean;
   actionLabel?: ReactNode;
   onAction?: () => void;
+  actions?: Array<{
+    label: ReactNode;
+    onAction: () => void;
+  }>;
 }
 
 interface Toast extends ToastOptions {
@@ -132,10 +136,19 @@ const ToastItem: React.FC<{ toast: Toast; onClose: (id: string) => void }> = ({
         <div className="text-xs">
           {toast.message && <div className="text-xs">{toast.message}</div>}
         </div>
-        {toast.actionLabel && toast.onAction ? (
-          <Button className="btn-xs mt-2" onClick={toast.onAction}>
-            {toast.actionLabel}
-          </Button>
+        {(toast.actions?.length || (toast.actionLabel && toast.onAction)) ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {toast.actions?.map((action, index) => (
+              <Button key={index} className="btn-xs" onClick={action.onAction}>
+                {action.label}
+              </Button>
+            ))}
+            {!toast.actions?.length && toast.actionLabel && toast.onAction ? (
+              <Button className="btn-xs" onClick={toast.onAction}>
+                {toast.actionLabel}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <button

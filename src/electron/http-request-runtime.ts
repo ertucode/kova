@@ -62,6 +62,13 @@ export type PreparedHttpRequest = {
 
 export type PreparedHttpRequestBase = Omit<PreparedHttpRequest, 'resolvedBody' | 'requestBody'>
 
+type GeneratedCodeRequestInput = Pick<PreparedHttpRequest, 'method' | 'url' | 'headers' | 'resolvedBody'>
+
+type PrepareHttpRequestRuntimeContext = {
+  environments: Awaited<ReturnType<typeof listVisibleEnvironments>>
+  folderEnvironments: Awaited<ReturnType<typeof listVisibleEnvironments>>
+}
+
 type PrepareHttpRequestBaseInput = Pick<
   SendRequestInput,
   | 'requestId'
@@ -93,6 +100,7 @@ export async function prepareHttpRequest(
     prompt?: ScriptPromptBridge
     clipboard?: ScriptClipboardBridge
     makeRequest?: ScriptMakeRequestBridge
+    beforePrepareHttpRequest?: (context: PrepareHttpRequestRuntimeContext) => PrepareHttpRequestRuntimeContext
   }
 ): Promise<GenericResult<PreparedHttpRequest>> {
   const baseResult = await prepareHttpRequestBase(input, options)
@@ -124,6 +132,7 @@ export async function prepareHttpRequestBase(
     prompt?: ScriptPromptBridge
     clipboard?: ScriptClipboardBridge
     makeRequest?: ScriptMakeRequestBridge
+    beforePrepareHttpRequest?: (context: PrepareHttpRequestRuntimeContext) => PrepareHttpRequestRuntimeContext
   }
 ): Promise<GenericResult<PreparedHttpRequestBase>> {
   const requestResult = await getRequest({ id: input.requestId })
@@ -135,6 +144,10 @@ export async function prepareHttpRequestBase(
   const activeEnvironments = input.environmentSnapshot
     ? input.environmentSnapshot
     : await listVisibleEnvironments({ folderId: parentFolderId, activeEnvironmentIds: input.activeEnvironmentIds })
+  const folderEnvironments = activeEnvironments.filter(environment => environment.folderId != null)
+  const prepareContext = options?.beforePrepareHttpRequest
+    ? options.beforePrepareHttpRequest({ environments: activeEnvironments, folderEnvironments })
+    : { environments: activeEnvironments, folderEnvironments }
 
   if (requestResult.data.requestType !== 'http') {
     return GenericError.Message('Use the WebSocket connect flow for websocket requests')
@@ -164,8 +177,8 @@ export async function prepareHttpRequestBase(
       graphqlVariables: input.graphqlVariables ?? '',
     },
     requestMetadata: input.requestMetadata,
-    environments: activeEnvironments,
-    folderEnvironments: activeEnvironments.filter(environment => environment.folderId != null),
+    environments: prepareContext.environments,
+    folderEnvironments: prepareContext.folderEnvironments,
     sharedScripts,
     scriptPackages: workspacePackages,
     toast: options?.toast,
@@ -214,10 +227,7 @@ export async function prepareHttpRequestBase(
     )
   }
 
-  const effectiveAuth = resolveInheritedAuth(
-    resolvedFolderAuths,
-    runtime.request.auth
-  )
+  const effectiveAuth = resolveInheritedAuth(resolvedFolderAuths, runtime.request.auth)
   const missingAuthVariables = getAuthVariableSources(effectiveAuth).flatMap(source =>
     findMissingTemplateVariables(source, variables)
   )
@@ -236,11 +246,11 @@ export async function prepareHttpRequestBase(
     return GenericError.Message('Request URL is required')
   }
 
-  try {
-    new URL(url)
-  } catch {
-    return GenericError.Message('Request URL is invalid')
-  }
+  // try {
+  //   new URL(url)
+  // } catch {
+  //   return GenericError.Message('Request URL is invalid')
+  // }
 
   if (!REQUEST_METHODS.includes(runtime.request.method)) {
     return GenericError.Message('Invalid request method')
@@ -295,7 +305,7 @@ async function resolveReadyWorkspaceScriptPackages() {
   return entries
 }
 
-export function buildCurlCommand(input: Pick<PreparedHttpRequest, 'method' | 'url' | 'headers' | 'resolvedBody'>) {
+export function buildCurlCommand(input: GeneratedCodeRequestInput) {
   const parts = ['curl']
 
   if (input.method !== 'GET') {
@@ -329,7 +339,7 @@ export function buildCurlCommand(input: Pick<PreparedHttpRequest, 'method' | 'ur
   return parts.join(' \\\n  ')
 }
 
-export async function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method' | 'url' | 'headers' | 'resolvedBody'>) {
+export async function buildFetchSnippet(input: GeneratedCodeRequestInput) {
   const optionLines = [
     `method: ${serializeJsString(input.method)}`,
     `headers: ${formatJsObject(Array.from(input.headers.entries()))}`,
@@ -353,11 +363,9 @@ export async function buildFetchSnippet(input: Pick<PreparedHttpRequest, 'method
       optionLines.push('body: searchParams')
       break
     case 'form-data':
-      setup = [
-        'const formData = new FormData()',
-        ...buildFormDataSnippetLines(input.resolvedBody.entries),
-        '',
-      ].join('\n')
+      setup = ['const formData = new FormData()', ...buildFormDataSnippetLines(input.resolvedBody.entries), ''].join(
+        '\n'
+      )
       optionLines.push('body: formData')
       break
   }
@@ -443,7 +451,10 @@ export async function buildResolvedRequestBody(
         }
       }
 
-      return Result.Success({ kind: 'raw', value: JSON.stringify(variablesValue ? { query, variables: variablesValue } : { query }) })
+      return Result.Success({
+        kind: 'raw',
+        value: JSON.stringify(variablesValue ? { query, variables: variablesValue } : { query }),
+      })
     }
   }
 }
@@ -484,7 +495,9 @@ function buildRuntimeRequestBody(input: ResolvedRequestBody) {
       }
       return {
         body: formData,
-        preview: input.entries.map(entry => `${entry.key}: ${entry.type === 'file' ? `@${entry.value}` : entry.value}`).join('\n'),
+        preview: input.entries
+          .map(entry => `${entry.key}: ${entry.type === 'file' ? `@${entry.value}` : entry.value}`)
+          .join('\n'),
       }
     }
     case 'x-www-form-urlencoded':
@@ -506,7 +519,10 @@ function resolveKeyValueEntries(value: string, variables: Record<string, string>
     .map(row => ({ key: row.key, value: row.value }))
 }
 
-async function resolveFormDataEntries(value: string, variables: Record<string, string>): Promise<GenericResult<ResolvedFormDataEntry[]>> {
+async function resolveFormDataEntries(
+  value: string,
+  variables: Record<string, string>
+): Promise<GenericResult<ResolvedFormDataEntry[]>> {
   const entries: ResolvedFormDataEntry[] = []
 
   for (const row of parseKeyValueRows(value)) {
@@ -536,7 +552,8 @@ async function resolveFormDataEntries(value: string, variables: Record<string, s
           bytes,
         })
       } catch (error) {
-        const message = error instanceof Error && error.message.trim() ? error.message.trim() : 'Unknown file read error'
+        const message =
+          error instanceof Error && error.message.trim() ? error.message.trim() : 'Unknown file read error'
         return GenericError.Message(`Could not read form-data file for field ${key}: ${message}`)
       }
 
@@ -550,7 +567,18 @@ async function resolveFormDataEntries(value: string, variables: Record<string, s
 }
 
 function collectMissingVariables(
-  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'graphqlQuery' | 'graphqlVariables'>,
+  input: Pick<
+    SendRequestInput,
+    | 'url'
+    | 'pathParams'
+    | 'searchParams'
+    | 'auth'
+    | 'headers'
+    | 'body'
+    | 'bodyType'
+    | 'graphqlQuery'
+    | 'graphqlVariables'
+  >,
   variables: Record<string, string>
 ) {
   const missingVariables = new Set<string>()
@@ -716,8 +744,66 @@ function applyDefaultBodyHeaders(headers: Headers, rawType: RequestRawType, reso
   }
 }
 
+export function maskRequestAuthForCodegen(input: GeneratedCodeRequestInput): GeneratedCodeRequestInput {
+  const headers = new Headers(input.headers)
+  for (const [key, value] of headers.entries()) {
+    if (key.toLowerCase() !== 'authorization') {
+      continue
+    }
+
+    headers.set(key, maskAuthorizationHeaderValue(value))
+  }
+
+  return {
+    ...input,
+    headers,
+  }
+}
+
+export function maskEnvironmentValuesForCodegen(
+  environments: Awaited<ReturnType<typeof listVisibleEnvironments>>
+): Awaited<ReturnType<typeof listVisibleEnvironments>> {
+  return environments.map(environment => ({
+    ...environment,
+    variables: maskEnvironmentVariableRows(environment.variables),
+  }))
+}
+
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`
+}
+
+function maskAuthorizationHeaderValue(value: string) {
+  const separatorIndex = value.indexOf(' ')
+  if (separatorIndex <= 0) {
+    return '[MASKED_AUTH]'
+  }
+
+  return `${value.slice(0, separatorIndex)} [MASKED_AUTH]`
+}
+
+function maskEnvironmentVariableRows(value: string) {
+  return parseKeyValueRows(value)
+    .map(row => ({
+      ...row,
+      value: row.enabled && row.key.trim() ? `[${toMaskedVariableName(row.key)}]` : row.value,
+    }))
+    .map(
+      row =>
+        `${row.enabled ? '' : '//'}${row.key.trim()}:${row.type ? `${row.type}:` : ''}${row.value.trim()}${row.description.trim() ? ` // ${row.description.trim()}` : ''}`
+    )
+    .join('\n')
+}
+
+function toMaskedVariableName(name: string) {
+  const normalized = name
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase()
+
+  return normalized || 'VARIABLE'
 }
 
 function buildFormDataSnippetLines(entries: ResolvedFormDataEntry[]) {

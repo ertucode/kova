@@ -9,8 +9,11 @@ export const DEFAULT_COOKIES_ENABLED = true
 export const DEFAULT_SUPERMAVEN_ENABLED = false
 export const DEFAULT_SCRIPT_AI_MODEL: string | null = null
 export const DEFAULT_SCRIPT_AI_SERVER_PORT = 46381
+export const APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS = ['resolved', 'mask-auth', 'mask-variables'] as const
+export const DEFAULT_REQUEST_CODE_COPY_BEHAVIOR = 'resolved'
 
 export type AppSettingsResponseBodyDisplayMode = (typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]
+export type AppSettingsRequestCodeCopyBehavior = (typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]
 
 export type AppSettingsRecord = {
   id: string
@@ -24,6 +27,7 @@ export type AppSettingsRecord = {
   supermavenEnabled: boolean
   scriptAiModel: string | null
   scriptAiServerPort: number | null
+  requestCodeCopyBehavior: AppSettingsRequestCodeCopyBehavior
   createdAt: number
   updatedAt: number
 }
@@ -39,6 +43,7 @@ export type UpdateAppSettingsInput = Partial<{
   supermavenEnabled: boolean
   scriptAiModel: string | null
   scriptAiServerPort: number | null
+  requestCodeCopyBehavior: AppSettingsRequestCodeCopyBehavior
 }>
 
 export function parseScriptBlockPrettierConfig(value: string) {

@@ -268,6 +268,7 @@ export const appSettings = sqliteTable('app_settings', {
   supermavenEnabled: integer('supermaven_enabled', { mode: 'boolean' }).notNull().default(false),
   scriptAiModel: text('script_ai_model'),
   scriptAiServerPort: integer('script_ai_server_port'),
+  requestCodeCopyBehavior: text('request_code_copy_behavior').notNull().default('resolved'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })

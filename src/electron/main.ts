@@ -22,6 +22,7 @@ import {
   moveEnvironment,
   updateEnvironment,
 } from './db/environments.js'
+import type { EnvironmentRecord } from '../common/Environments.js'
 import {
   deleteRequestHistoryEntry,
   getRequestHistoryCount,
@@ -84,7 +85,16 @@ import {
 import { cancelHttpRequest, fetchGraphqlSchema, sendRequest } from './send-request.js'
 import { fetchMcpIntrospection, invokeMcpRequest } from './mcp-runtime.js'
 import { cancelFolderRun, runFolderRequests } from './folder-request-runner.js'
-import { buildCurlCommand, buildFetchSnippet, prepareHttpRequest } from './http-request-runtime.js'
+import {
+  buildCurlCommand,
+  buildFetchSnippet,
+  maskRequestAuthForCodegen,
+  maskEnvironmentValuesForCodegen,
+  prepareHttpRequest,
+  type PreparedHttpRequest,
+} from './http-request-runtime.js'
+import type { RequestCodeGenerationMode } from '../common/RequestCodegen.js'
+import { Typescript } from '../common/Typescript.js'
 import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
 import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
 import { analyzePostmanEnvironment, importPostmanEnvironment } from './postman-environment-import.js'
@@ -905,6 +915,14 @@ app.on('ready', async () => {
       return requestResult
     }
 
+    const beforePrepareHttpRequest =
+      input.mode === 'mask-variables'
+        ? ({ environments, folderEnvironments }: { environments: EnvironmentRecord[]; folderEnvironments: EnvironmentRecord[] }) => ({
+            environments: maskEnvironmentValuesForCodegen(environments),
+            folderEnvironments: maskEnvironmentValuesForCodegen(folderEnvironments),
+          })
+        : undefined
+
     const preparedRequest = await prepareHttpRequest({
       requestId: requestResult.data.id,
       method: requestResult.data.method,
@@ -929,14 +947,16 @@ app.on('ready', async () => {
         isRetry: false,
         retryCount: 0,
       },
-    })
+    }, { beforePrepareHttpRequest })
     if (!preparedRequest.success) {
       return preparedRequest
     }
 
+    const codegenRequest = toRequestCodeGenerationInput(preparedRequest.data, input.mode)
+
     return Result.Success({
-      curl: buildCurlCommand(preparedRequest.data),
-      fetch: await buildFetchSnippet(preparedRequest.data),
+      curl: buildCurlCommand(codegenRequest),
+      fetch: await buildFetchSnippet(codegenRequest),
     })
   })
 
@@ -1435,6 +1455,22 @@ async function getSearchParamContextTarget(contents: Electron.WebContents, param
     )
   } catch {
     return null
+  }
+}
+
+function toRequestCodeGenerationInput(
+  preparedRequest: PreparedHttpRequest,
+  mode: RequestCodeGenerationMode
+) {
+  switch (mode) {
+    case 'resolved':
+      return preparedRequest
+    case 'mask-auth':
+      return maskRequestAuthForCodegen(preparedRequest)
+    case 'mask-variables':
+      return preparedRequest
+    default:
+      return Typescript.assertUnreachable(mode)
   }
 }
 

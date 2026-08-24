@@ -2,7 +2,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildCurlCommand, buildFetchSnippet, buildResolvedRequestBody } from './http-request-runtime.js'
+import {
+  buildCurlCommand,
+  buildFetchSnippet,
+  buildResolvedRequestBody,
+  maskRequestAuthForCodegen,
+  maskEnvironmentValuesForCodegen,
+} from './http-request-runtime.js'
 
 describe('buildResolvedRequestBody', () => {
   it('treats empty trimmed raw JSON bodies as no body', async () => {
@@ -127,5 +133,39 @@ describe('buildResolvedRequestBody', () => {
     } finally {
       await rm(tempDirectory, { recursive: true, force: true })
     }
+  })
+
+  it('masks authorization values in generated snippets', async () => {
+    const masked = maskRequestAuthForCodegen({
+      method: 'GET',
+      url: 'https://api.example.com/users',
+      headers: new Headers({ authorization: 'Bearer secret-token', 'x-test': '1' }),
+      resolvedBody: { kind: 'none' },
+    })
+
+    const curl = buildCurlCommand(masked)
+    const fetchSnippet = await buildFetchSnippet(masked)
+
+    expect(curl).toContain("authorization: Bearer [MASKED_AUTH]")
+    expect(fetchSnippet).toContain('"authorization": "Bearer [MASKED_AUTH]"')
+  })
+
+  it('masks environment values by replacing them in environment rows', () => {
+    const masked = maskEnvironmentValuesForCodegen([
+      {
+        id: 'env-1',
+        name: 'Preprod',
+        folderId: null,
+        variables: 'x-device-id:temp-device\nuserId:42\n//disabled:keep',
+        color: null,
+        warnOnRequest: false,
+        position: 0,
+        priority: 0,
+        createdAt: 1,
+        deletedAt: null,
+      },
+    ])
+
+    expect(masked[0]?.variables).toBe('x-device-id:[X_DEVICE_ID]\nuserId:[USER_ID]\n//disabled:keep')
   })
 })

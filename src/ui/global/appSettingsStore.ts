@@ -3,12 +3,14 @@ import {
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+  DEFAULT_REQUEST_CODE_COPY_BEHAVIOR,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_SUPERMAVEN_ENABLED,
   DEFAULT_VIM_MODE,
   DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS,
+  type AppSettingsRequestCodeCopyBehavior,
   type AppSettingsRecord,
   type UpdateAppSettingsInput,
 } from '@common/AppSettings'
@@ -132,4 +134,8 @@ export function getScriptBlockPrettierConfig() {
 
 export function getScriptAiModel() {
   return appSettingsStore.getSnapshot().context.settings?.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL
+}
+
+export function getRequestCodeCopyBehavior(): AppSettingsRequestCodeCopyBehavior {
+  return appSettingsStore.getSnapshot().context.settings?.requestCodeCopyBehavior ?? DEFAULT_REQUEST_CODE_COPY_BEHAVIOR
 }

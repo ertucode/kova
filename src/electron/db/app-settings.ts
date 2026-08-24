@@ -1,9 +1,11 @@
 import { eq } from 'drizzle-orm'
 import {
+  APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS,
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+  DEFAULT_REQUEST_CODE_COPY_BEHAVIOR,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_SCRIPT_AI_MODEL,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
@@ -41,12 +43,13 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
     formatScriptBlocksOnSave: DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
     scriptBlockPrettierConfig: DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
     cookiesEnabled: DEFAULT_COOKIES_ENABLED,
-    supermavenEnabled: DEFAULT_SUPERMAVEN_ENABLED,
-    scriptAiModel: DEFAULT_SCRIPT_AI_MODEL,
-    scriptAiServerPort: null,
-    createdAt: now,
-    updatedAt: now,
-  }
+      supermavenEnabled: DEFAULT_SUPERMAVEN_ENABLED,
+      scriptAiModel: DEFAULT_SCRIPT_AI_MODEL,
+      scriptAiServerPort: null,
+      requestCodeCopyBehavior: DEFAULT_REQUEST_CODE_COPY_BEHAVIOR,
+      createdAt: now,
+      updatedAt: now,
+    }
 
   db.insert(appSettings).values(defaults).run()
   return toAppSettingsRecord(defaults)
@@ -130,6 +133,13 @@ function validateAppSettingsPatch(input: UpdateAppSettingsInput) {
     return 'Script AI server port must be an integer between 1024 and 65535'
   }
 
+  if (
+    input.requestCodeCopyBehavior !== undefined
+    && !APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS.includes(input.requestCodeCopyBehavior)
+  ) {
+    return 'Invalid request code copy behavior'
+  }
+
   return null
 }
 
@@ -178,6 +188,10 @@ function buildAppSettingsUpdatePatch(input: UpdateAppSettingsInput): Partial<App
     patch.scriptAiServerPort = input.scriptAiServerPort
   }
 
+  if (input.requestCodeCopyBehavior !== undefined) {
+    patch.requestCodeCopyBehavior = input.requestCodeCopyBehavior
+  }
+
   return patch
 }
 
@@ -197,6 +211,11 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
   )
     ? (value.responseBodyDisplayMode as (typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number])
     : DEFAULT_RESPONSE_BODY_DISPLAY_MODE
+  const requestCodeCopyBehavior = APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS.includes(
+    value.requestCodeCopyBehavior as (typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]
+  )
+    ? (value.requestCodeCopyBehavior as (typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number])
+    : DEFAULT_REQUEST_CODE_COPY_BEHAVIOR
 
   return {
     id: value.id,
@@ -210,6 +229,7 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     supermavenEnabled: value.supermavenEnabled ?? DEFAULT_SUPERMAVEN_ENABLED,
     scriptAiModel: value.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL,
     scriptAiServerPort: value.scriptAiServerPort ?? null,
+    requestCodeCopyBehavior,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }
