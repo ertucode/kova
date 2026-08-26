@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HttpAuth } from '../common/Auth.js'
 import { Result } from '../common/Result.js'
+import { fetch as undiciFetch, Response as UndiciResponse } from 'undici'
 import * as cookieDb from './db/cookies.js'
 import * as requestDb from './db/requests.js'
 import * as genericEvents from './generic-events.js'
@@ -8,7 +9,18 @@ import * as httpRequestRuntime from './http-request-runtime.js'
 import type { PreparedHttpRequest } from './http-request-runtime.js'
 import { applyScriptCallRequestOverrides, sendRequest } from './send-request.js'
 
+vi.mock('undici', async importOriginal => {
+  const actual = await importOriginal<typeof import('undici')>()
+  return {
+    ...actual,
+    fetch: vi.fn(),
+  }
+})
+
+const mockedUndiciFetch = vi.mocked(undiciFetch)
+
 afterEach(() => {
+  mockedUndiciFetch.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -129,14 +141,13 @@ describe('applyScriptCallRequestOverrides', () => {
     vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(preparedRequest))
     vi.spyOn(cookieDb, 'storeResponseCookies').mockResolvedValue(undefined)
 
-    const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ retry: true }), {
+    mockedUndiciFetch.mockResolvedValue(
+      new UndiciResponse(JSON.stringify({ retry: true }), {
         status: 200,
         statusText: 'OK',
         headers: { 'content-type': 'application/json' },
       })
     )
-    vi.stubGlobal('fetch', fetchSpy)
 
     const result = await sendRequest({
       requestId: 'request-1',
@@ -165,7 +176,7 @@ describe('applyScriptCallRequestOverrides', () => {
 
     expect(result.success).toBe(true)
     expect(postRequestSpy).toHaveBeenCalledTimes(1)
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(mockedUndiciFetch).toHaveBeenCalledTimes(1)
     expect(emitGenericEventSpy).toHaveBeenCalledWith({
       type: 'retry-request',
       requestId: 'request-1',
@@ -184,15 +195,12 @@ describe('applyScriptCallRequestOverrides', () => {
     const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
     vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(preparedRequest))
     vi.spyOn(cookieDb, 'storeResponseCookies').mockResolvedValue(undefined)
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response('ok', {
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/plain' },
-        })
-      )
+    mockedUndiciFetch.mockResolvedValue(
+      new UndiciResponse('ok', {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'text/plain' },
+      })
     )
 
     const result = await sendRequest({
@@ -296,32 +304,28 @@ describe('applyScriptCallRequestOverrides', () => {
         deletedAt: null,
       })
     })
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response('expired', {
-            status: 401,
-            statusText: 'Unauthorized',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-        .mockResolvedValueOnce(
-          new Response('token', {
-            status: 200,
-            statusText: 'OK',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-        .mockResolvedValueOnce(
-          new Response('ok', {
-            status: 200,
-            statusText: 'OK',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-    )
+    mockedUndiciFetch
+      .mockResolvedValueOnce(
+        new UndiciResponse('expired', {
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new UndiciResponse('token', {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new UndiciResponse('ok', {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
 
     const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
 
@@ -434,25 +438,21 @@ describe('applyScriptCallRequestOverrides', () => {
         deletedAt: null,
       })
     )
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response('expired', {
-            status: 403,
-            statusText: 'Forbidden',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-        .mockResolvedValueOnce(
-          new Response('still expired', {
-            status: 401,
-            statusText: 'Unauthorized',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-    )
+    mockedUndiciFetch
+      .mockResolvedValueOnce(
+        new UndiciResponse('expired', {
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new UndiciResponse('still expired', {
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
 
     const result = await sendRequest({
       requestId: 'request-1',
@@ -553,32 +553,28 @@ describe('applyScriptCallRequestOverrides', () => {
         deletedAt: null,
       })
     )
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response('expired', {
-            status: 401,
-            statusText: 'Unauthorized',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-        .mockResolvedValueOnce(
-          new Response('', {
-            status: 204,
-            statusText: 'No Content',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-        .mockResolvedValueOnce(
-          new Response('ok', {
-            status: 200,
-            statusText: 'OK',
-            headers: { 'content-type': 'text/plain' },
-          })
-        )
-    )
+    mockedUndiciFetch
+      .mockResolvedValueOnce(
+        new UndiciResponse('expired', {
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new UndiciResponse(null, {
+          status: 204,
+          statusText: 'No Content',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new UndiciResponse('ok', {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/plain' },
+        })
+      )
 
     const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
 

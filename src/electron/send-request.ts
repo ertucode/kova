@@ -3,6 +3,7 @@ import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { extractTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
 import type { ScriptCallRequestOverrides } from '../common/ScriptMakeRequest.js'
+import { fetch as undiciFetch, type RequestInit as UndiciRequestInit, type Response as UndiciResponse } from 'undici'
 import type { ScriptClipboardBridge } from './script-clipboard.js'
 import type { ScriptMakeRequestBridge } from './script-make-request.js'
 import type { ScriptPromptBridge } from './script-prompt.js'
@@ -76,12 +77,12 @@ export async function fetchGraphqlSchema(
     headers.set('content-type', 'application/json')
     const dispatcher = await resolveRequestTlsDispatcher(preparedRequest.data.url, input.requestId, input.tlsVerificationMode)
 
-    const response = await fetch(preparedRequest.data.url, {
+    const response = await undiciFetch(preparedRequest.data.url, {
       method: 'POST',
       headers,
       body: JSON.stringify({ query: getIntrospectionQuery() }),
       dispatcher,
-    } as RequestInit & { dispatcher?: unknown })
+    } as UndiciRequestInit)
     const responseText = await response.text()
     const parsedPayload = parseGraphqlSchemaPayload(responseText)
     if (!parsedPayload.success) {
@@ -176,13 +177,13 @@ export async function sendRequest(
     })
     const startedAt = Date.now()
     const dispatcher = await resolveRequestTlsDispatcher(url, input.requestId, input.tlsVerificationMode)
-    const response = await fetch(url, {
+    const response = await undiciFetch(url, {
       method,
       headers,
       body: requestBody.body,
       dispatcher,
       signal: abortController.signal,
-    } as RequestInit & { dispatcher?: unknown })
+    } as UndiciRequestInit)
     const responseHeaderEntries = Array.from(response.headers.entries())
     let responseHeaders = serializeResponseHeaderEntries(responseHeaderEntries)
 
@@ -378,7 +379,7 @@ async function consumeSseResponse(input: {
         makeRequest?: ScriptMakeRequestBridge
       }
     | undefined
-  response: Response
+  response: UndiciResponse
   responseHeaders: string
   requestName: string
   resolvedAuth: PreparedHttpRequest['resolvedAuth']
@@ -848,7 +849,7 @@ function getResponseContentType(headers: string) {
   )
 }
 
-async function readResponseBody(response: Response, headers: string) {
+async function readResponseBody(response: UndiciResponse, headers: string) {
   const contentType = getResponseContentType(headers)?.toLowerCase() ?? ''
 
   if (!contentType.startsWith('image/') && !contentType.includes('application/pdf')) {
