@@ -1,0 +1,1 @@
+ALTER TABLE `folders` ADD `tls_verification_mode` text DEFAULT 'inherit' NOT NULL;

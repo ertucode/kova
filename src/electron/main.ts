@@ -939,6 +939,7 @@ app.on('ready', async () => {
       rawType: requestResult.data.rawType,
       graphqlQuery: requestResult.data.graphqlQuery,
       graphqlVariables: requestResult.data.graphqlVariables,
+      tlsVerificationMode: requestResult.data.tlsVerificationMode,
       activeEnvironmentIds: input.activeEnvironmentIds,
       saveToHistory: false,
       historyKeepLast: 0,

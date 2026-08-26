@@ -412,6 +412,7 @@ function insertRequestFromPlan(tx: Database, parentFolderId: string | null, requ
       graphqlQuery: request.graphqlQuery,
       graphqlVariables: request.graphqlVariables,
       graphqlSchema: '',
+      tlsVerificationMode: request.tlsVerificationMode,
       websocketSubprotocols: '',
       websocketOnOpenMessage: '',
       websocketAutoSendEnabled: false,

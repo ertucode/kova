@@ -1,3 +1,4 @@
+import { WebSocket as UndiciWebSocket } from 'undici'
 import {
   getAuthHeaders,
   getAuthQueryParams,
@@ -12,6 +13,8 @@ import { applySearchParamsToUrl } from '../common/PathParams.js'
 import { formatRequestScriptErrorSummaries } from '../common/RequestScriptErrors.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
 import { Result } from '../common/Result.js'
+import { DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE } from '../common/AppSettings.js'
+import type { AppSettingsTlsVerificationMode } from '../common/AppSettings.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import type { ScriptClipboardBridge } from './script-clipboard.js'
 import type { ScriptMakeRequestBridge } from './script-make-request.js'
@@ -26,6 +29,7 @@ import type {
   WebSocketSessionRecord,
 } from '../common/Requests.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
+import { getAppSettings } from './db/app-settings.js'
 import { listVisibleEnvironments } from './db/environments.js'
 import { getFolderAncestorChain } from './db/folders.js'
 import { getRequest } from './db/requests.js'
@@ -40,9 +44,10 @@ import { getRequestParentFolderId } from './db/explorer.js'
 import { emitGenericEvent } from './generic-events.js'
 import { createRequestScriptRuntime } from './request-script-runner.js'
 import { getScriptPackageRegistryEntry } from './script-package-registry.js'
+import { getTlsDispatcher, resolveEffectiveTlsVerificationMode } from './tls-runtime.js'
 
 type ActiveWebSocketSession = {
-  socket: WebSocket
+  socket: UndiciWebSocket
   session: WebSocketSessionRecord
   activeEnvironmentIds: string[]
   parentFolderId: string | null
@@ -224,6 +229,7 @@ export async function connectWebSocket(
     const headers = new Headers()
     applyAuthHeaders(headers, resolvedAuth)
     applyResolvedHeaders(headers, parseKeyValueRows(runtime.request.headers), variables)
+    const dispatcher = await resolveRequestTlsDispatcher(url, folders, input.tlsVerificationMode)
 
     const connectedAt = Date.now()
     const session: WebSocketSessionRecord = {
@@ -246,10 +252,11 @@ export async function connectWebSocket(
       messages: [],
     }
 
-    const socket = new WebSocket(
-      url,
-      parseSubprotocols(resolveTemplateVariables(resolvedWebSocketSubprotocols, variables))
-    )
+    const socket = new UndiciWebSocket(url, {
+      protocols: parseSubprotocols(resolveTemplateVariables(resolvedWebSocketSubprotocols, variables)),
+      headers,
+      dispatcher,
+    })
     const activeSession: ActiveWebSocketSession = {
       socket,
       session,
@@ -460,7 +467,7 @@ function emitSessionUpdated(session: WebSocketSessionRecord) {
   })
 }
 
-function waitForOpenOrError(socket: WebSocket) {
+function waitForOpenOrError(socket: UndiciWebSocket) {
   return new Promise<void>((resolve, reject) => {
     const handleOpen = () => {
       cleanup()
@@ -695,4 +702,23 @@ function formatRuntimeError(error: unknown) {
     return error.message
   }
   return String(error)
+}
+
+async function resolveRequestTlsDispatcher(
+  url: string,
+  folders: Awaited<ReturnType<typeof getFolderAncestorChain>>,
+  requestMode: WebSocketConnectInput['tlsVerificationMode']
+) {
+  const appSettingsMode: AppSettingsTlsVerificationMode = await getAppSettings()
+    .then(settings => settings.tlsVerificationMode)
+    .catch(() => DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE)
+
+  return getTlsDispatcher(
+    url,
+    resolveEffectiveTlsVerificationMode({
+      requestMode,
+      folderModes: folders.map(folder => folder.tlsVerificationMode ?? 'inherit'),
+      appSettingsMode,
+    })
+  )
 }

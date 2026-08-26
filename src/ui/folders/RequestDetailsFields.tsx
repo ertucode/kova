@@ -6,7 +6,13 @@ import { buildClientSchema, type GraphQLSchema, type IntrospectionQuery } from '
 import type { ExplorerItem } from '@common/Explorer'
 import { getAuthVariableSources } from '@common/Auth'
 import type { RequestMetaTab } from '@common/FolderExplorerTabs'
-import type { RequestScriptError, RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
+import {
+  REQUEST_TLS_VERIFICATION_MODES,
+  type RequestScriptError,
+  type RequestBodyType,
+  type RequestMethod,
+  type RequestRawType,
+} from '@common/Requests'
 import { parseCurlRequest } from '@common/curl'
 import { extractTemplateVariables } from '@common/RequestVariables'
 import {
@@ -24,8 +30,9 @@ import {
 import { formatJson5PreferringJsonWithTemplates } from '@common/Json5'
 import { getWindowElectron } from '@/getWindowElectron'
 import { DEFAULT_COMPACT_REQUEST_VIEW } from '@common/AppSettings'
+import { SettingsDropdownFieldRow, SettingsTab } from '@/components/settings'
+import { buildTlsVerificationModeDropdownOptions } from '@/components/tlsVerificationMode'
 import { toast } from '@/lib/components/toast'
-import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { dialogActions } from '@/global/dialogStore'
 import { appSettingsStore, getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import { Tooltip } from '../components/Tooltip'
@@ -45,10 +52,7 @@ import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { RequestSendCoordinator } from './requestSendCoordinator'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
-import {
-  variableAutocompleteExtension,
-  type VariableAutocompleteItem,
-} from './codeEditorVariableAutocomplete'
+import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
 import { variableHighlightExtension } from './codeEditorVariableHighlight'
 import { scriptAutocompleteExtension } from './codeEditorScriptAutocomplete'
 import { scriptDiagnosticsExtension } from './codeEditorScriptDiagnostics'
@@ -76,6 +80,7 @@ import { formatScriptValueForSave } from './scriptFormatOnSave'
 import { ScriptAiIconButton } from './ScriptAiIconButton'
 import { twMerge } from 'tailwind-merge'
 import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
+import { DropdownSelect } from '@/lib/components/dropdown-select'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -137,7 +142,14 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         explorerItems,
         folderId: selectedRequestFolderId,
       }),
-    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedRequestFolderId]
+    [
+      activeEnvironmentIds,
+      environmentEntries,
+      environments,
+      explorerItems,
+      inactiveFolderEnvironmentIds,
+      selectedRequestFolderId,
+    ]
   )
   const activeEnvironmentNames = scopedEnvironments.activeEnvironmentNames
   const activeEnvironmentVariableNames = scopedEnvironments.activeEnvironmentVariableNames
@@ -749,7 +761,9 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       }
 
       updateSearchParams(
-        stringifyKeyValueRows(rows.map(candidate => (candidate.id === event.rowId ? { ...candidate, value: nextValue } : candidate)))
+        stringifyKeyValueRows(
+          rows.map(candidate => (candidate.id === event.rowId ? { ...candidate, value: nextValue } : candidate))
+        )
       )
     })
   }, [updateSearchParams])
@@ -850,6 +864,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         rawType: draftRef.current.rawType,
         graphqlQuery: draftRef.current.graphqlQuery,
         graphqlVariables: draftRef.current.graphqlVariables,
+        tlsVerificationMode: draftRef.current.tlsVerificationMode,
         activeEnvironmentIds,
       })
 
@@ -1056,6 +1071,8 @@ export default function View() {
         </section>
       ) : null}
 
+      {metaTab === 'settings' ? <RequestSettingsTab draft={draft} updateRequestDraft={updateRequestDraft} /> : null}
+
       {metaTab === 'path-params' ? (
         <section className="min-h-0 flex-1 overflow-auto">
           <KeyValueEditor
@@ -1095,7 +1112,9 @@ export default function View() {
                   ownerId={selectedRequestId ?? ''}
                   runtimeContext={{ phase: 'pre-request' }}
                   currentCode={draft.preRequestScript}
-                  onApply={nextCode => updateRequestDraft({ ...draft, preRequestScript: nextCode }, 'request-pre-script-ai')}
+                  onApply={nextCode =>
+                    updateRequestDraft({ ...draft, preRequestScript: nextCode }, 'request-pre-script-ai')
+                  }
                   tooltip="Generate with AI"
                 />
                 <ScriptDocumentationButton phase="pre-request" tooltip="Documentation" />
@@ -1133,7 +1152,9 @@ export default function View() {
                   ownerId={selectedRequestId ?? ''}
                   runtimeContext={{ phase: 'post-request' }}
                   currentCode={draft.postRequestScript}
-                  onApply={nextCode => updateRequestDraft({ ...draft, postRequestScript: nextCode }, 'request-post-script-ai')}
+                  onApply={nextCode =>
+                    updateRequestDraft({ ...draft, postRequestScript: nextCode }, 'request-post-script-ai')
+                  }
                   tooltip="Generate with AI"
                 />
                 <ScriptDocumentationButton phase="post-request" tooltip="Documentation" />
@@ -1157,7 +1178,9 @@ export default function View() {
           extensions={testScriptExtensions}
           editorRef={testEditorRef}
           externalSelection={
-            pendingTestSelectionRef.current?.code === draft.testScript ? pendingTestSelectionRef.current.selection : null
+            pendingTestSelectionRef.current?.code === draft.testScript
+              ? pendingTestSelectionRef.current.selection
+              : null
           }
           onChange={value => updateRequestDraft({ ...draft, testScript: value }, 'request-test-script')}
           onSelectionChange={selection => {
@@ -1320,7 +1343,7 @@ function ScriptDocumentationButton({
           ? 'Open post-request script documentation'
           : phase === 'test'
             ? 'Open test script documentation'
-          : 'Open response visualizer documentation'
+            : 'Open response visualizer documentation'
 
   const button = (
     <button
@@ -1468,13 +1491,13 @@ function VariableUsageBanner({
               : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
           ].join(' ')}
           onClick={() => onMetaTabChange('scripts')}
-          >
-            <span>Scripts</span>
-            <span className={metaTab === 'scripts' ? 'text-base-content/55' : 'text-base-content/30'}>
-              <span className={hasPreRequestScript ? '' : 'opacity-45'}>Pre</span>
-              <span className="mx-1">/</span>
-              <span className={hasPostRequestScript ? '' : 'opacity-45'}>Post</span>
-            </span>
+        >
+          <span>Scripts</span>
+          <span className={metaTab === 'scripts' ? 'text-base-content/55' : 'text-base-content/30'}>
+            <span className={hasPreRequestScript ? '' : 'opacity-45'}>Pre</span>
+            <span className="mx-1">/</span>
+            <span className={hasPostRequestScript ? '' : 'opacity-45'}>Post</span>
+          </span>
         </button>
         <button
           type="button"
@@ -1500,6 +1523,18 @@ function VariableUsageBanner({
         >
           <span>Response Visualizer</span>
         </button>
+        <button
+          type="button"
+          className={[
+            'h-10 border-l border-base-content/10 px-3 text-xs font-semibold transition',
+            metaTab === 'settings'
+              ? 'border-b-2 border-b-base-content text-base-content'
+              : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+          ].join(' ')}
+          onClick={() => onMetaTabChange('settings')}
+        >
+          Settings
+        </button>
       </div>
 
       <div className="ml-auto max-w-[60%] overflow-auto px-3 text-right whitespace-nowrap [scrollbar-width:thin]">
@@ -1519,6 +1554,28 @@ function normalizeMetaTabForLayout(tab: RequestMetaTab, compactRequestView: bool
   }
 
   return tab === 'overview' ? 'body' : tab
+}
+
+function RequestSettingsTab({
+  draft,
+  updateRequestDraft,
+}: {
+  draft: RequestDetailsDraft
+  updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
+}) {
+  return (
+    <SettingsTab>
+      <SettingsDropdownFieldRow
+        title="TLS verification"
+        description="Override how this request verifies HTTPS certificates."
+        value={draft.tlsVerificationMode}
+        options={buildTlsVerificationModeDropdownOptions(REQUEST_TLS_VERIFICATION_MODES)}
+        onChange={value =>
+          updateRequestDraft({ ...draft, tlsVerificationMode: value }, 'request-tls-verification-mode')
+        }
+      />
+    </SettingsTab>
+  )
 }
 
 const FLOATING_SCRIPT_ACTION_BUTTON_CLASS_NAME =
@@ -1674,10 +1731,7 @@ function RequestBodyTab({
     [getPackages, getSharedScripts, variableEditorExtensions]
   )
   const graphqlQueryExtensions = useMemo(
-    () => [
-      ...graphqlSchemaExtension(graphqlSchema),
-      graphqlDiagnosticsExtension({ getSharedScripts, getPackages }),
-    ],
+    () => [...graphqlSchemaExtension(graphqlSchema), graphqlDiagnosticsExtension({ getSharedScripts, getPackages })],
     [getPackages, getSharedScripts, graphqlSchema]
   )
 
@@ -1757,7 +1811,9 @@ function RequestBodyTab({
                 placeholder={'{\n  "id": "123"\n}'}
                 extensions={graphqlVariablesExtensions}
                 refreshKey={variableHighlightRefreshKey}
-                onChange={value => updateRequestDraft({ ...draft, graphqlVariables: value }, 'request-body-graphql-variables')}
+                onChange={value =>
+                  updateRequestDraft({ ...draft, graphqlVariables: value }, 'request-body-graphql-variables')
+                }
               />
             </div>
           </div>
@@ -1837,7 +1893,10 @@ function RequestBodyTabActions({
           return null
         }
 
-        return [exampleItem.id, result.data.requestBodyType === 'graphql' ? (result.data.graphqlQuery ?? '') : result.data.requestBody] as const
+        return [
+          exampleItem.id,
+          result.data.requestBodyType === 'graphql' ? (result.data.graphqlQuery ?? '') : result.data.requestBody,
+        ] as const
       })
     ).then(entries => {
       if (isCancelled) {
@@ -2155,17 +2214,17 @@ async function formatGraphqlQueryWithTemplates(value: string) {
 
 async function getGraphqlFormatter() {
   if (!graphqlFormatterPromise) {
-    graphqlFormatterPromise = Promise.all([
-      import('prettier/standalone'),
-      import('prettier/plugins/graphql'),
-    ]).then(([prettier, graphqlPlugin]) => {
-      const standalonePrettier = prettier as PrettierGraphqlModule
+    graphqlFormatterPromise = Promise.all([import('prettier/standalone'), import('prettier/plugins/graphql')]).then(
+      ([prettier, graphqlPlugin]) => {
+        const standalonePrettier = prettier as PrettierGraphqlModule
 
-      return async (value: string) => standalonePrettier.format(value, {
-        parser: 'graphql',
-        plugins: [graphqlPlugin.default],
-      })
-    })
+        return async (value: string) =>
+          standalonePrettier.format(value, {
+            parser: 'graphql',
+            plugins: [graphqlPlugin.default],
+          })
+      }
+    )
   }
 
   return graphqlFormatterPromise

@@ -17,7 +17,7 @@ import type { EnvironmentRecord } from '../common/Environments.js'
 import type { FolderRecord } from '../common/Folders.js'
 import type { ExplorerItem } from '../common/Explorer.js'
 import type { RequestExampleRecord } from '../common/RequestExamples.js'
-import type { HttpRequestRecord, RequestBodyType, RequestRawType } from '../common/Requests.js'
+import type { HttpRequestRecord, RequestBodyType, RequestRawType, RequestTlsVerificationMode } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
 import { listExplorerItems } from './db/explorer.js'
 import { listEnvironments } from './db/environments.js'
@@ -63,6 +63,7 @@ type PostmanCollectionDocument = {
     exportedByKova?: true
     folderHeaders?: string
     folderEnvironments?: FolderEnvironmentMetadata[]
+    tlsVerificationMode?: FolderRecord['tlsVerificationMode']
   }
 }
 
@@ -77,6 +78,7 @@ type PostmanItem = {
   _kova?: {
     folderHeaders?: string
     folderEnvironments?: FolderEnvironmentMetadata[]
+    tlsVerificationMode?: FolderRecord['tlsVerificationMode']
   }
 }
 
@@ -91,6 +93,12 @@ type PostmanRequest = {
   body?: PostmanBody
   auth?: PostmanAuth
   description?: string
+  protocolProfileBehavior?: {
+    disableSSLValidation?: boolean
+  }
+  _kova?: {
+    tlsVerificationMode?: RequestTlsVerificationMode
+  }
 }
 
 type PostmanResponse = {
@@ -300,6 +308,7 @@ export function buildCollectionExportDocument(source: CollectionExportSource, co
         ? collectionHeaders
         : undefined,
       folderEnvironments: rootFolderEnvironments.length > 0 ? rootFolderEnvironments : undefined,
+      tlsVerificationMode: rootFolder?.tlsVerificationMode ?? 'inherit',
     },
   }
 }
@@ -481,6 +490,11 @@ function buildFolderItem(folder: FolderExportRecord, children: PostmanItem[], fo
     }
   }
 
+  postmanItem._kova = {
+    ...postmanItem._kova,
+    tlsVerificationMode: folder.tlsVerificationMode ?? 'inherit',
+  }
+
   return postmanItem
 }
 
@@ -540,7 +554,7 @@ function buildRequestItem(request: RequestExportRecord, examples: RequestExample
 }
 
 function mapRequest(
-  request: Pick<HttpRequestRecord, 'method' | 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType' | 'rawType' | 'graphqlQuery' | 'graphqlVariables' | 'auth'>
+  request: Pick<HttpRequestRecord, 'method' | 'url' | 'pathParams' | 'searchParams' | 'headers' | 'body' | 'bodyType' | 'rawType' | 'graphqlQuery' | 'graphqlVariables' | 'auth' | 'tlsVerificationMode'>
 ): PostmanRequest {
   const headers = parseKeyValueRows(request.headers)
   const pathVariables = parseKeyValueRows(request.pathParams)
@@ -576,6 +590,14 @@ function mapRequest(
     postmanRequest.auth = auth
   }
 
+  if (request.tlsVerificationMode === 'disable') {
+    postmanRequest.protocolProfileBehavior = { disableSSLValidation: true }
+  }
+
+  postmanRequest._kova = {
+    tlsVerificationMode: request.tlsVerificationMode,
+  }
+
   return postmanRequest
 }
 
@@ -599,6 +621,7 @@ function mapResponseExample(example: RequestExampleRecord, request: RequestExpor
           rawType: example.requestRawType,
           graphqlQuery: example.graphqlQuery,
           graphqlVariables: example.graphqlVariables,
+          tlsVerificationMode: request.tlsVerificationMode,
         })
       : undefined,
   }

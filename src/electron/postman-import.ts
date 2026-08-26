@@ -16,6 +16,7 @@ import {
   type PostmanImportWarningCode,
 } from '../common/PostmanImport.js'
 import { Result } from '../common/Result.js'
+import type { RequestTlsVerificationMode } from '../common/Requests.js'
 import { getDb } from './db/index.js'
 import { environments, folders, requestExamples, requests } from './db/schema.js'
 import { ensureParentFolderExists, insertTreeItem } from './db/tree-items.js'
@@ -58,6 +59,7 @@ type PostmanCollection = {
     exportedByKova?: unknown
     folderHeaders?: unknown
     folderEnvironments?: unknown
+    tlsVerificationMode?: unknown
   }
 }
 
@@ -74,6 +76,7 @@ type PostmanItem = {
   _kova?: {
     folderHeaders?: unknown
     folderEnvironments?: unknown
+    tlsVerificationMode?: unknown
   }
 }
 
@@ -94,6 +97,9 @@ type PostmanRequest = {
   auth?: PostmanAuth
   description?: unknown
   protocolProfileBehavior?: unknown
+  _kova?: {
+    tlsVerificationMode?: unknown
+  }
 }
 
 type PostmanUrl = {
@@ -293,7 +299,7 @@ export function analyzeCollectionDocument(collection: PostmanCollection): Import
       inspectAuth(warnings, nextPath.join(' / '), item.request.auth ?? item.auth)
       inspectRequestBody(warnings, nextPath.join(' / '), item.request.body)
 
-      if (item.protocolProfileBehavior || item.request.protocolProfileBehavior) {
+      if (item.protocolProfileBehavior || hasUnsupportedRequestProtocolProfileBehavior(item.request.protocolProfileBehavior)) {
         addWarning(warnings, 'protocol-profile-ignored', 1, [nextPath.join(' / ')])
       }
     }
@@ -344,6 +350,7 @@ export function importCollectionDocument(
           description: '',
           headers: readCollectionHeaders(collection),
           authJson: JSON.stringify(mapAuth(collection.auth, false)),
+          tlsVerificationMode: readFolderTlsVerificationMode(collection._kova),
           preRequestScript: mapScripts(collection.event, 'prerequest', isKovaExportedCollection(collection)),
           postRequestScript: mapScripts(collection.event, 'test', isKovaExportedCollection(collection)),
           position: 0,
@@ -394,6 +401,7 @@ function importItem(
         description: readFolderDescription(item.description),
         headers: readFolderHeaders(item._kova),
         authJson: JSON.stringify(mapAuth(item.auth, true)),
+        tlsVerificationMode: readFolderTlsVerificationMode(item._kova),
         preRequestScript: mapScripts(item.event, 'prerequest', preserveScripts),
         postRequestScript: mapScripts(item.event, 'test', preserveScripts),
         position: 0,
@@ -436,6 +444,7 @@ function importItem(
       body: requestModel.body,
       bodyType: requestModel.bodyType,
       rawType: requestModel.rawType,
+      tlsVerificationMode: requestModel.tlsVerificationMode,
       graphqlQuery: requestModel.graphqlQuery,
       graphqlVariables: requestModel.graphqlVariables,
       websocketSubprotocols: '',
@@ -591,9 +600,45 @@ export function mapRequest(request: PostmanRequest) {
     body: body.body,
     bodyType: body.bodyType,
     rawType: body.rawType,
+    tlsVerificationMode: readRequestTlsVerificationMode(request),
     graphqlQuery: body.graphqlQuery,
     graphqlVariables: body.graphqlVariables,
   }
+}
+
+function readRequestTlsVerificationMode(request: PostmanRequest) {
+  const kovaMode = request._kova?.tlsVerificationMode
+  if (kovaMode === 'inherit' || kovaMode === 'strict' || kovaMode === 'disable-for-localhost' || kovaMode === 'disable') {
+    return kovaMode
+  }
+
+  return readProtocolProfileDisableSslValidation(request.protocolProfileBehavior) ? 'disable' : 'strict'
+}
+
+function hasUnsupportedRequestProtocolProfileBehavior(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const keys = Object.keys(value)
+  if (keys.length === 0) {
+    return false
+  }
+
+  if (keys.length === 1 && keys[0] === 'disableSSLValidation') {
+    return typeof (value as { disableSSLValidation?: unknown }).disableSSLValidation !== 'boolean'
+  }
+
+  return true
+}
+
+function readProtocolProfileDisableSslValidation(value: unknown) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (value as { disableSSLValidation?: unknown }).disableSSLValidation === true
+  )
 }
 
 function normalizeMethod(value: string | undefined) {
@@ -840,6 +885,13 @@ function readFolderDescription(value: unknown) {
 
 function readFolderHeaders(metadata: PostmanItem['_kova']) {
   return typeof metadata?.folderHeaders === 'string' ? metadata.folderHeaders : ''
+}
+
+function readFolderTlsVerificationMode(metadata: { tlsVerificationMode?: unknown } | undefined): RequestTlsVerificationMode {
+  const value = metadata?.tlsVerificationMode
+  return value === 'inherit' || value === 'strict' || value === 'disable-for-localhost' || value === 'disable'
+    ? value
+    : 'inherit'
 }
 
 export function readCollectionFolderEnvironments(collection: PostmanCollection, fallbackEnvironmentName: string) {

@@ -349,6 +349,7 @@ async function buildSystemPrompt(sessionId: string) {
             responseVisualizer: '',
             responseTableAccessor: '',
             preferredResponseBodyView: 'raw',
+            tlsVerificationMode: 'inherit',
             saveToHistory: true,
           },
         ],

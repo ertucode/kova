@@ -67,6 +67,7 @@ describe('requestUrlImport', () => {
       graphqlQuery: '',
       graphqlVariables: '',
       graphqlSchema: '',
+      tlsVerificationMode: 'inherit',
     })
   })
 
@@ -85,6 +86,7 @@ describe('requestUrlImport', () => {
       graphqlQuery: '',
       graphqlVariables: '',
       graphqlSchema: '',
+      tlsVerificationMode: 'inherit',
     })
   })
 })

@@ -286,6 +286,7 @@ function toSendRequestInput(
     rawType: request.rawType,
     graphqlQuery: request.graphqlQuery,
     graphqlVariables: request.graphqlVariables,
+    tlsVerificationMode: request.tlsVerificationMode,
     activeEnvironmentIds: input.activeEnvironmentIds,
     environmentSnapshot,
     saveToHistory: request.saveToHistory,

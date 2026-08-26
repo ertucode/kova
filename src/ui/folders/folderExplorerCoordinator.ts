@@ -566,6 +566,7 @@ function selectionsMatch(left: Selection | null, right: Selection | null) {
       graphqlQuery: importedRequest.graphqlQuery,
       graphqlVariables: importedRequest.graphqlVariables,
       graphqlSchema: '',
+      tlsVerificationMode: createResult.data.tlsVerificationMode,
       websocketSubprotocols: createResult.data.websocketSubprotocols,
       websocketOnOpenMessage: createResult.data.websocketOnOpenMessage,
       websocketAutoSendEnabled: createResult.data.websocketAutoSendEnabled,
@@ -1366,11 +1367,12 @@ async function saveItem(selection: Selection, options?: { skipFormatting?: boole
           name: draft.name,
           description: draft.description,
           headers: draft.headers,
-            auth: draft.auth,
-            preRequestScript: draft.preRequestScript,
-            postRequestScript: draft.postRequestScript,
-            runConfig: draft.runConfig,
-          })
+          auth: draft.auth,
+          tlsVerificationMode: draft.tlsVerificationMode,
+          preRequestScript: draft.preRequestScript,
+          postRequestScript: draft.postRequestScript,
+          runConfig: draft.runConfig,
+        })
       : draft.itemType === 'request'
         ? await getWindowElectron().updateRequest({
             id: selection.id,
@@ -1394,6 +1396,7 @@ async function saveItem(selection: Selection, options?: { skipFormatting?: boole
             graphqlQuery: draft.graphqlQuery,
             graphqlVariables: draft.graphqlVariables,
             graphqlSchema: draft.graphqlSchema,
+            tlsVerificationMode: draft.tlsVerificationMode,
             websocketSubprotocols: draft.websocketSubprotocols,
             websocketOnOpenMessage: draft.websocketOnOpenMessage,
             websocketAutoSendEnabled: draft.websocketAutoSendEnabled,

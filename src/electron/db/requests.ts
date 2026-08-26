@@ -12,6 +12,7 @@ import type {
   RequestBodyType,
   RequestMethod,
   RequestRawType,
+  RequestTlsVerificationMode,
   RequestType,
   McpTransport,
   UpdateRequestInput,
@@ -34,6 +35,7 @@ const REQUEST_RAW_TYPES: RequestRawType[] = ['json', 'text']
 const REQUEST_TYPES: RequestType[] = ['http', 'websocket', 'mcp']
 const MCP_TRANSPORTS: McpTransport[] = ['http']
 const RESPONSE_BODY_VIEWS: ResponseBodyView[] = ['raw', 'table', 'visualizer']
+const REQUEST_TLS_VERIFICATION_MODES: RequestTlsVerificationMode[] = ['inherit', 'strict', 'disable-for-localhost', 'disable']
 
 export async function createRequest(input: CreateRequestInput): Promise<GenericResult<HttpRequestRecord>> {
   const db = getDb()
@@ -75,6 +77,7 @@ export async function createRequest(input: CreateRequestInput): Promise<GenericR
         graphqlQuery: '',
         graphqlVariables: '',
         graphqlSchema: '',
+        tlsVerificationMode: 'inherit',
         websocketSubprotocols: '',
         websocketOnOpenMessage: '',
         websocketAutoSendEnabled: false,
@@ -154,6 +157,10 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
       return GenericError.Message('Invalid preferred response body view')
     }
 
+    if (!REQUEST_TLS_VERIFICATION_MODES.includes(input.tlsVerificationMode)) {
+      return GenericError.Message('Invalid TLS verification mode')
+    }
+
     const mcpTransport = input.mcpTransport ?? 'http'
     if (!MCP_TRANSPORTS.includes(mcpTransport)) {
       return GenericError.Message('Invalid MCP transport')
@@ -191,6 +198,7 @@ export async function updateRequest(input: UpdateRequestInput): Promise<GenericR
           graphqlQuery: input.graphqlQuery,
           graphqlVariables: input.graphqlVariables,
           graphqlSchema: input.graphqlSchema,
+          tlsVerificationMode: input.tlsVerificationMode,
           websocketSubprotocols: input.websocketSubprotocols,
           websocketOnOpenMessage: input.websocketOnOpenMessage,
           websocketAutoSendEnabled: input.websocketAutoSendEnabled,
@@ -458,6 +466,11 @@ function toRequestRecord(request: RequestRow, mcpDetails: McpRequestDetailsRow |
     graphqlQuery: request.graphqlQuery,
     graphqlVariables: request.graphqlVariables,
     graphqlSchema: request.graphqlSchema,
+    tlsVerificationMode: REQUEST_TLS_VERIFICATION_MODES.includes(
+      request.tlsVerificationMode as RequestTlsVerificationMode
+    )
+      ? (request.tlsVerificationMode as RequestTlsVerificationMode)
+      : 'inherit',
     websocketSubprotocols: request.websocketSubprotocols,
     websocketOnOpenMessage: request.websocketOnOpenMessage,
     websocketAutoSendEnabled: request.websocketAutoSendEnabled,

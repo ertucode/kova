@@ -365,6 +365,7 @@ export function importOpenApiDocument(
           body: operation.body,
           bodyType: operation.bodyType,
           rawType: operation.rawType,
+          tlsVerificationMode: 'inherit',
           websocketSubprotocols: '',
           websocketOnOpenMessage: '',
           websocketAutoSendEnabled: false,

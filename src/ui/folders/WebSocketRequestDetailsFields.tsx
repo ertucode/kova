@@ -13,10 +13,15 @@ import {
 } from 'lucide-react'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { syncSearchParamsWithUrl, syncUrlWithSearchParams } from '@common/PathParams'
-import type { WebSocketMessageRecord, WebSocketSavedMessageRecord } from '@common/Requests'
+import {
+  REQUEST_TLS_VERIFICATION_MODES,
+  type WebSocketMessageRecord,
+  type WebSocketSavedMessageRecord,
+} from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
+import { SettingsDropdownFieldRow, SettingsTab } from '@/components/settings'
+import { buildTlsVerificationModeDropdownOptions } from '@/components/tlsVerificationMode'
 import { toast } from '@/lib/components/toast'
-import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { AuthorizationEditor } from './AuthorizationEditor'
 import { CodeEditor, type CodeEditorPasteParams } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
@@ -40,8 +45,9 @@ import { buildEnvironmentScope, createVariableValueMap } from './environmentScop
 import { formatBytes } from '@common/formatBytes'
 import { useHoldAction } from '@/lib/hooks/useHoldAction'
 import { saveWebSocketTranscriptToFile } from './saveResponseToFile'
+import { DropdownSelect } from '@/lib/components/dropdown-select'
 
-type WebSocketMetaTab = 'overview' | 'search-params' | 'automation'
+type WebSocketMetaTab = 'overview' | 'search-params' | 'settings' | 'automation'
 type MessageFilter = 'all' | 'sent' | 'received'
 
 export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
@@ -87,7 +93,14 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
         explorerItems,
         folderId: selectedRequestFolderId,
       }),
-    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedRequestFolderId]
+    [
+      activeEnvironmentIds,
+      environmentEntries,
+      environments,
+      explorerItems,
+      inactiveFolderEnvironmentIds,
+      selectedRequestFolderId,
+    ]
   )
 
   const activeEnvironmentVariableNames = scopedEnvironments.activeEnvironmentVariableNames
@@ -300,6 +313,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
       websocketAutoSendEnabled: draft.websocketAutoSendEnabled,
       websocketAutoSendMessage: draft.websocketAutoSendMessage,
       websocketAutoSendIntervalSeconds: draft.websocketAutoSendIntervalSeconds,
+      tlsVerificationMode: draft.tlsVerificationMode,
       activeEnvironmentIds,
       saveToHistory: draft.saveToHistory,
       historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
@@ -558,6 +572,13 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
           >
             Automation
           </button>
+          <button
+            type="button"
+            className={getTabClassName(metaTab === 'settings')}
+            onClick={() => setMetaTab('settings')}
+          >
+            Settings
+          </button>
         </div>
       </section>
 
@@ -707,6 +728,23 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
             contentClassName="border-t-0"
           />
         </section>
+      ) : null}
+
+      {metaTab === 'settings' ? (
+        <SettingsTab>
+          <SettingsDropdownFieldRow
+            title="TLS verification"
+            description="Override how this socket verifies WSS certificates."
+            value={draft.tlsVerificationMode}
+            options={buildTlsVerificationModeDropdownOptions(REQUEST_TLS_VERIFICATION_MODES)}
+            onChange={value =>
+              FolderExplorerCoordinator.updateSelectedDraft({
+                ...draft,
+                tlsVerificationMode: value,
+              })
+            }
+          />
+        </SettingsTab>
       ) : null}
 
       {metaTab === 'automation' ? (

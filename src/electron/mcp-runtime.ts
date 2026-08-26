@@ -1,6 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
+import { DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE } from '../common/AppSettings.js'
+import type { AppSettingsTlsVerificationMode } from '../common/AppSettings.js'
 import type {
   FetchMcpIntrospectionInput,
   FetchMcpIntrospectionResponse,
@@ -11,11 +13,15 @@ import type {
   SendRequestResponse,
 } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
+import { getAppSettings } from './db/app-settings.js'
+import { getFolderAncestorChain } from './db/folders.js'
+import { getRequestParentFolderId } from './db/explorer.js'
+import { getTlsDispatcher, resolveEffectiveTlsVerificationMode } from './tls-runtime.js'
 
 export async function fetchMcpIntrospection(
   input: FetchMcpIntrospectionInput
 ): Promise<GenericResult<FetchMcpIntrospectionResponse>> {
-  const connection = createMcpConnection(input)
+  const connection = await createMcpConnection(input)
   if (!connection.success) {
     return connection
   }
@@ -60,7 +66,7 @@ export async function fetchMcpIntrospection(
 }
 
 export async function invokeMcpRequest(input: InvokeMcpRequestInput): Promise<GenericResult<SendRequestResponse>> {
-  const connection = createMcpConnection(input)
+  const connection = await createMcpConnection(input)
   if (!connection.success) {
     return connection
   }
@@ -155,10 +161,12 @@ export async function invokeMcpRequest(input: InvokeMcpRequestInput): Promise<Ge
   }
 }
 
-function createMcpConnection(input: {
+async function createMcpConnection(input: {
+  requestId: string
   transport: FetchMcpIntrospectionInput['transport']
   serverUrl: string
   accessToken: string | undefined
+  tlsVerificationMode: FetchMcpIntrospectionInput['tlsVerificationMode']
 }) {
   if (input.transport !== 'http') {
     return GenericError.Message('Only HTTP MCP transport is supported right now')
@@ -178,18 +186,37 @@ function createMcpConnection(input: {
 
   const authToken = input.accessToken?.trim() ?? ''
   const requestHeaders = authToken ? `Authorization: Bearer ${authToken}` : ''
+  const appSettingsMode: AppSettingsTlsVerificationMode = await getAppSettings()
+    .then(settings => settings.tlsVerificationMode)
+    .catch(() => DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE)
+  const folderModes = await getRequestParentFolderId(input.requestId)
+    .then(folderId => getFolderAncestorChain(folderId))
+    .then(folders => folders.map(folder => folder.tlsVerificationMode ?? 'inherit'))
+    .catch(() => [])
+  const dispatcher = getTlsDispatcher(
+    serverUrl.toString(),
+    resolveEffectiveTlsVerificationMode({
+      requestMode: input.tlsVerificationMode,
+      folderModes,
+      appSettingsMode,
+    })
+  )
+  const requestInit = {
+    ...(authToken
+      ? {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        }
+      : null),
+    ...(dispatcher ? { dispatcher } : null),
+  }
 
   return Result.Success({
     serverUrl,
     requestHeaders,
     transport: new StreamableHTTPClientTransport(serverUrl, {
-      requestInit: authToken
-        ? {
-            headers: {
-              Authorization: `Bearer ${authToken}`,
-            },
-          }
-        : undefined,
+      requestInit: Object.keys(requestInit).length > 0 ? requestInit : undefined,
     }),
   })
 }

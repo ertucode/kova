@@ -16,6 +16,7 @@ import type {
   RenameFolderInput,
   UpdateFolderInput,
 } from '../../common/Folders.js'
+import type { RequestTlsVerificationMode } from '../../common/Requests.js'
 import { Result } from '../../common/Result.js'
 import { getDb } from './index.js'
 import { folders, requestExamples, requests, treeItems, websocketExamples } from './schema.js'
@@ -23,6 +24,7 @@ import { insertOperation } from './operations.js'
 import { ensureParentFolderExists, insertTreeItem } from './tree-items.js'
 
 type FolderRow = typeof folders.$inferSelect
+const FOLDER_TLS_VERIFICATION_MODES: RequestTlsVerificationMode[] = ['inherit', 'strict', 'disable-for-localhost', 'disable']
 
 export async function createFolder(input: CreateFolderInput): Promise<GenericResult<FolderRecord>> {
   const db = getDb()
@@ -44,6 +46,7 @@ export async function createFolder(input: CreateFolderInput): Promise<GenericRes
         description: '',
         headers: '',
         authJson: serializeHttpAuth(createDefaultHttpAuth()),
+        tlsVerificationMode: 'inherit',
         preRequestScript: '',
         postRequestScript: '',
         runConfigJson: JSON.stringify(createDefaultFolderRequestRunConfig()),
@@ -117,6 +120,10 @@ export async function updateFolder(input: UpdateFolderInput): Promise<GenericRes
   }
 
   try {
+    if (input.tlsVerificationMode !== undefined && !FOLDER_TLS_VERIFICATION_MODES.includes(input.tlsVerificationMode)) {
+      return GenericError.Message('Invalid TLS verification mode')
+    }
+
     const result = db
       .update(folders)
       .set({
@@ -124,6 +131,7 @@ export async function updateFolder(input: UpdateFolderInput): Promise<GenericRes
         description: input.description,
         headers: input.headers,
         authJson: serializeHttpAuth(input.auth),
+        tlsVerificationMode: input.tlsVerificationMode ?? 'inherit',
         preRequestScript: input.preRequestScript,
         postRequestScript: input.postRequestScript,
         runConfigJson: serializeFolderRequestRunConfig(input.runConfig),
@@ -295,6 +303,9 @@ function toFolderRecord(folder: FolderRow): FolderRecord {
     description: folder.description,
     headers: folder.headers,
     auth: parseHttpAuth(folder.authJson),
+    tlsVerificationMode: FOLDER_TLS_VERIFICATION_MODES.includes(folder.tlsVerificationMode as RequestTlsVerificationMode)
+      ? (folder.tlsVerificationMode as RequestTlsVerificationMode)
+      : 'inherit',
     preRequestScript: folder.preRequestScript,
     postRequestScript: folder.postRequestScript,
     runConfig: parseFolderRequestRunConfig(folder.runConfigJson),

@@ -9,11 +9,10 @@ import type { DetailsDraft, Selection } from './folderExplorerTypes'
 import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
 import { loadFromAsyncStorage } from '@/utils/asyncStorage'
 import {
-  REQUEST_BODY_TYPES,
-  REQUEST_METHODS,
-  REQUEST_RAW_TYPES,
-} from './folderExplorerTypes'
-import type { RequestType } from '@common/Requests'
+  REQUEST_TLS_VERIFICATION_MODES,
+  type RequestType,
+} from '@common/Requests'
+import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES } from './folderExplorerTypes'
 
 const REQUEST_TYPES: RequestType[] = ['http', 'websocket', 'mcp']
 const MCP_TRANSPORTS = ['http'] as const
@@ -65,6 +64,7 @@ const folderDetailsDraftSchema = z.object({
   description: z.string(),
   headers: z.string().default(''),
   auth: authSchema.default({ type: 'inherit' }),
+  tlsVerificationMode: z.enum(REQUEST_TLS_VERIFICATION_MODES).default('inherit'),
   preRequestScript: z.string(),
   postRequestScript: z.string(),
   runConfig: z.object({
@@ -102,6 +102,7 @@ const requestDetailsDraftSchema = z.object({
   graphqlQuery: z.string().default(''),
   graphqlVariables: z.string().default(''),
   graphqlSchema: z.string().default(''),
+  tlsVerificationMode: z.enum(REQUEST_TLS_VERIFICATION_MODES).default('inherit'),
   websocketSubprotocols: z.string().default(''),
   websocketOnOpenMessage: z.string().default(''),
   websocketAutoSendEnabled: z.boolean().default(false),

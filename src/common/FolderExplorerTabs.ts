@@ -6,6 +6,7 @@ export type RequestMetaTab =
   | 'search-params'
   | 'headers'
   | 'auth'
+  | 'settings'
   | 'path-params'
   | 'explore'
   | 'invoke'

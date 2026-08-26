@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import type { GenericResult } from '@common/GenericError'
 import { errorResponseToMessage } from '@common/GenericError'
+import { Typescript } from '@common/Typescript'
 import type { SupermavenStatus } from '@common/Supermaven'
 import { useSelector } from '@xstate/store/react'
 import {
+  APP_SETTINGS_TLS_VERIFICATION_MODES,
   APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS,
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
+  DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
@@ -18,18 +21,21 @@ import {
 } from '@common/AppSettings'
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
 import { getWindowElectron } from '@/getWindowElectron'
+import { formatTlsVerificationModeLabel } from '@/components/tlsVerificationMode'
 import { Dialog } from '@/lib/components/dialog'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
 import { dialogActions } from './dialogStore'
 import { AppSettingsCoordinator, appSettingsStore } from './appSettingsStore'
 import { useOpenCodeModels } from './useOpenCodeModels'
+import { SettingsCheckboxFieldRow, SettingsDropdownFieldRow, SettingsInputFieldRow } from '@/components/settings'
 
 export function AppSettingsDialog() {
   const settings = useSelector(appSettingsStore, state => state.context.settings)
   const saving = useSelector(appSettingsStore, state => state.context.saving)
   const [warnBeforeRequestAfterSeconds, setWarnBeforeRequestAfterSeconds] = useState('10')
-  const [responseBodyDisplayMode, setResponseBodyDisplayMode] = useState<(typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]>('raw')
+  const [responseBodyDisplayMode, setResponseBodyDisplayMode] =
+    useState<(typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]>('raw')
   const [compactRequestView, setCompactRequestView] = useState(DEFAULT_COMPACT_REQUEST_VIEW)
   const [vimMode, setVimMode] = useState(DEFAULT_VIM_MODE)
   const [formatScriptBlocksOnSave, setFormatScriptBlocksOnSave] = useState(DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE)
@@ -38,8 +44,11 @@ export function AppSettingsDialog() {
   const [supermavenEnabled, setSupermavenEnabled] = useState(DEFAULT_SUPERMAVEN_ENABLED)
   const [scriptAiModel, setScriptAiModel] = useState<string | null>(DEFAULT_SCRIPT_AI_MODEL)
   const [scriptAiServerPort, setScriptAiServerPort] = useState('')
-  const [requestCodeCopyBehavior, setRequestCodeCopyBehavior] = useState<(typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]>(
-    DEFAULT_REQUEST_CODE_COPY_BEHAVIOR
+  const [requestCodeCopyBehavior, setRequestCodeCopyBehavior] = useState<
+    (typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]
+  >(DEFAULT_REQUEST_CODE_COPY_BEHAVIOR)
+  const [tlsVerificationMode, setTlsVerificationMode] = useState<(typeof APP_SETTINGS_TLS_VERIFICATION_MODES)[number]>(
+    DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE
   )
   const [supermavenStatus, setSupermavenStatus] = useState<SupermavenStatus | null>(null)
   const [supermavenStatusLoading, setSupermavenStatusLoading] = useState(false)
@@ -67,6 +76,7 @@ export function AppSettingsDialog() {
       setScriptAiModel(settings.scriptAiModel)
       setScriptAiServerPort(settings.scriptAiServerPort === null ? '' : String(settings.scriptAiServerPort))
       setRequestCodeCopyBehavior(settings.requestCodeCopyBehavior)
+      setTlsVerificationMode(settings.tlsVerificationMode)
     }
   }, [settings])
 
@@ -89,7 +99,11 @@ export function AppSettingsDialog() {
     const nextValue = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : Number.NaN
     const trimmedScriptAiServerPort = scriptAiServerPort.trim()
     const nextScriptAiServerPort =
-      trimmedScriptAiServerPort === '' ? null : Number.isInteger(Number(trimmedScriptAiServerPort)) ? Number(trimmedScriptAiServerPort) : Number.NaN
+      trimmedScriptAiServerPort === ''
+        ? null
+        : Number.isInteger(Number(trimmedScriptAiServerPort))
+          ? Number(trimmedScriptAiServerPort)
+          : Number.NaN
 
     if (!Number.isFinite(nextValue)) {
       return
@@ -111,6 +125,7 @@ export function AppSettingsDialog() {
       scriptAiModel,
       scriptAiServerPort: nextScriptAiServerPort,
       requestCodeCopyBehavior,
+      tlsVerificationMode,
     })
 
     if (success) {
@@ -166,8 +181,8 @@ export function AppSettingsDialog() {
     setDatabaseDrafts(current => ({
       ...current,
       [key]: {
-        name: field === 'name' ? value : current[key]?.name ?? '',
-        path: field === 'path' ? value : current[key]?.path ?? '',
+        name: field === 'name' ? value : (current[key]?.name ?? ''),
+        path: field === 'path' ? value : (current[key]?.path ?? ''),
       },
     }))
   }
@@ -371,67 +386,29 @@ export function AppSettingsDialog() {
       }
     >
       <div className="space-y-5">
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">Warn before request</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            When an active environment has request warnings enabled, show a confirmation dialog if the last request is older than this threshold.
-          </p>
+        <SettingsInputFieldRow
+          title="Warn before request"
+          description="When an active environment has request warnings enabled, show a confirmation dialog if the last request is older than this threshold."
+          value={warnBeforeRequestAfterSeconds}
+          onChange={value => setWarnBeforeRequestAfterSeconds(value)}
+        />
+        <SettingsDropdownFieldRow
+          title="Response body display"
+          description="Choose whether the Raw response view should default to the original payload or a formatted preview when formatting is available."
+          value={responseBodyDisplayMode}
+          options={APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.map(v => ({
+            label: <span className="capitalize">{v}</span>,
+            value: v,
+          }))}
+          onChange={value => setResponseBodyDisplayMode(value)}
+        />
 
-          <label className="mt-4 block max-w-[220px]">
-            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Seconds</div>
-            <input
-              type="number"
-              min={0}
-              step={1}
-              className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
-              value={warnBeforeRequestAfterSeconds}
-              onChange={event => setWarnBeforeRequestAfterSeconds(event.target.value)}
-            />
-          </label>
-        </div>
-
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">Response body display</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Choose whether the Raw response view should default to the original payload or a formatted preview when formatting is available.
-          </p>
-
-          <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-base-content/10 bg-base-100/80">
-            {APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.map(mode => (
-              <button
-                key={mode}
-                type="button"
-                className={[
-                  'px-4 py-2 text-sm font-medium capitalize transition',
-                  mode === responseBodyDisplayMode
-                    ? 'bg-base-200 text-base-content'
-                    : 'border-l border-base-content/10 text-base-content/60 first:border-l-0 hover:text-base-content',
-                ].join(' ')}
-                onClick={() => setResponseBodyDisplayMode(mode)}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">Request details layout</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Keep request details compact by showing auth, headers, and path params beside the body. Turn it off to split
-            them into separate tabs.
-          </p>
-
-          <label className="mt-4 inline-flex items-center gap-3">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm rounded-md"
-              checked={compactRequestView}
-              onChange={event => setCompactRequestView(event.target.checked)}
-            />
-            <span className="text-sm text-base-content">Compact request view</span>
-          </label>
-        </div>
+        <SettingsCheckboxFieldRow
+          title="Request details layout"
+          description="Keep request details compact by showing auth, headers, and path params beside the body. Turn it off to split them into separate tabs."
+          value={compactRequestView}
+          onChange={value => setCompactRequestView(value)}
+        />
 
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
           <div className="text-sm font-medium text-base-content">Editor behavior</div>
@@ -460,9 +437,12 @@ export function AppSettingsDialog() {
           </label>
 
           <label className="mt-4 block">
-            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Prettier Config JSON</div>
+            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
+              Prettier Config JSON
+            </div>
             <p className="mb-3 text-sm text-base-content/60">
-              Applies to script block format-on-save. Use a JSON object such as <code>{'{"semi":false,"singleQuote":true}'}</code>.
+              Applies to script block format-on-save. Use a JSON object such as{' '}
+              <code>{'{"semi":false,"singleQuote":true}'}</code>.
             </p>
             <textarea
               className="textarea min-h-36 w-full rounded-xl border-base-content/10 bg-base-100 font-mono text-sm leading-6"
@@ -471,6 +451,37 @@ export function AppSettingsDialog() {
               spellCheck={false}
             />
           </label>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
+          <div className="text-sm font-medium text-base-content">TLS verification</div>
+          <p className="mt-1 text-sm text-base-content/60">
+            Choose how request runtimes verify HTTPS and WSS certificates by default. Request-level overrides can make
+            this stricter or looser.
+          </p>
+
+          <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-base-content/10 bg-base-100/80">
+            {APP_SETTINGS_TLS_VERIFICATION_MODES.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                className={[
+                  'px-4 py-2 text-sm font-medium transition',
+                  mode === tlsVerificationMode
+                    ? 'bg-base-200 text-base-content'
+                    : 'border-l border-base-content/10 text-base-content/60 first:border-l-0 hover:text-base-content',
+                ].join(' ')}
+                onClick={() => setTlsVerificationMode(mode)}
+              >
+                {formatTlsVerificationModeLabel(mode)}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-3 text-sm text-base-content/55">
+            <code>disable-for-localhost</code> only affects <code>https://</code> and <code>wss://</code> requests that
+            target loopback hosts such as <code>localhost</code>, <code>127.0.0.1</code>, and <code>::1</code>.
+          </p>
         </div>
 
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
@@ -501,7 +512,8 @@ export function AppSettingsDialog() {
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
           <div className="text-sm font-medium text-base-content">Supermaven</div>
           <p className="mt-1 text-sm text-base-content/60">
-            Enable Supermaven ghost completions for script editors. Suggestions are requested with <code>Option+L</code>.
+            Enable Supermaven ghost completions for script editors. Suggestions are requested with <code>Option+L</code>
+            .
           </p>
 
           <label className="mt-4 inline-flex items-center gap-3">
@@ -535,7 +547,9 @@ export function AppSettingsDialog() {
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,260px)]">
             <label className="block max-w-[420px]">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Default model</div>
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
+                Default model
+              </div>
               <select
                 className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
                 value={scriptAiModel ?? ''}
@@ -554,7 +568,9 @@ export function AppSettingsDialog() {
             </label>
 
             <label className="block max-w-[260px]">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Server port</div>
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
+                Server port
+              </div>
               <input
                 type="number"
                 min={1024}
@@ -575,8 +591,8 @@ export function AppSettingsDialog() {
         <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
           <div className="text-sm font-medium text-base-content">Databases</div>
           <p className="mt-1 text-sm text-base-content/60">
-            Choose the active database, update saved database paths, or add another SQLite file. The window reloads after each
-            successful database change.
+            Choose the active database, update saved database paths, or add another SQLite file. The window reloads
+            after each successful database change.
           </p>
 
           <div className="mt-4 overflow-x-auto rounded-xl border border-base-content/10 bg-base-100">
@@ -670,7 +686,9 @@ export function AppSettingsDialog() {
                                   type="button"
                                   className="btn btn-sm btn-soft btn-primary"
                                   onClick={() => void handleSaveDatabase(item.name)}
-                                  disabled={databaseActionPending || !hasChanges || !draft.name.trim() || !draft.path.trim()}
+                                  disabled={
+                                    databaseActionPending || !hasChanges || !draft.name.trim() || !draft.path.trim()
+                                  }
                                 >
                                   Save
                                 </button>
@@ -730,7 +748,9 @@ export function AppSettingsDialog() {
             </label>
 
             <label className="block">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Source file</div>
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
+                Source file
+              </div>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -854,5 +874,7 @@ function formatRequestCodeCopyBehaviorLabel(mode: (typeof APP_SETTINGS_REQUEST_C
       return 'Mask Auth'
     case 'mask-variables':
       return 'Mask Variables'
+    default:
+      return Typescript.assertUnreachable(mode)
   }
 }

@@ -112,6 +112,7 @@ describe('folderExplorerUtils search', () => {
           graphqlQuery: '',
           graphqlVariables: '',
           graphqlSchema: '',
+          tlsVerificationMode: 'inherit',
           websocketSubprotocols: '',
           websocketOnOpenMessage: '',
           websocketAutoSendEnabled: false,

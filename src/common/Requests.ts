@@ -2,6 +2,13 @@ import type { HttpAuth } from './Auth.js'
 import type { EnvironmentRecord } from './Environments.js'
 import type { OperationRecord } from './Operations.js'
 import type { ScriptCallRequestOverrides } from './ScriptMakeRequest.js'
+import type { RequestTlsVerificationMode } from './Tls.js'
+
+export {
+  DEFAULT_REQUEST_TLS_VERIFICATION_MODE,
+  REQUEST_TLS_VERIFICATION_MODES,
+  type RequestTlsVerificationMode,
+} from './Tls.js'
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
@@ -66,6 +73,7 @@ export type HttpRequestRecord = {
   graphqlQuery?: string
   graphqlVariables?: string
   graphqlSchema?: string
+  tlsVerificationMode: RequestTlsVerificationMode
   websocketSubprotocols: string
   websocketOnOpenMessage: string
   websocketAutoSendEnabled: boolean
@@ -116,6 +124,7 @@ export type UpdateRequestInput = {
   graphqlQuery?: string
   graphqlVariables?: string
   graphqlSchema?: string
+  tlsVerificationMode: RequestTlsVerificationMode
   websocketSubprotocols: string
   websocketOnOpenMessage: string
   websocketAutoSendEnabled: boolean
@@ -166,6 +175,7 @@ export type SendRequestInput = {
   graphqlQuery?: string
   graphqlVariables?: string
   activeEnvironmentIds: string[]
+  tlsVerificationMode: RequestTlsVerificationMode
   environmentSnapshot?: EnvironmentRecord[]
   saveToHistory: boolean
   historyKeepLast: number
@@ -190,6 +200,7 @@ export type FetchGraphqlSchemaInput = {
   graphqlQuery?: string
   graphqlVariables?: string
   activeEnvironmentIds: string[]
+  tlsVerificationMode: RequestTlsVerificationMode
 }
 
 export type FetchGraphqlSchemaResponse = {
@@ -201,6 +212,7 @@ export type FetchMcpIntrospectionInput = {
   transport: McpTransport
   serverUrl: string
   accessToken: string | undefined
+  tlsVerificationMode: RequestTlsVerificationMode
 }
 
 export type InvokeMcpRequestInput = {
@@ -208,6 +220,7 @@ export type InvokeMcpRequestInput = {
   transport: McpTransport
   serverUrl: string
   accessToken: string | undefined
+  tlsVerificationMode: RequestTlsVerificationMode
   toolName: string
   argumentsJson: string
 }
@@ -239,6 +252,7 @@ export type WebSocketConnectInput = {
   websocketAutoSendMessage: string
   websocketAutoSendIntervalSeconds: number
   activeEnvironmentIds: string[]
+  tlsVerificationMode: RequestTlsVerificationMode
   saveToHistory: boolean
   historyKeepLast: number
 }

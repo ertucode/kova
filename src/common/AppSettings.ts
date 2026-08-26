@@ -1,3 +1,5 @@
+import type { AppSettingsTlsVerificationMode } from './Tls.js'
+
 export const DEFAULT_WARN_BEFORE_REQUEST_AFTER_SECONDS = 10
 export const APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES = ['raw', 'formatted'] as const
 export const DEFAULT_RESPONSE_BODY_DISPLAY_MODE = 'raw'
@@ -11,6 +13,11 @@ export const DEFAULT_SCRIPT_AI_MODEL: string | null = null
 export const DEFAULT_SCRIPT_AI_SERVER_PORT = 46381
 export const APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS = ['resolved', 'mask-auth', 'mask-variables'] as const
 export const DEFAULT_REQUEST_CODE_COPY_BEHAVIOR = 'resolved'
+export {
+  APP_SETTINGS_TLS_VERIFICATION_MODES,
+  DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE,
+  type AppSettingsTlsVerificationMode,
+} from './Tls.js'
 
 export type AppSettingsResponseBodyDisplayMode = (typeof APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES)[number]
 export type AppSettingsRequestCodeCopyBehavior = (typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]
@@ -28,6 +35,7 @@ export type AppSettingsRecord = {
   scriptAiModel: string | null
   scriptAiServerPort: number | null
   requestCodeCopyBehavior: AppSettingsRequestCodeCopyBehavior
+  tlsVerificationMode: AppSettingsTlsVerificationMode
   createdAt: number
   updatedAt: number
 }
@@ -44,6 +52,7 @@ export type UpdateAppSettingsInput = Partial<{
   scriptAiModel: string | null
   scriptAiServerPort: number | null
   requestCodeCopyBehavior: AppSettingsRequestCodeCopyBehavior
+  tlsVerificationMode: AppSettingsTlsVerificationMode
 }>
 
 export function parseScriptBlockPrettierConfig(value: string) {

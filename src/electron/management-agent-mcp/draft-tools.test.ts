@@ -40,6 +40,7 @@ describe('removeFolderCreationFromDraft', () => {
           responseVisualizer: '',
           responseTableAccessor: '',
           preferredResponseBodyView: 'raw' as const,
+          tlsVerificationMode: 'inherit' as const,
           saveToHistory: true,
         },
         {
@@ -63,6 +64,7 @@ describe('removeFolderCreationFromDraft', () => {
           responseVisualizer: '',
           responseTableAccessor: '',
           preferredResponseBodyView: 'raw' as const,
+          tlsVerificationMode: 'inherit' as const,
           saveToHistory: true,
         },
         {
@@ -86,6 +88,7 @@ describe('removeFolderCreationFromDraft', () => {
           responseVisualizer: '',
           responseTableAccessor: '',
           preferredResponseBodyView: 'raw' as const,
+          tlsVerificationMode: 'inherit' as const,
           saveToHistory: true,
         },
       ],
@@ -157,6 +160,7 @@ describe('removeFolderCreationFromDraft', () => {
           responseVisualizer: '',
           responseTableAccessor: '',
           preferredResponseBodyView: 'raw' as const,
+          tlsVerificationMode: 'inherit' as const,
           saveToHistory: true,
         },
       ],

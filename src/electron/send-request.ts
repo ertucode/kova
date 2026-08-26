@@ -25,10 +25,16 @@ import type {
 import { buildClientSchema, getIntrospectionQuery, type IntrospectionQuery } from 'graphql'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { getSetCookieHeaderValuesFromEntries, storeResponseCookies } from './db/cookies.js'
+import { getAppSettings } from './db/app-settings.js'
+import { getFolderAncestorChain } from './db/folders.js'
+import { getRequestParentFolderId } from './db/explorer.js'
 import { getRequest } from './db/requests.js'
 import { persistRequestHistory } from './db/request-history.js'
 import { emitGenericEvent } from './generic-events.js'
 import { prepareHttpRequest, prepareHttpRequestBase, type PreparedHttpRequest } from './http-request-runtime.js'
+import { getTlsDispatcher, resolveEffectiveTlsVerificationMode } from './tls-runtime.js'
+import { DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE } from '../common/AppSettings.js'
+import type { AppSettingsTlsVerificationMode } from '../common/AppSettings.js'
 
 const activeHttpRequests = new Map<string, { executionId: string; abortController: AbortController }>()
 const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
@@ -68,12 +74,14 @@ export async function fetchGraphqlSchema(
     const headers = new Headers(preparedRequest.data.headers)
     headers.set('accept', 'application/graphql-response+json, application/json')
     headers.set('content-type', 'application/json')
+    const dispatcher = await resolveRequestTlsDispatcher(preparedRequest.data.url, input.requestId, input.tlsVerificationMode)
 
     const response = await fetch(preparedRequest.data.url, {
       method: 'POST',
       headers,
       body: JSON.stringify({ query: getIntrospectionQuery() }),
-    })
+      dispatcher,
+    } as RequestInit & { dispatcher?: unknown })
     const responseText = await response.text()
     const parsedPayload = parseGraphqlSchemaPayload(responseText)
     if (!parsedPayload.success) {
@@ -167,12 +175,14 @@ export async function sendRequest(
       sentAt,
     })
     const startedAt = Date.now()
+    const dispatcher = await resolveRequestTlsDispatcher(url, input.requestId, input.tlsVerificationMode)
     const response = await fetch(url, {
       method,
       headers,
       body: requestBody.body,
+      dispatcher,
       signal: abortController.signal,
-    })
+    } as RequestInit & { dispatcher?: unknown })
     const responseHeaderEntries = Array.from(response.headers.entries())
     let responseHeaders = serializeResponseHeaderEntries(responseHeaderEntries)
 
@@ -900,6 +910,7 @@ async function maybeRetryWithTokenRefresh(input: {
       rawType: tokenRefreshRequest.rawType,
       graphqlQuery: tokenRefreshRequest.graphqlQuery,
       graphqlVariables: tokenRefreshRequest.graphqlVariables,
+      tlsVerificationMode: tokenRefreshRequest.tlsVerificationMode,
       activeEnvironmentIds: input.input.activeEnvironmentIds,
       saveToHistory: tokenRefreshRequest.saveToHistory,
       historyKeepLast: input.input.historyKeepLast,
@@ -959,4 +970,27 @@ function collectErrorMessages(error: Error, messages: Set<string>) {
   if (typeof cause === 'string' && cause.trim()) {
     messages.add(cause.trim())
   }
+}
+
+async function resolveRequestTlsDispatcher(
+  url: string,
+  requestId: string,
+  requestMode: SendRequestInput['tlsVerificationMode']
+) {
+  const appSettingsMode: AppSettingsTlsVerificationMode = await getAppSettings()
+    .then(settings => settings.tlsVerificationMode)
+    .catch(() => DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE)
+  const folderModes = await getRequestParentFolderId(requestId)
+    .then(folderId => getFolderAncestorChain(folderId))
+    .then(folders => folders.map(folder => folder.tlsVerificationMode ?? 'inherit'))
+    .catch(() => [])
+
+  return getTlsDispatcher(
+    url,
+    resolveEffectiveTlsVerificationMode({
+      requestMode,
+      folderModes,
+      appSettingsMode,
+    })
+  )
 }

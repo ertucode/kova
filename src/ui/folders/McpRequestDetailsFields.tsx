@@ -2,10 +2,16 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useSelector } from '@xstate/store/react'
 import type { RequestMetaTab } from '@common/FolderExplorerTabs'
 import { errorResponseToMessage } from '@common/GenericError'
-import type { McpPromptSummary, McpResourceSummary, McpToolSummary } from '@common/Requests'
+import {
+  REQUEST_TLS_VERIFICATION_MODES,
+  type McpPromptSummary,
+  type McpResourceSummary,
+  type McpToolSummary,
+} from '@common/Requests'
 import { getWindowElectron } from '@/getWindowElectron'
+import { SettingsDropdownFieldRow, SettingsTab } from '@/components/settings'
+import { buildTlsVerificationModeDropdownOptions } from '@/components/tlsVerificationMode'
 import { toast } from '@/lib/components/toast'
-import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { CodeEditor } from './CodeEditor'
 import { DetailsTextArea } from './DetailsTextArea'
 import { environmentEditorStore } from './environmentEditorStore'
@@ -18,8 +24,9 @@ import { requestExecutionStore } from './requestExecutionStore'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
+import { DropdownSelect } from '@/lib/components/dropdown-select'
 
-const MCP_META_TABS = ['explore', 'invoke', 'resources', 'prompts', 'scripts', 'tests', 'raw'] as const
+const MCP_META_TABS = ['explore', 'invoke', 'resources', 'prompts', 'scripts', 'tests', 'raw', 'settings'] as const
 
 type McpMetaTab = (typeof MCP_META_TABS)[number]
 
@@ -62,7 +69,14 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
         explorerItems,
         folderId: selectedRequestFolderId,
       }),
-    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedRequestFolderId]
+    [
+      activeEnvironmentIds,
+      environmentEntries,
+      environments,
+      explorerItems,
+      inactiveFolderEnvironmentIds,
+      selectedRequestFolderId,
+    ]
   )
 
   const metaTab = useMemo<McpMetaTab>(() => {
@@ -168,6 +182,7 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
         transport: draft.mcpTransport,
         serverUrl: draft.mcpServerUrl,
         accessToken: draft.mcpAccessToken || undefined,
+        tlsVerificationMode: draft.tlsVerificationMode,
       })
       if (!result.success) {
         toast.show(result)
@@ -211,6 +226,7 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
         transport: draft.mcpTransport,
         serverUrl: draft.mcpServerUrl,
         accessToken: draft.mcpAccessToken || undefined,
+        tlsVerificationMode: draft.tlsVerificationMode,
         toolName: draft.mcpSelectedToolName,
         argumentsJson: draft.mcpArguments,
       })
@@ -523,6 +539,20 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
             </section>
           </div>
         </section>
+      ) : null}
+
+      {metaTab === 'settings' ? (
+        <SettingsTab>
+          <SettingsDropdownFieldRow
+            title="TLS verification"
+            description="Override how this MCP request verifies HTTPS certificates."
+            value={draft.tlsVerificationMode}
+            options={buildTlsVerificationModeDropdownOptions(REQUEST_TLS_VERIFICATION_MODES)}
+            onChange={value =>
+              updateRequestDraft({ ...draft, tlsVerificationMode: value }, 'mcp-tls-verification-mode')
+            }
+          />
+        </SettingsTab>
       ) : null}
 
       {metaTab === 'scripts' ? (

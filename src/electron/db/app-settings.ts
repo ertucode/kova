@@ -1,10 +1,12 @@
 import { eq } from 'drizzle-orm'
 import {
+  APP_SETTINGS_TLS_VERIFICATION_MODES,
   APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS,
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
+  DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE,
   DEFAULT_REQUEST_CODE_COPY_BEHAVIOR,
   DEFAULT_RESPONSE_BODY_DISPLAY_MODE,
   DEFAULT_SCRIPT_AI_MODEL,
@@ -47,6 +49,7 @@ export async function getAppSettings(): Promise<AppSettingsRecord> {
       scriptAiModel: DEFAULT_SCRIPT_AI_MODEL,
       scriptAiServerPort: null,
       requestCodeCopyBehavior: DEFAULT_REQUEST_CODE_COPY_BEHAVIOR,
+      tlsVerificationMode: DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE,
       createdAt: now,
       updatedAt: now,
     }
@@ -140,6 +143,13 @@ function validateAppSettingsPatch(input: UpdateAppSettingsInput) {
     return 'Invalid request code copy behavior'
   }
 
+  if (
+    input.tlsVerificationMode !== undefined
+    && !APP_SETTINGS_TLS_VERIFICATION_MODES.includes(input.tlsVerificationMode)
+  ) {
+    return 'Invalid TLS verification setting'
+  }
+
   return null
 }
 
@@ -192,6 +202,10 @@ function buildAppSettingsUpdatePatch(input: UpdateAppSettingsInput): Partial<App
     patch.requestCodeCopyBehavior = input.requestCodeCopyBehavior
   }
 
+  if (input.tlsVerificationMode !== undefined) {
+    patch.tlsVerificationMode = input.tlsVerificationMode
+  }
+
   return patch
 }
 
@@ -230,6 +244,11 @@ function toAppSettingsRecord(value: AppSettingsRow): AppSettingsRecord {
     scriptAiModel: value.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL,
     scriptAiServerPort: value.scriptAiServerPort ?? null,
     requestCodeCopyBehavior,
+    tlsVerificationMode: APP_SETTINGS_TLS_VERIFICATION_MODES.includes(
+      value.tlsVerificationMode as (typeof APP_SETTINGS_TLS_VERIFICATION_MODES)[number]
+    )
+      ? (value.tlsVerificationMode as (typeof APP_SETTINGS_TLS_VERIFICATION_MODES)[number])
+      : DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }

@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, ChevronRightIcon, HistoryIcon, InfoIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  HistoryIcon,
+  InfoIcon,
+  PlayIcon,
+  PlusIcon,
+  SquareIcon,
+  Trash2Icon,
+} from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
+import { SettingsDropdownFieldRow } from '@/components/settings'
+import { buildTlsVerificationModeDropdownOptions } from '@/components/tlsVerificationMode'
 import { dialogActions } from '@/global/dialogStore'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import type { FolderDetailsDraft } from './folderExplorerTypes'
@@ -24,6 +35,7 @@ import { getWindowElectron } from '@/getWindowElectron'
 import { FolderRunCoordinator, folderRunStore } from './folderRunStore'
 import { requestExecutionStore } from './requestExecutionStore'
 import { parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
+import { REQUEST_TLS_VERIFICATION_MODES } from '@common/Requests'
 import { SharedScriptsSection } from './SharedScriptsSection'
 import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
@@ -74,7 +86,14 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         explorerItems,
         folderId: selectedFolderId,
       }),
-    [activeEnvironmentIds, environmentEntries, environments, explorerItems, inactiveFolderEnvironmentIds, selectedFolderId]
+    [
+      activeEnvironmentIds,
+      environmentEntries,
+      environments,
+      explorerItems,
+      inactiveFolderEnvironmentIds,
+      selectedFolderId,
+    ]
   )
   const activeEnvironmentNames = scopedEnvironments.activeEnvironmentNames
   const activeEnvironmentVariableNames = scopedEnvironments.activeEnvironmentVariableNames
@@ -282,6 +301,20 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
           valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
           valueEditorRefreshKey={variableHighlightRefreshKey}
           onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, headers: value })}
+        />
+
+        <DetailsSectionHeader title="Settings" />
+        <SettingsDropdownFieldRow
+          title="TLS verification"
+          description="Set the default TLS behavior for requests in this folder."
+          value={draft.tlsVerificationMode}
+          options={buildTlsVerificationModeDropdownOptions(REQUEST_TLS_VERIFICATION_MODES)}
+          onChange={value =>
+            FolderExplorerCoordinator.updateSelectedDraft({
+              ...draft,
+              tlsVerificationMode: value,
+            })
+          }
         />
       </div>
 
@@ -857,8 +890,8 @@ function FolderRunHistoryItem({
               <span className="text-xs text-base-content/45">{new Date(item.history.startedAt).toLocaleString()}</span>
             </div>
             <div className="mt-1 text-xs text-base-content/55">
-              {item.history.passedRequestCount}/{item.history.requestCount} requests passed, {item.history.failedRequestCount}{' '}
-              failed
+              {item.history.passedRequestCount}/{item.history.requestCount} requests passed,{' '}
+              {item.history.failedRequestCount} failed
             </div>
           </div>
         </button>

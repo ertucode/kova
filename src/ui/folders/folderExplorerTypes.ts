@@ -4,7 +4,15 @@ import type { FolderRecord } from '@common/Folders'
 import type { FolderRequestRunConfig } from '@common/FolderRuns'
 import type { KeyValueRow } from '@common/KeyValueRows'
 import type { RequestExampleRecord } from '@common/RequestExamples'
-import type { HttpRequestRecord, McpTransport, RequestBodyType, RequestMethod, RequestRawType, RequestType } from '@common/Requests'
+import type {
+  HttpRequestRecord,
+  McpTransport,
+  RequestBodyType,
+  RequestMethod,
+  RequestRawType,
+  RequestTlsVerificationMode,
+  RequestType,
+} from '@common/Requests'
 import type { WebSocketExampleRecord } from '@common/WebSocketExamples'
 
 export type TreeNode = ExplorerItem & {
@@ -37,6 +45,7 @@ export type FolderDetailsDraft = {
   description: string
   headers: string
   auth: HttpAuth
+  tlsVerificationMode: RequestTlsVerificationMode
   preRequestScript: string
   postRequestScript: string
   runConfig: FolderRequestRunConfig
@@ -64,6 +73,7 @@ export type RequestDetailsDraft = {
   graphqlQuery: string
   graphqlVariables: string
   graphqlSchema: string
+  tlsVerificationMode: RequestTlsVerificationMode
   websocketSubprotocols: string
   websocketOnOpenMessage: string
   websocketAutoSendEnabled: boolean

@@ -10,6 +10,7 @@ export const folders = sqliteTable(
     description: text('description').notNull().default(''),
     headers: text('headers').notNull().default(''),
     authJson: text('auth_json').notNull().default('{"type":"inherit"}'),
+    tlsVerificationMode: text('tls_verification_mode').notNull().default('inherit'),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
     runConfigJson: text('run_config_json').notNull().default('{"selectionMode":"tests-only","selectedRequestIds":[],"executionMode":"sequential","continueOnFailure":true}'),
@@ -60,6 +61,7 @@ export const requests = sqliteTable(
     websocketAutoSendEnabled: integer('websocket_auto_send_enabled', { mode: 'boolean' }).notNull().default(false),
     websocketAutoSendMessage: text('websocket_auto_send_message').notNull().default(''),
     websocketAutoSendIntervalSeconds: integer('websocket_auto_send_interval_seconds').notNull().default(0),
+    tlsVerificationMode: text('tls_verification_mode').notNull().default('inherit'),
     saveToHistory: integer('save_to_history', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at').notNull(),
     deletedAt: integer('deleted_at'),
@@ -269,6 +271,7 @@ export const appSettings = sqliteTable('app_settings', {
   scriptAiModel: text('script_ai_model'),
   scriptAiServerPort: integer('script_ai_server_port'),
   requestCodeCopyBehavior: text('request_code_copy_behavior').notNull().default('resolved'),
+  tlsVerificationMode: text('tls_verification_mode').notNull().default('strict'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })

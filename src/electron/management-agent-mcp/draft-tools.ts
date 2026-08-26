@@ -14,6 +14,7 @@ import {
   REQUEST_RAW_TYPES,
   RESPONSE_BODY_VIEWS,
 } from '../../common/ManagementAgent.js'
+import { REQUEST_TLS_VERIFICATION_MODES } from '../../common/Requests.js'
 import {
   clearCurrentManagementAgentDraftPlan,
   getCurrentManagementAgentDraftPlan,
@@ -94,6 +95,7 @@ const requestPlanFieldsSchema = z.object({
   responseVisualizer: z.string(),
   responseTableAccessor: z.string(),
   preferredResponseBodyView: z.enum(RESPONSE_BODY_VIEWS),
+  tlsVerificationMode: z.enum(REQUEST_TLS_VERIFICATION_MODES),
   saveToHistory: z.boolean(),
 })
 const requestCreatePlanItemSchema = requestPlanFieldsSchema.extend({
@@ -123,6 +125,7 @@ const requestFieldChangeSchema = z.discriminatedUnion('field', [
   z.object({ field: z.literal('responseVisualizer'), value: z.string() }),
   z.object({ field: z.literal('responseTableAccessor'), value: z.string() }),
   z.object({ field: z.literal('preferredResponseBodyView'), value: z.enum(RESPONSE_BODY_VIEWS) }),
+  z.object({ field: z.literal('tlsVerificationMode'), value: z.enum(REQUEST_TLS_VERIFICATION_MODES) }),
   z.object({ field: z.literal('saveToHistory'), value: z.boolean() }),
 ])
 const requestFieldChangeListSchema = z.object({
@@ -663,6 +666,9 @@ function assignRequestFieldChange(target: ManagementAgentRequestUpdatePlanItem, 
       return
     case 'preferredResponseBodyView':
       target.preferredResponseBodyView = change.value
+      return
+    case 'tlsVerificationMode':
+      target.tlsVerificationMode = change.value
       return
     case 'saveToHistory':
       target.saveToHistory = change.value

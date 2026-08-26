@@ -1,6 +1,7 @@
 import type { HttpAuth } from './Auth.js'
 import type { FolderRequestRunConfig } from './FolderRuns.js'
 import type { OperationRecord } from './Operations.js'
+import type { RequestTlsVerificationMode } from './Requests.js'
 
 export type FolderRecord = {
   id: string
@@ -8,6 +9,7 @@ export type FolderRecord = {
   description: string
   headers: string
   auth: HttpAuth
+  tlsVerificationMode?: RequestTlsVerificationMode
   preRequestScript: string
   postRequestScript: string
   runConfig?: FolderRequestRunConfig
@@ -35,6 +37,7 @@ export type UpdateFolderInput = {
   description: string
   headers: string
   auth: HttpAuth
+  tlsVerificationMode?: RequestTlsVerificationMode
   preRequestScript: string
   postRequestScript: string
   runConfig: FolderRequestRunConfig

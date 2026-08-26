@@ -8,6 +8,7 @@ import {
   type FolderRequestSelectionMode,
 } from './FolderRuns.js'
 import {
+  type RequestTlsVerificationMode,
   type RequestBodyType,
   type RequestMethod,
   type RequestRawType,
@@ -77,6 +78,7 @@ export type ManagementAgentRequestPlanFields = {
   responseVisualizer: string
   responseTableAccessor: string
   preferredResponseBodyView: ResponseBodyView
+  tlsVerificationMode: RequestTlsVerificationMode
   saveToHistory: boolean
 }
 
@@ -395,6 +397,7 @@ function normalizeRequestPlanFields(candidate: Record<string, unknown>): Managem
   const bodyType = toTrimmedString(candidate.bodyType)
   const rawType = toTrimmedString(candidate.rawType)
   const preferredResponseBodyView = toTrimmedString(candidate.preferredResponseBodyView)
+  const tlsVerificationMode = toTrimmedString(candidate.tlsVerificationMode)
 
   return {
     name: toTrimmedString(candidate.name),
@@ -417,6 +420,10 @@ function normalizeRequestPlanFields(candidate: Record<string, unknown>): Managem
     preferredResponseBodyView: RESPONSE_BODY_VIEWS.includes(preferredResponseBodyView as ResponseBodyView)
       ? (preferredResponseBodyView as ResponseBodyView)
       : 'raw',
+    tlsVerificationMode:
+      tlsVerificationMode === 'inherit' || tlsVerificationMode === 'strict' || tlsVerificationMode === 'disable-for-localhost' || tlsVerificationMode === 'disable'
+        ? (tlsVerificationMode as RequestTlsVerificationMode)
+        : 'inherit',
     saveToHistory: typeof candidate.saveToHistory === 'boolean' ? candidate.saveToHistory : true,
   }
 }
@@ -485,6 +492,13 @@ function normalizeRequestUpdatePlanFields(candidate: Record<string, unknown>): M
     normalizedFields.preferredResponseBodyView = RESPONSE_BODY_VIEWS.includes(preferredResponseBodyView as ResponseBodyView)
       ? (preferredResponseBodyView as ResponseBodyView)
       : 'raw'
+  }
+  if (hasOwn(candidate, 'tlsVerificationMode')) {
+    const tlsVerificationMode = toTrimmedString(candidate.tlsVerificationMode)
+    normalizedFields.tlsVerificationMode =
+      tlsVerificationMode === 'inherit' || tlsVerificationMode === 'strict' || tlsVerificationMode === 'disable-for-localhost' || tlsVerificationMode === 'disable'
+        ? (tlsVerificationMode as RequestTlsVerificationMode)
+        : 'inherit'
   }
   if (hasOwn(candidate, 'saveToHistory')) {
     normalizedFields.saveToHistory = typeof candidate.saveToHistory === 'boolean' ? candidate.saveToHistory : true
@@ -586,6 +600,7 @@ export function createDefaultManagementAgentRequestPlanFields(): ManagementAgent
     responseVisualizer: '',
     responseTableAccessor: '',
     preferredResponseBodyView: 'raw',
+    tlsVerificationMode: 'inherit',
     saveToHistory: true,
   }
 }

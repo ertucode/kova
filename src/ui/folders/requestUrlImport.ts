@@ -1,7 +1,7 @@
 import type { HttpAuth } from '@common/Auth'
 import { parseCurlRequest } from '@common/curl'
 import { syncPathParamsWithUrl, syncSearchParamsWithUrl } from '@common/PathParams'
-import type { RequestBodyType, RequestMethod, RequestRawType } from '@common/Requests'
+import type { RequestBodyType, RequestMethod, RequestRawType, RequestTlsVerificationMode } from '@common/Requests'
 
 export const DEFAULT_IMPORTED_REQUEST_NAME = 'Untitled'
 
@@ -18,6 +18,8 @@ export type ClipboardHttpRequestImport = {
   rawType: RequestRawType
   graphqlQuery: string
   graphqlVariables: string
+  graphqlSchema: string
+  tlsVerificationMode: RequestTlsVerificationMode
 }
 
 export function buildImportedHttpUrlFields(nextUrl: string, bodyType: RequestBodyType) {
@@ -51,6 +53,8 @@ export function parseClipboardHttpRequest(
     return {
       name: getImportedRequestNameFromUrl(parsedCurl.url, fallbackName),
       ...parsedCurl,
+      graphqlSchema: '',
+      tlsVerificationMode: 'inherit',
     }
   }
 
@@ -78,6 +82,8 @@ export function parseClipboardHttpRequest(
     rawType: 'json',
     graphqlQuery: '',
     graphqlVariables: '',
+    graphqlSchema: '',
+    tlsVerificationMode: 'inherit',
   }
 }
 

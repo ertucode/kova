@@ -1,5 +1,6 @@
 import { createStore } from '@xstate/store'
 import {
+  DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE,
   DEFAULT_COOKIES_ENABLED,
   DEFAULT_COMPACT_REQUEST_VIEW,
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
@@ -138,4 +139,8 @@ export function getScriptAiModel() {
 
 export function getRequestCodeCopyBehavior(): AppSettingsRequestCodeCopyBehavior {
   return appSettingsStore.getSnapshot().context.settings?.requestCodeCopyBehavior ?? DEFAULT_REQUEST_CODE_COPY_BEHAVIOR
+}
+
+export function getTlsVerificationMode() {
+  return appSettingsStore.getSnapshot().context.settings?.tlsVerificationMode ?? DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE
 }

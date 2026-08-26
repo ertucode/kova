@@ -193,6 +193,7 @@ describe('postman export', () => {
     expect(document._kova).toEqual({
       exportedByKova: true,
       folderHeaders: 'x-team:api',
+      tlsVerificationMode: 'inherit',
       folderEnvironments: [
         {
           name: 'Production',
@@ -264,7 +265,7 @@ describe('postman export', () => {
 
     expect(document.info.name).toBe('Create User')
     expect(document.item).toHaveLength(1)
-    expect(document._kova).toEqual({ exportedByKova: true, folderHeaders: undefined })
+    expect(document._kova).toEqual({ exportedByKova: true, folderHeaders: undefined, folderEnvironments: undefined, tlsVerificationMode: 'inherit' })
     expect(document.item[0]?.name).toBe('Create User')
     expect(document.item[0]?.request?.method).toBe('POST')
   })
@@ -425,5 +426,6 @@ function mcpRequestFieldDefaults() {
     mcpSelectedPromptName: undefined,
     mcpArguments: undefined,
     mcpIntrospection: undefined,
+    tlsVerificationMode: 'inherit' as const,
   }
 }

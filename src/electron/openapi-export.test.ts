@@ -580,5 +580,6 @@ function mcpRequestFieldDefaults() {
     mcpSelectedPromptName: undefined,
     mcpArguments: undefined,
     mcpIntrospection: undefined,
+    tlsVerificationMode: 'inherit' as const,
   }
 }
