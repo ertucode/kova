@@ -92,8 +92,8 @@ test.describe('request url paste', () => {
     await setRequestUrl(page, 'https://api.example.com/orders?page=2')
 
     await expect.poll(async () => getSearchParamRows(page)).toEqual([
-      { key: 'page', value: '2', enabled: true },
       { key: 'stale', value: '1', enabled: false },
+      { key: 'page', value: '2', enabled: true },
     ])
 
     await fillSearchParamValue(page, 'page', '3')
@@ -103,7 +103,33 @@ test.describe('request url paste', () => {
 
     await expect.poll(() => getPersistedRequest(page, requestId)).toEqual({
       url: 'https://api.example.com/orders?page=3',
-      searchParams: 'page:3\n//stale:1',
+      searchParams: '//stale:1\npage:3',
+    })
+  })
+
+  test('persists bulk edited search params after applying changes', async () => {
+    const requestId = await seedRequestFixture(page)
+
+    await page.reload()
+    await expect(page.getByTestId('request-url-editor')).toBeVisible()
+
+    await openSearchParamsTab(page)
+    await page.getByRole('button', { name: 'Bulk edit rows' }).click()
+
+    await fillBulkEditValue(page, 'page:2\nsort:desc')
+    await page.getByRole('button', { name: 'Apply bulk edits' }).click()
+
+    await expect.poll(async () => getSearchParamRows(page)).toEqual([
+      { key: 'page', value: '2', enabled: true },
+      { key: 'sort', value: 'desc', enabled: true },
+    ])
+    await expect.poll(() => getRequestUrl(page)).toBe('https://api.example.com/orders?page=2&sort=desc')
+
+    await page.keyboard.press('Meta+S')
+
+    await expect.poll(() => getPersistedRequest(page, requestId)).toEqual({
+      url: 'https://api.example.com/orders?page=2&sort=desc',
+      searchParams: 'page:2\nsort:desc',
     })
   })
 })
@@ -135,6 +161,13 @@ async function setSearchParamEnabled(page: Page, key: string, enabled: boolean) 
 async function fillSearchParamValue(page: Page, key: string, value: string) {
   const row = getSearchParamRow(page, key)
   const content = row.locator('[data-key-value-field="value"] .cm-content')
+  await content.click()
+  await page.keyboard.press('Meta+A')
+  await page.keyboard.type(value)
+}
+
+async function fillBulkEditValue(page: Page, value: string) {
+  const content = page.locator('[data-testid="search-params-tab"] .cm-content').first()
   await content.click()
   await page.keyboard.press('Meta+A')
   await page.keyboard.type(value)

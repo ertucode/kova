@@ -454,6 +454,7 @@ export function KeyValueEditor({
 
     const nextValue = normalizeBulkEditValue(bulkEditValue)
     lastEmittedValueRef.current = nextValue
+    setRows(currentRows => buildRows(nextValue, currentRows))
     onChange(nextValue)
     setIsBulkEditMode(false)
   }
