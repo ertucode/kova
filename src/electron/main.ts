@@ -390,6 +390,15 @@ app.on('ready', async () => {
     await shell.openExternal(url)
   })
 
+  ipcHandle('openFile', async (filePath: string) => {
+    const errorMessage = await shell.openPath(filePath)
+    if (errorMessage) {
+      return GenericError.Message(errorMessage)
+    }
+
+    return Result.Success(undefined)
+  })
+
   ipcHandle('openFileLocation', async (filePath: string) => {
     shell.showItemInFolder(filePath)
     return Result.Success(undefined)

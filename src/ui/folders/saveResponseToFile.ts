@@ -28,6 +28,20 @@ export async function saveHttpResponseBodyToFile({
     severity: 'success',
     title: 'Response saved',
     message: `Saved response body for ${requestName}.`,
+    actions: [
+      {
+        label: 'Open file',
+        onAction: () => {
+          void getWindowElectron().openFile(result.data.filePath)
+        },
+      },
+      {
+        label: 'Open folder',
+        onAction: () => {
+          void getWindowElectron().openFileLocation(result.data.filePath)
+        },
+      },
+    ],
   })
 }
 

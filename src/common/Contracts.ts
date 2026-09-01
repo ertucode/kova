@@ -232,6 +232,7 @@ export type EventResponseMapping = {
   'window:focus': void
   abortTask: Promise<void>
   openShell: Promise<void>
+  openFile: Promise<GenericResult<void>>
   openFileLocation: Promise<GenericResult<void>>
   pickFilePath: Promise<GenericResult<{ filePath: string }>>
   saveTextToFile: Promise<GenericResult<SaveTextToFileResponse>>
@@ -387,6 +388,7 @@ export type EventResponseMapping = {
 export type EventRequestMapping = {
   abortTask: string
   openShell: string
+  openFile: string
   openFileLocation: string
   pickFilePath: { defaultPath?: string }
   saveTextToFile: SaveTextToFileInput
@@ -551,6 +553,7 @@ export type WindowElectron = {
   onWindowFocus: (cb: () => void) => UnsubscribeFunction
   abortTask: (taskId: string) => Promise<void>
   openShell: (url: string) => Promise<void>
+  openFile: (filePath: string) => Promise<GenericResult<void>>
   openFileLocation: (filePath: string) => Promise<GenericResult<void>>
   pickFilePath: (input?: { defaultPath?: string }) => Promise<GenericResult<{ filePath: string }>>
   saveTextToFile: (input: SaveTextToFileInput) => Promise<GenericResult<SaveTextToFileResponse>>

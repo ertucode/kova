@@ -24,6 +24,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   },
   abortTask: (taskId: string) => ipcInvoke('abortTask', taskId),
   openShell: (url: string) => ipcInvoke('openShell', url),
+  openFile: (filePath: string) => ipcInvoke('openFile', filePath),
   openFileLocation: (filePath: string) => ipcInvoke('openFileLocation', filePath),
   pickFilePath: input => ipcInvoke('pickFilePath', input ?? {}),
   saveTextToFile: input => ipcInvoke('saveTextToFile', input),
