@@ -7,148 +7,32 @@ import { copyFile, mkdir, rename, unlink, writeFile } from 'fs/promises'
 import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { TaskManager } from './TaskManager.js'
-import { clearCookies, createCookie, deleteCookie, listCookies, updateCookie } from './db/cookies.js'
 import { closeDatabase, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
-import { getAppSettings, updateAppSettings } from './db/app-settings.js'
 import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
-import { findHttpRequestByPath, listExplorerItems } from './db/explorer.js'
-import { listFolderExplorerTabs, saveFolderExplorerTabs, updateFolderExplorerTab } from './db/folder-explorer-tabs.js'
-import { createFolder, deleteFolder, getFolder, renameFolder, updateFolder } from './db/folders.js'
-import {
-  createEnvironment,
-  deleteEnvironment,
-  duplicateEnvironment,
-  listEnvironments,
-  moveEnvironment,
-  updateEnvironment,
-} from './db/environments.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
-import {
-  deleteRequestHistoryEntry,
-  getRequestHistoryCount,
-  listRecentHttpRequestUsage,
-  listRequestHistory,
-  trimRequestHistory,
-} from './db/request-history.js'
-import { deleteFolderRunHistory, getFolderRunHistory, listFolderRunHistory } from './db/folder-run-history.js'
-import {
-  createRequest,
-  deleteRequest,
-  duplicateRequest,
-  getRequest,
-  updateRequest,
-  updateRequestResponseBodyViewPreference,
-} from './db/requests.js'
-import {
-  createRequestExample,
-  deleteRequestExample,
-  getRequestExample,
-  moveRequestExample,
-  updateRequestExample,
-} from './db/request-examples.js'
-import {
-  createWebSocketExample,
-  deleteWebSocketExample,
-  getWebSocketExample,
-  moveWebSocketExample,
-  updateWebSocketExample,
-} from './db/websocket-examples.js'
-import {
-  createWebSocketSavedMessage,
-  deleteWebSocketSavedMessage,
-  listWebSocketSavedMessages,
-  updateWebSocketSavedMessage,
-} from './db/websocket-saved-messages.js'
-import { moveExplorerItem } from './db/tree-items.js'
-import { deleteOperation, deleteOperations, listOperations, undoOperation, undoOperations } from './db/operations.js'
-import {
-  createSharedScript,
-  deleteSharedScript,
-  listSharedScripts,
-  listVisibleSharedScripts,
-  moveSharedScript,
-  updateSharedScript,
-} from './db/shared-scripts.js'
-import { createView, deleteView, listViews, moveView, updateView } from './db/views.js'
-import { deleteViewCacheEntry, getViewCacheEntry, listViewCacheEntries, setViewCacheEntry } from './db/view-cache.js'
-import { createScriptPackage, deleteScriptPackage, listScriptPackages, toScriptPackageCacheKey, updateScriptPackage } from './db/script-packages.js'
-import {
-  createTag,
-  deleteTag,
-  listTagAssignments,
-  listTags,
-  moveTag,
-  replaceItemTags,
-  replaceTagItems,
-  updateTag,
-} from './db/tags.js'
-import { cancelHttpRequest, fetchGraphqlSchema, sendRequest } from './send-request.js'
-import { fetchMcpIntrospection, invokeMcpRequest } from './mcp-runtime.js'
-import { cancelFolderRun, runFolderRequests } from './folder-request-runner.js'
-import {
-  buildCurlCommand,
-  buildFetchSnippet,
-  maskRequestAuthForCodegen,
-  maskEnvironmentValuesForCodegen,
-  prepareHttpRequest,
-  type PreparedHttpRequest,
-} from './http-request-runtime.js'
+import type { PreparedHttpRequest } from './http-request-runtime.js'
 import type { RequestCodeGenerationMode } from '../common/RequestCodegen.js'
 import { Typescript } from '../common/Typescript.js'
-import { connectWebSocket, disconnectWebSocket, sendWebSocketMessage } from './websocket-runtime.js'
-import { analyzePostmanCollection, importPostmanCollection } from './postman-import.js'
-import { analyzePostmanEnvironment, importPostmanEnvironment } from './postman-environment-import.js'
-import { analyzePostmanCollectionExport, exportPostmanCollection } from './postman-export.js'
-import { analyzePostmanEnvironmentExport, exportPostmanEnvironment } from './postman-environment-export.js'
-import { analyzeOpenApiSpec, importOpenApiSpec } from './openapi-import.js'
-import { analyzeOpenApiSpecExport, exportOpenApiSpec } from './openapi-export.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
 import {
-  deleteCustomDatabaseConfig,
   getResolvedDatabaseConfig,
   getServerConfig,
-  setActiveDatabaseConfig,
-  upsertCustomDatabaseConfig,
 } from './server-config.js'
 import { GenericError } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
+import { createScriptMakeRequestRegistry, createScriptPromptRegistry } from './script-ui-bridges.js'
 import {
-  createScriptMakeRequestRegistry,
-  createScriptPromptRegistry,
-  createScriptToastBridge,
-} from './script-ui-bridges.js'
-import {
-  abortScriptAiSession,
-  applyScriptAiWorkspace,
   configureScriptAiBaseDirectory,
-  createScriptAiSession,
-  loadScriptAiMessagePatchDiff,
-  loadScriptAiWorkspace,
-  sendScriptAiMessage,
   shutdownScriptAiServer,
-  syncScriptAiWorkspace,
 } from './script-ai-sdk.js'
 import { configureScriptAiDiagnosticsBridge, getScriptAiDiagnostics } from './script-ai-diagnostics.js'
 import { startScriptAiDiagnosticsBridge } from './script-ai-diagnostics-bridge.js'
 import {
   configureScriptPackageRegistry,
-  deleteDownloadedScriptPackage,
-  downloadScriptPackage,
-  getScriptPackageArtifact,
-  getScriptPackageRegistryEntry,
-  suggestScriptPackageVersion,
-  suggestTypesScriptPackage,
 } from './script-package-registry.js'
-import { listOpenCodeModels } from './opencode-models.js'
-import { supermavenService } from './supermaven-service.js'
 import {
-  abortManagementAgentSession,
-  applyManagementAgentPlan,
   configureManagementAgentBaseDirectory,
-  createManagementAgentSession,
-  loadManagementAgentWorkspace,
-  sendManagementAgentMessage,
   shutdownManagementAgentServer,
 } from './management-agent.js'
 import type { SaveTextToFileInput } from '../common/TextFileSave.js'
@@ -182,6 +66,43 @@ type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' 
 const homeDir = os.homedir()
 const scriptPromptRegistry = createScriptPromptRegistry()
 const scriptMakeRequestRegistry = createScriptMakeRequestRegistry()
+const loadCookiesDb = () => import('./db/cookies.js')
+const loadAppSettingsDb = () => import('./db/app-settings.js')
+const loadExplorerDb = () => import('./db/explorer.js')
+const loadFolderExplorerTabsDb = () => import('./db/folder-explorer-tabs.js')
+const loadFoldersDb = () => import('./db/folders.js')
+const loadEnvironmentsDb = () => import('./db/environments.js')
+const loadRequestHistoryDb = () => import('./db/request-history.js')
+const loadFolderRunHistoryDb = () => import('./db/folder-run-history.js')
+const loadRequestsDb = () => import('./db/requests.js')
+const loadRequestExamplesDb = () => import('./db/request-examples.js')
+const loadWebSocketExamplesDb = () => import('./db/websocket-examples.js')
+const loadWebSocketSavedMessagesDb = () => import('./db/websocket-saved-messages.js')
+const loadTreeItemsDb = () => import('./db/tree-items.js')
+const loadOperationsDb = () => import('./db/operations.js')
+const loadSharedScriptsDb = () => import('./db/shared-scripts.js')
+const loadViewsDb = () => import('./db/views.js')
+const loadViewCacheDb = () => import('./db/view-cache.js')
+const loadScriptPackagesDb = () => import('./db/script-packages.js')
+const loadTagsDb = () => import('./db/tags.js')
+const loadSendRequestRuntime = () => import('./send-request.js')
+const loadMcpRuntime = () => import('./mcp-runtime.js')
+const loadFolderRequestRunner = () => import('./folder-request-runner.js')
+const loadHttpRequestRuntime = () => import('./http-request-runtime.js')
+const loadWebSocketRuntime = () => import('./websocket-runtime.js')
+const loadPostmanImport = () => import('./postman-import.js')
+const loadPostmanEnvironmentImport = () => import('./postman-environment-import.js')
+const loadPostmanExport = () => import('./postman-export.js')
+const loadPostmanEnvironmentExport = () => import('./postman-environment-export.js')
+const loadOpenApiImport = () => import('./openapi-import.js')
+const loadOpenApiExport = () => import('./openapi-export.js')
+const loadServerConfig = () => import('./server-config.js')
+const loadScriptUiBridges = () => import('./script-ui-bridges.js')
+const loadScriptAiSdk = () => import('./script-ai-sdk.js')
+const loadScriptPackageRegistry = () => import('./script-package-registry.js')
+const loadOpenCodeModels = () => import('./opencode-models.js')
+const loadSupermavenService = async () => (await import('./supermaven-service.js')).supermavenService
+const loadManagementAgent = () => import('./management-agent.js')
 
 function getDefaultDatabasePath() {
   return path.join(app.getPath('userData'), 'kova.sqlite')
@@ -508,42 +429,55 @@ app.on('ready', async () => {
   })
 
   ipcHandle('listCookies', async () => {
+    const { listCookies } = await loadCookiesDb()
     return listCookies()
   })
 
   ipcHandle('createCookie', async input => {
+    const { createCookie } = await loadCookiesDb()
     return createCookie(input)
   })
 
   ipcHandle('updateCookie', async input => {
+    const { updateCookie } = await loadCookiesDb()
     return updateCookie(input)
   })
 
   ipcHandle('deleteCookie', async input => {
+    const { deleteCookie } = await loadCookiesDb()
     return deleteCookie(input)
   })
 
   ipcHandle('clearCookies', async input => {
+    const { clearCookies } = await loadCookiesDb()
     return clearCookies(input ?? {})
   })
 
   ipcHandle('listExplorerItems', async () => {
+    const { listExplorerItems } = await loadExplorerDb()
     return listExplorerItems()
   })
 
   ipcHandle('listFolderExplorerTabs', async () => {
+    const { listFolderExplorerTabs } = await loadFolderExplorerTabsDb()
     return listFolderExplorerTabs()
   })
 
   ipcHandle('saveFolderExplorerTabs', async input => {
+    const { saveFolderExplorerTabs } = await loadFolderExplorerTabsDb()
     return saveFolderExplorerTabs(input)
   })
 
   ipcHandle('updateFolderExplorerTab', async input => {
+    const { updateFolderExplorerTab } = await loadFolderExplorerTabsDb()
     return updateFolderExplorerTab(input)
   })
 
   ipcHandle('runFolderRequests', async (input, event) => {
+    const [{ runFolderRequests }, { createScriptToastBridge }] = await Promise.all([
+      loadFolderRequestRunner(),
+      loadScriptUiBridges(),
+    ])
     return runFolderRequests(input, {
       toast: createScriptToastBridge(event.sender),
       prompt: scriptPromptRegistry.createBridge(event.sender),
@@ -555,150 +489,190 @@ app.on('ready', async () => {
   })
 
   ipcHandle('cancelFolderRun', async input => {
+    const { cancelFolderRun } = await loadFolderRequestRunner()
     return cancelFolderRun(input)
   })
 
   ipcHandle('deleteFolderRunHistory', async input => {
+    const { deleteFolderRunHistory } = await loadFolderRunHistoryDb()
     return deleteFolderRunHistory(input)
   })
 
   ipcHandle('listFolderRunHistory', async input => {
+    const { listFolderRunHistory } = await loadFolderRunHistoryDb()
     return listFolderRunHistory(input)
   })
 
   ipcHandle('getFolderRunHistory', async input => {
+    const { getFolderRunHistory } = await loadFolderRunHistoryDb()
     return getFolderRunHistory(input)
   })
 
   ipcHandle('createFolder', async input => {
+    const { createFolder } = await loadFoldersDb()
     return createFolder(input)
   })
 
   ipcHandle('getFolder', async input => {
+    const { getFolder } = await loadFoldersDb()
     return getFolder(input)
   })
 
   ipcHandle('renameFolder', async input => {
+    const { renameFolder } = await loadFoldersDb()
     return renameFolder(input)
   })
 
   ipcHandle('updateFolder', async input => {
+    const { updateFolder } = await loadFoldersDb()
     return updateFolder(input)
   })
 
   ipcHandle('deleteFolder', async input => {
+    const { deleteFolder } = await loadFoldersDb()
     return deleteFolder(input)
   })
 
   ipcHandle('listOperations', async input => {
+    const { listOperations } = await loadOperationsDb()
     return listOperations(input ?? undefined)
   })
 
   ipcHandle('undoOperation', async input => {
+    const { undoOperation } = await loadOperationsDb()
     return undoOperation(input)
   })
 
   ipcHandle('deleteOperation', async input => {
+    const { deleteOperation } = await loadOperationsDb()
     return deleteOperation(input)
   })
 
   ipcHandle('undoOperations', async input => {
+    const { undoOperations } = await loadOperationsDb()
     return undoOperations(input)
   })
 
   ipcHandle('deleteOperations', async input => {
+    const { deleteOperations } = await loadOperationsDb()
     return deleteOperations(input)
   })
 
   ipcHandle('createRequest', async input => {
+    const { createRequest } = await loadRequestsDb()
     return createRequest(input)
   })
 
   ipcHandle('getRequest', async input => {
+    const { getRequest } = await loadRequestsDb()
     return getRequest(input)
   })
 
   ipcHandle('updateRequest', async input => {
+    const { updateRequest } = await loadRequestsDb()
     return updateRequest(input)
   })
 
   ipcHandle('updateRequestResponseBodyViewPreference', async input => {
+    const { updateRequestResponseBodyViewPreference } = await loadRequestsDb()
     return updateRequestResponseBodyViewPreference(input)
   })
 
   ipcHandle('deleteRequest', async input => {
+    const { deleteRequest } = await loadRequestsDb()
     return deleteRequest(input)
   })
 
   ipcHandle('duplicateRequest', async input => {
+    const { duplicateRequest } = await loadRequestsDb()
     return duplicateRequest(input)
   })
 
   ipcHandle('createRequestExample', async input => {
+    const { createRequestExample } = await loadRequestExamplesDb()
     return createRequestExample(input)
   })
 
   ipcHandle('getRequestExample', async input => {
+    const { getRequestExample } = await loadRequestExamplesDb()
     return getRequestExample(input)
   })
 
   ipcHandle('updateRequestExample', async input => {
+    const { updateRequestExample } = await loadRequestExamplesDb()
     return updateRequestExample(input)
   })
 
   ipcHandle('deleteRequestExample', async input => {
+    const { deleteRequestExample } = await loadRequestExamplesDb()
     return deleteRequestExample(input)
   })
 
   ipcHandle('moveRequestExample', async input => {
+    const { moveRequestExample } = await loadRequestExamplesDb()
     return moveRequestExample(input)
   })
 
   ipcHandle('createWebSocketExample', async input => {
+    const { createWebSocketExample } = await loadWebSocketExamplesDb()
     return createWebSocketExample(input)
   })
 
   ipcHandle('getWebSocketExample', async input => {
+    const { getWebSocketExample } = await loadWebSocketExamplesDb()
     return getWebSocketExample(input)
   })
 
   ipcHandle('updateWebSocketExample', async input => {
+    const { updateWebSocketExample } = await loadWebSocketExamplesDb()
     return updateWebSocketExample(input)
   })
 
   ipcHandle('deleteWebSocketExample', async input => {
+    const { deleteWebSocketExample } = await loadWebSocketExamplesDb()
     return deleteWebSocketExample(input)
   })
 
   ipcHandle('moveWebSocketExample', async input => {
+    const { moveWebSocketExample } = await loadWebSocketExamplesDb()
     return moveWebSocketExample(input)
   })
 
   ipcHandle('listEnvironments', async () => {
+    const { listEnvironments } = await loadEnvironmentsDb()
     return listEnvironments()
   })
 
   ipcHandle('getAppSettings', async () => {
+    const { getAppSettings } = await loadAppSettingsDb()
     return getAppSettings()
   })
 
   ipcHandle('getSupermavenStatus', async () => {
+    const supermavenService = await loadSupermavenService()
     return await supermavenService.getStatus()
   })
 
   ipcHandle('createEnvironment', async input => {
+    const { createEnvironment } = await loadEnvironmentsDb()
     return createEnvironment(input)
   })
 
   ipcHandle('duplicateEnvironment', async input => {
+    const { duplicateEnvironment } = await loadEnvironmentsDb()
     return duplicateEnvironment(input)
   })
 
   ipcHandle('updateEnvironment', async input => {
+    const { updateEnvironment } = await loadEnvironmentsDb()
     return updateEnvironment(input)
   })
 
   ipcHandle('updateAppSettings', async input => {
+    const [{ getAppSettings, updateAppSettings }, supermavenService] = await Promise.all([
+      loadAppSettingsDb(),
+      loadSupermavenService(),
+    ])
     const previousSettings = await getAppSettings()
     const result = await updateAppSettings(input)
     if (!result.success) {
@@ -721,78 +695,100 @@ app.on('ready', async () => {
   })
 
   ipcHandle('requestSupermavenInlineSuggestion', async input => {
+    const supermavenService = await loadSupermavenService()
     return await supermavenService.requestInlineSuggestion(input)
   })
 
   ipcHandle('deleteEnvironment', async input => {
+    const { deleteEnvironment } = await loadEnvironmentsDb()
     return deleteEnvironment(input)
   })
 
   ipcHandle('moveEnvironment', async input => {
+    const { moveEnvironment } = await loadEnvironmentsDb()
     return moveEnvironment(input)
   })
 
   ipcHandle('listSharedScripts', async input => {
+    const { listSharedScripts } = await loadSharedScriptsDb()
     return listSharedScripts(input)
   })
 
   ipcHandle('createSharedScript', async input => {
+    const { createSharedScript } = await loadSharedScriptsDb()
     return createSharedScript(input)
   })
 
   ipcHandle('updateSharedScript', async input => {
+    const { updateSharedScript } = await loadSharedScriptsDb()
     return updateSharedScript(input)
   })
 
   ipcHandle('deleteSharedScript', async input => {
+    const { deleteSharedScript } = await loadSharedScriptsDb()
     return deleteSharedScript(input)
   })
 
   ipcHandle('moveSharedScript', async input => {
+    const { moveSharedScript } = await loadSharedScriptsDb()
     return moveSharedScript(input)
   })
 
   ipcHandle('listVisibleSharedScripts', async input => {
+    const { listVisibleSharedScripts } = await loadSharedScriptsDb()
     return listVisibleSharedScripts({ folderId: input.folderId, onlyActive: true })
   })
 
   ipcHandle('listViews', async () => {
+    const { listViews } = await loadViewsDb()
     return listViews()
   })
 
   ipcHandle('createView', async input => {
+    const { createView } = await loadViewsDb()
     return createView(input)
   })
 
   ipcHandle('updateView', async input => {
+    const { updateView } = await loadViewsDb()
     return updateView(input)
   })
 
   ipcHandle('deleteView', async input => {
+    const { deleteView } = await loadViewsDb()
     return deleteView(input)
   })
 
   ipcHandle('moveView', async input => {
+    const { moveView } = await loadViewsDb()
     return moveView(input)
   })
 
   ipcHandle('listViewCacheEntries', async input => {
+    const { listViewCacheEntries } = await loadViewCacheDb()
     return listViewCacheEntries(input)
   })
 
   ipcHandle('getViewCacheEntry', async input => {
+    const { getViewCacheEntry } = await loadViewCacheDb()
     return getViewCacheEntry(input)
   })
 
   ipcHandle('setViewCacheEntry', async input => {
+    const { setViewCacheEntry } = await loadViewCacheDb()
     return setViewCacheEntry(input)
   })
 
   ipcHandle('deleteViewCacheEntry', async input => {
+    const { deleteViewCacheEntry } = await loadViewCacheDb()
     return deleteViewCacheEntry(input)
   })
 
   ipcHandle('listScriptPackages', async () => {
+    const [{ listScriptPackages, toScriptPackageCacheKey }, { getScriptPackageRegistryEntry }] = await Promise.all([
+      loadScriptPackagesDb(),
+      loadScriptPackageRegistry(),
+    ])
     const records = await listScriptPackages()
     const items = await Promise.all(
       records.map(async record => {
@@ -813,76 +809,100 @@ app.on('ready', async () => {
   })
 
   ipcHandle('createScriptPackage', async input => {
+    const { createScriptPackage } = await loadScriptPackagesDb()
     return createScriptPackage(input)
   })
 
   ipcHandle('updateScriptPackage', async input => {
+    const { updateScriptPackage } = await loadScriptPackagesDb()
     return updateScriptPackage(input)
   })
 
   ipcHandle('deleteScriptPackage', async input => {
+    const { deleteScriptPackage } = await loadScriptPackagesDb()
     return deleteScriptPackage(input)
   })
 
   ipcHandle('suggestScriptPackageVersion', async input => {
+    const { suggestScriptPackageVersion } = await loadScriptPackageRegistry()
     return suggestScriptPackageVersion(input)
   })
 
   ipcHandle('suggestTypesScriptPackage', async input => {
+    const { suggestTypesScriptPackage } = await loadScriptPackageRegistry()
     return suggestTypesScriptPackage(input)
   })
 
   ipcHandle('downloadScriptPackage', async input => {
+    const { downloadScriptPackage } = await loadScriptPackageRegistry()
     return downloadScriptPackage(input)
   })
 
   ipcHandle('deleteDownloadedScriptPackage', async input => {
+    const { deleteDownloadedScriptPackage } = await loadScriptPackageRegistry()
     return deleteDownloadedScriptPackage(input)
   })
 
   ipcHandle('getScriptPackageArtifacts', async () => {
+    const [{ listScriptPackages }, { getScriptPackageArtifact }] = await Promise.all([
+      loadScriptPackagesDb(),
+      loadScriptPackageRegistry(),
+    ])
     const records = await listScriptPackages()
     const artifacts = await Promise.all(records.map(record => getScriptPackageArtifact(record)))
     return artifacts.filter((artifact): artifact is NonNullable<typeof artifact> => artifact !== null)
   })
 
   ipcHandle('listTags', async () => {
+    const { listTags } = await loadTagsDb()
     return listTags()
   })
 
   ipcHandle('listTagAssignments', async () => {
+    const { listTagAssignments } = await loadTagsDb()
     return listTagAssignments()
   })
 
   ipcHandle('createTag', async input => {
+    const { createTag } = await loadTagsDb()
     return createTag(input)
   })
 
   ipcHandle('updateTag', async input => {
+    const { updateTag } = await loadTagsDb()
     return updateTag(input)
   })
 
   ipcHandle('deleteTag', async input => {
+    const { deleteTag } = await loadTagsDb()
     return deleteTag(input)
   })
 
   ipcHandle('moveTag', async input => {
+    const { moveTag } = await loadTagsDb()
     return moveTag(input)
   })
 
   ipcHandle('replaceItemTags', async input => {
+    const { replaceItemTags } = await loadTagsDb()
     return replaceItemTags(input)
   })
 
   ipcHandle('replaceTagItems', async input => {
+    const { replaceTagItems } = await loadTagsDb()
     return replaceTagItems(input)
   })
 
   ipcHandle('moveExplorerItem', async input => {
+    const { moveExplorerItem } = await loadTreeItemsDb()
     return moveExplorerItem(input)
   })
 
   ipcHandle('sendRequest', async (input, event) => {
+    const [{ sendRequest }, { createScriptToastBridge }] = await Promise.all([
+      loadSendRequestRuntime(),
+      loadScriptUiBridges(),
+    ])
     const makeRequestBridge = createScriptRequestBridge(event.sender)
     return sendRequest(input, {
       toast: createScriptToastBridge(event.sender),
@@ -895,6 +915,10 @@ app.on('ready', async () => {
   })
 
   ipcHandle('fetchGraphqlSchema', async (input, event) => {
+    const [{ fetchGraphqlSchema }, { createScriptToastBridge }] = await Promise.all([
+      loadSendRequestRuntime(),
+      loadScriptUiBridges(),
+    ])
     const makeRequestBridge = createScriptRequestBridge(event.sender)
     return fetchGraphqlSchema(input, {
       toast: createScriptToastBridge(event.sender),
@@ -907,18 +931,23 @@ app.on('ready', async () => {
   })
 
   ipcHandle('fetchMcpIntrospection', async input => {
+    const { fetchMcpIntrospection } = await loadMcpRuntime()
     return fetchMcpIntrospection(input)
   })
 
   ipcHandle('invokeMcpRequest', async input => {
+    const { invokeMcpRequest } = await loadMcpRuntime()
     return invokeMcpRequest(input)
   })
 
   ipcHandle('cancelHttpRequest', async input => {
+    const { cancelHttpRequest } = await loadSendRequestRuntime()
     return cancelHttpRequest(input)
   })
 
   ipcHandle('generateRequestCode', async input => {
+    const [{ getRequest }, { buildCurlCommand, buildFetchSnippet, maskEnvironmentValuesForCodegen, maskRequestAuthForCodegen, prepareHttpRequest }] =
+      await Promise.all([loadRequestsDb(), loadHttpRequestRuntime()])
     const requestResult = await getRequest({ id: input.requestId })
     if (!requestResult.success) {
       return requestResult
@@ -962,7 +991,7 @@ app.on('ready', async () => {
       return preparedRequest
     }
 
-    const codegenRequest = toRequestCodeGenerationInput(preparedRequest.data, input.mode)
+    const codegenRequest = toRequestCodeGenerationInput(preparedRequest.data, input.mode, maskRequestAuthForCodegen)
 
     return Result.Success({
       curl: buildCurlCommand(codegenRequest),
@@ -971,58 +1000,75 @@ app.on('ready', async () => {
   })
 
   ipcHandle('loadScriptAiWorkspace', async input => {
+    const { loadScriptAiWorkspace } = await loadScriptAiSdk()
     return loadScriptAiWorkspace(input)
   })
 
   ipcHandle('createScriptAiSession', async input => {
+    const { createScriptAiSession } = await loadScriptAiSdk()
     return createScriptAiSession(input)
   })
 
   ipcHandle('sendScriptAiMessage', async input => {
+    const { sendScriptAiMessage } = await loadScriptAiSdk()
     return sendScriptAiMessage(input)
   })
 
   ipcHandle('syncScriptAiWorkspace', async input => {
+    const { syncScriptAiWorkspace } = await loadScriptAiSdk()
     return syncScriptAiWorkspace(input)
   })
 
   ipcHandle('applyScriptAiWorkspace', async input => {
+    const { applyScriptAiWorkspace } = await loadScriptAiSdk()
     return applyScriptAiWorkspace(input)
   })
 
   ipcHandle('abortScriptAiSession', async input => {
+    const { abortScriptAiSession } = await loadScriptAiSdk()
     return abortScriptAiSession(input)
   })
 
   ipcHandle('loadScriptAiMessagePatchDiff', async input => {
+    const { loadScriptAiMessagePatchDiff } = await loadScriptAiSdk()
     return loadScriptAiMessagePatchDiff(input)
   })
 
   ipcHandle('loadManagementAgentWorkspace', async input => {
+    const { loadManagementAgentWorkspace } = await loadManagementAgent()
     return loadManagementAgentWorkspace(input)
   })
 
   ipcHandle('createManagementAgentSession', async input => {
+    const { createManagementAgentSession } = await loadManagementAgent()
     return createManagementAgentSession(input)
   })
 
   ipcHandle('sendManagementAgentMessage', async input => {
+    const { sendManagementAgentMessage } = await loadManagementAgent()
     return sendManagementAgentMessage(input)
   })
 
   ipcHandle('abortManagementAgentSession', async input => {
+    const { abortManagementAgentSession } = await loadManagementAgent()
     return abortManagementAgentSession(input)
   })
 
   ipcHandle('applyManagementAgentPlan', async input => {
+    const { applyManagementAgentPlan } = await loadManagementAgent()
     return applyManagementAgentPlan(input)
   })
 
   ipcHandle('listOpenCodeModels', async () => {
+    const { listOpenCodeModels } = await loadOpenCodeModels()
     return listOpenCodeModels()
   })
 
   ipcHandle('connectWebSocket', async (input, event) => {
+    const [{ connectWebSocket }, { createScriptToastBridge }] = await Promise.all([
+      loadWebSocketRuntime(),
+      loadScriptUiBridges(),
+    ])
     const makeRequestBridge = createScriptRequestBridge(event.sender)
     return connectWebSocket(input, {
       toast: createScriptToastBridge(event.sender),
@@ -1035,46 +1081,57 @@ app.on('ready', async () => {
   })
 
   ipcHandle('sendWebSocketMessage', async input => {
+    const { sendWebSocketMessage } = await loadWebSocketRuntime()
     return sendWebSocketMessage(input)
   })
 
   ipcHandle('disconnectWebSocket', async input => {
+    const { disconnectWebSocket } = await loadWebSocketRuntime()
     return disconnectWebSocket(input)
   })
 
   ipcHandle('listWebSocketSavedMessages', async input => {
+    const { listWebSocketSavedMessages } = await loadWebSocketSavedMessagesDb()
     return listWebSocketSavedMessages(input)
   })
 
   ipcHandle('createWebSocketSavedMessage', async input => {
+    const { createWebSocketSavedMessage } = await loadWebSocketSavedMessagesDb()
     return createWebSocketSavedMessage(input)
   })
 
   ipcHandle('updateWebSocketSavedMessage', async input => {
+    const { updateWebSocketSavedMessage } = await loadWebSocketSavedMessagesDb()
     return updateWebSocketSavedMessage(input)
   })
 
   ipcHandle('deleteWebSocketSavedMessage', async input => {
+    const { deleteWebSocketSavedMessage } = await loadWebSocketSavedMessagesDb()
     return deleteWebSocketSavedMessage(input)
   })
 
   ipcHandle('listRequestHistory', async input => {
+    const { listRequestHistory } = await loadRequestHistoryDb()
     return listRequestHistory(input)
   })
 
   ipcHandle('getRequestHistoryCount', async input => {
+    const { getRequestHistoryCount } = await loadRequestHistoryDb()
     return getRequestHistoryCount(input)
   })
 
   ipcHandle('listRecentHttpRequestUsage', async () => {
+    const { listRecentHttpRequestUsage } = await loadRequestHistoryDb()
     return listRecentHttpRequestUsage()
   })
 
   ipcHandle('deleteRequestHistoryEntry', async input => {
+    const { deleteRequestHistoryEntry } = await loadRequestHistoryDb()
     return deleteRequestHistoryEntry(input)
   })
 
   ipcHandle('trimRequestHistory', async input => {
+    const { trimRequestHistory } = await loadRequestHistoryDb()
     return trimRequestHistory(input)
   })
 
@@ -1100,6 +1157,7 @@ app.on('ready', async () => {
   })
 
   ipcHandle('upsertDatabaseConfig', async input => {
+    const { upsertCustomDatabaseConfig } = await loadServerConfig()
     try {
       const databaseConfig = await getResolvedDatabaseConfig(getDefaultDatabasePath())
       const existingDatabase = input.previousName
@@ -1172,11 +1230,13 @@ app.on('ready', async () => {
   })
 
   ipcHandle('deleteDatabaseConfig', async input => {
+    const { deleteCustomDatabaseConfig } = await loadServerConfig()
     await deleteCustomDatabaseConfig(input.name)
     return Result.Success(await syncConfiguredDatabase())
   })
 
   ipcHandle('setActiveDatabaseConfig', async input => {
+    const { setActiveDatabaseConfig } = await loadServerConfig()
     const databaseConfig = await getResolvedDatabaseConfig(getDefaultDatabasePath())
     const nextDatabase = databaseConfig.items.find(item => item.name === input.name)
     if (!nextDatabase) {
@@ -1210,10 +1270,12 @@ app.on('ready', async () => {
   })
 
   ipcHandle('analyzePostmanCollection', async input => {
+    const { analyzePostmanCollection } = await loadPostmanImport()
     return analyzePostmanCollection(input)
   })
 
   ipcHandle('importPostmanCollection', async input => {
+    const { importPostmanCollection } = await loadPostmanImport()
     return importPostmanCollection(input)
   })
 
@@ -1235,10 +1297,12 @@ app.on('ready', async () => {
   })
 
   ipcHandle('analyzePostmanCollectionExport', async input => {
+    const { analyzePostmanCollectionExport } = await loadPostmanExport()
     return analyzePostmanCollectionExport(input)
   })
 
   ipcHandle('exportPostmanCollection', async input => {
+    const { exportPostmanCollection } = await loadPostmanExport()
     return exportPostmanCollection(input)
   })
 
@@ -1260,10 +1324,12 @@ app.on('ready', async () => {
   })
 
   ipcHandle('analyzePostmanEnvironment', async input => {
+    const { analyzePostmanEnvironment } = await loadPostmanEnvironmentImport()
     return analyzePostmanEnvironment(input)
   })
 
   ipcHandle('importPostmanEnvironment', async input => {
+    const { importPostmanEnvironment } = await loadPostmanEnvironmentImport()
     return importPostmanEnvironment(input)
   })
 
@@ -1285,10 +1351,12 @@ app.on('ready', async () => {
   })
 
   ipcHandle('analyzePostmanEnvironmentExport', async input => {
+    const { analyzePostmanEnvironmentExport } = await loadPostmanEnvironmentExport()
     return analyzePostmanEnvironmentExport(input)
   })
 
   ipcHandle('exportPostmanEnvironment', async input => {
+    const { exportPostmanEnvironment } = await loadPostmanEnvironmentExport()
     return exportPostmanEnvironment(input)
   })
 
@@ -1310,10 +1378,12 @@ app.on('ready', async () => {
   })
 
   ipcHandle('analyzeOpenApiSpec', async input => {
+    const { analyzeOpenApiSpec } = await loadOpenApiImport()
     return analyzeOpenApiSpec(input)
   })
 
   ipcHandle('importOpenApiSpec', async input => {
+    const { importOpenApiSpec } = await loadOpenApiImport()
     return importOpenApiSpec(input)
   })
 
@@ -1335,10 +1405,12 @@ app.on('ready', async () => {
   })
 
   ipcHandle('analyzeOpenApiSpecExport', async input => {
+    const { analyzeOpenApiSpecExport } = await loadOpenApiExport()
     return analyzeOpenApiSpecExport(input)
   })
 
   ipcHandle('exportOpenApiSpec', async input => {
+    const { exportOpenApiSpec } = await loadOpenApiExport()
     return exportOpenApiSpec(input)
   })
 
@@ -1470,7 +1542,8 @@ async function getSearchParamContextTarget(contents: Electron.WebContents, param
 
 function toRequestCodeGenerationInput(
   preparedRequest: PreparedHttpRequest,
-  mode: RequestCodeGenerationMode
+  mode: RequestCodeGenerationMode,
+  maskRequestAuthForCodegen: typeof import('./http-request-runtime.js').maskRequestAuthForCodegen
 ) {
   switch (mode) {
     case 'resolved':
@@ -1489,6 +1562,7 @@ function createScriptRequestBridge(webContents: Electron.WebContents) {
 
   return {
     navigateAndCallRequest: async (path: string[]) => {
+      const { findHttpRequestByPath } = await loadExplorerDb()
       const request = await findHttpRequestByPath(path)
       if (!request) {
         throw new Error(`Request path was not found: ${path.join(' / ')}`)
@@ -1497,6 +1571,7 @@ function createScriptRequestBridge(webContents: Electron.WebContents) {
       return makeRequestBridge.navigateAndCallRequest(request.id, path)
     },
     callRequest: async (path: string[], overrides?: Parameters<typeof makeRequestBridge.callRequest>[2]) => {
+      const { findHttpRequestByPath } = await loadExplorerDb()
       const request = await findHttpRequestByPath(path)
       if (!request) {
         throw new Error(`Request path was not found: ${path.join(' / ')}`)
