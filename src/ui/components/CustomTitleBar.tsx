@@ -58,8 +58,8 @@ export function CustomTitleBar() {
         } as React.CSSProperties
       }
     >
-      {/* Space for macOS traffic lights */}
-      <div className="w-20 flex-shrink-0" />
+      {/* On macOS the fallback reserves traffic-light space; Windows reports a zero-width left inset. */}
+      <div className="flex-shrink-0" style={{ width: 'env(titlebar-area-x, 5rem)' }} />
       {import.meta.env.DEV && <div>DEVELOPMENT</div>}
 
       {/* Navigation buttons */}
@@ -200,10 +200,12 @@ export function CustomTitleBar() {
 
       {/* Window controls */}
       <div
-        className="flex items-center gap-2 pr-4"
+        className="flex items-center gap-2 pl-4"
         style={
           {
             WebkitAppRegion: 'no-drag',
+            paddingRight:
+              'max(1rem, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))',
           } as React.CSSProperties
         }
       >

@@ -172,8 +172,21 @@ async function createWindow(args?: WindowArgsWithoutStatic) {
     x: isSelectMode ? undefined : 0,
     y: isSelectMode ? undefined : 0,
     backgroundColor: '#282a36',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 10, y: 16 },
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 10, y: 16 },
+        }
+      : process.platform === 'win32'
+        ? {
+            titleBarStyle: 'hidden' as const,
+            titleBarOverlay: {
+              color: '#1a1b26',
+              symbolColor: '#e1e3ec',
+              height: 48,
+            },
+          }
+        : {}),
     modal: isSelectMode,
     webPreferences: {
       preload: getPreloadPath(),
