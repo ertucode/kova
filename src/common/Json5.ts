@@ -27,48 +27,48 @@ async function getJson5Formatter(): Promise<Json5Formatter> {
   return json5FormatterPromise
 }
 
-function hasJson5Comments(value: string) {
-  let inString = false
-  let stringQuote = ''
-  let isEscaped = false
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index]
-    const nextChar = value[index + 1]
-
-    if (inString) {
-      if (isEscaped) {
-        isEscaped = false
-        continue
-      }
-
-      if (char === '\\') {
-        isEscaped = true
-        continue
-      }
-
-      if (char === stringQuote) {
-        inString = false
-        stringQuote = ''
-      }
-
-      continue
-    }
-
-    if (char === '"' || char === "'") {
-      inString = true
-      stringQuote = char
-      continue
-    }
-
-    if (char === '/' && (nextChar === '/' || nextChar === '*')) {
-      return true
-    }
-  }
-
-  return false
-}
-
+// function hasJson5Comments(value: string) {
+//   let inString = false
+//   let stringQuote = ''
+//   let isEscaped = false
+//
+//   for (let index = 0; index < value.length; index += 1) {
+//     const char = value[index]
+//     const nextChar = value[index + 1]
+//
+//     if (inString) {
+//       if (isEscaped) {
+//         isEscaped = false
+//         continue
+//       }
+//
+//       if (char === '\\') {
+//         isEscaped = true
+//         continue
+//       }
+//
+//       if (char === stringQuote) {
+//         inString = false
+//         stringQuote = ''
+//       }
+//
+//       continue
+//     }
+//
+//     if (char === '"' || char === "'") {
+//       inString = true
+//       stringQuote = char
+//       continue
+//     }
+//
+//     if (char === '/' && (nextChar === '/' || nextChar === '*')) {
+//       return true
+//     }
+//   }
+//
+//   return false
+// }
+//
 export async function formatJson5(value: string) {
   const format = await getJson5Formatter()
   return format(value)
