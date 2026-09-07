@@ -36,6 +36,7 @@ import {
   shutdownManagementAgentServer,
 } from './management-agent.js'
 import type { SaveTextToFileInput } from '../common/TextFileSave.js'
+import { checkForAppUpdates, startAutoUpdater } from './auto-updater.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -314,7 +315,8 @@ app.on('ready', async () => {
   // Use pending path from open-file event if available, otherwise check argv
   const initialPath =
     pendingOpenPath ?? process.argv.find(a => a.startsWith('--initial-path='))?.replace('--initial-path=', '')
-  createWindow({ initialPath })
+  const mainWindow = await createWindow({ initialPath })
+  startAutoUpdater(mainWindow)
 
   ipcHandle('abortTask', async taskId => {
     TaskManager.abort(taskId)
@@ -659,6 +661,10 @@ app.on('ready', async () => {
   ipcHandle('getAppSettings', async () => {
     const { getAppSettings } = await loadAppSettingsDb()
     return getAppSettings()
+  })
+
+  ipcHandle('checkForAppUpdates', async () => {
+    return checkForAppUpdates()
   })
 
   ipcHandle('getSupermavenStatus', async () => {

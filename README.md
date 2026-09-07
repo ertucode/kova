@@ -3,6 +3,10 @@
 - npm run build-mas (Build for Mac App Store)
 - xattr -cr /Applications/Kova.app (For your friend to run the built app)
 
+## Windows installation
+
+Windows releases use the NSIS setup executable from GitHub Releases and update automatically. Users of the previous MSI package should uninstall the MSI version before running the NSIS setup executable. Uninstalling the application does not remove Kova's user data.
+
 ![Kova example](./example.png)
 
 # Features

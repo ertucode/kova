@@ -78,6 +78,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   moveWebSocketExample: input => ipcInvoke('moveWebSocketExample', input),
   listEnvironments: () => ipcInvoke('listEnvironments', undefined),
   getAppSettings: () => ipcInvoke('getAppSettings', undefined),
+  checkForAppUpdates: () => ipcInvoke('checkForAppUpdates', undefined),
   getSupermavenStatus: () => ipcInvoke('getSupermavenStatus', undefined),
   createEnvironment: input => ipcInvoke('createEnvironment', input),
   duplicateEnvironment: input => ipcInvoke('duplicateEnvironment', input),

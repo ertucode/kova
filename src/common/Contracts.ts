@@ -225,6 +225,7 @@ import {
 } from './ScriptPackages.js'
 import { type ScriptRequestBridgeResponse } from './ScriptMakeRequest.js'
 import type { SupermavenInlineSuggestion, SupermavenInlineSuggestionRequest, SupermavenStatus } from './Supermaven.js'
+import type { AppUpdateCheckResult } from './AppUpdate.js'
 
 export type EventResponseMapping = {
   'task:event': TaskEvents
@@ -288,6 +289,7 @@ export type EventResponseMapping = {
   moveWebSocketExample: Promise<GenericResult<void>>
   listEnvironments: Promise<EnvironmentRecord[]>
   getAppSettings: Promise<AppSettingsRecord>
+  checkForAppUpdates: Promise<AppUpdateCheckResult>
   getSupermavenStatus: Promise<SupermavenStatus>
   createEnvironment: Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: Promise<GenericResult<EnvironmentRecord>>
@@ -443,6 +445,7 @@ export type EventRequestMapping = {
   moveWebSocketExample: MoveWebSocketExampleInput
   listEnvironments: void
   getAppSettings: void
+  checkForAppUpdates: void
   getSupermavenStatus: void
   createEnvironment: CreateEnvironmentInput
   duplicateEnvironment: DuplicateEnvironmentInput
@@ -610,6 +613,7 @@ export type WindowElectron = {
   moveWebSocketExample: (input: MoveWebSocketExampleInput) => Promise<GenericResult<void>>
   listEnvironments: () => Promise<EnvironmentRecord[]>
   getAppSettings: () => Promise<AppSettingsRecord>
+  checkForAppUpdates: () => Promise<AppUpdateCheckResult>
   getSupermavenStatus: () => Promise<SupermavenStatus>
   createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>
   duplicateEnvironment: (input: DuplicateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>

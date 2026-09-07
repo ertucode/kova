@@ -27,16 +27,15 @@ jobs:
         run: npm run build-code
 
       - name: Build Windows artifacts
-        run: npx electron-builder --win portable msi --x64
+        run: npx electron-builder --win nsis --x64 --publish never
 
       - name: Compute release metadata
         id: meta
         shell: bash
         run: |
           version=$(node -p "require('./package.json').version")
-          short_sha="${GITHUB_SHA::7}"
-          tag="windows-v${version}-${short_sha}"
-          name="Windows ${version} (${short_sha})"
+          tag="v${version}"
+          name="Kova ${version}"
           {
             echo "tag=$tag"
             echo "name=$name"
@@ -48,8 +47,13 @@ jobs:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.name }}
           target_commitish: ${{ github.sha }}
+          body: |
+            Windows releases now use the NSIS installer to support automatic updates.
+
+            If Kova was installed from an MSI package, uninstall that version before running the new setup executable. Application data is retained.
           files: |
             dist/*.exe
-            dist/*.msi
+            dist/*.exe.blockmap
+            dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

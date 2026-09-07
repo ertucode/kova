@@ -20,6 +20,7 @@ import {
   DEFAULT_VIM_MODE,
 } from '@common/AppSettings'
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
+import type { AppUpdateCheckResult } from '@common/AppUpdate'
 import { getWindowElectron } from '@/getWindowElectron'
 import { formatTlsVerificationModeLabel } from '@/components/tlsVerificationMode'
 import { Dialog } from '@/lib/components/dialog'
@@ -61,6 +62,9 @@ export function AppSettingsDialog() {
   const [newDatabasePathTouched, setNewDatabasePathTouched] = useState(false)
   const [newDatabaseBasedOnName, setNewDatabaseBasedOnName] = useState('')
   const [newDatabaseSourceFilePath, setNewDatabaseSourceFilePath] = useState('')
+  const [updateCheckPending, setUpdateCheckPending] = useState(false)
+  const [updateCheckResult, setUpdateCheckResult] = useState<AppUpdateCheckResult | null>(null)
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null)
   const { models: openCodeModels, loading: modelsLoading, error: modelsError } = useOpenCodeModels()
 
   useEffect(() => {
@@ -369,6 +373,20 @@ export function AppSettingsDialog() {
     }
   }
 
+  const handleCheckForUpdates = async () => {
+    setUpdateCheckPending(true)
+    setUpdateCheckResult(null)
+    setUpdateCheckError(null)
+
+    try {
+      setUpdateCheckResult(await getWindowElectron().checkForAppUpdates())
+    } catch (error) {
+      setUpdateCheckError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setUpdateCheckPending(false)
+    }
+  }
+
   return (
     <Dialog
       title="Settings"
@@ -386,6 +404,28 @@ export function AppSettingsDialog() {
       }
     >
       <div className="space-y-5">
+        <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-base-content/10 bg-base-200/35 p-4 sm:flex-row sm:items-center">
+          <div>
+            <div className="text-sm font-medium text-base-content">Application updates</div>
+            <p className="mt-1 text-sm text-base-content/60">
+              Automatic updates are available in installed Windows builds.
+            </p>
+            {updateCheckResult ? (
+              <p className="mt-2 text-sm text-base-content/70">{formatUpdateCheckResult(updateCheckResult)}</p>
+            ) : null}
+            {updateCheckError ? (
+              <p className="mt-2 text-sm text-error">Update check failed: {updateCheckError}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="btn btn-soft shrink-0"
+            onClick={() => void handleCheckForUpdates()}
+            disabled={updateCheckPending}
+          >
+            {updateCheckPending ? 'Checking...' : 'Check for updates'}
+          </button>
+        </div>
         <SettingsInputFieldRow
           title="Warn before request"
           description="When an active environment has request warnings enabled, show a confirmation dialog if the last request is older than this threshold."
@@ -804,6 +844,19 @@ export function AppSettingsDialog() {
       </div>
     </Dialog>
   )
+}
+
+function formatUpdateCheckResult(result: AppUpdateCheckResult) {
+  switch (result.status) {
+    case 'unsupported':
+      return `Kova ${result.currentVersion}. Update checks are only available in installed Windows builds.`
+    case 'up-to-date':
+      return `Kova ${result.currentVersion} is up to date.`
+    case 'update-available':
+      return `Kova ${result.availableVersion} is available.`
+    default:
+      return Typescript.assertUnreachable(result)
+  }
 }
 
 function formatSupermavenStatus(status: SupermavenStatus | null) {
