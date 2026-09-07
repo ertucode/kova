@@ -4,7 +4,9 @@ type Json5Formatter = (value: string) => Promise<string>
 
 let json5FormatterPromise: Promise<Json5Formatter> | null = null
 
-async function getJson5Formatter(): Promise<Json5Formatter> {
+type Options = Parameters<(typeof import('prettier/standalone'))['format']>[1]
+
+async function getJson5Formatter(options?: Partial<Options>): Promise<Json5Formatter> {
   if (!json5FormatterPromise) {
     json5FormatterPromise = Promise.all([
       import('prettier/standalone'),
@@ -17,8 +19,9 @@ async function getJson5Formatter(): Promise<Json5Formatter> {
           plugins: [babelPlugin.default, estreePlugin.default],
           quoteProps: 'preserve',
           singleQuote: false,
-          trailingComma: 'all',
+          trailingComma: 'none',
           useTabs: true,
+          ...options,
         })
       }
     })
@@ -69,8 +72,8 @@ async function getJson5Formatter(): Promise<Json5Formatter> {
 //   return false
 // }
 //
-export async function formatJson5(value: string) {
-  const format = await getJson5Formatter()
+export async function formatJson5NoTraling(value: string) {
+  const format = await getJson5Formatter({ trailingComma: 'none' })
   return format(value)
 }
 
@@ -87,7 +90,7 @@ export function normalizeJson5ToJson(value: string) {
 export async function formatJson5PreferringJson(value: string) {
   // Bu fonksiyon neden vardı hatırlamıyorum. Hatırlayana kadar commentli
   // return hasJson5Comments(value) ? formatJson5(value) : formatJson(value)
-  return formatJson5(value)
+  return formatJson5NoTraling(value)
 }
 
 export async function formatJson5PreferringJsonWithTemplates(value: string) {
