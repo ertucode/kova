@@ -34,6 +34,7 @@ import { folderRunStore } from './folderRunStore'
 import { openManagementAgentDialog } from './ManagementAgentDialog'
 import { Typescript } from '@common/Typescript'
 import type { RequestCodeGenerationMode } from '@common/RequestCodegen'
+import { errorToString } from '@common/errorToString'
 
 export function ExplorerRow({
   node,
@@ -114,9 +115,7 @@ export function ExplorerRow({
   const showDropBefore = dropTarget?.indicatorId === `${rowKey}:before`
   const showDropAfter = dropTarget?.indicatorId === `${rowKey}:after`
   const showDropInside = dropTarget?.indicatorId === `${rowKey}:inside`
-  const folderRunIndicator = node.itemType === 'folder'
-    ? getFolderRunIndicator(node, activeRunIdByFolderId)
-    : 'none'
+  const folderRunIndicator = node.itemType === 'folder' ? getFolderRunIndicator(node, activeRunIdByFolderId) : 'none'
 
   return (
     <div className="relative">
@@ -192,7 +191,9 @@ export function ExplorerRow({
             <div
               className={[
                 'size-2 shrink-0 rounded-full',
-                folderRunIndicator === 'active' ? 'bg-info shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-info)_18%,transparent)]' : 'bg-info/35',
+                folderRunIndicator === 'active'
+                  ? 'bg-info shadow-[0_0_0_4px_color-mix(in_oklch,var(--color-info)_18%,transparent)]'
+                  : 'bg-info/35',
               ].join(' ')}
               aria-label={folderRunIndicator === 'active' ? 'Folder run active' : 'Descendant folder run active'}
               title={folderRunIndicator === 'active' ? 'Folder run active' : 'Descendant folder run active'}
@@ -226,18 +227,20 @@ export function ExplorerRow({
                   try {
                     const clipboardText = await navigator.clipboard.readText()
                     await FolderExplorerCoordinator.createHttpRequestFromClipboard(node.id, clipboardText)
-                  } catch {
+                  } catch (e) {
                     toast.show({
                       severity: 'error',
                       title: 'Clipboard read failed',
-                      message: 'Could not read text from the clipboard.',
+                      message: <pre className="text-xxs">{errorToString(e)}</pre>,
                     })
                   }
                 }
               : undefined
           }
           onAddMcpRequest={
-            node.itemType === 'folder' ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'mcp') : undefined
+            node.itemType === 'folder'
+              ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'mcp')
+              : undefined
           }
           onAddWebSocketRequest={
             node.itemType === 'folder'
@@ -254,7 +257,9 @@ export function ExplorerRow({
                   })
               : undefined
           }
-          onDuplicateRequest={node.itemType === 'request' ? () => FolderExplorerCoordinator.duplicateRequest(node.id) : undefined}
+          onDuplicateRequest={
+            node.itemType === 'request' ? () => FolderExplorerCoordinator.duplicateRequest(node.id) : undefined
+          }
           onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
         />
       </div>
@@ -321,13 +326,21 @@ function hasActiveDescendantFolderRun(node: TreeNode, activeRunIdByFolderId: Rec
   return false
 }
 
-export function RequestMethodTag({ method, requestType }: { method: string; requestType: 'http' | 'websocket' | 'mcp' }) {
+export function RequestMethodTag({
+  method,
+  requestType,
+}: {
+  method: string
+  requestType: 'http' | 'websocket' | 'mcp'
+}) {
   if (requestType === 'websocket') {
     return <div className="w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em] text-accent">WS</div>
   }
 
   if (requestType === 'mcp') {
-    return <div className="w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em] text-secondary">MCP</div>
+    return (
+      <div className="w-8 shrink-0 text-center text-[10px] font-semibold tracking-[0.12em] text-secondary">MCP</div>
+    )
   }
 
   const tone = getMethodTone(method)
@@ -664,7 +677,9 @@ function ExplorerMenu({
   const items = useMemo(() => {
     if (itemType === 'folder') {
       return compactExplorerMenuEntries([
-        onAddFolder ? { type: 'item', icon: <FolderIcon className="size-4" />, label: 'Add Folder', action: onAddFolder } : null,
+        onAddFolder
+          ? { type: 'item', icon: <FolderIcon className="size-4" />, label: 'Add Folder', action: onAddFolder }
+          : null,
         onAddHttpRequest
           ? { type: 'item', icon: <PlusIcon className="size-4" />, label: 'Add HTTP Request', action: onAddHttpRequest }
           : null,
@@ -677,22 +692,35 @@ function ExplorerMenu({
             }
           : null,
         onAddWebSocketRequest
-          ? { type: 'item', icon: <PlusIcon className="size-4" />, label: 'Add WebSocket', action: onAddWebSocketRequest }
+          ? {
+              type: 'item',
+              icon: <PlusIcon className="size-4" />,
+              label: 'Add WebSocket',
+              action: onAddWebSocketRequest,
+            }
           : null,
         onAddMcpRequest
           ? { type: 'item', icon: <PlusIcon className="size-4" />, label: 'Add MCP Request', action: onAddMcpRequest }
           : null,
         { type: 'divider' },
-        onAssignTags ? { type: 'item', icon: <TagIcon className="size-4" />, label: 'Assign Tags', action: onAssignTags } : null,
+        onAssignTags
+          ? { type: 'item', icon: <TagIcon className="size-4" />, label: 'Assign Tags', action: onAssignTags }
+          : null,
         onFlattenFolder
-          ? { type: 'item', icon: <ChevronDownIcon className="size-4" />, label: 'Flatten Folder', action: onFlattenFolder }
+          ? {
+              type: 'item',
+              icon: <ChevronDownIcon className="size-4" />,
+              label: 'Flatten Folder',
+              action: onFlattenFolder,
+            }
           : null,
         { type: 'divider' },
         {
           type: 'item',
           icon: <SparklesIcon className="size-4" />,
           label: 'Manage with AI',
-          action: () => openManagementAgentDialog({ scopeType: 'folder', targetFolderId: itemId, targetRequestId: null }),
+          action: () =>
+            openManagementAgentDialog({ scopeType: 'folder', targetFolderId: itemId, targetRequestId: null }),
         },
         {
           type: 'divider',
@@ -701,49 +729,77 @@ function ExplorerMenu({
           type: 'item',
           icon: <FileJsonIcon className="size-4" />,
           label: 'Export Postman',
-          action: () => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } }),
+          action: () =>
+            dialogActions.open({ component: PostmanExportDialog, props: { scope: 'folder', folderId: itemId } }),
         },
         {
           type: 'item',
           icon: <FileJsonIcon className="size-4" />,
           label: 'Export OpenAPI',
-          action: () => dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'folder', folderId: itemId } }),
+          action: () =>
+            dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'folder', folderId: itemId } }),
         },
         { type: 'divider' },
-        { type: 'item', icon: <Trash2Icon className="size-4" />, label: 'Delete', action: onDelete, severity: 'danger' },
+        {
+          type: 'item',
+          icon: <Trash2Icon className="size-4" />,
+          label: 'Delete',
+          action: onDelete,
+          severity: 'danger',
+        },
       ])
     }
 
     return compactExplorerMenuEntries([
       onDuplicateRequest
-        ? { type: 'item', icon: <CopyIcon className="size-4" />, label: 'Duplicate Request', action: onDuplicateRequest }
+        ? {
+            type: 'item',
+            icon: <CopyIcon className="size-4" />,
+            label: 'Duplicate Request',
+            action: onDuplicateRequest,
+          }
         : null,
-      onAssignTags ? { type: 'item', icon: <TagIcon className="size-4" />, label: 'Assign Tags', action: onAssignTags } : null,
+      onAssignTags
+        ? { type: 'item', icon: <TagIcon className="size-4" />, label: 'Assign Tags', action: onAssignTags }
+        : null,
       { type: 'divider' },
       requestType === 'http'
-        ? { type: 'item', icon: <CopyIcon className="size-4" />, label: 'Copy as cURL', action: () => copyRequestCode('curl') }
+        ? {
+            type: 'item',
+            icon: <CopyIcon className="size-4" />,
+            label: 'Copy as cURL',
+            action: () => copyRequestCode('curl'),
+          }
         : null,
       requestType === 'http'
-        ? { type: 'item', icon: <FileCode2Icon className="size-4" />, label: 'Copy as fetch', action: () => copyRequestCode('fetch') }
+        ? {
+            type: 'item',
+            icon: <FileCode2Icon className="size-4" />,
+            label: 'Copy as fetch',
+            action: () => copyRequestCode('fetch'),
+          }
         : null,
       {
         type: 'item',
         icon: <FileJsonIcon className="size-4" />,
         label: 'Export Postman',
-        action: () => dialogActions.open({ component: PostmanExportDialog, props: { scope: 'request', requestId: itemId } }),
+        action: () =>
+          dialogActions.open({ component: PostmanExportDialog, props: { scope: 'request', requestId: itemId } }),
       },
       {
         type: 'item',
         icon: <SparklesIcon className="size-4" />,
         label: 'Manage with AI',
-        action: () => openManagementAgentDialog({ scopeType: 'request', targetFolderId: parentFolderId, targetRequestId: itemId }),
+        action: () =>
+          openManagementAgentDialog({ scopeType: 'request', targetFolderId: parentFolderId, targetRequestId: itemId }),
       },
       requestType === 'http'
         ? {
             type: 'item',
             icon: <FileJsonIcon className="size-4" />,
             label: 'Export OpenAPI',
-            action: () => dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'request', requestId: itemId } }),
+            action: () =>
+              dialogActions.open({ component: OpenApiExportDialog, props: { scope: 'request', requestId: itemId } }),
           }
         : null,
       { type: 'divider' },
@@ -819,7 +875,13 @@ function compactExplorerMenuEntries(entries: Array<ExplorerMenuEntry | null>): E
   return compacted
 }
 
-function ExplorerMenuItems({ items, onAction }: { items: ExplorerMenuEntry[]; onAction: (action: ExplorerMenuAction) => void }) {
+function ExplorerMenuItems({
+  items,
+  onAction,
+}: {
+  items: ExplorerMenuEntry[]
+  onAction: (action: ExplorerMenuAction) => void
+}) {
   return items.map((item, index) => {
     if (item.type === 'divider') {
       return <li key={`divider-${index}`} className="my-1 border-t border-base-content/10" aria-hidden="true" />

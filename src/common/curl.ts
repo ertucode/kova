@@ -56,14 +56,18 @@ function normalizeMethod(value: string | undefined): RequestMethod {
   return method && REQUEST_METHODS.has(method as RequestMethod) ? (method as RequestMethod) : 'GET'
 }
 
-function normalizeHeaders(headers: Record<string, string>) {
-  const rows = Object.entries(headers).map(([key, value], index) => ({
-    id: `curl-header-${index}`,
-    enabled: true,
-    key,
-    value,
-    description: '',
-  }) satisfies KeyValueRow)
+function normalizeHeaders(headers: Record<string, string | undefined>) {
+  const rows = Object.entries(headers).map(([key, value], index) => {
+    const isEmptyHeader = value === undefined && key.endsWith(';')
+
+    return {
+      id: `curl-header-${index}`,
+      enabled: true,
+      key: isEmptyHeader ? key.slice(0, -1) : key,
+      value: value ?? '',
+      description: '',
+    } satisfies KeyValueRow
+  })
 
   return stringifyKeyValueRows(rows)
 }

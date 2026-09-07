@@ -8,6 +8,7 @@
 @import 'tailwindcss/preflight.css' layer(base);
 
 @theme {
+  --text-xxs: 0.625rem;
   --color-base-100: #1a1b26;
   --color-base-200: #16161e;
   --color-base-300: #24283b;
