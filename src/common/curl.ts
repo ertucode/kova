@@ -177,7 +177,7 @@ function normalizeBody(body: string, bodyType: RequestBodyType) {
 
 function looksLikeJson(body: string) {
   const normalized = body.trim()
-  if (!normalized || !/^[\[{]/.test(normalized)) {
+  if (!normalized || !/^[{[]/.test(normalized)) {
     return false
   }
 
