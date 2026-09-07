@@ -217,7 +217,7 @@ export function ExplorerRow({
           }
           onAddHttpRequest={
             node.itemType === 'folder'
-              ? () => FolderExplorerCoordinator.startCreate('request', node.id, 'http')
+              ? () => FolderExplorerCoordinator.createHttpRequest(node.id)
               : undefined
           }
           onAddRequestFromClipboard={

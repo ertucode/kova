@@ -75,13 +75,137 @@ export async function formatJson5(value: string) {
 }
 
 export function formatJson(value: string, indentation?: number) {
-  const parsed = JSON5.parse(value)
-  return JSON.stringify(parsed, null, indentation ?? 2)
+  return stringifyJson5PreservingLargeIntegers(value, indentation ?? 2)
 }
 
 export function normalizeJson5ToJson(value: string) {
-  const parsed = JSON5.parse(value)
-  return JSON.stringify(parsed)
+  return stringifyJson5PreservingLargeIntegers(value)
+}
+
+const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER)
+
+function stringifyJson5PreservingLargeIntegers(value: string, indentation?: number) {
+  const masked = maskLargeIntegerLiterals(value)
+  const parsed = JSON5.parse(masked.value)
+  let serialized = JSON.stringify(parsed, null, indentation)
+
+  for (const [index, literal] of masked.literals.entries()) {
+    serialized = serialized.replaceAll(`"${masked.prefix}${index}"`, literal)
+  }
+
+  return serialized
+}
+
+function maskLargeIntegerLiterals(value: string) {
+  const prefix = createLargeIntegerPlaceholderPrefix(value)
+  const literals: string[] = []
+  let result = ''
+  let index = 0
+  let inString = false
+  let stringQuote = ''
+  let isEscaped = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  while (index < value.length) {
+    const char = value[index]
+    const nextChar = value[index + 1]
+
+    if (inString) {
+      result += char
+      if (isEscaped) {
+        isEscaped = false
+      } else if (char === '\\') {
+        isEscaped = true
+      } else if (char === stringQuote) {
+        inString = false
+      }
+      index += 1
+      continue
+    }
+
+    if (inLineComment) {
+      result += char
+      if (char === '\n' || char === '\r') {
+        inLineComment = false
+      }
+      index += 1
+      continue
+    }
+
+    if (inBlockComment) {
+      result += char
+      if (char === '*' && nextChar === '/') {
+        result += nextChar
+        inBlockComment = false
+        index += 2
+        continue
+      }
+      index += 1
+      continue
+    }
+
+    if (char === '"' || char === "'") {
+      inString = true
+      stringQuote = char
+      result += char
+      index += 1
+      continue
+    }
+
+    if (char === '/' && nextChar === '/') {
+      inLineComment = true
+      result += '//'
+      index += 2
+      continue
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true
+      result += '/*'
+      index += 2
+      continue
+    }
+
+    const integerMatch = value.slice(index).match(/^[+-]?(?:0[xX][0-9a-fA-F]+|\d+)/)
+    if (
+      integerMatch &&
+      isJson5NumberBoundary(value[index - 1]) &&
+      isJson5NumberBoundary(value[index + integerMatch[0].length])
+    ) {
+      const literal = integerMatch[0]
+      const integer = parseJson5IntegerLiteral(literal)
+      if (integer > MAX_SAFE_INTEGER || integer < -MAX_SAFE_INTEGER) {
+        result += `"${prefix}${literals.length}"`
+        literals.push(integer.toString())
+        index += literal.length
+        continue
+      }
+    }
+
+    result += char
+    index += 1
+  }
+
+  return { value: result, prefix, literals }
+}
+
+function parseJson5IntegerLiteral(literal: string) {
+  const sign = literal[0] === '-' ? -1n : 1n
+  const unsignedLiteral = literal[0] === '-' || literal[0] === '+' ? literal.slice(1) : literal
+  return sign * BigInt(unsignedLiteral)
+}
+
+function isJson5NumberBoundary(char: string | undefined) {
+  return char === undefined || !/[\w.$+-]/.test(char)
+}
+
+function createLargeIntegerPlaceholderPrefix(value: string) {
+  let prefix = '__KOVA_LARGE_INTEGER_'
+  while (value.includes(prefix)) {
+    prefix = `_${prefix}`
+  }
+  return prefix
 }
 
 export async function formatJson5PreferringJson(value: string) {

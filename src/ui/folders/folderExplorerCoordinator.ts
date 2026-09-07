@@ -492,6 +492,28 @@ function selectionsMatch(left: Selection | null, right: Selection | null) {
     folderExplorerTreeStore.trigger.createCancelled()
   }
 
+  export async function createHttpRequest(parentFolderId: string | null) {
+    const result = await getWindowElectron().createRequest({
+      parentFolderId,
+      name: 'New Request',
+      requestType: 'http',
+    })
+
+    if (!result.success) {
+      toast.show(result)
+      return
+    }
+
+    cancelCreate()
+    if (parentFolderId) {
+      folderExplorerEditorStore.trigger.expandedEnsured({ id: parentFolderId })
+      persistUiState()
+    }
+
+    await loadItems()
+    await selectItem({ itemType: 'request', id: result.data.id })
+  }
+
   export async function submitCreate() {
     const createDraft = folderExplorerTreeStore.getSnapshot().context.createDraft
     if (!createDraft) return

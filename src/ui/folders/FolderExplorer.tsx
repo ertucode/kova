@@ -718,7 +718,7 @@ function CreateMenuButton() {
           <li>
             <button
               type="button"
-              onClick={() => runAction(() => FolderExplorerCoordinator.startCreate('request', null, 'http'))}
+              onClick={() => runAction(() => FolderExplorerCoordinator.createHttpRequest(null))}
             >
               <FileCode2Icon className="size-4" />
               Add HTTP Request
