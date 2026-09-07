@@ -85,7 +85,9 @@ export function normalizeJson5ToJson(value: string) {
 }
 
 export async function formatJson5PreferringJson(value: string) {
-  return hasJson5Comments(value) ? formatJson5(value) : formatJson(value)
+  // Bu fonksiyon neden vardı hatırlamıyorum. Hatırlayana kadar commentli
+  // return hasJson5Comments(value) ? formatJson5(value) : formatJson(value)
+  return formatJson5(value)
 }
 
 export async function formatJson5PreferringJsonWithTemplates(value: string) {

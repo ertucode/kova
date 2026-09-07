@@ -9,7 +9,7 @@ import {
   type HttpAuth,
 } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
-import { normalizeJson5ToJson } from '../common/Json5.js'
+import { formatJson5, normalizeJson5ToJson } from '../common/Json5.js'
 import { parseKeyValueRows } from '../common/KeyValueRows.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
 import { formatRequestScriptErrorSummaries } from '../common/RequestScriptErrors.js'
@@ -402,7 +402,8 @@ export async function buildResolvedRequestBody(
       }
 
       try {
-        return Result.Success({ kind: 'raw', value: normalizeJson5ToJson(resolvedBody) })
+        const formatted = await formatJson5(resolvedBody)
+        return Result.Success({ kind: 'raw', value: formatted })
       } catch (error) {
         return GenericError.Message(getInvalidJsonBodyMessage(error))
       }
