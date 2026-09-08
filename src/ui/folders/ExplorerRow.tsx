@@ -61,6 +61,7 @@ export function ExplorerRow({
   onRowDragOver: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
   onRowDrop: (node: TreeNode, event: DragEvent<HTMLDivElement>) => void
 }) {
+  const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition | null>(null)
   const createDraft = useSelector(folderExplorerTreeStore, state => state.context.createDraft)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
@@ -142,6 +143,17 @@ export function ExplorerRow({
         }}
         onDoubleClick={() => {
           void FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id }, { mode: 'pin' })
+        }}
+        onContextMenu={event => {
+          event.preventDefault()
+          const rowRect = event.currentTarget.getBoundingClientRect()
+          setContextMenuPosition({
+            x: event.clientX,
+            vertical: event.clientY > window.innerHeight / 2 ? 'up' : 'down',
+            horizontal: event.clientX >= 256 ? 'right' : 'left',
+            top: rowRect.bottom + 4,
+            bottom: window.innerHeight - rowRect.top + 4,
+          })
         }}
         onDragStart={event => onDragStart(node, event)}
         onDragEnd={onDragEnd}
@@ -261,6 +273,8 @@ export function ExplorerRow({
             node.itemType === 'request' ? () => FolderExplorerCoordinator.duplicateRequest(node.id) : undefined
           }
           onDelete={() => FolderExplorerCoordinator.requestDelete(node)}
+          contextMenuPosition={contextMenuPosition}
+          onCloseContextMenu={() => setContextMenuPosition(null)}
         />
       </div>
 
@@ -515,6 +529,14 @@ function getRequestCodeCopiedMessage(mode: RequestCodeGenerationMode, format: 'c
 
 type ExplorerMenuAction = () => void | Promise<void>
 
+type ContextMenuPosition = {
+  x: number
+  vertical: 'down' | 'up'
+  horizontal: 'right' | 'left'
+  top: number
+  bottom: number
+}
+
 type ExplorerMenuEntry =
   | {
       type: 'item'
@@ -541,6 +563,8 @@ function ExplorerMenu({
   onAssignTags,
   onDuplicateRequest,
   onDelete,
+  contextMenuPosition,
+  onCloseContextMenu,
 }: {
   itemId: string
   itemType: ExplorerItem['itemType']
@@ -555,27 +579,37 @@ function ExplorerMenu({
   onAssignTags?: () => void
   onDuplicateRequest?: () => void
   onDelete: () => void
+  contextMenuPosition: ContextMenuPosition | null
+  onCloseContextMenu: () => void
 }) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isButtonOpen, setIsButtonOpen] = useState(false)
   const [menuPlacement, setMenuPlacement] = useState<{ vertical: 'down' | 'up'; horizontal: 'right' | 'left' }>({
     vertical: 'down',
     horizontal: 'right',
   })
   const containerRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLUListElement | null>(null)
+  const isOpen = isButtonOpen || contextMenuPosition !== null
+
+  const closeMenu = () => {
+    setIsButtonOpen(false)
+    onCloseContextMenu()
+  }
 
   useEffect(() => {
     if (!isOpen) return
 
     const handlePointerDown = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false)
+        setIsButtonOpen(false)
+        onCloseContextMenu()
       }
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsOpen(false)
+        setIsButtonOpen(false)
+        onCloseContextMenu()
       }
     }
 
@@ -586,17 +620,21 @@ function ExplorerMenu({
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen])
+  }, [isOpen, onCloseContextMenu])
 
   useEffect(() => {
-    if (!isOpen || !containerRef.current || !menuRef.current) {
+    if (!isOpen || contextMenuPosition || !containerRef.current || !menuRef.current) {
       return
     }
 
     const updateMenuPlacement = () => {
-      const triggerRect = containerRef.current?.getBoundingClientRect()
       const menuRect = menuRef.current?.getBoundingClientRect()
-      if (!triggerRect || !menuRect) {
+      if (!menuRect) {
+        return
+      }
+
+      const triggerRect = containerRef.current?.getBoundingClientRect()
+      if (!triggerRect) {
         return
       }
 
@@ -622,10 +660,10 @@ function ExplorerMenu({
       window.removeEventListener('resize', updateMenuPlacement)
       window.removeEventListener('scroll', updateMenuPlacement, true)
     }
-  }, [isOpen])
+  }, [contextMenuPosition, isOpen])
 
   const runAction = (action: ExplorerMenuAction) => {
-    setIsOpen(false)
+    closeMenu()
     void action()
   }
 
@@ -829,9 +867,11 @@ function ExplorerMenu({
         aria-label="Item actions"
         draggable={false}
         className="flex size-7 items-center justify-center text-base-content/45 opacity-0 transition hover:bg-base-200/80 hover:text-base-content group-hover:opacity-100 focus:opacity-100"
+        onPointerDown={event => event.stopPropagation()}
         onClick={event => {
           event.stopPropagation()
-          setIsOpen(prev => !prev)
+          onCloseContextMenu()
+          setIsButtonOpen(prev => !prev)
         }}
       >
         <MoreHorizontalIcon className="size-4" />
@@ -841,10 +881,30 @@ function ExplorerMenu({
         <ul
           ref={menuRef}
           className={[
-            'menu absolute z-20 w-64 border border-base-content/10 bg-base-100 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.2)]',
-            menuPlacement.vertical === 'down' ? 'top-full mt-1' : 'bottom-full mb-1',
-            menuPlacement.horizontal === 'right' ? 'right-0' : 'left-0',
+            'menu z-20 w-64 border border-base-content/10 bg-base-100 p-1.5 text-[13px] shadow-[0_20px_50px_rgba(0,0,0,0.2)]',
+            contextMenuPosition ? 'fixed' : 'absolute',
+            contextMenuPosition
+              ? ''
+              : menuPlacement.vertical === 'down'
+                ? 'top-full mt-1'
+                : 'bottom-full mb-1',
+            contextMenuPosition ? '' : menuPlacement.horizontal === 'right' ? 'right-0' : 'left-0',
           ].join(' ')}
+          style={
+            contextMenuPosition
+              ? {
+                  top: contextMenuPosition.vertical === 'down' ? contextMenuPosition.top : undefined,
+                  bottom: contextMenuPosition.vertical === 'up' ? contextMenuPosition.bottom : undefined,
+                  left: contextMenuPosition.horizontal === 'left' ? contextMenuPosition.x : undefined,
+                  right:
+                    contextMenuPosition.horizontal === 'right' ? window.innerWidth - contextMenuPosition.x : undefined,
+                }
+              : undefined
+          }
+          onContextMenu={event => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
         >
           <ExplorerMenuItems items={items} onAction={runAction} />
         </ul>
@@ -892,7 +952,7 @@ function ExplorerMenuItems({
         <button
           type="button"
           onClick={() => onAction(item.action)}
-          className={item.severity === 'danger' ? 'text-error hover:text-error' : undefined}
+          className={['py-1.5', item.severity === 'danger' ? 'text-error hover:text-error' : ''].join(' ')}
         >
           {item.icon}
           {item.label}
