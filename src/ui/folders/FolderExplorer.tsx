@@ -54,6 +54,7 @@ import { PostmanEnvironmentImportDialog } from './PostmanEnvironmentImportDialog
 import { PostmanImportDialog } from './PostmanImportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
 import { tagsStore } from './tagsStore'
+import { TagShortcutGuide } from './TagShortcutGuide'
 
 type DropPlacement = ExplorerDropTarget['placement']
 const TREE_SEARCH_DEBOUNCE_MS = 5
@@ -603,6 +604,8 @@ export function FolderExplorer() {
         {sidebarTab === 'changes' ? <ChangesPanel /> : null}
         {sidebarTab === 'packages' ? <PackagesPanel /> : null}
       </main>
+
+      <TagShortcutGuide />
     </div>
   )
 }
