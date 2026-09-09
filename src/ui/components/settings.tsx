@@ -18,25 +18,50 @@ export function SettingsTab({
   )
 }
 
+export function SettingsList({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={clsx(
+        '[&>section]:border-x-0 [&>section]:border-t-0 [&>section]:border-b-base-content/10 [&>section]:bg-transparent [&>section]:px-0 [&>section]:py-4 [&>section:last-child]:border-b-0',
+        className
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+export function SettingsControlLabel({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return (
+    <label className="block min-w-0">
+      <div className="mb-1 text-xs font-medium text-base-content/60">{label}</div>
+      {children}
+    </label>
+  )
+}
+
 export function SettingsFieldRow({
   title,
   description,
   control,
+  detail,
   className,
 }: {
   title: ReactNode
   description: ReactNode
   control?: ReactNode
+  detail?: ReactNode
   className?: string
 }) {
   return (
-    <div className={clsx('flex flex-col gap-1 border border-base-content/10 bg-base-100/70 p-3', className)}>
-      <div className="flex flex-col gap-0">
+    <section className={clsx('flex flex-col gap-3 border border-base-content/10 bg-base-100/70 p-4', className)}>
+      <div>
         <div className="text-sm font-medium text-base-content">{title}</div>
         <div className="mt-1 text-xs text-base-content/60">{description}</div>
       </div>
       {control && <div className="w-full lg:w-[320px] lg:shrink-0">{control}</div>}
-    </div>
+      {detail ? <div>{detail}</div> : null}
+    </section>
   )
 }
 
@@ -50,6 +75,8 @@ export function SettingsDropdownFieldRow<T extends string>({
   dropdownClassName,
   triggerClassName,
   menuClassName,
+  disabled,
+  detail,
 }: {
   title: ReactNode
   description: ReactNode
@@ -60,6 +87,8 @@ export function SettingsDropdownFieldRow<T extends string>({
   dropdownClassName?: string
   triggerClassName?: string
   menuClassName?: string
+  disabled?: boolean
+  detail?: ReactNode
 }) {
   const optionsOut: DropdownSelectOption<T>[] = useMemo(() => {
     if (options.length === 0) return [] as DropdownSelectOption<T>[]
@@ -78,6 +107,7 @@ export function SettingsDropdownFieldRow<T extends string>({
       title={title}
       description={description}
       className={className}
+      detail={detail}
       control={
         <DropdownSelect
           value={value}
@@ -86,6 +116,7 @@ export function SettingsDropdownFieldRow<T extends string>({
           className={clsx('w-full', dropdownClassName)}
           triggerClassName={clsx('h-11 text-sm px-2 bg-base-content/10', triggerClassName)}
           menuClassName={clsx('w-[320px]', menuClassName)}
+          disabled={disabled}
         />
       }
     />
@@ -98,28 +129,70 @@ export function SettingsCheckboxFieldRow({
   value,
   onChange,
   className,
+  detail,
+  disabled,
 }: {
   title: ReactNode
   description: ReactNode
   value: boolean
   onChange: (value: boolean) => void
   className?: string
+  detail?: ReactNode
+  disabled?: boolean
 }) {
   return (
     <SettingsFieldRow
       title={title}
       description={
-        <label className="mt-1 inline-flex items-center gap-3">
+        <label className="inline-flex items-center gap-3">
           <input
             type="checkbox"
             className="checkbox checkbox-sm rounded-md"
             checked={value}
             onChange={event => onChange(event.target.checked)}
+            disabled={disabled}
           />
           <span className="text-xs text-base-content/60">{description}</span>
         </label>
       }
       className={className}
+      detail={detail}
+    />
+  )
+}
+
+export function SettingsTextareaFieldRow({
+  title,
+  description,
+  value,
+  onChange,
+  className,
+  textareaClassName,
+  ...rest
+}: {
+  title: ReactNode
+  description: ReactNode
+  value: string
+  onChange: (value: string) => void
+  className?: string
+  textareaClassName?: string
+} & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'>) {
+  return (
+    <SettingsFieldRow
+      title={title}
+      description={description}
+      className={className}
+      detail={
+        <textarea
+          className={clsx(
+            'textarea min-h-36 w-full border-base-content/10 bg-base-content/10 font-mono text-sm leading-6',
+            textareaClassName
+          )}
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          {...rest}
+        />
+      }
     />
   )
 }
@@ -147,10 +220,7 @@ export function SettingsInputFieldRow({
       className={className}
       control={
         <input
-          className={clsx(
-            'input input-sm w-full border-base-content/10 bg-base-content/10 rounded-none',
-            inputClassName
-          )}
+          className={clsx('input h-11 w-full rounded-none border-base-content/10 bg-base-content/10', inputClassName)}
           value={value}
           onChange={event => onChange(event.target.value)}
           {...rest}

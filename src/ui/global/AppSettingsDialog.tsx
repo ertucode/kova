@@ -29,7 +29,15 @@ import { toast } from '@/lib/components/toast'
 import { dialogActions } from './dialogStore'
 import { AppSettingsCoordinator, appSettingsStore } from './appSettingsStore'
 import { useOpenCodeModels } from './useOpenCodeModels'
-import { SettingsCheckboxFieldRow, SettingsDropdownFieldRow, SettingsInputFieldRow } from '@/components/settings'
+import {
+  SettingsCheckboxFieldRow,
+  SettingsControlLabel,
+  SettingsDropdownFieldRow,
+  SettingsFieldRow,
+  SettingsInputFieldRow,
+  SettingsList,
+  SettingsTextareaFieldRow,
+} from '@/components/settings'
 
 export function AppSettingsDialog() {
   const settings = useSelector(appSettingsStore, state => state.context.settings)
@@ -391,7 +399,7 @@ export function AppSettingsDialog() {
     <Dialog
       title="Settings"
       onClose={() => dialogActions.close()}
-      className="w-[90vw] max-w-[1400px]"
+      className="w-[90vw] max-w-[1400px] [&_button]:rounded-none"
       footer={
         <>
           <button type="button" className="btn btn-ghost" onClick={() => dialogActions.close()} disabled={saving}>
@@ -403,29 +411,29 @@ export function AppSettingsDialog() {
         </>
       }
     >
-      <div className="space-y-5">
-        <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-base-content/10 bg-base-200/35 p-4 sm:flex-row sm:items-center">
-          <div>
-            <div className="text-sm font-medium text-base-content">Application updates</div>
-            <p className="mt-1 text-sm text-base-content/60">
-              Automatic updates are available in installed Windows builds.
-            </p>
-            {updateCheckResult ? (
-              <p className="mt-2 text-sm text-base-content/70">{formatUpdateCheckResult(updateCheckResult)}</p>
-            ) : null}
-            {updateCheckError ? (
-              <p className="mt-2 text-sm text-error">Update check failed: {updateCheckError}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="btn btn-soft shrink-0"
-            onClick={() => void handleCheckForUpdates()}
-            disabled={updateCheckPending}
-          >
-            {updateCheckPending ? 'Checking...' : 'Check for updates'}
-          </button>
-        </div>
+      <SettingsList>
+        <SettingsFieldRow
+          title="Application updates"
+          description="Automatic updates are available in installed Windows builds."
+          control={
+            <button
+              type="button"
+              className="btn btn-soft h-11 w-full"
+              onClick={() => void handleCheckForUpdates()}
+              disabled={updateCheckPending}
+            >
+              {updateCheckPending ? 'Checking...' : 'Check for updates'}
+            </button>
+          }
+          detail={
+            updateCheckResult || updateCheckError ? (
+              <div className="text-xs text-base-content/60">
+                {updateCheckResult ? <p>{formatUpdateCheckResult(updateCheckResult)}</p> : null}
+                {updateCheckError ? <p className="text-error">Update check failed: {updateCheckError}</p> : null}
+              </div>
+            ) : null
+          }
+        />
         <SettingsInputFieldRow
           title="Warn before request"
           description="When an active environment has request warnings enabled, show a confirmation dialog if the last request is older than this threshold."
@@ -450,398 +458,331 @@ export function AppSettingsDialog() {
           onChange={value => setCompactRequestView(value)}
         />
 
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">Editor behavior</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Control save-time formatting for script blocks and enable Vim keybindings in request and script editors.
-          </p>
-
-          <label className="mt-4 inline-flex items-center gap-3">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm rounded-md"
-              checked={formatScriptBlocksOnSave}
-              onChange={event => setFormatScriptBlocksOnSave(event.target.checked)}
-            />
-            <span className="text-sm text-base-content">Format script blocks on save</span>
-          </label>
-
-          <label className="mt-3 inline-flex items-center gap-3">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm rounded-md"
-              checked={vimMode}
-              onChange={event => setVimMode(event.target.checked)}
-            />
-            <span className="text-sm text-base-content">Enable Vim mode</span>
-          </label>
-
-          <label className="mt-4 block">
-            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
-              Prettier Config JSON
-            </div>
-            <p className="mb-3 text-sm text-base-content/60">
+        <SettingsCheckboxFieldRow
+          title="Format script blocks on save"
+          description="Format request and script editor blocks with Prettier when they are saved."
+          value={formatScriptBlocksOnSave}
+          onChange={setFormatScriptBlocksOnSave}
+        />
+        <SettingsCheckboxFieldRow
+          title="Vim mode"
+          description="Enable Vim keybindings in request and script editors."
+          value={vimMode}
+          onChange={setVimMode}
+        />
+        <SettingsTextareaFieldRow
+          title="Prettier config JSON"
+          description={
+            <>
               Applies to script block format-on-save. Use a JSON object such as{' '}
               <code>{'{"semi":false,"singleQuote":true}'}</code>.
-            </p>
-            <textarea
-              className="textarea min-h-36 w-full rounded-xl border-base-content/10 bg-base-100 font-mono text-sm leading-6"
-              value={scriptBlockPrettierConfig}
-              onChange={event => setScriptBlockPrettierConfig(event.target.value)}
-              spellCheck={false}
-            />
-          </label>
-        </div>
+            </>
+          }
+          value={scriptBlockPrettierConfig}
+          onChange={setScriptBlockPrettierConfig}
+          spellCheck={false}
+        />
+        <SettingsCheckboxFieldRow
+          title="Cookies"
+          description="Store and send cookies returned by requests."
+          value={cookiesEnabled}
+          onChange={setCookiesEnabled}
+        />
+        <SettingsDropdownFieldRow
+          title="TLS verification"
+          description={
+            <>
+              Choose how request runtimes verify HTTPS and WSS certificates by default. Request-level overrides can make
+              this stricter or looser. <code>disable-for-localhost</code> only affects loopback hosts.
+            </>
+          }
+          value={tlsVerificationMode}
+          options={APP_SETTINGS_TLS_VERIFICATION_MODES.map(mode => ({
+            label: formatTlsVerificationModeLabel(mode),
+            value: mode,
+          }))}
+          onChange={setTlsVerificationMode}
+        />
+        <SettingsDropdownFieldRow
+          title="Request code copy"
+          description={
+            <>
+              Choose the default behavior for <code>Copy as cURL</code> and <code>Copy as fetch</code>.
+            </>
+          }
+          value={requestCodeCopyBehavior}
+          options={APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS.map(mode => ({
+            label: formatRequestCodeCopyBehaviorLabel(mode),
+            value: mode,
+          }))}
+          onChange={setRequestCodeCopyBehavior}
+        />
 
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">TLS verification</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Choose how request runtimes verify HTTPS and WSS certificates by default. Request-level overrides can make
-            this stricter or looser.
-          </p>
-
-          <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-base-content/10 bg-base-100/80">
-            {APP_SETTINGS_TLS_VERIFICATION_MODES.map(mode => (
-              <button
-                key={mode}
-                type="button"
-                className={[
-                  'px-4 py-2 text-sm font-medium transition',
-                  mode === tlsVerificationMode
-                    ? 'bg-base-200 text-base-content'
-                    : 'border-l border-base-content/10 text-base-content/60 first:border-l-0 hover:text-base-content',
-                ].join(' ')}
-                onClick={() => setTlsVerificationMode(mode)}
-              >
-                {formatTlsVerificationModeLabel(mode)}
-              </button>
-            ))}
-          </div>
-
-          <p className="mt-3 text-sm text-base-content/55">
-            <code>disable-for-localhost</code> only affects <code>https://</code> and <code>wss://</code> requests that
-            target loopback hosts such as <code>localhost</code>, <code>127.0.0.1</code>, and <code>::1</code>.
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">Request code copy</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Choose the default behavior for <code>Copy as cURL</code> and <code>Copy as fetch</code>.
-          </p>
-
-          <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-base-content/10 bg-base-100/80">
-            {APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS.map(mode => (
-              <button
-                key={mode}
-                type="button"
-                className={[
-                  'px-4 py-2 text-sm font-medium transition',
-                  mode === requestCodeCopyBehavior
-                    ? 'bg-base-200 text-base-content'
-                    : 'border-l border-base-content/10 text-base-content/60 first:border-l-0 hover:text-base-content',
-                ].join(' ')}
-                onClick={() => setRequestCodeCopyBehavior(mode)}
-              >
-                {formatRequestCodeCopyBehaviorLabel(mode)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">Supermaven</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Enable Supermaven ghost completions for script editors. Suggestions are requested with <code>Option+L</code>
-            .
-          </p>
-
-          <label className="mt-4 inline-flex items-center gap-3">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm rounded-md"
-              checked={supermavenEnabled}
-              onChange={event => setSupermavenEnabled(event.target.checked)}
-            />
-            <span className="text-sm text-base-content">Enable Supermaven</span>
-          </label>
-
-          {supermavenEnabled ? (
-            <div className="mt-4 rounded-xl border border-base-content/10 bg-base-100 px-4 py-3 text-sm">
-              <div className="font-medium text-base-content">
-                Status: {supermavenStatusLoading ? 'Loading...' : formatSupermavenStatus(supermavenStatus)}
+        <SettingsCheckboxFieldRow
+          title="Supermaven"
+          description={
+            <>
+              Enable ghost completions for script editors. Suggestions are requested with <code>Option+L</code>.
+            </>
+          }
+          value={supermavenEnabled}
+          onChange={setSupermavenEnabled}
+          detail={
+            supermavenEnabled ? (
+              <div className="border border-base-content/10 bg-base-content/5 px-3 py-2 text-xs">
+                <div className="font-medium text-base-content">
+                  Status: {supermavenStatusLoading ? 'Loading...' : formatSupermavenStatus(supermavenStatus)}
+                </div>
+                {supermavenStatus?.detail ? (
+                  <p className="mt-1 break-words text-base-content/60">{supermavenStatus.detail}</p>
+                ) : null}
               </div>
-              {supermavenStatus && supermavenStatus.detail ? (
-                <p className="mt-1 text-base-content/60 break-words">{supermavenStatus.detail}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">AI script generation</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Choose which OpenCode model should be used by default for script generation and refinement, and which local
-            port Kova should use for the OpenCode server.
-          </p>
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,260px)]">
-            <label className="block max-w-[420px]">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
-                Default model
+            ) : null
+          }
+        />
+        <SettingsDropdownFieldRow
+          title="AI script model"
+          description="Choose which OpenCode model should be used by default for script generation and refinement."
+          value={scriptAiModel ?? ''}
+          options={[
+            { label: 'OpenCode default', value: '' },
+            ...openCodeModels.map(model => ({ label: model, value: model })),
+          ]}
+          onChange={value => setScriptAiModel(value || null)}
+          disabled={modelsLoading}
+          detail={
+            modelsLoading || modelsError ? (
+              <div className="text-xs text-base-content/60">
+                {modelsLoading ? <p>Loading available models...</p> : null}
+                {modelsError ? <p className="text-error">{modelsError}</p> : null}
               </div>
-              <select
-                className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
-                value={scriptAiModel ?? ''}
-                onChange={event => setScriptAiModel(event.target.value || null)}
-                disabled={modelsLoading}
-              >
-                <option value="">OpenCode default</option>
-                {openCodeModels.map(model => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-              {modelsLoading ? <p className="mt-2 text-sm text-base-content/55">Loading available models...</p> : null}
-              {modelsError ? <p className="mt-2 text-sm text-error">{modelsError}</p> : null}
-            </label>
-
-            <label className="block max-w-[260px]">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
-                Server port
-              </div>
-              <input
-                type="number"
-                min={1024}
-                max={65535}
-                step={1}
-                placeholder={String(DEFAULT_SCRIPT_AI_SERVER_PORT)}
-                className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
-                value={scriptAiServerPort}
-                onChange={event => setScriptAiServerPort(event.target.value)}
-              />
-              <p className="mt-2 text-sm text-base-content/55">
-                Leave empty to use Kova&apos;s default port: <code>{DEFAULT_SCRIPT_AI_SERVER_PORT}</code>.
-              </p>
-            </label>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-base-content/10 bg-base-200/35 p-4">
-          <div className="text-sm font-medium text-base-content">Databases</div>
-          <p className="mt-1 text-sm text-base-content/60">
-            Choose the active database, update saved database paths, or add another SQLite file. The window reloads
-            after each successful database change.
-          </p>
-
-          <div className="mt-4 overflow-x-auto rounded-xl border border-base-content/10 bg-base-100">
-            <table className="table table-zebra text-sm">
-              <thead>
-                <tr>
-                  <th className="w-24">Active</th>
-                  <th>Name</th>
-                  <th>Path</th>
-                  <th className="w-32">Size</th>
-                  <th className="w-48">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {databaseLoading ? (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-base-content/50">
-                      Loading databases...
-                    </td>
-                  </tr>
-                ) : databaseState?.items.length ? (
-                  databaseState.items.map(item => {
-                    const draft = databaseDrafts[item.name] ?? { name: item.name, path: item.path }
-                    const isActive = databaseState.activeName === item.name
-                    const hasChanges = draft.name !== item.name || draft.path !== item.path
-
-                    return (
-                      <tr key={item.name}>
-                        <td>
-                          <button
-                            type="button"
-                            className={`btn btn-xs ${isActive ? 'btn-success' : 'btn-soft'}`}
-                            onClick={() => void handleActivateDatabase(item.name)}
-                            disabled={databaseActionPending || isActive}
-                          >
-                            {isActive ? 'Active' : 'Use'}
-                          </button>
-                        </td>
-                        <td>
-                          {item.isDefault ? (
-                            <span className="font-medium">default</span>
-                          ) : (
-                            <input
-                              type="text"
-                              className="input input-sm w-full border-base-content/10 bg-base-100"
-                              value={draft.name}
-                              onChange={event => updateDatabaseDraft(item.name, 'name', event.target.value)}
-                              disabled={databaseActionPending}
-                            />
-                          )}
-                        </td>
-                        <td>
-                          {item.isDefault ? (
-                            <div className="break-all text-base-content/70">{item.path}</div>
-                          ) : (
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                className="input input-sm min-w-[280px] flex-1 border-base-content/10 bg-base-100"
-                                value={draft.path}
-                                onChange={event => updateDatabaseDraft(item.name, 'path', event.target.value)}
-                                disabled={databaseActionPending}
-                              />
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-soft"
-                                onClick={() => void browseDatabasePath(item.name)}
-                                disabled={databaseActionPending}
-                              >
-                                Browse
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                        <td className="text-base-content/60">{formatFileSize(item.sizeBytes)}</td>
-                        <td>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-soft"
-                              onClick={() => void openDatabaseLocation(item.path)}
-                              disabled={databaseActionPending}
-                            >
-                              Open location
-                            </button>
-                            {item.isDefault ? (
-                              <span className="text-xs text-base-content/45">Default cannot be deleted.</span>
-                            ) : (
-                              <>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-soft btn-primary"
-                                  onClick={() => void handleSaveDatabase(item.name)}
-                                  disabled={
-                                    databaseActionPending || !hasChanges || !draft.name.trim() || !draft.path.trim()
-                                  }
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-soft btn-error"
-                                  onClick={() => handleDeleteDatabase(item.name)}
-                                  disabled={databaseActionPending}
-                                >
-                                  Delete
-                                </button>
-                              </>
-                            )}
-                          </div>
+            ) : null
+          }
+        />
+        <SettingsInputFieldRow
+          title="AI server port"
+          description={
+            <>
+              Leave empty to use Kova&apos;s default OpenCode server port: <code>{DEFAULT_SCRIPT_AI_SERVER_PORT}</code>.
+            </>
+          }
+          type="number"
+          min={1024}
+          max={65535}
+          step={1}
+          placeholder={String(DEFAULT_SCRIPT_AI_SERVER_PORT)}
+          value={scriptAiServerPort}
+          onChange={setScriptAiServerPort}
+        />
+        <SettingsFieldRow
+          title="Databases"
+          description="Choose the active database, update saved database paths, or add another SQLite file. The window reloads after each successful database change."
+          detail={
+            <div className="space-y-3">
+              <div className="overflow-x-auto border border-base-content/10 bg-base-100">
+                <table className="table table-zebra text-sm">
+                  <thead>
+                    <tr>
+                      <th className="w-24">Active</th>
+                      <th>Name</th>
+                      <th>Path</th>
+                      <th className="w-32">Size</th>
+                      <th className="w-48">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {databaseLoading ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-base-content/50">
+                          Loading databases...
                         </td>
                       </tr>
-                    )
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-base-content/50">
-                      No databases available.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                    ) : databaseState?.items.length ? (
+                      databaseState.items.map(item => {
+                        const draft = databaseDrafts[item.name] ?? { name: item.name, path: item.path }
+                        const isActive = databaseState.activeName === item.name
+                        const hasChanges = draft.name !== item.name || draft.path !== item.path
 
-          <div className="mt-4 grid gap-3 rounded-xl border border-dashed border-base-content/15 bg-base-100/70 p-4 md:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-            <label className="block">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Name</div>
-              <input
-                type="text"
-                className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
-                value={newDatabaseName}
-                onChange={event => handleNewDatabaseNameChange(event.target.value)}
-                disabled={databaseActionPending}
-              />
-            </label>
-
-            <label className="block">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Based on</div>
-              <select
-                className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
-                value={newDatabaseBasedOnName}
-                onChange={event => handleNewDatabaseBasedOnNameChange(event.target.value)}
-                disabled={databaseActionPending}
-              >
-                <option value="">Empty database</option>
-                {databaseState?.items.map(item => (
-                  <option key={item.name} value={item.name}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">
-                Source file
+                        return (
+                          <tr key={item.name}>
+                            <td>
+                              <button
+                                type="button"
+                                className={`btn btn-xs ${isActive ? 'btn-success' : 'btn-soft'}`}
+                                onClick={() => void handleActivateDatabase(item.name)}
+                                disabled={databaseActionPending || isActive}
+                              >
+                                {isActive ? 'Active' : 'Use'}
+                              </button>
+                            </td>
+                            <td>
+                              {item.isDefault ? (
+                                <span className="font-medium">default</span>
+                              ) : (
+                                <input
+                                  type="text"
+                                  className="input input-sm w-full border-base-content/10 bg-base-100"
+                                  value={draft.name}
+                                  onChange={event => updateDatabaseDraft(item.name, 'name', event.target.value)}
+                                  disabled={databaseActionPending}
+                                />
+                              )}
+                            </td>
+                            <td>
+                              {item.isDefault ? (
+                                <div className="break-all text-base-content/70">{item.path}</div>
+                              ) : (
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    className="input input-sm min-w-[280px] flex-1 border-base-content/10 bg-base-100"
+                                    value={draft.path}
+                                    onChange={event => updateDatabaseDraft(item.name, 'path', event.target.value)}
+                                    disabled={databaseActionPending}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-soft"
+                                    onClick={() => void browseDatabasePath(item.name)}
+                                    disabled={databaseActionPending}
+                                  >
+                                    Browse
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                            <td className="text-base-content/60">{formatFileSize(item.sizeBytes)}</td>
+                            <td>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-soft"
+                                  onClick={() => void openDatabaseLocation(item.path)}
+                                  disabled={databaseActionPending}
+                                >
+                                  Open location
+                                </button>
+                                {item.isDefault ? (
+                                  <span className="text-xs text-base-content/45">Default cannot be deleted.</span>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-soft btn-primary"
+                                      onClick={() => void handleSaveDatabase(item.name)}
+                                      disabled={
+                                        databaseActionPending || !hasChanges || !draft.name.trim() || !draft.path.trim()
+                                      }
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-soft btn-error"
+                                      onClick={() => handleDeleteDatabase(item.name)}
+                                      disabled={databaseActionPending}
+                                    >
+                                      Delete
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-base-content/50">
+                          No databases available.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  className="input h-11 min-w-0 flex-1 rounded-xl border-base-content/10 bg-base-100"
-                  value={newDatabaseSourceFilePath}
-                  onChange={event => handleNewDatabaseSourceFilePathChange(event.target.value)}
-                  disabled={databaseActionPending}
-                  placeholder="Optional external database file"
-                />
+
+              <div className="grid gap-3 border border-dashed border-base-content/15 bg-base-content/5 p-3 md:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,180px)_minmax(0,220px)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                <SettingsControlLabel label="Name">
+                  <input
+                    type="text"
+                    className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
+                    value={newDatabaseName}
+                    onChange={event => handleNewDatabaseNameChange(event.target.value)}
+                    disabled={databaseActionPending}
+                  />
+                </SettingsControlLabel>
+
+                <SettingsControlLabel label="Based on">
+                  <select
+                    className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100"
+                    value={newDatabaseBasedOnName}
+                    onChange={event => handleNewDatabaseBasedOnNameChange(event.target.value)}
+                    disabled={databaseActionPending}
+                  >
+                    <option value="">Empty database</option>
+                    {databaseState?.items.map(item => (
+                      <option key={item.name} value={item.name}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </SettingsControlLabel>
+
+                <SettingsControlLabel label="Source file">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="input h-11 min-w-0 flex-1 rounded-xl border-base-content/10 bg-base-100"
+                      value={newDatabaseSourceFilePath}
+                      onChange={event => handleNewDatabaseSourceFilePathChange(event.target.value)}
+                      disabled={databaseActionPending}
+                      placeholder="Optional external database file"
+                    />
+                    <button
+                      type="button"
+                      className="btn h-11 btn-soft"
+                      onClick={() => void browseSourceDatabaseFile()}
+                      disabled={databaseActionPending}
+                    >
+                      Browse
+                    </button>
+                  </div>
+                </SettingsControlLabel>
+
+                <SettingsControlLabel label="Path">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="input h-11 min-w-0 flex-1 rounded-xl border-base-content/10 bg-base-100"
+                      value={newDatabasePath}
+                      onChange={event => handleNewDatabasePathChange(event.target.value)}
+                      disabled={databaseActionPending}
+                    />
+                    <button
+                      type="button"
+                      className="btn h-11 btn-soft"
+                      onClick={() => void browseDatabasePath('new')}
+                      disabled={databaseActionPending}
+                    >
+                      Browse
+                    </button>
+                  </div>
+                </SettingsControlLabel>
+
                 <button
                   type="button"
-                  className="btn h-11 btn-soft"
-                  onClick={() => void browseSourceDatabaseFile()}
-                  disabled={databaseActionPending}
+                  className="btn h-11 btn-primary"
+                  onClick={() => void handleCreateDatabase()}
+                  disabled={isCreateDisabled}
                 >
-                  Browse
+                  Add database
                 </button>
               </div>
-            </label>
-
-            <label className="block">
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-base-content/45">Path</div>
-              <input
-                type="text"
-                className="input h-11 w-full rounded-xl border-base-content/10 bg-base-100"
-                value={newDatabasePath}
-                onChange={event => handleNewDatabasePathChange(event.target.value)}
-                disabled={databaseActionPending}
-              />
-            </label>
-
-            <button
-              type="button"
-              className="btn h-11 btn-soft"
-              onClick={() => void browseDatabasePath('new')}
-              disabled={databaseActionPending}
-            >
-              Browse
-            </button>
-
-            <button
-              type="button"
-              className="btn h-11 btn-primary"
-              onClick={() => void handleCreateDatabase()}
-              disabled={isCreateDisabled}
-            >
-              Add database
-            </button>
-          </div>
-        </div>
-      </div>
+            </div>
+          }
+        />
+      </SettingsList>
     </Dialog>
   )
 }

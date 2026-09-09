@@ -17,6 +17,7 @@ export function DropdownSelect<T extends string>({
   menuClassName,
   renderValue,
   placeholder,
+  disabled,
 }: {
   value: T
   options: DropdownSelectOption<T>[]
@@ -26,6 +27,7 @@ export function DropdownSelect<T extends string>({
   menuClassName?: string
   renderValue?: (option: DropdownSelectOption<T>) => ReactNode
   placeholder?: ReactNode
+  disabled?: boolean
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -73,18 +75,21 @@ export function DropdownSelect<T extends string>({
         ref={buttonRef}
         type="button"
         className={cn(
-          'flex h-full w-full items-center justify-between gap-3 border-0 bg-transparent px-4 text-left text-sm font-semibold outline-none',
+          'flex h-full w-full items-center justify-between gap-3 border-0 bg-transparent px-4 text-left text-sm font-semibold outline-none disabled:cursor-not-allowed disabled:opacity-50',
           triggerClassName
         )}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={listId}
+        disabled={disabled}
         onClick={() => setIsOpen(current => !current)}
       >
-         <span className="min-w-0 truncate">
-           {selectedOption ? (renderValue ? renderValue(selectedOption) : selectedOption.label) : placeholder}
-         </span>
-        <ChevronDownIcon className={cn('size-4 shrink-0 text-base-content/45 transition', isOpen ? 'rotate-180' : '')} />
+        <span className="min-w-0 truncate">
+          {selectedOption ? (renderValue ? renderValue(selectedOption) : selectedOption.label) : placeholder}
+        </span>
+        <ChevronDownIcon
+          className={cn('size-4 shrink-0 text-base-content/45 transition', isOpen ? 'rotate-180' : '')}
+        />
       </button>
 
       {isOpen ? (
@@ -107,7 +112,9 @@ export function DropdownSelect<T extends string>({
                 aria-selected={isSelected}
                 className={cn(
                   'flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition',
-                  isSelected ? 'bg-base-100/80 text-base-content' : 'text-base-content/75 hover:bg-base-100/55 hover:text-base-content'
+                  isSelected
+                    ? 'bg-base-100/80 text-base-content'
+                    : 'text-base-content/75 hover:bg-base-100/55 hover:text-base-content'
                 )}
                 onClick={() => {
                   onChange(option.value)
@@ -116,7 +123,9 @@ export function DropdownSelect<T extends string>({
               >
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{option.label}</div>
-                  {option.description ? <div className="mt-0.5 text-xs text-base-content/45">{option.description}</div> : null}
+                  {option.description ? (
+                    <div className="mt-0.5 text-xs text-base-content/45">{option.description}</div>
+                  ) : null}
                 </div>
               </button>
             )
