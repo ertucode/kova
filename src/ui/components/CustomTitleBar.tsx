@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckIcon, CogIcon, SparklesIcon } from 'lucide-react'
+import { CheckIcon, CogIcon, SearchIcon, SparklesIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { environmentEditorStore } from '@/folders/environmentEditorStore'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
@@ -21,6 +21,7 @@ export function CustomTitleBar() {
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const [isEnvMenuOpen, setIsEnvMenuOpen] = useState(false)
+  const [environmentSearchQuery, setEnvironmentSearchQuery] = useState('')
   const envMenuRef = useRef<HTMLDivElement>(null)
 
   const currentFolderId = getSelectionEnvironmentFolderId(explorerItems, selected)
@@ -32,6 +33,13 @@ export function CustomTitleBar() {
     explorerItems,
     folderId: currentFolderId,
   })
+  const normalizedEnvironmentSearchQuery = environmentSearchQuery.trim().toLocaleLowerCase()
+  const filteredWorkspaceEnvironments = workspaceEnvironments.filter(environment =>
+    environment.name.toLocaleLowerCase().includes(normalizedEnvironmentSearchQuery)
+  )
+  const filteredFolderEnvironments = visibleFolderEnvironments.filter(environment =>
+    environment.name.toLocaleLowerCase().includes(normalizedEnvironmentSearchQuery)
+  )
 
   useEffect(() => {
     if (!isEnvMenuOpen) {
@@ -41,6 +49,7 @@ export function CustomTitleBar() {
     const handlePointerDown = (event: MouseEvent) => {
       if (!envMenuRef.current?.contains(event.target as Node)) {
         setIsEnvMenuOpen(false)
+        setEnvironmentSearchQuery('')
       }
     }
 
@@ -89,7 +98,10 @@ export function CustomTitleBar() {
               className={[
                 'flex cursor-pointer items-center rounded-full border border-base-content/10 bg-base-100 text-xs text-base-content/70 transition hover:border-base-content/20 hover:bg-base-200 hover:text-base-content',
               ].join(' ')}
-              onClick={() => setIsEnvMenuOpen(open => !open)}
+              onClick={() => {
+                setEnvironmentSearchQuery('')
+                setIsEnvMenuOpen(open => !open)
+              }}
               title="Toggle active environments"
             >
               <div className="flex max-w-[520px] min-w-0 items-center overflow-hidden rounded-full">
@@ -107,17 +119,34 @@ export function CustomTitleBar() {
                   Environments
                 </div>
 
+                <div className="border-b border-base-content/10 p-2">
+                  <label className="flex items-center gap-2 rounded-xl border border-base-content/10 bg-base-200/45 px-3 py-2 focus-within:border-base-content/25">
+                    <SearchIcon className="size-4 shrink-0 text-base-content/45" aria-hidden="true" />
+                    <input
+                      autoFocus
+                      type="search"
+                      value={environmentSearchQuery}
+                      onChange={event => setEnvironmentSearchQuery(event.target.value)}
+                      placeholder="Search environments"
+                      className="min-w-0 flex-1 bg-transparent text-sm text-base-content outline-none placeholder:text-base-content/35"
+                    />
+                  </label>
+                </div>
+
                 <div className="max-h-[100vh] overflow-auto p-2">
                   {workspaceEnvironments.length === 0 && visibleFolderEnvironments.length === 0 ? (
                     <div className="px-2 py-3 text-sm text-base-content/45">No environments available</div>
+                  ) : filteredWorkspaceEnvironments.length === 0 && filteredFolderEnvironments.length === 0 ? (
+                    <div className="px-2 py-3 text-sm text-base-content/45">No matching environments</div>
                   ) : (
                     <div className="space-y-3">
+                      {filteredWorkspaceEnvironments.length > 0 ? (
                       <div>
                         <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-base-content/40">
                           Workspace
                         </div>
                         <div className="space-y-1">
-                          {workspaceEnvironments.map(environment => (
+                          {filteredWorkspaceEnvironments.map(environment => (
                             <button
                               key={environment.id}
                               type="button"
@@ -147,14 +176,15 @@ export function CustomTitleBar() {
                           ))}
                         </div>
                       </div>
+                      ) : null}
 
-                      {visibleFolderEnvironments.length > 0 ? (
+                      {filteredFolderEnvironments.length > 0 ? (
                         <div>
                           <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-base-content/40">
                             Folder
                           </div>
                           <div className="space-y-1">
-                            {visibleFolderEnvironments.map(environment => (
+                            {filteredFolderEnvironments.map(environment => (
                               <button
                                 key={environment.id}
                                 type="button"
