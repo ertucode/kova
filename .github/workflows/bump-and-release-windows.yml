@@ -1,0 +1,59 @@
+name: Bump Version and Release Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version component to bump
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: windows-version-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump Version and Start Release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bump package version
+        id: version
+        run: |
+          npm version "${{ inputs.bump }}" --no-git-tag-version
+          echo "value=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push version bump
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${VERSION}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Start Windows release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run windows-release.yml --ref "$GITHUB_REF_NAME"
