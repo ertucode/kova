@@ -28,6 +28,7 @@ Windows releases use the NSIS setup executable from GitHub Releases and update a
 - Export as curl, fetch. Import from curl
 - opencode integration
 - Retry request based on some condition.
+- Batch requests from xlsx, json, csv
 
 ## Niche Features
 
