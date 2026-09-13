@@ -33,6 +33,8 @@ import type {
 import type {
   CancelRequestBatchInput,
   DeleteRequestBatchInput,
+  ExportRequestBatchInput,
+  ExportRequestBatchResponse,
   GetRequestBatchInput,
   GetRequestBatchResponse,
   ImportRequestBatchFileInput,
@@ -288,6 +290,7 @@ export type EventResponseMapping = {
   importRequestBatchFile: Promise<GenericResult<RequestBatchRecord>>
   listRequestBatches: Promise<ListRequestBatchesResponse>
   getRequestBatch: Promise<GenericResult<GetRequestBatchResponse>>
+  exportRequestBatch: Promise<GenericResult<ExportRequestBatchResponse | null>>
   listRequestBatchRows: Promise<ListRequestBatchRowsResponse>
   startRequestBatch: Promise<GenericResult<StartRequestBatchResponse>>
   runRequestBatchRow: Promise<GenericResult<RunRequestBatchRowResponse>>
@@ -454,6 +457,7 @@ export type EventRequestMapping = {
   importRequestBatchFile: ImportRequestBatchFileInput
   listRequestBatches: ListRequestBatchesInput
   getRequestBatch: GetRequestBatchInput
+  exportRequestBatch: ExportRequestBatchInput
   listRequestBatchRows: ListRequestBatchRowsInput
   startRequestBatch: StartRequestBatchInput
   runRequestBatchRow: RunRequestBatchRowInput
@@ -630,6 +634,7 @@ export type WindowElectron = {
   importRequestBatchFile: (input: ImportRequestBatchFileInput) => Promise<GenericResult<RequestBatchRecord>>
   listRequestBatches: (input: ListRequestBatchesInput) => Promise<ListRequestBatchesResponse>
   getRequestBatch: (input: GetRequestBatchInput) => Promise<GenericResult<GetRequestBatchResponse>>
+  exportRequestBatch: (input: ExportRequestBatchInput) => Promise<GenericResult<ExportRequestBatchResponse | null>>
   listRequestBatchRows: (input: ListRequestBatchRowsInput) => Promise<ListRequestBatchRowsResponse>
   startRequestBatch: (input: StartRequestBatchInput) => Promise<GenericResult<StartRequestBatchResponse>>
   runRequestBatchRow: (input: RunRequestBatchRowInput) => Promise<GenericResult<RunRequestBatchRowResponse>>

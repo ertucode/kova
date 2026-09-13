@@ -4,12 +4,13 @@ import type {
   CancelRequestBatchInput,
   RequestBatchRecord,
   RequestBatchRowRecord,
+  RequestBatchRowStatus,
   RunRequestBatchRowInput,
   RunRequestBatchRowResponse,
   StartRequestBatchInput,
   StartRequestBatchResponse,
 } from '../common/RequestBatches.js'
-import type { SendRequestInput } from '../common/Requests.js'
+import type { RequestExecutionRecord, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
 import {
   beginRequestBatchExecution,
@@ -287,7 +288,7 @@ async function executeRow(
     await finishRow(
       dependencies,
       row.id,
-      state.isCancelling ? 'cancelled' : result.success ? 'completed' : 'failed',
+      state.isCancelling ? 'cancelled' : result.success ? getExecutionRowStatus(result.data.execution) : 'failed',
       result.success ? result.data.execution.id : null
     )
   } catch {
@@ -300,7 +301,7 @@ async function executeRow(
 async function finishRow(
   dependencies: RequestBatchRunnerDependencies,
   rowId: string,
-  status: 'completed' | 'failed' | 'cancelled',
+  status: Exclude<RequestBatchRowStatus, 'pending' | 'running'>,
   historyId: string | null
 ) {
   const result = await dependencies.updateRow({ id: rowId, status, historyId, completedAt: Date.now() })
@@ -308,6 +309,11 @@ async function finishRow(
     throw new Error('Failed to persist request batch row completion')
   }
   emitRowUpdated(dependencies, result.data.batch, result.data.row)
+}
+
+function getExecutionRowStatus(execution: RequestExecutionRecord): 'completed' | 'http-error' | 'failed' {
+  if (!execution.response || execution.responseError) return 'failed'
+  return execution.response.status >= 200 && execution.response.status < 300 ? 'completed' : 'http-error'
 }
 
 function toRowSendRequestInput(state: ActiveBatch, row: RequestBatchRowRecord, executionId: string): SendRequestInput {

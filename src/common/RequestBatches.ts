@@ -1,7 +1,7 @@
 export const REQUEST_BATCH_SOURCE_TYPES = ['csv', 'xlsx', 'json'] as const
 export type RequestBatchSourceType = (typeof REQUEST_BATCH_SOURCE_TYPES)[number]
 
-export const REQUEST_BATCH_ROW_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
+export const REQUEST_BATCH_ROW_STATUSES = ['pending', 'running', 'completed', 'http-error', 'failed', 'cancelled'] as const
 export type RequestBatchRowStatus = (typeof REQUEST_BATCH_ROW_STATUSES)[number]
 
 export const REQUEST_BATCH_STATUSES = ['ready', 'running', 'completed', 'failed', 'cancelled'] as const
@@ -14,6 +14,7 @@ export type RequestBatchSummary = {
   pendingCount: number
   runningCount: number
   completedCount: number
+  httpErrorCount: number
   failedCount: number
   cancelledCount: number
 }
@@ -106,6 +107,7 @@ export type ListRequestBatchesResponse = {
 export type GetRequestBatchInput = {
   id: string
   rowSearchQuery?: string
+  rowStatus?: RequestBatchRowStatus
   rowOffset?: number
   rowLimit?: number
 }
@@ -132,6 +134,15 @@ export type GetRequestBatchResponse = {
 
 export type DeleteRequestBatchInput = {
   id: string
+}
+
+export type ExportRequestBatchInput = {
+  batchId: string
+}
+
+export type ExportRequestBatchResponse = {
+  filePath: string
+  rowCount: number
 }
 
 export type UpdateRequestBatchRowInput = {

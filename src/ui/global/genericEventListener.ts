@@ -5,7 +5,7 @@ import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { folderRunStore } from '@/folders/folderRunStore'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
 import { ScriptAiReviewCoordinator } from '@/folders/scriptAiReviewStore'
-import { RequestBatchCoordinator, requestBatchStore } from '@/folders/requestBatchStore'
+import { RequestBatchCoordinator } from '@/folders/requestBatchStore'
 import { toast } from '@/lib/components/toast'
 import { Typescript } from '@common/Typescript'
 import { dialogActions } from './dialogStore'
@@ -89,21 +89,15 @@ export function subscribeToGenericEvents() {
         summary: e.summary,
       })
     } else if (e.type === 'request-batch-updated') {
-      requestBatchStore.trigger.batchUpdated({
+      RequestBatchCoordinator.queueBatchUpdate({
         batchId: e.batchId,
         status: e.status,
         summary: e.summary,
         startedAt: e.startedAt,
         completedAt: e.completedAt,
       })
-      if (e.status !== 'running') {
-        const page = requestBatchStore.getSnapshot().context.pageByBatchId[e.batchId]
-        if (page) {
-          void RequestBatchCoordinator.loadPage(e.batchId, page.rowSearchQuery, page.rowOffset)
-        }
-      }
     } else if (e.type === 'request-batch-row-updated') {
-      requestBatchStore.trigger.rowUpdated({
+      RequestBatchCoordinator.queueRowUpdate({
         batchId: e.batchId,
         rowId: e.rowId,
         status: e.status,

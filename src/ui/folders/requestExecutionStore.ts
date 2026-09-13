@@ -16,7 +16,7 @@ import { createAsyncStoragePersistence } from '@/utils/asyncStorage'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
 
 const HISTORY_PAGE_SIZE = 20
-const MAX_HISTORY_KEEP_LAST = 1000
+const MAX_HISTORY_KEEP_LAST = 100000
 
 const requestHistorySettingsSchema = z.object({
   keepLast: z.number().int().min(1).max(MAX_HISTORY_KEEP_LAST),
@@ -74,7 +74,12 @@ export const requestExecutionStore = createStore({
   on: {
     requestSucceeded: (
       context,
-      event: { requestId: string; requestName: string; requestDraft: RequestDetailsDraft; response: SendRequestResponse }
+      event: {
+        requestId: string
+        requestName: string
+        requestDraft: RequestDetailsDraft
+        response: SendRequestResponse
+      }
     ) => {
       const normalizedResponse = normalizeSendRequestResponse(event)
 
@@ -140,7 +145,10 @@ export const requestExecutionStore = createStore({
       historyLoading: event.append ? context.historyLoading : true,
       historyLoadingMore: event.append,
     }),
-    historyLoaded: (context, event: { items: RequestHistoryListItem[]; nextOffset: number | null; append: boolean }) => ({
+    historyLoaded: (
+      context,
+      event: { items: RequestHistoryListItem[]; nextOffset: number | null; append: boolean }
+    ) => ({
       ...context,
       history: event.append
         ? [...context.history, ...event.items.map(normalizeHistoryItem)]
@@ -359,14 +367,19 @@ async function loadHistoryPage({ append }: { append: boolean }) {
 function isRequestHistoryListItem(value: RequestHistoryListItem | null | undefined): value is RequestHistoryListItem {
   return Boolean(
     value &&
-      typeof value.id === 'string' &&
-      (value.itemType === 'http'
-        ? value.request && typeof value.request.url === 'string' && Array.isArray(value.consoleEntries) && Array.isArray(value.scriptErrors)
-        : typeof value.url === 'string' && Array.isArray(value.messages))
+    typeof value.id === 'string' &&
+    (value.itemType === 'http'
+      ? value.request &&
+        typeof value.request.url === 'string' &&
+        Array.isArray(value.consoleEntries) &&
+        Array.isArray(value.scriptErrors)
+      : typeof value.url === 'string' && Array.isArray(value.messages))
   )
 }
 
-function isRequestExecutionRecord(value: RequestHistoryListItem | RequestExecutionRecord | null | undefined): value is RequestExecutionRecord {
+function isRequestExecutionRecord(
+  value: RequestHistoryListItem | RequestExecutionRecord | null | undefined
+): value is RequestExecutionRecord {
   return Boolean(value && value.itemType === 'http')
 }
 
@@ -473,7 +486,9 @@ function normalizeScriptErrors(errors: RequestScriptError[]): RequestScriptError
     const line = typeof error.line === 'number' ? error.line : null
     const phase: RequestScriptError['phase'] =
       error.phase === 'pre-request' ? 'pre-request' : error.phase === 'test' ? 'test' : 'post-request'
-    const compactLabel = error.compactLabel || buildCompactScriptErrorLabel(phase, line, typeof error.column === 'number' ? error.column : null)
+    const compactLabel =
+      error.compactLabel ||
+      buildCompactScriptErrorLabel(phase, line, typeof error.column === 'number' ? error.column : null)
     const compactMessage = error.compactMessage || error.message
     const detailedMessage = error.detailedMessage || error.message
 
@@ -490,11 +505,7 @@ function normalizeScriptErrors(errors: RequestScriptError[]): RequestScriptError
   })
 }
 
-function buildCompactScriptErrorLabel(
-  phase: RequestScriptError['phase'],
-  line: number | null,
-  column: number | null
-) {
+function buildCompactScriptErrorLabel(phase: RequestScriptError['phase'], line: number | null, column: number | null) {
   const phaseLabel = phase === 'pre-request' ? 'Pre-request' : phase === 'test' ? 'Test' : 'Post-request'
   if (line === null) {
     return phaseLabel

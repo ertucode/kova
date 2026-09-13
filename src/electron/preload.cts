@@ -54,6 +54,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   importRequestBatchFile: input => ipcInvoke('importRequestBatchFile', input),
   listRequestBatches: input => ipcInvoke('listRequestBatches', input),
   getRequestBatch: input => ipcInvoke('getRequestBatch', input),
+  exportRequestBatch: input => ipcInvoke('exportRequestBatch', input),
   listRequestBatchRows: input => ipcInvoke('listRequestBatchRows', input),
   startRequestBatch: input => ipcInvoke('startRequestBatch', input),
   runRequestBatchRow: input => ipcInvoke('runRequestBatchRow', input),

@@ -126,7 +126,7 @@ function HistoryToolbar({
         <input
           type="number"
           min={1}
-          max={1000}
+          max={100000}
           value={keepLast}
           onChange={event => onKeepLastChange(event.target.valueAsNumber)}
           className="w-full border-0 bg-transparent text-sm text-base-content outline-none"

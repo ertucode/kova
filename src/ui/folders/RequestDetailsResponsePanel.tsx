@@ -51,6 +51,7 @@ const readOnlyCodeEditorOnChange = () => undefined
 const jsonResponsePathExtension = createJsonResponsePathExtension()
 
 export type RequestDetailsResponsePanelProps = {
+  embedded?: boolean
   isSending: boolean
   execution?: RequestExecutionRecord
   requestName: string
@@ -81,6 +82,7 @@ export type RequestDetailsResponsePanelProps = {
 }
 
 export const RequestDetailsResponsePanel = memo(function RequestDetailsResponsePanel({
+  embedded = false,
   isSending,
   execution,
   requestName,
@@ -102,7 +104,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
   const liveSelectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
-  const responsePaneHeight = useSelector(folderExplorerEditorStore, state => state.context.responsePaneHeight)
+  const responsePaneHeight = useSelector(folderExplorerEditorStore, state => embedded ? 384 : state.context.responsePaneHeight)
   const responseBodyDisplayMode = useSelector(
     appSettingsStore,
     state => state.context.settings?.responseBodyDisplayMode ?? 'raw'
@@ -320,13 +322,15 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
   ])
 
   useEffect(() => {
+    if (embedded) return
     const clampedHeight = clampResponsePaneHeight(responsePaneHeight)
     if (clampedHeight !== responsePaneHeight) {
       folderExplorerEditorStore.trigger.responsePaneHeightChanged({ height: clampedHeight })
     }
-  }, [responsePaneHeight])
+  }, [embedded, responsePaneHeight])
 
   useEffect(() => {
+    if (embedded) return
     const handlePointerMove = (event: PointerEvent) => {
       const resizeState = resizeStateRef.current
       if (!resizeState) {
@@ -361,7 +365,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [])
+  }, [embedded])
 
   const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     resizeStateRef.current = {
@@ -375,7 +379,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
 
   return (
     <section className="relative shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
-      <button
+      {!embedded ? <button
         type="button"
         className={`block h-[3px] w-full cursor-ns-resize border-0 transition-colors ${
           isResizingResponsePane ? 'bg-base-content/35' : 'bg-base-content/10 hover:bg-base-content/25'
@@ -383,9 +387,9 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
         onPointerDown={startResize}
         aria-label="Resize response panel"
         title="Resize response panel"
-      />
+      /> : null}
 
-      <div className="relative flex h-[calc(100%-3px)] min-h-0 flex-col overflow-hidden">
+      <div className={`relative flex min-h-0 flex-col overflow-hidden ${embedded ? 'h-full' : 'h-[calc(100%-3px)]'}`}>
         {sending ? (
           <>
             <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px overflow-hidden bg-base-content/8">

@@ -599,6 +599,31 @@ app.on('ready', async () => {
     return listRequestBatchRows(input)
   })
 
+  ipcHandle('exportRequestBatch', async (input, event) => {
+    try {
+      await ensureRequestBatchRecovery()
+      const { getRequestBatchExportData } = await loadRequestBatchesDb()
+      const data = getRequestBatchExportData(input.batchId)
+      if (!data.success) return data
+
+      const name = data.data.batch.name.replace(/\.(csv|xlsx|json)$/i, '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').trim() || 'batch'
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const options: Electron.SaveDialogOptions = {
+        defaultPath: `${name}-results.xlsx`,
+        filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
+      }
+      const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
+      if (result.canceled || !result.filePath) return Result.Success(null)
+
+      const filePath = /\.xlsx$/i.test(result.filePath) ? result.filePath : `${result.filePath}.xlsx`
+      const { writeRequestBatchExport } = await import('./request-batch-export.js')
+      await writeRequestBatchExport(data.data, filePath)
+      return Result.Success({ filePath, rowCount: data.data.rows.length })
+    } catch (error) {
+      return GenericError.Unknown(error)
+    }
+  })
+
   ipcHandle('startRequestBatch', async (input, event) => {
     await ensureRequestBatchRecovery()
     const [{ startRequestBatch }, { createScriptToastBridge }] = await Promise.all([

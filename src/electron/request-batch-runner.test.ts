@@ -61,6 +61,59 @@ describe('request batch runner', () => {
     expect(harness.rows[1]).toMatchObject({ status: 'completed', historyId: 'execution-2' })
   })
 
+  it.each([
+    [200, 'completed'],
+    [204, 'completed'],
+    [299, 'completed'],
+    [300, 'http-error'],
+    [304, 'http-error'],
+    [400, 'http-error'],
+    [404, 'http-error'],
+    [500, 'http-error'],
+    [503, 'http-error'],
+  ] as const)('classifies HTTP %i as %s and preserves response history', async (status, expectedStatus) => {
+    const harness = createHarness(1, async input => successfulSend(input.executionId ?? '', status))
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+
+    const httpError = expectedStatus === 'http-error'
+    expect(harness.rows[0]).toMatchObject({ status: expectedStatus, historyId: 'execution-1' })
+    expect(harness.batch.summary).toMatchObject({
+      completedCount: httpError ? 0 : 1,
+      httpErrorCount: httpError ? 1 : 0,
+      failedCount: 0,
+      runningCount: 0,
+    })
+    expect(harness.batch.status).toBe(httpError ? 'failed' : 'completed')
+    expect(harness.events).toContainEqual(expect.objectContaining({
+      type: 'request-batch-row-updated', status: expectedStatus, historyId: 'execution-1',
+    }))
+  })
+
+  it('marks a saved execution without a response as failed and preserves its history', async () => {
+    const harness = createHarness(1, async input => Result.Success({
+      execution: { id: input.executionId, response: null, responseError: 'Connection refused' },
+    } as SendRequestResponse))
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.rows[0]).toMatchObject({ status: 'failed', historyId: 'execution-1' })
+    expect(harness.batch.summary).toMatchObject({ failedCount: 1, httpErrorCount: 0, completedCount: 0 })
+  })
+
+  it('replaces an HTTP error with completed when a row rerun succeeds', async () => {
+    let status = 500
+    const harness = createHarness(1, async input => successfulSend(input.executionId ?? '', status))
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.batch.summary.httpErrorCount).toBe(1)
+
+    status = 200
+    await harness.runner.runRow({ batchId: 'batch-1', rowId: 'row-0', request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.rows[0]).toMatchObject({ status: 'completed', historyId: 'execution-2' })
+    expect(harness.batch.summary).toMatchObject({ httpErrorCount: 0, completedCount: 1 })
+  })
+
   it('cancels the exact active execution and queued rows', async () => {
     let releaseSend: (() => void) | undefined
     const harness = createHarness(3, async () => {
@@ -198,7 +251,7 @@ function createHarness(rowCount: number, send: RequestBatchRunnerDependencies['s
     finish: vi.fn(async () => {
       const summary = buildSummary(rows)
       batch.status =
-        summary.failedCount > 0
+        summary.failedCount > 0 || summary.httpErrorCount > 0
           ? 'failed'
           : summary.cancelledCount > 0
             ? 'cancelled'
@@ -224,13 +277,14 @@ function buildSummary(rows: RequestBatchRowRecord[]): RequestBatchSummary {
     pendingCount: rows.filter(row => row.status === 'pending').length,
     runningCount: rows.filter(row => row.status === 'running').length,
     completedCount: rows.filter(row => row.status === 'completed').length,
+    httpErrorCount: rows.filter(row => row.status === 'http-error').length,
     failedCount: rows.filter(row => row.status === 'failed').length,
     cancelledCount: rows.filter(row => row.status === 'cancelled').length,
   }
 }
 
-function successfulSend(executionId: string) {
-  return Result.Success({ execution: { id: executionId } } as SendRequestResponse)
+function successfulSend(executionId: string, status = 200) {
+  return Result.Success({ execution: { id: executionId, response: { status }, responseError: null } } as SendRequestResponse)
 }
 
 function createSendRequestInput(): SendRequestInput {

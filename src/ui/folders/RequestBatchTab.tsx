@@ -3,8 +3,10 @@ import { useSelector } from '@xstate/store/react'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  DownloadIcon,
   PlayIcon,
   SearchIcon,
+  SettingsIcon,
   SquareIcon,
   Trash2Icon,
   UploadIcon,
@@ -14,19 +16,23 @@ import type { RequestExecutionRecord } from '@common/Requests'
 import { Typescript } from '@common/Typescript'
 import { errorResponseToMessage } from '@common/GenericError'
 import { getWindowElectron } from '@/getWindowElectron'
+import { dialogActions } from '@/global/dialogStore'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
+import { PAGINATION_DOTS, usePaginationRange } from '@/lib/hooks/usePaginationRange'
 import {
   RequestDetailsResponsePanel,
   type RequestDetailsResponsePanelProps,
 } from './RequestDetailsResponsePanel'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
 import { buildSendRequestInput } from './requestSendInput'
+import { RequestBatchSettingsDialog } from './RequestBatchSettingsDialog'
+import { RequestExecutionDetails } from './RequestExecutionPanels'
 import {
-  REQUEST_BATCH_ROW_PAGE_SIZE,
   RequestBatchCoordinator,
   requestBatchStore,
   type RequestBatchPage,
+  type RequestBatchRowFilter,
 } from './requestBatchStore'
 
 type RequestBatchTabProps = {
@@ -38,6 +44,7 @@ type RequestBatchTabProps = {
 }
 
 const EMPTY_REQUEST_BATCHES: RequestBatchRecord[] = []
+const ROW_PAGE_SIZES = [10, 25, 50, 100]
 
 export function RequestBatchTab({
   requestId,
@@ -116,6 +123,13 @@ export function RequestBatchTab({
             Run this request once for each row in CSV, XLSX, or JSON data.
           </div>
         </div>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-xl border border-base-content/15 bg-base-100 px-3 py-2 text-xs font-semibold text-base-content/70 transition hover:border-base-content/25 hover:text-base-content"
+          onClick={() => dialogActions.open({ component: RequestBatchSettingsDialog, props: {} })}
+        >
+          <SettingsIcon className="size-3.5" /> Settings
+        </button>
         <button
           type="button"
           className="inline-flex items-center gap-2 rounded-xl border border-base-content/15 bg-base-100 px-3 py-2 text-xs font-semibold text-base-content/70 transition hover:border-base-content/25 hover:text-base-content"
@@ -262,9 +276,11 @@ function BatchDetails({
   onDelete: () => void
 }) {
   const batch = page.batch
+  const preferredPageSize = useSelector(requestBatchStore, state => state.context.rowPageSize)
   const [concurrencyValue, setConcurrencyValue] = useState(() => batch.concurrency?.toString() ?? '1')
   const [searchValue, setSearchValue] = useState(() => page.rowSearchQuery)
   const [starting, setStarting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
   const [historyByRowId, setHistoryByRowId] = useState<Record<string, RequestExecutionRecord>>({})
@@ -274,8 +290,55 @@ function BatchDetails({
   const isActive = batch.status === 'running'
   const canStart = !isActive
   const isFirstRun = batch.status === 'ready' && batch.summary.pendingCount === batch.summary.totalCount
-  const pageNumber = Math.floor(page.rowOffset / REQUEST_BATCH_ROW_PAGE_SIZE) + 1
-  const pageCount = Math.max(1, Math.ceil(page.totalRowCount / REQUEST_BATCH_ROW_PAGE_SIZE))
+  const [customPageSize, setCustomPageSize] = useState(() => !ROW_PAGE_SIZES.includes(page.rowPageSize))
+  const [pageSizeValue, setPageSizeValue] = useState(() => String(page.rowPageSize))
+  const pageNumber = Math.floor(page.rowOffset / page.rowPageSize) + 1
+  const pageCount = Math.max(1, Math.ceil(page.totalRowCount / page.rowPageSize))
+  const paginationRange = usePaginationRange({
+    totalCount: page.totalRowCount,
+    pageSize: page.rowPageSize,
+    currentPage: pageNumber,
+  })
+
+  const changePageSize = (size: number) => {
+    if (!Number.isSafeInteger(size) || size < 1) {
+      toast.show({ severity: 'warning', message: 'Rows per page must be a positive whole number.' })
+      return
+    }
+    setPageSizeValue(String(size))
+    RequestBatchCoordinator.setRowPageSize(size)
+    void RequestBatchCoordinator.loadPage(batch.id, searchValue, 0, size)
+  }
+
+  useEffect(() => {
+    setPageSizeValue(String(preferredPageSize))
+    setCustomPageSize(!ROW_PAGE_SIZES.includes(preferredPageSize))
+  }, [preferredPageSize])
+
+  useEffect(() => {
+    if (page.rowPageSize !== preferredPageSize) {
+      void RequestBatchCoordinator.loadPage(batch.id, page.rowSearchQuery, 0)
+    }
+  }, [batch.id, page.rowPageSize, page.rowSearchQuery, preferredPageSize])
+
+  const toggleFilter = (filter: RequestBatchRowFilter) => {
+    setExpandedRowId(null)
+    void RequestBatchCoordinator.loadPage(batch.id, searchValue, 0, undefined, page.rowFilter === filter ? null : filter)
+  }
+
+  useEffect(() => {
+    if (page.rowFilter === null || page.rowFilter === 'all') return
+    const refresh = () => {
+      const current = requestBatchStore.getSnapshot().context.pageByBatchId[batch.id]
+      if (current && !current.loading) {
+        void RequestBatchCoordinator.loadPage(batch.id, current.rowSearchQuery, current.rowOffset)
+      }
+    }
+    refresh()
+    if (!isActive) return
+    const interval = window.setInterval(refresh, 1000)
+    return () => window.clearInterval(interval)
+  }, [batch.id, isActive, page.rowFilter])
 
   useEffect(() => {
     if (searchValue === page.rowSearchQuery) return
@@ -284,6 +347,32 @@ function BatchDetails({
     }, 250)
     return () => window.clearTimeout(timeout)
   }, [batch.id, page.rowSearchQuery, searchValue])
+
+  const exportBatch = async () => {
+    setExporting(true)
+    try {
+      const result = await getWindowElectron().exportRequestBatch({ batchId: batch.id })
+      if (!result.success) {
+        toast.show(result)
+        return
+      }
+      if (!result.data) return
+      const { filePath, rowCount } = result.data
+      toast.show({
+        severity: 'success',
+        title: 'Batch exported',
+        message: `Exported ${rowCount} rows to Excel.`,
+        actions: [
+          { label: 'Open file', onAction: () => { void getWindowElectron().openFile(filePath) } },
+          { label: 'Open folder', onAction: () => { void getWindowElectron().openFileLocation(filePath) } },
+        ],
+      })
+    } catch (error) {
+      toast.show({ severity: 'error', message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const startBatch = async () => {
     const concurrency = Number(concurrencyValue)
@@ -333,7 +422,7 @@ function BatchDetails({
   }
 
   const toggleRow = async (row: RequestBatchRowRecord) => {
-    if (row.status !== 'completed') return
+    if (!canExpandRow(row)) return
     if (expandedRowId === row.id) {
       setExpandedRowId(null)
       return
@@ -368,7 +457,16 @@ function BatchDetails({
               {batch.sheetName ? ` / ${batch.sheetName}` : ''} · {batch.rowCount} rows
             </div>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-xl border border-base-content/15 bg-base-100 px-3 py-2 text-xs font-semibold text-base-content/70 transition hover:border-base-content/25 hover:text-base-content disabled:opacity-45"
+              onClick={() => void exportBatch()}
+              disabled={exporting}
+              title="Export all batch rows and saved request/response details to Excel"
+            >
+              <DownloadIcon className="size-3.5" /> {exporting ? 'Exporting...' : 'Export Excel'}
+            </button>
             {canStart ? (
               <label className="grid gap-1 text-[11px] font-medium text-base-content/50">
                 Concurrency
@@ -416,13 +514,14 @@ function BatchDetails({
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-          <BatchMetric label="Total" value={batch.summary.totalCount} />
-          <BatchMetric label="Pending" value={batch.summary.pendingCount} />
-          <BatchMetric label="Running" value={batch.summary.runningCount} tone="text-info" />
-          <BatchMetric label="Completed" value={batch.summary.completedCount} tone="text-success" />
-          <BatchMetric label="Failed" value={batch.summary.failedCount} tone="text-error" />
-          <BatchMetric label="Cancelled" value={batch.summary.cancelledCount} tone="text-warning" />
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+          <BatchMetric label="Total" value={batch.summary.totalCount} selected={page.rowFilter === 'all'} onClick={() => toggleFilter('all')} />
+          <BatchMetric label="Pending" value={batch.summary.pendingCount} selected={page.rowFilter === 'pending'} onClick={() => toggleFilter('pending')} />
+          <BatchMetric label="Running" value={batch.summary.runningCount} tone="text-info" selected={page.rowFilter === 'running'} onClick={() => toggleFilter('running')} />
+          <BatchMetric label="Completed" value={batch.summary.completedCount} tone="text-success" selected={page.rowFilter === 'completed'} onClick={() => toggleFilter('completed')} />
+          <BatchMetric label="HTTP error" value={batch.summary.httpErrorCount} tone="text-warning" selected={page.rowFilter === 'http-error'} onClick={() => toggleFilter('http-error')} />
+          <BatchMetric label="Failed" value={batch.summary.failedCount} tone="text-error" selected={page.rowFilter === 'failed'} onClick={() => toggleFilter('failed')} />
+          <BatchMetric label="Cancelled" value={batch.summary.cancelledCount} tone="text-warning" selected={page.rowFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
         </div>
       </div>
 
@@ -451,7 +550,7 @@ function BatchDetails({
                   {column}
                 </th>
               ))}
-              <th className="min-w-44 border-b border-base-content/10 px-3 py-2.5 text-base-content/40">Actions</th>
+              <th className="w-10 border-b border-base-content/10 px-3 py-2.5 text-base-content/40">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -478,16 +577,55 @@ function BatchDetails({
         </table>
         {!page.loading && page.rows.length === 0 ? (
           <div className="grid min-h-32 place-items-center text-sm text-base-content/40">
-            {searchValue.trim() ? 'No rows match this search.' : 'This batch has no rows.'}
+            {searchValue.trim() || (page.rowFilter !== null && page.rowFilter !== 'all')
+              ? 'No rows match the current filters.'
+              : 'This batch has no rows.'}
           </div>
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-base-content/10 bg-base-200/25 px-4 py-3 text-xs text-base-content/45">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-content/10 bg-base-200/25 px-4 py-3 text-xs text-base-content/45">
         <span>
           Page {pageNumber} of {pageCount} · {page.totalRowCount} rows
         </span>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2">
+            Rows per page
+            <select
+              className="rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-base-content/70 disabled:opacity-35"
+              value={customPageSize ? 'custom' : page.rowPageSize}
+              disabled={page.loading}
+              onChange={event => {
+                const custom = event.target.value === 'custom'
+                setCustomPageSize(custom)
+                if (!custom) changePageSize(Number(event.target.value))
+              }}
+            >
+              {ROW_PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          {customPageSize ? (
+            <form className="flex items-center gap-2" onSubmit={event => {
+              event.preventDefault()
+              changePageSize(Number(pageSizeValue))
+            }}>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                required
+                aria-label="Custom rows per page"
+                className="w-20 rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-base-content/70"
+                value={pageSizeValue}
+                onChange={event => setPageSizeValue(event.target.value)}
+                disabled={page.loading}
+              />
+              <button type="submit" className="rounded-lg border border-base-content/10 px-2 py-1.5 text-base-content/60 disabled:opacity-35" disabled={page.loading}>Apply</button>
+            </form>
+          ) : null}
+        </div>
+        <nav aria-label="Batch rows pagination" className="flex flex-wrap items-center gap-1">
           <button
             type="button"
             className="rounded-lg border border-base-content/10 px-3 py-1.5 font-medium text-base-content/60 disabled:opacity-35"
@@ -496,12 +634,32 @@ function BatchDetails({
               void RequestBatchCoordinator.loadPage(
                 batch.id,
                 page.rowSearchQuery,
-                Math.max(0, page.rowOffset - REQUEST_BATCH_ROW_PAGE_SIZE)
+                 Math.max(0, page.rowOffset - page.rowPageSize)
               )
             }
           >
             Previous
           </button>
+          {paginationRange.map((item, index) => item === PAGINATION_DOTS ? (
+            <span key={`dots-${index}`} className="px-2" aria-hidden="true">{PAGINATION_DOTS}</span>
+          ) : (
+            <button
+              key={item}
+              type="button"
+              aria-label={`Page ${item}`}
+              aria-current={item === pageNumber ? 'page' : undefined}
+              className={[
+                'min-w-8 rounded-lg border px-2 py-1.5 font-medium disabled:opacity-35',
+                item === pageNumber
+                  ? 'border-primary/30 bg-primary/10 text-primary'
+                  : 'border-base-content/10 text-base-content/60 hover:bg-base-100',
+              ].join(' ')}
+              disabled={page.loading}
+              onClick={() => {
+                if (item !== pageNumber) void RequestBatchCoordinator.loadPage(batch.id, page.rowSearchQuery, (item - 1) * page.rowPageSize)
+              }}
+            >{item}</button>
+          ))}
           <button
             type="button"
             className="rounded-lg border border-base-content/10 px-3 py-1.5 font-medium text-base-content/60 disabled:opacity-35"
@@ -513,7 +671,7 @@ function BatchDetails({
           >
             Next
           </button>
-        </div>
+        </nav>
       </div>
     </div>
   )
@@ -544,7 +702,7 @@ function RowWithDetails({
   onToggle: () => void
   onRun: () => void
 }) {
-  const expandable = row.status === 'completed'
+  const expandable = canExpandRow(row)
   return (
     <>
       <tr className={expandable ? 'cursor-pointer hover:bg-base-200/35' : 'hover:bg-base-200/20'} onClick={onToggle}>
@@ -561,7 +719,7 @@ function RowWithDetails({
           </span>
         </td>
         <td className={`border-b border-base-content/7 px-3 py-2.5 font-medium ${getRowStatusClassName(row.status)}`}>
-          {row.status}
+          {row.status === 'http-error' ? 'HTTP error' : row.status}
         </td>
         {columns.map(column => (
           <td
@@ -575,7 +733,6 @@ function RowWithDetails({
         ))}
         <td className="border-b border-base-content/7 px-3 py-2.5 text-base-content/40">
           <div className="flex items-center justify-between gap-2">
-            <span>{row.historyId ? <span title={row.historyId}>Saved · {row.historyId.slice(0, 8)}</span> : 'Not saved'}</span>
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded-lg border border-base-content/10 px-2 py-1 font-medium text-base-content/60 hover:bg-base-100 disabled:opacity-35"
@@ -596,7 +753,7 @@ function RowWithDetails({
           <td colSpan={columns.length + 3} className="border-b border-base-content/10 bg-base-200/20 px-4 py-4">
             {loading ? <div className="text-sm text-base-content/40">Loading request history...</div> : null}
             {!loading && history ? (
-              <RequestDetailsResponsePanel key={history.id} {...responsePanelProps} isSending={false} execution={history} />
+              <BatchRowDetailView key={history.id} history={history} responsePanelProps={responsePanelProps} />
             ) : null}
             {!loading && !history ? (
               <div className="text-sm text-base-content/45">
@@ -611,12 +768,52 @@ function RowWithDetails({
   )
 }
 
-function BatchMetric({ label, value, tone = 'text-base-content' }: { label: string; value: number; tone?: string }) {
+function BatchRowDetailView({ history, responsePanelProps }: {
+  history: RequestExecutionRecord
+  responsePanelProps: Omit<RequestDetailsResponsePanelProps, 'isSending' | 'execution'>
+}) {
+  const view = useSelector(requestBatchStore, state => state.context.rowDetailView)
+  const [responseBodyExpanded, setResponseBodyExpanded] = useState(true)
+
+  switch (view) {
+    case 'response-panel':
+      return <RequestDetailsResponsePanel {...responsePanelProps} embedded isSending={false} execution={history} />
+    case 'history-view':
+      return (
+        <div className="max-h-[500px] min-w-0 overflow-auto rounded-xl border border-base-content/10 bg-base-100/50 p-4">
+          <RequestExecutionDetails
+            execution={history}
+            onJumpToScriptError={responsePanelProps.onJumpToScriptError}
+            responseBodyExpanded={responseBodyExpanded}
+            onToggleResponseBody={() => setResponseBodyExpanded(current => !current)}
+          />
+        </div>
+      )
+    default:
+      return Typescript.assertUnreachable(view)
+  }
+}
+
+function BatchMetric({ label, value, tone = 'text-base-content', selected, onClick }: {
+  label: string
+  value: number
+  tone?: string
+  selected: boolean
+  onClick: () => void
+}) {
   return (
-    <div className="rounded-xl border border-base-content/8 bg-base-100/55 px-3 py-2">
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={[
+        'rounded-xl border px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-primary',
+        selected ? 'border-primary/50 bg-primary/10 ring-1 ring-primary/25' : 'border-base-content/8 bg-base-100/55 hover:border-base-content/25 hover:bg-base-100',
+      ].join(' ')}
+    >
       <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-base-content/35">{label}</div>
       <div className={`mt-0.5 text-sm font-semibold ${tone}`}>{value}</div>
-    </div>
+    </button>
   )
 }
 
@@ -645,6 +842,8 @@ function getRowStatusClassName(status: RequestBatchRowRecord['status']) {
       return 'text-info'
     case 'completed':
       return 'text-success'
+    case 'http-error':
+      return 'text-warning'
     case 'failed':
       return 'text-error'
     case 'cancelled':
@@ -652,6 +851,10 @@ function getRowStatusClassName(status: RequestBatchRowRecord['status']) {
     default:
       return Typescript.assertUnreachable(status)
   }
+}
+
+function canExpandRow(row: RequestBatchRowRecord) {
+  return row.status === 'completed' || row.status === 'http-error' || (row.status === 'failed' && row.historyId !== null)
 }
 
 function formatDate(timestamp: number) {

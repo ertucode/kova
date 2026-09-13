@@ -37,6 +37,7 @@ const EMPTY_BATCH_SUMMARY: RequestBatchSummary = {
   pendingCount: 0,
   runningCount: 0,
   completedCount: 0,
+  httpErrorCount: 0,
   failedCount: 0,
   cancelledCount: 0,
 }
@@ -127,6 +128,7 @@ export async function beginRequestBatchExecution(input: {
       existingSummary.pendingCount === existingSummary.totalCount &&
       existingSummary.runningCount === 0 &&
       existingSummary.completedCount === 0 &&
+      existingSummary.httpErrorCount === 0 &&
       existingSummary.failedCount === 0 &&
       existingSummary.cancelledCount === 0
     if (!isPristine) {
@@ -377,7 +379,7 @@ export async function finishRequestBatchExecution(input: {
       return GenericError.Message('Request batch still has running rows')
     }
     const status: RequestBatchStatus =
-      summary.failedCount > 0
+      summary.failedCount > 0 || summary.httpErrorCount > 0
         ? 'failed'
         : summary.cancelledCount > 0
           ? 'cancelled'
@@ -461,9 +463,15 @@ export async function getRequestBatch(input: GetRequestBatchInput): Promise<Gene
     return GenericError.Message('Request batch not found')
   }
 
-  const limit = normalizePageSize(input.rowLimit)
+  const limit =
+    typeof input.rowLimit === 'number' && Number.isSafeInteger(input.rowLimit) && input.rowLimit > 0
+      ? input.rowLimit
+      : DEFAULT_PAGE_SIZE
   const offset = normalizeOffset(input.rowOffset)
-  const rowWhereClause = buildRowWhereClause(input.id, input.rowSearchQuery ?? '')
+  const rowWhereClause = and(
+    buildRowWhereClause(input.id, input.rowSearchQuery ?? ''),
+    input.rowStatus ? eq(requestBatchRows.status, input.rowStatus) : undefined
+  )
   const rows = db
     .select()
     .from(requestBatchRows)
@@ -484,6 +492,54 @@ export async function getRequestBatch(input: GetRequestBatchInput): Promise<Gene
     rows: rows.slice(0, limit).map(toRequestBatchRowRecord),
     nextRowOffset: rows.length > limit ? offset + limit : null,
     totalRowCount,
+  })
+}
+
+export type RequestBatchExportData = {
+  batch: RequestBatchRecord
+  rows: {
+    row: RequestBatchRowRecord
+    history: {
+      requestUrl: string
+      requestBody: string
+      responseStatus: number | null
+      responseBody: string
+      responseHeaders: string
+      durationMs: number | null
+      responseError: string | null
+      responseBodyOmitted: boolean
+    } | null
+  }[]
+}
+
+export function getRequestBatchExportData(batchId: string): GenericResult<RequestBatchExportData> {
+  const db = getDb()
+  const batch = db.select().from(requestBatches).where(eq(requestBatches.id, batchId)).get()
+  if (!batch) return GenericError.Message('Request batch not found')
+
+  const rows = db
+    .select({
+      row: requestBatchRows,
+      history: {
+        requestUrl: requestHistory.url,
+        requestBody: requestHistory.requestBody,
+        responseStatus: requestHistory.responseStatus,
+        responseBody: requestHistory.responseBody,
+        responseHeaders: requestHistory.responseHeaders,
+        durationMs: requestHistory.responseDurationMs,
+        responseError: requestHistory.responseError,
+        responseBodyOmitted: requestHistory.responseBodyOmitted,
+      },
+    })
+    .from(requestBatchRows)
+    .leftJoin(requestHistory, eq(requestBatchRows.historyId, requestHistory.id))
+    .where(eq(requestBatchRows.batchId, batchId))
+    .orderBy(asc(requestBatchRows.rowIndex), asc(requestBatchRows.id))
+    .all()
+
+  return Result.Success({
+    batch: toRequestBatchRecord(batch),
+    rows: rows.map(({ row, history }) => ({ row: toRequestBatchRowRecord(row), history })),
   })
 }
 
@@ -595,11 +651,12 @@ function toRequestBatchRecord(row: RequestBatchDbRow | typeof requestBatches.$in
     rowCount: row.rowCount ?? 0,
     status: parseBatchStatus(row.status ?? 'ready'),
     concurrency: row.concurrency ?? null,
-    summary: parseJson<RequestBatchSummary>(row.summaryJson ?? '{}', {
+    summary: {
       ...EMPTY_BATCH_SUMMARY,
       totalCount: row.rowCount ?? 0,
       pendingCount: row.rowCount ?? 0,
-    }),
+      ...parseJson<Partial<RequestBatchSummary>>(row.summaryJson ?? '{}', {}),
+    },
     startedAt: row.startedAt ?? null,
     completedAt: row.completedAt ?? null,
     createdAt: row.createdAt,
@@ -642,6 +699,7 @@ const SUMMARY_COUNT_KEY_BY_ROW_STATUS = {
   pending: 'pendingCount',
   running: 'runningCount',
   completed: 'completedCount',
+  'http-error': 'httpErrorCount',
   failed: 'failedCount',
   cancelled: 'cancelledCount',
 } as const satisfies Record<RequestBatchRowStatus, keyof RequestBatchSummary>
@@ -655,23 +713,7 @@ function calculateRequestBatchSummary(batchId: string): RequestBatchSummary {
     .all()
   summary.totalCount = rows.length
   for (const row of rows) {
-    switch (parseRowStatus(row.status)) {
-      case 'pending':
-        summary.pendingCount += 1
-        break
-      case 'running':
-        summary.runningCount += 1
-        break
-      case 'completed':
-        summary.completedCount += 1
-        break
-      case 'failed':
-        summary.failedCount += 1
-        break
-      case 'cancelled':
-        summary.cancelledCount += 1
-        break
-    }
+    summary[SUMMARY_COUNT_KEY_BY_ROW_STATUS[parseRowStatus(row.status)]] += 1
   }
   return summary
 }

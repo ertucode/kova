@@ -8,18 +8,50 @@ import { toast } from '@/lib/components/toast'
 
 export const REQUEST_BATCH_ROW_PAGE_SIZE = 50
 const REQUEST_BATCH_LIST_PAGE_SIZE = 100
+const ROW_PAGE_SIZE_STORAGE_KEY = 'request-batch-rows-per-page'
+const ROW_DETAIL_VIEW_STORAGE_KEY = 'request-batch-row-detail-view'
+export type RequestBatchRowDetailView = 'response-panel' | 'history-view'
+export type RequestBatchRowFilter = RequestBatchRowRecord['status'] | 'all' | null
+type BatchUpdate = Omit<Extract<GenericEvent, { type: 'request-batch-updated' }>, 'type'>
+type RowUpdate = Omit<Extract<GenericEvent, { type: 'request-batch-row-updated' }>, 'type'>
+type ProgressUpdates = {
+  batches: Map<string, BatchUpdate>
+  rows: Map<string, Map<string, RowUpdate>>
+}
+
+function loadRowDetailView(): RequestBatchRowDetailView {
+  try {
+    return localStorage.getItem(ROW_DETAIL_VIEW_STORAGE_KEY) === 'history-view' ? 'history-view' : 'response-panel'
+  } catch {
+    return 'response-panel'
+  }
+}
+
+function loadRowPageSize() {
+  try {
+    const size = Number(localStorage.getItem(ROW_PAGE_SIZE_STORAGE_KEY))
+    if (Number.isSafeInteger(size) && size > 0) return size
+  } catch {
+    return REQUEST_BATCH_ROW_PAGE_SIZE
+  }
+  return REQUEST_BATCH_ROW_PAGE_SIZE
+}
 
 export type RequestBatchPage = {
   batch: RequestBatchRecord
   rows: RequestBatchRowRecord[]
   rowOffset: number
+  rowPageSize: number
   nextRowOffset: number | null
   totalRowCount: number
   rowSearchQuery: string
+  rowFilter: RequestBatchRowFilter
   loading: boolean
 }
 
 type RequestBatchContext = {
+  rowPageSize: number
+  rowDetailView: RequestBatchRowDetailView
   batchesByRequestId: Record<string, RequestBatchRecord[]>
   loadingByRequestId: Record<string, boolean>
   selectedBatchIdByRequestId: Record<string, string | null>
@@ -28,12 +60,17 @@ type RequestBatchContext = {
 
 export const requestBatchStore = createStore({
   context: {
+    rowPageSize: loadRowPageSize(),
+    rowDetailView: loadRowDetailView(),
     batchesByRequestId: {},
     loadingByRequestId: {},
     selectedBatchIdByRequestId: {},
     pageByBatchId: {},
   } as RequestBatchContext,
   on: {
+    progressUpdated: (context, event: ProgressUpdates) => applyProgressUpdates(context, event),
+    rowPageSizeChanged: (context, event: { size: number }) => ({ ...context, rowPageSize: event.size }),
+    rowDetailViewChanged: (context, event: { view: RequestBatchRowDetailView }) => ({ ...context, rowDetailView: event.view }),
     batchesLoading: (context, event: { requestId: string }) => ({
       ...context,
       loadingByRequestId: { ...context.loadingByRequestId, [event.requestId]: true },
@@ -55,7 +92,7 @@ export const requestBatchStore = createStore({
       ...context,
       selectedBatchIdByRequestId: { ...context.selectedBatchIdByRequestId, [event.requestId]: event.batchId },
     }),
-    pageLoading: (context, event: { batch: RequestBatchRecord; rowOffset: number; rowSearchQuery: string }) => ({
+    pageLoading: (context, event: { batch: RequestBatchRecord; rowOffset: number; rowPageSize: number; rowSearchQuery: string; rowFilter?: RequestBatchRowFilter }) => ({
       ...context,
       pageByBatchId: {
         ...context.pageByBatchId,
@@ -63,9 +100,11 @@ export const requestBatchStore = createStore({
           batch: event.batch,
           rows: context.pageByBatchId[event.batch.id]?.rows ?? [],
           rowOffset: event.rowOffset,
+          rowPageSize: event.rowPageSize,
           nextRowOffset: null,
           totalRowCount: context.pageByBatchId[event.batch.id]?.totalRowCount ?? event.batch.rowCount,
           rowSearchQuery: event.rowSearchQuery,
+          rowFilter: event.rowFilter ?? null,
           loading: true,
         },
       },
@@ -76,15 +115,19 @@ export const requestBatchStore = createStore({
         batch: RequestBatchRecord
         rows: RequestBatchRowRecord[]
         rowOffset: number
+        rowPageSize: number
         nextRowOffset: number | null
         totalRowCount: number
         rowSearchQuery: string
+        rowFilter?: RequestBatchRowFilter
       }
     ) => {
       const pendingPage = context.pageByBatchId[event.batch.id]
       if (
         !pendingPage ||
         pendingPage.rowOffset !== event.rowOffset ||
+        pendingPage.rowPageSize !== event.rowPageSize ||
+        pendingPage.rowFilter !== (event.rowFilter ?? null) ||
         pendingPage.rowSearchQuery !== event.rowSearchQuery
       ) {
         return context
@@ -93,13 +136,13 @@ export const requestBatchStore = createStore({
         ...replaceBatch(context, event.batch),
         pageByBatchId: {
           ...context.pageByBatchId,
-          [event.batch.id]: { ...event, loading: false },
+          [event.batch.id]: { ...event, rowFilter: event.rowFilter ?? null, loading: false },
         },
       }
     },
-    pageLoadFailed: (context, event: { batchId: string; rowOffset: number; rowSearchQuery: string }) => {
+    pageLoadFailed: (context, event: { batchId: string; rowOffset: number; rowPageSize: number; rowSearchQuery: string; rowFilter?: RequestBatchRowFilter }) => {
       const page = context.pageByBatchId[event.batchId]
-      if (!page || page.rowOffset !== event.rowOffset || page.rowSearchQuery !== event.rowSearchQuery) {
+      if (!page || page.rowOffset !== event.rowOffset || page.rowPageSize !== event.rowPageSize || page.rowSearchQuery !== event.rowSearchQuery || page.rowFilter !== (event.rowFilter ?? null)) {
         return context
       }
       return {
@@ -143,47 +186,76 @@ export const requestBatchStore = createStore({
         pageByBatchId: nextPages,
       }
     },
-    batchUpdated: (context, event: Omit<Extract<GenericEvent, { type: 'request-batch-updated' }>, 'type'>) => {
-      const current = findBatch(context, event.batchId)
-      if (!current) return context
-      return replaceBatch(context, {
-        ...current,
-        status: event.status,
-        summary: event.summary,
-        startedAt: event.startedAt,
-        completedAt: event.completedAt,
-        updatedAt: Date.now(),
-      })
-    },
-    rowUpdated: (context, event: Omit<Extract<GenericEvent, { type: 'request-batch-row-updated' }>, 'type'>) => {
-      const page = context.pageByBatchId[event.batchId]
-      if (!page || !page.rows.some(row => row.id === event.rowId)) return context
-      return {
-        ...context,
-        pageByBatchId: {
-          ...context.pageByBatchId,
-          [event.batchId]: {
-            ...page,
-            rows: page.rows.map(row =>
-              row.id === event.rowId
-                ? {
-                    ...row,
-                    status: event.status,
-                    historyId: event.historyId,
-                    startedAt: event.startedAt,
-                    completedAt: event.completedAt,
-                    updatedAt: Date.now(),
-                  }
-                : row
-            ),
-          },
-        },
-      }
-    },
+    batchUpdated: (context, event: BatchUpdate) =>
+      applyProgressUpdates(context, { batches: new Map([[event.batchId, event]]), rows: new Map() }),
+    rowUpdated: (context, event: RowUpdate) =>
+      applyProgressUpdates(context, { batches: new Map(), rows: new Map([[event.batchId, new Map([[event.rowId, event]])]]) }),
   },
 })
 
+let persistedRowPageSize = requestBatchStore.getSnapshot().context.rowPageSize
+requestBatchStore.subscribe(state => {
+  if (state.context.rowPageSize === persistedRowPageSize) return
+  try {
+    localStorage.setItem(ROW_PAGE_SIZE_STORAGE_KEY, String(state.context.rowPageSize))
+    persistedRowPageSize = state.context.rowPageSize
+  } catch {
+    return
+  }
+})
+
+let persistedRowDetailView = requestBatchStore.getSnapshot().context.rowDetailView
+requestBatchStore.subscribe(state => {
+  if (state.context.rowDetailView === persistedRowDetailView) return
+  try {
+    localStorage.setItem(ROW_DETAIL_VIEW_STORAGE_KEY, state.context.rowDetailView)
+    persistedRowDetailView = state.context.rowDetailView
+  } catch {
+    return
+  }
+})
+
+const LIVE_UPDATE_THROTTLE_MS = 300
+let pendingProgress: ProgressUpdates = { batches: new Map(), rows: new Map() }
+let progressTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleProgressUpdate() {
+  if (progressTimer !== null) return
+  progressTimer = setTimeout(() => {
+    progressTimer = null
+    const updates = pendingProgress
+    pendingProgress = { batches: new Map(), rows: new Map() }
+    requestBatchStore.trigger.progressUpdated(updates)
+
+    for (const update of updates.batches.values()) {
+      if (update.status === 'running') continue
+      const page = requestBatchStore.getSnapshot().context.pageByBatchId[update.batchId]
+      if (page) void RequestBatchCoordinator.loadPage(update.batchId, page.rowSearchQuery, page.rowOffset)
+    }
+  }, LIVE_UPDATE_THROTTLE_MS)
+}
+
 export const RequestBatchCoordinator = {
+  queueBatchUpdate(update: BatchUpdate) {
+    pendingProgress.batches.set(update.batchId, update)
+    scheduleProgressUpdate()
+  },
+  queueRowUpdate(update: RowUpdate) {
+    let rows = pendingProgress.rows.get(update.batchId)
+    if (!rows) {
+      rows = new Map()
+      pendingProgress.rows.set(update.batchId, rows)
+    }
+    rows.set(update.rowId, update)
+    scheduleProgressUpdate()
+  },
+  setRowDetailView(view: RequestBatchRowDetailView) {
+    requestBatchStore.trigger.rowDetailViewChanged({ view })
+  },
+  setRowPageSize(size: number) {
+    if (!Number.isSafeInteger(size) || size <= 0) return
+    requestBatchStore.trigger.rowPageSizeChanged({ size })
+  },
   async loadBatches(requestId: string) {
     requestBatchStore.trigger.batchesLoading({ requestId })
     try {
@@ -229,41 +301,49 @@ export const RequestBatchCoordinator = {
     return result.data
   },
 
-  async loadPage(batchId: string, rowSearchQuery: string, rowOffset: number) {
+  async loadPage(batchId: string, rowSearchQuery: string, rowOffset: number, pageSize?: number, filter?: RequestBatchRowFilter) {
     const context = requestBatchStore.getSnapshot().context
+    const rowPageSize = pageSize ?? context.rowPageSize
+    const rowFilter = filter === undefined ? context.pageByBatchId[batchId]?.rowFilter ?? null : filter
+    if (context.pageByBatchId[batchId]?.rowPageSize !== rowPageSize) rowOffset = 0
     const batch = findBatch(context, batchId) ?? context.pageByBatchId[batchId]?.batch
     if (!batch) return
-    requestBatchStore.trigger.pageLoading({ batch, rowOffset, rowSearchQuery })
+    requestBatchStore.trigger.pageLoading({ batch, rowOffset, rowPageSize, rowSearchQuery, rowFilter })
     try {
       const result = await getWindowElectron().getRequestBatch({
         id: batchId,
         rowSearchQuery,
         rowOffset,
-        rowLimit: REQUEST_BATCH_ROW_PAGE_SIZE,
+        rowLimit: rowPageSize,
+        rowStatus: rowFilter === 'all' || rowFilter === null ? undefined : rowFilter,
       })
+      const pendingPage = requestBatchStore.getSnapshot().context.pageByBatchId[batchId]
+      if (!pendingPage || pendingPage.rowOffset !== rowOffset || pendingPage.rowPageSize !== rowPageSize || pendingPage.rowSearchQuery !== rowSearchQuery || pendingPage.rowFilter !== rowFilter) return
       if (!result.success) {
         toast.show(result)
-        requestBatchStore.trigger.pageLoadFailed({ batchId, rowOffset, rowSearchQuery })
+        requestBatchStore.trigger.pageLoadFailed({ batchId, rowOffset, rowPageSize, rowSearchQuery, rowFilter })
         return
       }
       const lastRowOffset = Math.max(
         0,
-        Math.floor((result.data.totalRowCount - 1) / REQUEST_BATCH_ROW_PAGE_SIZE) * REQUEST_BATCH_ROW_PAGE_SIZE
+        Math.floor((result.data.totalRowCount - 1) / rowPageSize) * rowPageSize
       )
       if (rowOffset > lastRowOffset) {
-        await RequestBatchCoordinator.loadPage(batchId, rowSearchQuery, lastRowOffset)
+        await RequestBatchCoordinator.loadPage(batchId, rowSearchQuery, lastRowOffset, rowPageSize, rowFilter)
         return
       }
       requestBatchStore.trigger.pageLoaded({
         batch: result.data.batch,
         rows: result.data.rows,
         rowOffset,
+        rowPageSize,
         nextRowOffset: result.data.nextRowOffset,
         totalRowCount: result.data.totalRowCount,
         rowSearchQuery,
+        rowFilter,
       })
     } catch (error) {
-      requestBatchStore.trigger.pageLoadFailed({ batchId, rowOffset, rowSearchQuery })
+      requestBatchStore.trigger.pageLoadFailed({ batchId, rowOffset, rowPageSize, rowSearchQuery, rowFilter })
       toast.show({ severity: 'error', message: error instanceof Error ? error.message : String(error) })
     }
   },
@@ -309,6 +389,54 @@ export const RequestBatchCoordinator = {
     const selected = requestBatchStore.getSnapshot().context.selectedBatchIdByRequestId[requestId]
     if (selected) await RequestBatchCoordinator.loadPage(selected, '', 0)
   },
+}
+
+function applyProgressUpdates(context: RequestBatchContext, updates: ProgressUpdates): RequestBatchContext {
+  const updatedAt = Date.now()
+  const updateBatch = (batch: RequestBatchRecord) => {
+    const update = updates.batches.get(batch.id)
+    return update ? {
+      ...batch,
+      status: update.status,
+      summary: update.summary,
+      startedAt: update.startedAt,
+      completedAt: update.completedAt,
+      updatedAt,
+    } : batch
+  }
+  const batchesByRequestId = { ...context.batchesByRequestId }
+  const pageByBatchId = { ...context.pageByBatchId }
+  let changed = false
+
+  for (const [requestId, batches] of Object.entries(context.batchesByRequestId)) {
+    if (!batches.some(batch => updates.batches.has(batch.id))) continue
+    batchesByRequestId[requestId] = batches.map(updateBatch)
+    changed = true
+  }
+  for (const batchId of new Set([...updates.batches.keys(), ...updates.rows.keys()])) {
+    const page = context.pageByBatchId[batchId]
+    if (!page) continue
+    const batch = updateBatch(page.batch)
+    const rowUpdates = updates.rows.get(batchId)
+    let rowsChanged = false
+    const rows = rowUpdates ? page.rows.map(row => {
+      const update = rowUpdates.get(row.id)
+      if (!update) return row
+      rowsChanged = true
+      return {
+        ...row,
+        status: update.status,
+        historyId: update.historyId,
+        startedAt: update.startedAt,
+        completedAt: update.completedAt,
+        updatedAt,
+      }
+    }) : page.rows
+    if (batch === page.batch && !rowsChanged) continue
+    pageByBatchId[batchId] = { ...page, batch, rows: rowsChanged ? rows : page.rows }
+    changed = true
+  }
+  return changed ? { ...context, batchesByRequestId, pageByBatchId } : context
 }
 
 function getSelectedBatchId(context: RequestBatchContext, requestId: string, batches: RequestBatchRecord[]) {
