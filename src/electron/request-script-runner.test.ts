@@ -7,6 +7,57 @@ import * as requestExamplesDb from './db/request-examples.js'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 describe('createRequestScriptRuntime', () => {
+  it('keeps immutable variables above environment and mutable request scope values', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com/{{rowId}}',
+        pathParams: '',
+        searchParams: 'value:{{rowId}}',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      immutableVariables: { rowId: 'immutable-row' },
+      environments: [
+        {
+          id: 'env-1',
+          name: 'Default',
+          folderId: null,
+          variables: 'rowId:environment-row',
+          color: null,
+          warnOnRequest: false,
+          position: 0,
+          priority: 0,
+          createdAt: 1,
+          deletedAt: null,
+        },
+      ],
+    })
+
+    const errors = await runtime.runPreRequestScripts([
+      {
+        name: 'Request: Test',
+        script:
+          "scope.set('rowId', 'mutable-row')\nscope.set('scopeValue', scope.get('rowId') ?? '')\nscope.set('resolvedUrl', request.resolveUrl())",
+      },
+    ])
+
+    expect(errors).toEqual([])
+    expect(runtime.getResolvedVariables()).toEqual({
+      rowId: 'immutable-row',
+      scopeValue: 'immutable-row',
+      resolvedUrl: 'https://example.com/immutable-row?value=immutable-row',
+    })
+    expect(runtime.getRequestScopeValues()).toEqual({
+      rowId: 'immutable-row',
+      scopeValue: 'immutable-row',
+      resolvedUrl: 'https://example.com/immutable-row?value=immutable-row',
+    })
+  })
+
   it('exposes request metadata to scripts', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
@@ -232,7 +283,8 @@ describe('createRequestScriptRuntime', () => {
     const errors = await runtime.runPreRequestScripts([
       {
         name: 'Request: Test',
-        script: "requireScript('authModule').setAuthHeader(); scope.set('authorization', request.headers.get('Authorization') ?? '')",
+        script:
+          "requireScript('authModule').setAuthHeader(); scope.set('authorization', request.headers.get('Authorization') ?? '')",
       },
     ])
 
@@ -380,7 +432,10 @@ describe('createRequestScriptRuntime', () => {
       ],
     })
 
-    const result = await runtime.resolveTemplateExpressions('{{$requireScript("traceModule").nextTraceId()}}', 'Request Body')
+    const result = await runtime.resolveTemplateExpressions(
+      '{{$requireScript("traceModule").nextTraceId()}}',
+      'Request Body'
+    )
 
     expect(result).toMatch(UUID_PATTERN)
     expect(runtime.getRequestScopeValues().traceId).toBe(result)
@@ -723,26 +778,109 @@ describe('createRequestScriptRuntime', () => {
       }
     )
 
-  expect(postRequestErrors).toEqual({ scriptErrors: [], retryRequested: false })
-  expect(hiddenToastIds).toEqual(['loading-toast'])
-})
+    expect(postRequestErrors).toEqual({ scriptErrors: [], retryRequested: false })
+    expect(hiddenToastIds).toEqual(['loading-toast'])
+  })
 
-it('runs test scripts with kv.test and persists environment updates', async () => {
-  const navigatedPaths: string[][] = []
-  const updateEnvironmentVariablesSpy = vi.spyOn(environmentDb, 'updateEnvironmentVariables').mockImplementation(async input => ({
-    id: input.id,
-    name: 'Default',
-    variables: input.variables,
-    color: null,
-    warnOnRequest: false,
-    position: 0,
-    priority: 0,
-    createdAt: 1,
-    deletedAt: null,
-  }))
-  try {
+  it('runs test scripts with kv.test and persists environment updates', async () => {
+    const navigatedPaths: string[][] = []
+    const updateEnvironmentVariablesSpy = vi
+      .spyOn(environmentDb, 'updateEnvironmentVariables')
+      .mockImplementation(async input => ({
+        id: input.id,
+        name: 'Default',
+        variables: input.variables,
+        color: null,
+        warnOnRequest: false,
+        position: 0,
+        priority: 0,
+        createdAt: 1,
+        deletedAt: null,
+      }))
+    try {
+      const runtime = createRequestScriptRuntime({
+        request: {
+          method: 'GET',
+          url: 'https://example.com',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'noauth' },
+          headers: '',
+          body: '',
+          bodyType: 'none',
+          rawType: 'text',
+        },
+        environments: [
+          {
+            id: 'env-1',
+            name: 'Default',
+            variables: '',
+            color: null,
+            warnOnRequest: false,
+            position: 0,
+            priority: 0,
+            createdAt: 1,
+            deletedAt: null,
+          },
+        ],
+        makeRequest: {
+          navigateAndCallRequest: async path => {
+            navigatedPaths.push(path)
+          },
+          callRequest: async () => ({
+            status: 200,
+            statusText: 'OK',
+            headers: '',
+            body: { type: 'text', data: '' },
+          }),
+        },
+      })
+
+      const result = await runtime.runTestScripts(
+        [
+          {
+            name: 'Request: Tests',
+            script:
+              "kv.test.describe('suite', () => {\n  kv.test.beforeEach(() => {\n    scope.set('before', '1')\n  })\n\n  kv.test.it('updates env', async () => {\n    env.set('token', 'abc')\n    await navigateAndCallRequest(['Auth', 'Refresh Token'])\n  })\n\n  kv.test.skip('ignored', () => {\n    env.set('token', 'skip')\n  })\n})",
+          },
+        ],
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: '',
+          body: { type: 'text', data: '' },
+        }
+      )
+
+      expect(result.scriptErrors).toEqual([])
+      expect(result.registeredTests).toBe(2)
+      expect(result.testRun?.passedCount).toBe(1)
+      expect(result.testRun?.skippedCount).toBe(1)
+      expect(navigatedPaths).toEqual([['Auth', 'Refresh Token']])
+      expect(runtime.getRequestScopeValues().before).toBe('1')
+      expect(runtime.getUpdatedEnvironments()).toEqual([
+        {
+          id: 'env-1',
+          name: 'Default',
+          variables: 'token:abc',
+          color: null,
+          warnOnRequest: false,
+          position: 0,
+          priority: 0,
+          createdAt: 1,
+          deletedAt: null,
+        },
+      ])
+      expect(updateEnvironmentVariablesSpy).toHaveBeenCalledWith({ id: 'env-1', variables: 'token:abc' })
+    } finally {
+      updateEnvironmentVariablesSpy.mockRestore()
+    }
+  })
+
+  it('does not expose retryRequest in test scripts', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
+        requestId: 'request-1',
         method: 'GET',
         url: 'https://example.com',
         pathParams: '',
@@ -753,38 +891,14 @@ it('runs test scripts with kv.test and persists environment updates', async () =
         bodyType: 'none',
         rawType: 'text',
       },
-      environments: [
-        {
-          id: 'env-1',
-          name: 'Default',
-          variables: '',
-          color: null,
-          warnOnRequest: false,
-          position: 0,
-          priority: 0,
-          createdAt: 1,
-          deletedAt: null,
-        },
-      ],
-      makeRequest: {
-        navigateAndCallRequest: async path => {
-          navigatedPaths.push(path)
-        },
-        callRequest: async () => ({
-          status: 200,
-          statusText: 'OK',
-          headers: '',
-          body: { type: 'text', data: '' },
-        }),
-      },
+      environments: [],
     })
 
     const result = await runtime.runTestScripts(
       [
         {
           name: 'Request: Tests',
-          script:
-            "kv.test.describe('suite', () => {\n  kv.test.beforeEach(() => {\n    scope.set('before', '1')\n  })\n\n  kv.test.it('updates env', async () => {\n    env.set('token', 'abc')\n    await navigateAndCallRequest(['Auth', 'Refresh Token'])\n  })\n\n  kv.test.skip('ignored', () => {\n    env.set('token', 'skip')\n  })\n})",
+          script: 'retryRequest()',
         },
       ],
       {
@@ -795,92 +909,80 @@ it('runs test scripts with kv.test and persists environment updates', async () =
       }
     )
 
-    expect(result.scriptErrors).toEqual([])
-    expect(result.registeredTests).toBe(2)
-    expect(result.testRun?.passedCount).toBe(1)
-    expect(result.testRun?.skippedCount).toBe(1)
-    expect(navigatedPaths).toEqual([['Auth', 'Refresh Token']])
-    expect(runtime.getRequestScopeValues().before).toBe('1')
-    expect(runtime.getUpdatedEnvironments()).toEqual([
+    expect(result.registeredTests).toBe(0)
+    expect(result.testRun).toBeNull()
+    expect(result.scriptErrors).toHaveLength(1)
+    expect(result.scriptErrors[0]?.phase).toBe('test')
+    expect(result.scriptErrors[0]?.message).toContain('retryRequest is not defined')
+  })
+
+  it('supports only and async example matching in test scripts', async () => {
+    const listExamplesSpy = vi.spyOn(requestExamplesDb, 'listRequestExamplesByRequestIds').mockResolvedValue([
       {
-        id: 'env-1',
-        name: 'Default',
-        variables: 'token:abc',
-        color: null,
-        warnOnRequest: false,
+        id: 'example-1',
+        requestId: 'request-1',
+        name: 'success',
         position: 0,
-        priority: 0,
+        requestHeaders: '',
+        requestBody: '',
+        requestBodyType: 'none',
+        requestRawType: 'json',
+        responseStatus: 200,
+        responseStatusText: 'OK',
+        responseHeaders: 'content-type: application/json',
+        responseBody: '{"ok":true}',
         createdAt: 1,
+        updatedAt: 1,
         deletedAt: null,
       },
     ])
-    expect(updateEnvironmentVariablesSpy).toHaveBeenCalledWith({ id: 'env-1', variables: 'token:abc' })
-  } finally {
-    updateEnvironmentVariablesSpy.mockRestore()
-  }
-})
 
-it('does not expose retryRequest in test scripts', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      requestId: 'request-1',
-      method: 'GET',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
+    try {
+      const runtime = createRequestScriptRuntime({
+        request: {
+          requestId: 'request-1',
+          method: 'GET',
+          url: 'https://example.com',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'noauth' },
+          headers: '',
+          body: '',
+          bodyType: 'none',
+          rawType: 'text',
+        },
+        environments: [],
+      })
+
+      const result = await runtime.runTestScripts(
+        [
+          {
+            name: 'Request: Tests',
+            script:
+              "kv.test.it('plain', () => { kv.test.fail('should be skipped') })\nkv.test.only('matches example', async () => {\n  const example = await kv.test.example('success')\n  kv.test.expect(example.response.status).toBe(200)\n  await kv.test.expectResponse().toMatchExample('success')\n})",
+          },
+        ],
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: 'content-type: application/json',
+          body: { type: 'json', data: { ok: true } },
+          rawBody: '{"ok":true}',
+        }
+      )
+
+      expect(result.scriptErrors).toEqual([])
+      expect(result.registeredTests).toBe(2)
+      expect(result.testRun?.passedCount).toBe(1)
+      expect(result.testRun?.skippedCount).toBe(1)
+      expect(result.testRun?.failedCount).toBe(0)
+      expect(listExamplesSpy).toHaveBeenCalledWith(['request-1'])
+    } finally {
+      listExamplesSpy.mockRestore()
+    }
   })
 
-  const result = await runtime.runTestScripts(
-    [
-      {
-        name: 'Request: Tests',
-        script: 'retryRequest()',
-      },
-    ],
-    {
-      status: 200,
-      statusText: 'OK',
-      headers: '',
-      body: { type: 'text', data: '' },
-    }
-  )
-
-  expect(result.registeredTests).toBe(0)
-  expect(result.testRun).toBeNull()
-  expect(result.scriptErrors).toHaveLength(1)
-  expect(result.scriptErrors[0]?.phase).toBe('test')
-  expect(result.scriptErrors[0]?.message).toContain('retryRequest is not defined')
-})
-
-  it('supports only and async example matching in test scripts', async () => {
-  const listExamplesSpy = vi.spyOn(requestExamplesDb, 'listRequestExamplesByRequestIds').mockResolvedValue([
-    {
-      id: 'example-1',
-      requestId: 'request-1',
-      name: 'success',
-      position: 0,
-      requestHeaders: '',
-      requestBody: '',
-      requestBodyType: 'none',
-      requestRawType: 'json',
-      responseStatus: 200,
-      responseStatusText: 'OK',
-      responseHeaders: 'content-type: application/json',
-      responseBody: '{"ok":true}',
-      createdAt: 1,
-      updatedAt: 1,
-      deletedAt: null,
-    },
-  ])
-
-  try {
+  it('supports richer kv.test.expect matchers', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
         requestId: 'request-1',
@@ -902,298 +1004,252 @@ it('does not expose retryRequest in test scripts', async () => {
         {
           name: 'Request: Tests',
           script:
-            "kv.test.it('plain', () => { kv.test.fail('should be skipped') })\nkv.test.only('matches example', async () => {\n  const example = await kv.test.example('success')\n  kv.test.expect(example.response.status).toBe(200)\n  await kv.test.expectResponse().toMatchExample('success')\n})",
+            "kv.test.it('rich matchers', () => {\n  kv.test.expect({ user: { id: 1, roles: ['admin', 'editor'] } }).toMatchObject({ user: { id: 1 } })\n  kv.test.expect([{ id: 1 }, { id: 2 }]).toContain({ id: 2 })\n  kv.test.expect(200).toBeGreaterThan(199)\n  kv.test.expect(200).toBeGreaterThanOrEqual(200)\n  kv.test.expect(200).toBeLessThan(201)\n  kv.test.expect(200).toBeLessThanOrEqual(200)\n  kv.test.expect('application/json').toStartWith('application/')\n  kv.test.expect('application/json').toEndWith('json')\n  kv.test.expect('application/json').not.toContain('xml')\n  kv.test.expect(undefined).not.toBeDefined()\n  kv.test.expect('Ada').toBeDefined()\n  kv.test.expect('Ada').not.toBeUndefined()\n  kv.test.expect('Ada').not.toMatchSchema(z.number())\n  const parsed = kv.test.expect(response.body.type === 'json' ? response.body.data : null).toMatchSchema(z.object({ ok: z.boolean(), count: z.number() }))\n  kv.test.expect(parsed.count).not.toBe(0)\n})",
         },
       ],
       {
         status: 200,
         statusText: 'OK',
         headers: 'content-type: application/json',
-        body: { type: 'json', data: { ok: true } },
-        rawBody: '{"ok":true}',
+        body: { type: 'json', data: { ok: true, count: 2 } },
+        rawBody: '{"ok":true,"count":2}',
       }
     )
 
     expect(result.scriptErrors).toEqual([])
-    expect(result.registeredTests).toBe(2)
+    expect(result.registeredTests).toBe(1)
     expect(result.testRun?.passedCount).toBe(1)
-    expect(result.testRun?.skippedCount).toBe(1)
     expect(result.testRun?.failedCount).toBe(0)
-    expect(listExamplesSpy).toHaveBeenCalledWith(['request-1'])
-  } finally {
-    listExamplesSpy.mockRestore()
-  }
-})
-
-it('supports richer kv.test.expect matchers', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      requestId: 'request-1',
-      method: 'GET',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
   })
 
-  const result = await runtime.runTestScripts(
-    [
-      {
-        name: 'Request: Tests',
-        script:
-          "kv.test.it('rich matchers', () => {\n  kv.test.expect({ user: { id: 1, roles: ['admin', 'editor'] } }).toMatchObject({ user: { id: 1 } })\n  kv.test.expect([{ id: 1 }, { id: 2 }]).toContain({ id: 2 })\n  kv.test.expect(200).toBeGreaterThan(199)\n  kv.test.expect(200).toBeGreaterThanOrEqual(200)\n  kv.test.expect(200).toBeLessThan(201)\n  kv.test.expect(200).toBeLessThanOrEqual(200)\n  kv.test.expect('application/json').toStartWith('application/')\n  kv.test.expect('application/json').toEndWith('json')\n  kv.test.expect('application/json').not.toContain('xml')\n  kv.test.expect(undefined).not.toBeDefined()\n  kv.test.expect('Ada').toBeDefined()\n  kv.test.expect('Ada').not.toBeUndefined()\n  kv.test.expect('Ada').not.toMatchSchema(z.number())\n  const parsed = kv.test.expect(response.body.type === 'json' ? response.body.data : null).toMatchSchema(z.object({ ok: z.boolean(), count: z.number() }))\n  kv.test.expect(parsed.count).not.toBe(0)\n})",
+  it('records negated matcher failures', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        requestId: 'request-1',
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
       },
-    ],
-    {
-      status: 200,
-      statusText: 'OK',
-      headers: 'content-type: application/json',
-      body: { type: 'json', data: { ok: true, count: 2 } },
-      rawBody: '{"ok":true,"count":2}',
-    }
-  )
+      environments: [],
+    })
 
-  expect(result.scriptErrors).toEqual([])
-  expect(result.registeredTests).toBe(1)
-  expect(result.testRun?.passedCount).toBe(1)
-  expect(result.testRun?.failedCount).toBe(0)
-})
-
-it('records negated matcher failures', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      requestId: 'request-1',
-      method: 'GET',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
-  })
-
-  const result = await runtime.runTestScripts(
-    [
+    const result = await runtime.runTestScripts(
+      [
+        {
+          name: 'Request: Tests',
+          script: "kv.test.it('fails', () => { kv.test.expect('abc').not.toContain('a') })",
+        },
+      ],
       {
-        name: 'Request: Tests',
-        script: "kv.test.it('fails', () => { kv.test.expect('abc').not.toContain('a') })",
+        status: 200,
+        statusText: 'OK',
+        headers: '',
+        body: { type: 'text', data: '' },
+      }
+    )
+
+    expect(result.scriptErrors).toEqual([])
+    expect(result.testRun?.failedCount).toBe(1)
+    expect(result.testRun?.suites[0]?.tests[0]?.failures[0]).toMatchObject({
+      matcherName: 'not.toContain',
+      message: "Expected 'abc' not to contain 'a'",
+      expected: 'a',
+      actual: 'abc',
+    })
+  })
+
+  it('rejects non-string substring assertions for string values', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        requestId: 'request-1',
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
       },
-    ],
-    {
-      status: 200,
-      statusText: 'OK',
-      headers: '',
-      body: { type: 'text', data: '' },
-    }
-  )
+      environments: [],
+    })
 
-  expect(result.scriptErrors).toEqual([])
-  expect(result.testRun?.failedCount).toBe(1)
-  expect(result.testRun?.suites[0]?.tests[0]?.failures[0]).toMatchObject({
-    matcherName: 'not.toContain',
-    message: "Expected 'abc' not to contain 'a'",
-    expected: 'a',
-    actual: 'abc',
-  })
-})
-
-it('rejects non-string substring assertions for string values', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      requestId: 'request-1',
-      method: 'GET',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
-  })
-
-  const result = await runtime.runTestScripts(
-    [
+    const result = await runtime.runTestScripts(
+      [
+        {
+          name: 'Request: Tests',
+          script: "kv.test.it('fails', () => { kv.test.expect('abc').toContain(123) })",
+        },
+      ],
       {
-        name: 'Request: Tests',
-        script: "kv.test.it('fails', () => { kv.test.expect('abc').toContain(123) })",
-      },
-    ],
-    {
-      status: 200,
-      statusText: 'OK',
-      headers: '',
-      body: { type: 'text', data: '' },
-    }
-  )
+        status: 200,
+        statusText: 'OK',
+        headers: '',
+        body: { type: 'text', data: '' },
+      }
+    )
 
-  expect(result.scriptErrors).toEqual([])
-  expect(result.testRun?.failedCount).toBe(1)
-  expect(result.testRun?.suites[0]?.tests[0]?.failures[0]).toMatchObject({
-    matcherName: 'toContain',
-    message: 'Expected 123 to be a string',
-    expected: 123,
-    actual: 'abc',
+    expect(result.scriptErrors).toEqual([])
+    expect(result.testRun?.failedCount).toBe(1)
+    expect(result.testRun?.suites[0]?.tests[0]?.failures[0]).toMatchObject({
+      matcherName: 'toContain',
+      message: 'Expected 123 to be a string',
+      expected: 123,
+      actual: 'abc',
+    })
   })
-})
 
   it('allows post-request scripts to mutate response headers', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      method: 'GET',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
-  })
-  const response = {
-    status: 200,
-    statusText: 'OK',
-    headers: 'content-type: application/json\nset-cookie: session=old',
-    body: { type: 'json', data: { ok: true } } as const,
-  }
-
-  const errors = await runtime.runPostRequestScripts(
-    [
-      {
-        name: 'Request: Test',
-        script:
-          "response.headers.set('x-scripted', '1')\nresponse.headers.set('set-cookie', 'session=new; Path=/')\nresponse.headers.delete('content-type')\nscope.set('header', response.headers.get('x-scripted') ?? '')",
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
       },
-    ],
-    response
-  )
+      environments: [],
+    })
+    const response = {
+      status: 200,
+      statusText: 'OK',
+      headers: 'content-type: application/json\nset-cookie: session=old',
+      body: { type: 'json', data: { ok: true } } as const,
+    }
 
-  expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
-  expect(runtime.getRequestScopeValues().header).toBe('1')
-  expect(response.headers).toBe('set-cookie: session=new; Path=/\nx-scripted: 1')
-})
-
-it('parses and rewrites response cookies from the header helper', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      method: 'GET',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
-  })
-  const response = {
-    status: 200,
-    statusText: 'OK',
-    headers:
-      'set-cookie: cookiesession1=skip; Path=/; HttpOnly, session=keep; Path=/; Secure; SameSite=None',
-    body: { type: 'text', data: '' } as const,
-  }
-
-  const errors = await runtime.runPostRequestScripts(
-    [
-      {
-        name: 'Request: Test',
-        script:
-          "if (response.headers.get('set-cookie')) {\n  const c = cookies.parse(response.headers.get('set-cookie'))\n  const filtered = c.filter(c => c.name !== 'cookiesession1')\n  response.headers.set('set-cookie', cookies.stringify(filtered))\n}\n\nif (response.hasCookies()) {\n  const c = response.parseCookies()\n  const filtered = c.filter(c => c.name !== 'cookiesession1')\n  response.headers.set('set-cookie', cookies.stringify(filtered))\n}",
-      },
-    ],
-    response
-  )
-
-  expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
-  expect(response.headers).toBe('set-cookie: session=keep; Path=/; Secure; SameSite=None')
-})
-
-it('allows post-request scripts to inspect the response and request a retry', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      method: 'POST',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
-  })
-  const response = {
-    status: 401,
-    statusText: 'Unauthorized',
-    headers: 'content-type: application/json',
-    body: { type: 'json', data: { code: 'expired' } } as const,
-  }
-
-  const result = await runtime.runPostRequestScripts(
-    [
-      {
-        name: 'Request: Test',
-        script:
-          "if (response.body.type !== 'json') throw new Error('Expected JSON body')\nscope.set('code', String(Reflect.get(response.body.data, 'code')))\nresponse.headers.set('x-retry', '1')\nretryRequest()",
-      },
-      {
-        name: 'Folder: Should Not Run',
-        script: "scope.set('afterRetry', 'should-not-run')",
-      },
-    ],
-    response
-  )
-
-  expect(result).toEqual({ scriptErrors: [], retryRequested: true })
-  expect(runtime.getRequestScopeValues()).toEqual({ code: 'expired' })
-  expect(response.headers).toBe('content-type: application/json\nx-retry: 1')
-})
-
-it('preserves token refresher ids when resolving auth template expressions', async () => {
-  const runtime = createRequestScriptRuntime({
-    request: {
-      method: 'GET',
-      url: 'https://example.com',
-      pathParams: '',
-      searchParams: '',
-      auth: { type: 'noauth' },
-      headers: '',
-      body: '',
-      bodyType: 'none',
-      rawType: 'text',
-    },
-    environments: [],
-  })
-
-  await expect(
-    runtime.resolveHttpAuthTemplateExpressions(
-      { type: 'bearer', token: '{{token}}', tokenRefreshRequestId: 'request-refresh' },
-      'Folder Auth: Protected'
+    const errors = await runtime.runPostRequestScripts(
+      [
+        {
+          name: 'Request: Test',
+          script:
+            "response.headers.set('x-scripted', '1')\nresponse.headers.set('set-cookie', 'session=new; Path=/')\nresponse.headers.delete('content-type')\nscope.set('header', response.headers.get('x-scripted') ?? '')",
+        },
+      ],
+      response
     )
-  ).resolves.toEqual({
-    type: 'bearer',
-    token: '{{token}}',
-    tokenRefreshRequestId: 'request-refresh',
+
+    expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
+    expect(runtime.getRequestScopeValues().header).toBe('1')
+    expect(response.headers).toBe('set-cookie: session=new; Path=/\nx-scripted: 1')
   })
-})
+
+  it('parses and rewrites response cookies from the header helper', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+    const response = {
+      status: 200,
+      statusText: 'OK',
+      headers: 'set-cookie: cookiesession1=skip; Path=/; HttpOnly, session=keep; Path=/; Secure; SameSite=None',
+      body: { type: 'text', data: '' } as const,
+    }
+
+    const errors = await runtime.runPostRequestScripts(
+      [
+        {
+          name: 'Request: Test',
+          script:
+            "if (response.headers.get('set-cookie')) {\n  const c = cookies.parse(response.headers.get('set-cookie'))\n  const filtered = c.filter(c => c.name !== 'cookiesession1')\n  response.headers.set('set-cookie', cookies.stringify(filtered))\n}\n\nif (response.hasCookies()) {\n  const c = response.parseCookies()\n  const filtered = c.filter(c => c.name !== 'cookiesession1')\n  response.headers.set('set-cookie', cookies.stringify(filtered))\n}",
+        },
+      ],
+      response
+    )
+
+    expect(errors).toEqual({ scriptErrors: [], retryRequested: false })
+    expect(response.headers).toBe('set-cookie: session=keep; Path=/; Secure; SameSite=None')
+  })
+
+  it('allows post-request scripts to inspect the response and request a retry', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+    const response = {
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: 'content-type: application/json',
+      body: { type: 'json', data: { code: 'expired' } } as const,
+    }
+
+    const result = await runtime.runPostRequestScripts(
+      [
+        {
+          name: 'Request: Test',
+          script:
+            "if (response.body.type !== 'json') throw new Error('Expected JSON body')\nscope.set('code', String(Reflect.get(response.body.data, 'code')))\nresponse.headers.set('x-retry', '1')\nretryRequest()",
+        },
+        {
+          name: 'Folder: Should Not Run',
+          script: "scope.set('afterRetry', 'should-not-run')",
+        },
+      ],
+      response
+    )
+
+    expect(result).toEqual({ scriptErrors: [], retryRequested: true })
+    expect(runtime.getRequestScopeValues()).toEqual({ code: 'expired' })
+    expect(response.headers).toBe('content-type: application/json\nx-retry: 1')
+  })
+
+  it('preserves token refresher ids when resolving auth template expressions', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'GET',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'none',
+        rawType: 'text',
+      },
+      environments: [],
+    })
+
+    await expect(
+      runtime.resolveHttpAuthTemplateExpressions(
+        { type: 'bearer', token: '{{token}}', tokenRefreshRequestId: 'request-refresh' },
+        'Folder Auth: Protected'
+      )
+    ).resolves.toEqual({
+      type: 'bearer',
+      token: '{{token}}',
+      tokenRefreshRequestId: 'request-refresh',
+    })
+  })
 
   it('returns the prompted text value to the script', async () => {
     const promptedOptions: Array<Record<string, unknown>> = []
@@ -1361,7 +1417,8 @@ it('preserves token refresher ids when resolving auth template expressions', asy
     const errors = await runtime.runPreRequestScripts([
       {
         name: 'Request: Test',
-        script: "const name = await prompt.text({ message: 'Needed for the request' })\nif (name) {\n  scope.set('name', name)\n}",
+        script:
+          "const name = await prompt.text({ message: 'Needed for the request' })\nif (name) {\n  scope.set('name', name)\n}",
       },
     ])
 
@@ -1436,7 +1493,8 @@ it('preserves token refresher ids when resolving auth template expressions', asy
     const errors = await runtime.runPreRequestScripts([
       {
         name: 'Request: Test',
-        script: "const answer = await prompt.text({ title: 'Answer' })\nif (answer) {\n  scope.set('answer', answer)\n}",
+        script:
+          "const answer = await prompt.text({ title: 'Answer' })\nif (answer) {\n  scope.set('answer', answer)\n}",
       },
     ])
 
@@ -1466,7 +1524,8 @@ it('preserves token refresher ids when resolving auth template expressions', asy
     const errors = await runtime.runPreRequestScripts([
       {
         name: 'Request: Test',
-        script: "const answer = await prompt.text({ title: 'Answer' })\nscope.set('wasCancelled', String(answer === null))",
+        script:
+          "const answer = await prompt.text({ title: 'Answer' })\nscope.set('wasCancelled', String(answer === null))",
       },
     ])
 

@@ -400,6 +400,13 @@
       "when": 1787757190146,
       "tag": "0056_chief_metal_master",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1789317686833,
+      "tag": "0057_funny_menace",
+      "breakpoints": true
     }
   ]
 }

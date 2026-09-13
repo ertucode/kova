@@ -13,7 +13,11 @@ export const folders = sqliteTable(
     tlsVerificationMode: text('tls_verification_mode').notNull().default('inherit'),
     preRequestScript: text('pre_request_script').notNull().default(''),
     postRequestScript: text('post_request_script').notNull().default(''),
-    runConfigJson: text('run_config_json').notNull().default('{"selectionMode":"tests-only","selectedRequestIds":[],"executionMode":"sequential","continueOnFailure":true}'),
+    runConfigJson: text('run_config_json')
+      .notNull()
+      .default(
+        '{"selectionMode":"tests-only","selectedRequestIds":[],"executionMode":"sequential","continueOnFailure":true}'
+      ),
     position: integer('position').notNull().default(0),
     createdAt: integer('created_at').notNull(),
     deletedAt: integer('deleted_at'),
@@ -72,20 +76,17 @@ export const requests = sqliteTable(
   ]
 )
 
-export const mcpRequestDetails = sqliteTable(
-  'mcp_request_details',
-  {
-    requestId: text('request_id').primaryKey(),
-    transport: text('transport').notNull().default('http'),
-    serverUrl: text('server_url').notNull().default(''),
-    accessToken: text('access_token').notNull().default(''),
-    selectedToolName: text('selected_tool_name').notNull().default(''),
-    selectedResourceUri: text('selected_resource_uri').notNull().default(''),
-    selectedPromptName: text('selected_prompt_name').notNull().default(''),
-    argumentsJson: text('arguments_json').notNull().default(''),
-    introspectionJson: text('introspection_json').notNull().default(''),
-  }
-)
+export const mcpRequestDetails = sqliteTable('mcp_request_details', {
+  requestId: text('request_id').primaryKey(),
+  transport: text('transport').notNull().default('http'),
+  serverUrl: text('server_url').notNull().default(''),
+  accessToken: text('access_token').notNull().default(''),
+  selectedToolName: text('selected_tool_name').notNull().default(''),
+  selectedResourceUri: text('selected_resource_uri').notNull().default(''),
+  selectedPromptName: text('selected_prompt_name').notNull().default(''),
+  argumentsJson: text('arguments_json').notNull().default(''),
+  introspectionJson: text('introspection_json').notNull().default(''),
+})
 
 export const environments = sqliteTable(
   'environments',
@@ -230,10 +231,7 @@ export const tags = sqliteTable(
     createdAt: integer('created_at').notNull(),
     deletedAt: integer('deleted_at'),
   },
-  table => [
-    index('tags_deleted_at_idx').on(table.deletedAt),
-    index('tags_position_idx').on(table.position),
-  ]
+  table => [index('tags_deleted_at_idx').on(table.deletedAt), index('tags_position_idx').on(table.position)]
 )
 
 export const tagAssignments = sqliteTable(
@@ -377,6 +375,8 @@ export const requestHistory = sqliteTable(
     id: text('id').primaryKey(),
     folderRunId: text('folder_run_id'),
     folderRunFolderId: text('folder_run_folder_id'),
+    batchId: text('batch_id'),
+    rowId: text('row_id'),
     requestId: text('request_id').notNull(),
     requestName: text('request_name').notNull(),
     method: text('method').notNull(),
@@ -407,7 +407,62 @@ export const requestHistory = sqliteTable(
     index('request_history_request_id_idx').on(table.requestId),
     index('request_history_folder_run_id_idx').on(table.folderRunId),
     index('request_history_folder_run_folder_id_idx').on(table.folderRunFolderId),
+    index('request_history_batch_id_idx').on(table.batchId),
+    index('request_history_row_id_idx').on(table.rowId),
     index('request_history_sent_at_idx').on(table.sentAt),
+  ]
+)
+
+export const requestBatches = sqliteTable(
+  'request_batches',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('request_id').notNull(),
+    requestName: text('request_name').notNull(),
+    name: text('name').notNull(),
+    sourceFileName: text('source_file_name').notNull(),
+    sourceType: text('source_type').notNull(),
+    sheetName: text('sheet_name'),
+    columnsJson: text('columns_json').notNull().default('[]'),
+    rowCount: integer('row_count').notNull().default(0),
+    status: text('status').notNull().default('ready'),
+    concurrency: integer('concurrency'),
+    summaryJson: text('summary_json')
+      .notNull()
+      .default(
+        '{"totalCount":0,"pendingCount":0,"runningCount":0,"completedCount":0,"failedCount":0,"cancelledCount":0}'
+      ),
+    startedAt: integer('started_at'),
+    completedAt: integer('completed_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  table => [
+    index('request_batches_request_id_idx').on(table.requestId),
+    index('request_batches_created_at_idx').on(table.createdAt),
+    index('request_batches_status_idx').on(table.status),
+  ]
+)
+
+export const requestBatchRows = sqliteTable(
+  'request_batch_rows',
+  {
+    id: text('id').primaryKey(),
+    batchId: text('batch_id').notNull(),
+    rowIndex: integer('row_index').notNull(),
+    variablesJson: text('variables_json').notNull().default('{}'),
+    status: text('status').notNull().default('pending'),
+    historyId: text('history_id'),
+    startedAt: integer('started_at'),
+    completedAt: integer('completed_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  table => [
+    index('request_batch_rows_batch_id_idx').on(table.batchId),
+    index('request_batch_rows_batch_row_index_idx').on(table.batchId, table.rowIndex),
+    index('request_batch_rows_status_idx').on(table.batchId, table.status),
+    index('request_batch_rows_history_id_idx').on(table.historyId),
   ]
 )
 
@@ -559,11 +614,15 @@ export const managementAgentSessions = sqliteTable(
     deletedAt: integer('deleted_at'),
   },
   table => [
-    index('import_agent_sessions_scope_idx').on(table.scopeType, table.targetFolderId, table.targetRequestId, table.updatedAt),
+    index('import_agent_sessions_scope_idx').on(
+      table.scopeType,
+      table.targetFolderId,
+      table.targetRequestId,
+      table.updatedAt
+    ),
     index('import_agent_sessions_deleted_at_idx').on(table.deletedAt),
   ]
 )
-
 
 export const managementAgentPlans = sqliteTable(
   'import_agent_plans',
@@ -576,9 +635,7 @@ export const managementAgentPlans = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  table => [
-    index('import_agent_plans_session_idx').on(table.sessionId, table.updatedAt),
-  ]
+  table => [index('import_agent_plans_session_idx').on(table.sessionId, table.updatedAt)]
 )
 
 export const websocketExampleMessages = sqliteTable(

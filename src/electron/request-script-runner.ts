@@ -14,7 +14,10 @@ import {
 } from '../common/EnvironmentVariables.js'
 import { parseKeyValueRows, stringifyKeyValueRows, type KeyValueRow } from '../common/KeyValueRows.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
-import { resolveTemplateExpressions as resolveTemplateExpressionTokens, resolveTemplateVariables } from '../common/RequestVariables.js'
+import {
+  resolveTemplateExpressions as resolveTemplateExpressionTokens,
+  resolveTemplateVariables,
+} from '../common/RequestVariables.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type {
   RequestScriptError,
@@ -203,14 +206,11 @@ export type ScriptRuntime = {
   getRequestScopeValues: () => Record<string, string>
   getUpdatedEnvironments: () => EnvironmentRecord[]
   getConsoleEntries: () => RequestConsoleEntry[]
-   resolveTemplateExpressions: (value: string, sourceName: string) => Promise<string>
-   resolveHttpAuthTemplateExpressions: (auth: HttpAuth, sourceName: string) => Promise<HttpAuth>
-   resolveRequestTemplateExpressions: () => Promise<void>
+  resolveTemplateExpressions: (value: string, sourceName: string) => Promise<string>
+  resolveHttpAuthTemplateExpressions: (auth: HttpAuth, sourceName: string) => Promise<HttpAuth>
+  resolveRequestTemplateExpressions: () => Promise<void>
   runPreRequestScripts: (sources: ScriptSource[]) => Promise<RequestScriptError[]>
-  runPostRequestScripts: (
-    sources: ScriptSource[],
-    response: RuntimeResponseState
-  ) => Promise<PostRequestScriptResult>
+  runPostRequestScripts: (sources: ScriptSource[], response: RuntimeResponseState) => Promise<PostRequestScriptResult>
   runTestScripts: (sources: ScriptSource[], response: RuntimeResponseState) => Promise<TestScriptResult>
 }
 
@@ -258,7 +258,10 @@ type KvTestExample = {
 }
 
 type KvResponseExpectation = {
-  toMatchExample: (name: string, options?: { compare?: KvExampleCompareTarget[]; ignoreHeaders?: string[] }) => Promise<void>
+  toMatchExample: (
+    name: string,
+    options?: { compare?: KvExampleCompareTarget[]; ignoreHeaders?: string[] }
+  ) => Promise<void>
 }
 
 type KvNegatedExpectation<T> = {
@@ -318,6 +321,7 @@ class RetryRequestSignal extends Error {
 export function createRequestScriptRuntime(input: {
   request: RuntimeRequestState
   requestMetadata?: SendRequestMetadata
+  immutableVariables?: Record<string, string>
   environments: EnvironmentRecord[]
   folderEnvironments?: EnvironmentRecord[]
   sharedScripts?: SharedScriptRecord[]
@@ -328,11 +332,13 @@ export function createRequestScriptRuntime(input: {
   makeRequest?: ScriptMakeRequestBridge
 }): ScriptRuntime {
   const requestScope = new Map<string, string>()
+  const immutableVariables = { ...input.immutableVariables }
   const runtimeRequest: RuntimeRequestState = { ...input.request }
   const environmentSpecificityById = new Map(
     input.environments.map((environment, index) => [environment.id, input.environments.length - index])
   )
-  const getEnvironmentSpecificity = (environment: EnvironmentRecord) => environmentSpecificityById.get(environment.id) ?? 0
+  const getEnvironmentSpecificity = (environment: EnvironmentRecord) =>
+    environmentSpecificityById.get(environment.id) ?? 0
   const folderEnvironmentIds = new Set((input.folderEnvironments ?? []).map(environment => environment.id))
   const getFolderEnvironmentSpecificity = (environment: EnvironmentRecord) =>
     folderEnvironmentIds.has(environment.id) ? getEnvironmentSpecificity(environment) : 0
@@ -354,8 +360,12 @@ export function createRequestScriptRuntime(input: {
   return {
     request: runtimeRequest,
     requestScope,
-    getResolvedVariables: () => ({ ...environmentValues, ...Object.fromEntries(requestScope.entries()) }),
-    getRequestScopeValues: () => Object.fromEntries(requestScope.entries()),
+    getResolvedVariables: () => ({
+      ...environmentValues,
+      ...Object.fromEntries(requestScope.entries()),
+      ...immutableVariables,
+    }),
+    getRequestScopeValues: () => ({ ...Object.fromEntries(requestScope.entries()), ...immutableVariables }),
     getUpdatedEnvironments: () => environments.filter(environment => updatedEnvironmentIds.has(environment.id)),
     getConsoleEntries: () => consoleEntries.slice(),
     resolveTemplateExpressions: (value, sourceName) =>
@@ -366,6 +376,7 @@ export function createRequestScriptRuntime(input: {
           runtimeRequest,
           runtimeRequestMetadata,
           requestScope,
+          immutableVariables,
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
@@ -384,6 +395,7 @@ export function createRequestScriptRuntime(input: {
             runtimeRequest,
             runtimeRequestMetadata,
             requestScope,
+            immutableVariables,
             response: null,
             environmentContext: createEnvironmentContext(),
             consoleEntries,
@@ -402,6 +414,7 @@ export function createRequestScriptRuntime(input: {
           runtimeRequest,
           runtimeRequestMetadata,
           requestScope,
+          immutableVariables,
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
@@ -418,6 +431,7 @@ export function createRequestScriptRuntime(input: {
           runtimeRequest,
           runtimeRequestMetadata,
           requestScope,
+          immutableVariables,
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
@@ -427,20 +441,23 @@ export function createRequestScriptRuntime(input: {
           clipboardBridge: input.clipboard,
         })
       )
-      runtimeRequest.searchParams = await resolveTemplateExpressionTokens(runtimeRequest.searchParams, expressionSource =>
-        evaluateTemplateExpression({
-          sourceName: 'Request Search Params',
-          expressionSource,
-          runtimeRequest,
-          runtimeRequestMetadata,
-          requestScope,
-          response: null,
-          environmentContext: createEnvironmentContext(),
-          consoleEntries,
-          sharedScripts: input.sharedScripts ?? [],
-          scriptPackages: input.scriptPackages ?? [],
-          promptBridge: input.prompt,
-        })
+      runtimeRequest.searchParams = await resolveTemplateExpressionTokens(
+        runtimeRequest.searchParams,
+        expressionSource =>
+          evaluateTemplateExpression({
+            sourceName: 'Request Search Params',
+            expressionSource,
+            runtimeRequest,
+            runtimeRequestMetadata,
+            requestScope,
+            immutableVariables,
+            response: null,
+            environmentContext: createEnvironmentContext(),
+            consoleEntries,
+            sharedScripts: input.sharedScripts ?? [],
+            scriptPackages: input.scriptPackages ?? [],
+            promptBridge: input.prompt,
+          })
       )
       runtimeRequest.auth = await resolveHttpAuthExpressions(runtimeRequest.auth, (value, fieldName) =>
         resolveTemplateExpressionTokens(value, expressionSource =>
@@ -450,6 +467,7 @@ export function createRequestScriptRuntime(input: {
             runtimeRequest,
             runtimeRequestMetadata,
             requestScope,
+            immutableVariables,
             response: null,
             environmentContext: createEnvironmentContext(),
             consoleEntries,
@@ -467,6 +485,7 @@ export function createRequestScriptRuntime(input: {
           runtimeRequest,
           runtimeRequestMetadata,
           requestScope,
+          immutableVariables,
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
@@ -483,6 +502,7 @@ export function createRequestScriptRuntime(input: {
           runtimeRequest,
           runtimeRequestMetadata,
           requestScope,
+          immutableVariables,
           response: null,
           environmentContext: createEnvironmentContext(),
           consoleEntries,
@@ -494,30 +514,42 @@ export function createRequestScriptRuntime(input: {
       )
     },
     runPreRequestScripts: async sources => {
-      const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
+      const snapshot = createRuntimeSnapshot({
+        runtimeRequest,
+        requestScope,
+        environments,
+        environmentValues,
+        environmentOwners,
+        pendingEnvironmentIds,
+      })
       const result = await runScriptPhase({
-          phase: 'pre-request',
-          sources,
-          sharedScripts: input.sharedScripts ?? [],
-          runtimeRequest,
-          runtimeRequestMetadata,
-          requestScope,
-          response: null,
-          environmentContext: createEnvironmentContext(),
-          consoleEntries,
-          toastBridge: input.toast,
-          promptBridge: input.prompt,
-          clipboardBridge: input.clipboard,
-          makeRequestBridge: input.makeRequest,
-          scriptPackages: input.scriptPackages ?? [],
-        })
+        phase: 'pre-request',
+        sources,
+        sharedScripts: input.sharedScripts ?? [],
+        runtimeRequest,
+        runtimeRequestMetadata,
+        requestScope,
+        immutableVariables,
+        response: null,
+        environmentContext: createEnvironmentContext(),
+        consoleEntries,
+        toastBridge: input.toast,
+        promptBridge: input.prompt,
+        clipboardBridge: input.clipboard,
+        makeRequestBridge: input.makeRequest,
+        scriptPackages: input.scriptPackages ?? [],
+      })
       if (result.kind !== 'completed') {
         throw new Error('retryRequest is only available in post-request scripts')
       }
 
       const { scriptErrors } = result
       if (scriptErrors.length > 0) {
-        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(
+          snapshot,
+          runtimeRequest,
+          requestScope
+        ))
         return scriptErrors
       }
 
@@ -532,7 +564,14 @@ export function createRequestScriptRuntime(input: {
       return []
     },
     runPostRequestScripts: async (sources, response) => {
-      const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
+      const snapshot = createRuntimeSnapshot({
+        runtimeRequest,
+        requestScope,
+        environments,
+        environmentValues,
+        environmentOwners,
+        pendingEnvironmentIds,
+      })
       const responseHeaders = createResponseHeaderEditor(response.headers)
 
       try {
@@ -543,6 +582,7 @@ export function createRequestScriptRuntime(input: {
           runtimeRequest,
           runtimeRequestMetadata,
           requestScope,
+          immutableVariables,
           response: {
             ...response,
             headers: responseHeaders,
@@ -556,7 +596,11 @@ export function createRequestScriptRuntime(input: {
           scriptPackages: input.scriptPackages ?? [],
         })
         if (result.kind === 'completed' && result.scriptErrors.length > 0) {
-          ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+          ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(
+            snapshot,
+            runtimeRequest,
+            requestScope
+          ))
           return {
             scriptErrors: result.scriptErrors,
             retryRequested: false,
@@ -578,7 +622,11 @@ export function createRequestScriptRuntime(input: {
           retryRequested: result.kind === 'retry-request',
         }
       } catch (error) {
-        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(
+          snapshot,
+          runtimeRequest,
+          requestScope
+        ))
 
         return {
           scriptErrors: [toScriptErrorDetails(error, 'post-request')],
@@ -587,7 +635,14 @@ export function createRequestScriptRuntime(input: {
       }
     },
     runTestScripts: async (sources, response) => {
-      const snapshot = createRuntimeSnapshot({ runtimeRequest, requestScope, environments, environmentValues, environmentOwners, pendingEnvironmentIds })
+      const snapshot = createRuntimeSnapshot({
+        runtimeRequest,
+        requestScope,
+        environments,
+        environmentValues,
+        environmentOwners,
+        pendingEnvironmentIds,
+      })
 
       try {
         const result = await runScriptPhase({
@@ -597,6 +652,7 @@ export function createRequestScriptRuntime(input: {
           runtimeRequest,
           runtimeRequestMetadata,
           requestScope,
+          immutableVariables,
           response: createRuntimeResponseApiState(response),
           environmentContext: createEnvironmentContext(),
           consoleEntries,
@@ -611,7 +667,11 @@ export function createRequestScriptRuntime(input: {
         }
 
         if (result.scriptErrors.length > 0) {
-          ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+          ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(
+            snapshot,
+            runtimeRequest,
+            requestScope
+          ))
         } else if (pendingEnvironmentIds.size > 0) {
           environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
           environmentValues = buildEnvironmentVariableMap(environments)
@@ -626,7 +686,11 @@ export function createRequestScriptRuntime(input: {
           testRun: result.testRun,
         }
       } catch (error) {
-        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(snapshot, runtimeRequest, requestScope))
+        ;({ environments, environmentValues, environmentOwners, pendingEnvironmentIds } = restoreRuntimeSnapshot(
+          snapshot,
+          runtimeRequest,
+          requestScope
+        ))
 
         return {
           scriptErrors: [toScriptErrorDetails(error, 'test')],
@@ -723,7 +787,10 @@ function restoreRuntimeSnapshot(
 function toScriptErrorDetails(error: unknown, fallbackPhase: ScriptPhase): ScriptErrorDetails {
   if (typeof error === 'object' && error !== null && 'sourceName' in error && 'message' in error) {
     return {
-      phase: 'phase' in error && (error.phase === 'pre-request' || error.phase === 'post-request' || error.phase === 'test') ? error.phase : fallbackPhase,
+      phase:
+        'phase' in error && (error.phase === 'pre-request' || error.phase === 'post-request' || error.phase === 'test')
+          ? error.phase
+          : fallbackPhase,
       sourceName: String(error.sourceName),
       message: String(error.message),
       compactLabel:
@@ -757,6 +824,7 @@ async function runScriptPhase(input: {
   runtimeRequest: RuntimeRequestState
   runtimeRequestMetadata: RuntimeRequestMetadataState
   requestScope: Map<string, string>
+  immutableVariables: Record<string, string>
   response: RuntimeResponseApiState | null
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
@@ -788,11 +856,12 @@ async function runScriptPhase(input: {
     request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
       ...input.environmentContext.getValues(),
       ...Object.fromEntries(input.requestScope.entries()),
+      ...input.immutableVariables,
     })),
     requestMetadata: createRequestMetadataApi(input.runtimeRequestMetadata),
     response: input.response ? createResponseApi(input.response) : undefined,
     env: createEnvironmentApi(input.environmentContext),
-    scope: createScopeApi(input.requestScope),
+    scope: createScopeApi(input.requestScope, input.immutableVariables),
     toast: createScriptToastApi(input.toastBridge),
     clipboard: createScriptClipboardApi(input.clipboardBridge),
     crypto: createCryptoApi(),
@@ -857,13 +926,15 @@ async function runScriptPhase(input: {
 
       return {
         kind: 'completed',
-        scriptErrors: [buildScriptErrorDetails({
-          phase: input.phase,
-          sourceName: source.name,
-          error,
-          sourceCode: source.script,
-          compiledScript,
-        })],
+        scriptErrors: [
+          buildScriptErrorDetails({
+            phase: input.phase,
+            sourceName: source.name,
+            error,
+            sourceCode: source.script,
+            compiledScript,
+          }),
+        ],
         registeredTests: kvTestRuntime.getRegisteredTestCount(),
         testRun: null,
       }
@@ -990,7 +1061,9 @@ function buildScriptErrorDetails(input: {
 
   if (location?.line !== undefined && location.line !== null) {
     detailedLines.push(
-      location.column !== null ? `Location: line ${location.line}, column ${location.column}` : `Location: line ${location.line}`
+      location.column !== null
+        ? `Location: line ${location.line}, column ${location.column}`
+        : `Location: line ${location.line}`
     )
   }
 
@@ -1013,11 +1086,7 @@ function buildScriptErrorDetails(input: {
   }
 }
 
-function buildCompactScriptErrorLabel(
-  phase: ScriptPhase,
-  line: number | null,
-  column: number | null
-) {
+function buildCompactScriptErrorLabel(phase: ScriptPhase, line: number | null, column: number | null) {
   if (line === null) {
     return formatScriptPhase(phase)
   }
@@ -1140,7 +1209,9 @@ function compileRequestScript(sourceCode: string): CompiledRequestScript {
     reportDiagnostics: true,
   })
 
-  const diagnostics = (result.diagnostics ?? []).filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
+  const diagnostics = (result.diagnostics ?? []).filter(
+    diagnostic => diagnostic.category === ts.DiagnosticCategory.Error
+  )
   if (diagnostics.length > 0) {
     throw toScriptCompilerError(diagnostics[0], sourceCode)
   }
@@ -1160,7 +1231,7 @@ function toScriptCompilerError(diagnostic: ts.Diagnostic, sourceCode: string): S
       : null
   const line = location ? location.line + 1 : null
   const column = location ? location.character + 1 : null
-  const sourceLine = line ? sourceCode.split('\n')[line - 1]?.trimEnd() ?? null : null
+  const sourceLine = line ? (sourceCode.split('\n')[line - 1]?.trimEnd() ?? null) : null
 
   return {
     kind: 'compile-error',
@@ -1299,7 +1370,9 @@ function createRequestApi(
 }
 
 function createLiveScriptPathParams(runtimeRequest: RuntimeRequestState): ScriptPathParam[] {
-  return parseKeyValueRows(runtimeRequest.pathParams).map((_, index) => createScriptPathParamProxy(runtimeRequest, index))
+  return parseKeyValueRows(runtimeRequest.pathParams).map((_, index) =>
+    createScriptPathParamProxy(runtimeRequest, index)
+  )
 }
 
 function createScriptPathParamProxy(runtimeRequest: RuntimeRequestState, index: number): ScriptPathParam {
@@ -1488,15 +1561,18 @@ function createRuntimeResponseApiState(response: RuntimeResponseState): RuntimeR
   }
 }
 
-function createScopeApi(requestScope: Map<string, string>) {
+function createScopeApi(requestScope: Map<string, string>, immutableVariables: Record<string, string>) {
   return {
     get(name: string) {
-      return requestScope.get(name) ?? null
+      return immutableVariables[name] ?? requestScope.get(name) ?? null
     },
     has(name: string) {
-      return requestScope.has(name)
+      return Object.hasOwn(immutableVariables, name) || requestScope.has(name)
     },
     set(name: string, value: string) {
+      if (Object.hasOwn(immutableVariables, name)) {
+        return
+      }
       requestScope.set(name, value)
     },
   }
@@ -1510,7 +1586,13 @@ function createKvTestRuntime(input: {
   type SourceContext = ReturnType<typeof input.getSourceContext>
   type TestMode = 'run' | 'skip' | 'only'
   type HookDefinition = { id: string; callback: () => void | Promise<void>; source: SourceContext }
-  type TestDefinition = { id: string; name: string; mode: TestMode; callback: () => void | Promise<void>; source: SourceContext }
+  type TestDefinition = {
+    id: string
+    name: string
+    mode: TestMode
+    callback: () => void | Promise<void>
+    source: SourceContext
+  }
   type SuiteDefinition = {
     id: string
     name: string
@@ -1641,8 +1723,14 @@ function createKvTestRuntime(input: {
           }
 
           if (compare.includes('headers')) {
-            const actualHeaders = normalizeHeadersForExampleComparison(response.headers.serialize(), options?.ignoreHeaders ?? [])
-            const expectedHeaders = normalizeHeadersForExampleComparison(example.response.headers, options?.ignoreHeaders ?? [])
+            const actualHeaders = normalizeHeadersForExampleComparison(
+              response.headers.serialize(),
+              options?.ignoreHeaders ?? []
+            )
+            const expectedHeaders = normalizeHeadersForExampleComparison(
+              example.response.headers,
+              options?.ignoreHeaders ?? []
+            )
             if (!isDeepStrictEqual(actualHeaders, expectedHeaders)) {
               throw createKvAssertionError({
                 message: `Expected response headers to match example ${name}`,
@@ -1733,25 +1821,26 @@ function createKvTestRuntime(input: {
 
     const onlyIds = collectOnlyTestIds(rootSuite)
     const startedAt = Date.now()
-    const suites = rootSuite.tests.length > 0
-      ? [
-          await executeSuite(
-            {
-              id: 'top-level-tests',
-              name: 'Tests',
-              source: null,
-              beforeEachHooks: rootSuite.beforeEachHooks,
-              afterEachHooks: rootSuite.afterEachHooks,
-              suites: rootSuite.suites,
-              tests: rootSuite.tests,
-            },
-            [],
-            [],
-            onlyIds,
-            []
-          ),
-        ]
-      : await Promise.all(rootSuite.suites.map(suite => executeSuite(suite, [], [], onlyIds, [])))
+    const suites =
+      rootSuite.tests.length > 0
+        ? [
+            await executeSuite(
+              {
+                id: 'top-level-tests',
+                name: 'Tests',
+                source: null,
+                beforeEachHooks: rootSuite.beforeEachHooks,
+                afterEachHooks: rootSuite.afterEachHooks,
+                suites: rootSuite.suites,
+                tests: rootSuite.tests,
+              },
+              [],
+              [],
+              onlyIds,
+              []
+            ),
+          ]
+        : await Promise.all(rootSuite.suites.map(suite => executeSuite(suite, [], [], onlyIds, [])))
     const durationMs = Date.now() - startedAt
     const counts = countTestResults(suites)
 
@@ -1780,7 +1869,9 @@ function createKvTestRuntime(input: {
     const nestedSuites = await Promise.all(
       suite.suites.map(child => executeSuite(child, nextBeforeEach, nextAfterEach, onlyIds, path))
     )
-    const tests = await Promise.all(suite.tests.map(test => executeTest(test, path, nextBeforeEach, nextAfterEach, onlyIds)))
+    const tests = await Promise.all(
+      suite.tests.map(test => executeTest(test, path, nextBeforeEach, nextAfterEach, onlyIds))
+    )
     const durationMs = Date.now() - startedAt
     const statuses = [...nestedSuites.map(result => result.status), ...tests.map(result => result.status)]
 
@@ -2445,7 +2536,11 @@ function assertKvNumericMatcher(input: {
 
 function matchesKvPartialValue(actual: unknown, expected: unknown): boolean {
   if (Array.isArray(expected)) {
-    return Array.isArray(actual) && actual.length === expected.length && expected.every((value, index) => matchesKvPartialValue(actual[index], value))
+    return (
+      Array.isArray(actual) &&
+      actual.length === expected.length &&
+      expected.every((value, index) => matchesKvPartialValue(actual[index], value))
+    )
   }
 
   if (isKvPlainObject(expected)) {
@@ -2594,6 +2689,7 @@ async function evaluateTemplateExpression(input: {
   runtimeRequest: RuntimeRequestState
   runtimeRequestMetadata: RuntimeRequestMetadataState
   requestScope: Map<string, string>
+  immutableVariables: Record<string, string>
   response: RuntimeResponseApiState | null
   environmentContext: EnvironmentContext
   consoleEntries: RequestConsoleEntry[]
@@ -2609,11 +2705,12 @@ async function evaluateTemplateExpression(input: {
     request: createRequestApi(input.runtimeRequest, headerEditor, () => ({
       ...input.environmentContext.getValues(),
       ...Object.fromEntries(input.requestScope.entries()),
+      ...input.immutableVariables,
     })),
     requestMetadata: createRequestMetadataApi(input.runtimeRequestMetadata),
     response: input.response ? createResponseApi(input.response) : undefined,
     env: createEnvironmentApi(input.environmentContext),
-    scope: createScopeApi(input.requestScope),
+    scope: createScopeApi(input.requestScope, input.immutableVariables),
     clipboard: createScriptClipboardApi(input.clipboardBridge),
     crypto: createCryptoApi(),
     cookies: createCookiesApi(),
@@ -2672,33 +2769,43 @@ async function resolveTemplateExpressionResult(value: unknown): Promise<unknown>
   return await Promise.resolve(value())
 }
 
-function resolveHttpAuthExpressions(auth: HttpAuth, resolveValue: (value: string, fieldName: string) => Promise<string>) {
+function resolveHttpAuthExpressions(
+  auth: HttpAuth,
+  resolveValue: (value: string, fieldName: string) => Promise<string>
+) {
   switch (auth.type) {
     case 'inherit':
     case 'noauth':
       return Promise.resolve(auth)
     case 'bearer':
-      return resolveValue(auth.token, 'Token').then(token => ({
-        type: 'bearer',
-        token,
-        tokenRefreshRequestId: auth.tokenRefreshRequestId,
-      }) as const)
+      return resolveValue(auth.token, 'Token').then(
+        token =>
+          ({
+            type: 'bearer',
+            token,
+            tokenRefreshRequestId: auth.tokenRefreshRequestId,
+          }) as const
+      )
     case 'apikey':
-      return Promise.all([resolveValue(auth.key, 'Key'), resolveValue(auth.value, 'Value')]).then(([key, value]) => ({
-        type: 'apikey',
-        key,
-        value,
-        addTo: auth.addTo,
-        tokenRefreshRequestId: auth.tokenRefreshRequestId,
-      }) as const)
+      return Promise.all([resolveValue(auth.key, 'Key'), resolveValue(auth.value, 'Value')]).then(
+        ([key, value]) =>
+          ({
+            type: 'apikey',
+            key,
+            value,
+            addTo: auth.addTo,
+            tokenRefreshRequestId: auth.tokenRefreshRequestId,
+          }) as const
+      )
     case 'basic':
       return Promise.all([resolveValue(auth.username, 'Username'), resolveValue(auth.password, 'Password')]).then(
-        ([username, password]) => ({
-          type: 'basic',
-          username,
-          password,
-          tokenRefreshRequestId: auth.tokenRefreshRequestId,
-        }) as const
+        ([username, password]) =>
+          ({
+            type: 'basic',
+            username,
+            password,
+            tokenRefreshRequestId: auth.tokenRefreshRequestId,
+          }) as const
       )
   }
 }
@@ -2723,7 +2830,6 @@ async function executeScriptInContext(
   context: vm.Context,
   executionController = createScriptExecutionController()
 ) {
-  
   const script = new vm.Script(`(async () => {\n${code}\n})()`, { filename: 'request-script.js' })
   const result = script.runInContext(context, { timeout: SCRIPT_TIMEOUT_MS })
 
@@ -2762,15 +2868,16 @@ function createSharedModuleLoader(input: {
     crypto: ReturnType<typeof createCryptoApi>
     z: typeof z
     toast?: ReturnType<typeof createScriptToastApi>
-      prompt?: ReturnType<typeof createPromptProxy>
-      navigateAndCallRequest?: ReturnType<typeof createMakeRequestProxy>
-      callRequest?: ReturnType<typeof createCallRequestProxy>
-      kv?: { test: KvTestRuntimeApi }
-      loadPackage?: (specifier: string) => unknown
-    }
+    prompt?: ReturnType<typeof createPromptProxy>
+    navigateAndCallRequest?: ReturnType<typeof createMakeRequestProxy>
+    callRequest?: ReturnType<typeof createCallRequestProxy>
+    kv?: { test: KvTestRuntimeApi }
+    loadPackage?: (specifier: string) => unknown
+  }
 }) {
   const visibleModules = input.sharedScripts.filter(
-    script => script.isActive && script.kind === 'module' && script.targets.includes(input.phase) && script.name.trim() !== ''
+    script =>
+      script.isActive && script.kind === 'module' && script.targets.includes(input.phase) && script.name.trim() !== ''
   )
   const modulesByName = new Map<string, SharedScriptRecord>()
   for (const script of visibleModules) {
@@ -2858,7 +2965,9 @@ function createInstalledPackageLoader(scriptPackages: ScriptRuntimePackage[]) {
         throw new Error(`Multiple ${parsedSpecifier.packageName} versions are configured. Import an exact version.`)
       }
 
-      throw new Error(`Package ${parsedSpecifier.packageName}@${parsedSpecifier.version} is not available in this workspace`)
+      throw new Error(
+        `Package ${parsedSpecifier.packageName}@${parsedSpecifier.version} is not available in this workspace`
+      )
     }
 
     if (!selectedPackage.cacheDirectory) {
@@ -3010,7 +3119,10 @@ function createHeaderEditor(runtimeRequest: RuntimeRequestState): HeaderApi {
         return
       }
 
-      rows = [...rows, { id: crypto.randomUUID(), enabled: true, key: normalizedName, value: normalizedValue, description: '' }]
+      rows = [
+        ...rows,
+        { id: crypto.randomUUID(), enabled: true, key: normalizedName, value: normalizedValue, description: '' },
+      ]
     },
     delete(name) {
       const normalizedName = normalizeScriptHeaderName(name, 'request.headers.delete')
@@ -3135,7 +3247,9 @@ function parseSetCookieForScript(value: string): ScriptCookie[] {
 
   for (const attribute of segments.slice(1)) {
     const attributeSeparatorIndex = attribute.indexOf('=')
-    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex)).trim().toLowerCase()
+    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex))
+      .trim()
+      .toLowerCase()
     const attributeValue = attributeSeparatorIndex === -1 ? '' : attribute.slice(attributeSeparatorIndex + 1).trim()
 
     if (attributeName === 'domain') {
@@ -3265,7 +3379,6 @@ function findEnvironmentByName(environments: EnvironmentRecord[], environmentNam
     null
   )
 }
-
 
 async function persistEnvironmentUpdates(environments: EnvironmentRecord[], pendingEnvironmentIds: Set<string>) {
   const updatedById = new Map<string, EnvironmentRecord>()

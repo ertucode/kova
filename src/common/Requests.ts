@@ -14,7 +14,14 @@ export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
 
 export type RequestRuntimePhase = 'pre-request' | 'post-request' | 'test' | 'template-expression'
 
-export type RequestRuntimeSource = 'request-editor' | 'call-request' | 'navigate-and-call-request' | 'generate-request-code' | 'folder-run' | 'websocket'
+export type RequestRuntimeSource =
+  | 'request-editor'
+  | 'call-request'
+  | 'navigate-and-call-request'
+  | 'generate-request-code'
+  | 'folder-run'
+  | 'request-batch'
+  | 'websocket'
 
 export type SendRequestMetadata = {
   sourceRuntime: RequestRuntimeSource
@@ -159,6 +166,7 @@ export type DuplicateRequestInput = {
 }
 
 export type SendRequestInput = {
+  executionId?: string
   requestId: string
   method: RequestMethod
   url: string
@@ -177,12 +185,16 @@ export type SendRequestInput = {
   activeEnvironmentIds: string[]
   tlsVerificationMode: RequestTlsVerificationMode
   environmentSnapshot?: EnvironmentRecord[]
+  immutableVariables?: Record<string, string>
   saveToHistory: boolean
   historyKeepLast: number
   callRequestOverrides?: ScriptCallRequestOverrides
   requestMetadata?: SendRequestMetadata
   folderRunId?: string
   folderRunFolderId?: string
+  requestBatchId?: string
+  requestBatchRowId?: string
+  suppressSseEvents?: boolean
 }
 
 export type FetchGraphqlSchemaInput = {
@@ -234,9 +246,9 @@ export type FetchMcpIntrospectionResponse = {
   introspection: string
 }
 
-export type CancelHttpRequestInput = {
-  requestId: string
-}
+export type CancelHttpRequestInput =
+  | { requestId: string; executionId?: undefined }
+  | { executionId: string; requestId?: string }
 
 export type WebSocketConnectInput = {
   requestId: string
@@ -422,6 +434,8 @@ export type RequestExecutionRecord = {
   id: string
   folderRunId?: string | null
   folderRunFolderId?: string | null
+  requestBatchId?: string | null
+  requestBatchRowId?: string | null
   requestId: string
   requestName: string
   request: ExecutedRequestSnapshot
@@ -509,6 +523,10 @@ export type GetRequestHistoryCountResponse = {
 
 export type ListRecentHttpRequestUsageResponse = {
   requestIds: string[]
+}
+
+export type GetRequestHistoryEntryInput = {
+  id: string
 }
 
 export type DeleteRequestHistoryEntryInput = {

@@ -81,6 +81,8 @@ import { ScriptAiIconButton } from './ScriptAiIconButton'
 import { twMerge } from 'tailwind-merge'
 import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
+import { RequestBatchTab } from './RequestBatchTab'
+import { requestExecutionStore } from './requestExecutionStore'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -91,6 +93,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const draftRef = useRef(draft)
+  const activeExecutionIdRef = useRef<string | null>(null)
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const postRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const testEditorRef = useRef<CodeEditorHandle | null>(null)
@@ -122,6 +125,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     return request?.parentFolderId ?? null
   })
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
+  const historyKeepLast = useSelector(requestExecutionStore, state => state.context.historyKeepLast)
   const inactiveFolderEnvironmentIds = useSelector(
     folderExplorerEditorStore,
     state => state.context.inactiveFolderEnvironmentIds
@@ -529,12 +533,17 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   }, [handleSaveWithFormatting])
 
   const sendRequest = async () => {
+    const executionId = crypto.randomUUID()
+    activeExecutionIdRef.current = executionId
     setIsSending(true)
     try {
-      await RequestSendCoordinator.sendSelectedRequest()
+      await RequestSendCoordinator.sendSelectedRequest(undefined, executionId)
     } catch {
       return
     } finally {
+      if (activeExecutionIdRef.current === executionId) {
+        activeExecutionIdRef.current = null
+      }
       setIsSending(false)
     }
   }
@@ -998,7 +1007,10 @@ export default function View() {
             className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-4 py-2 text-sm font-medium text-base-content transition hover:bg-base-300"
             onClick={() => {
               if (isSending && selectedRequestId) {
-                void getWindowElectron().cancelHttpRequest({ requestId: selectedRequestId })
+                const executionId = activeExecutionIdRef.current
+                if (executionId) {
+                  void getWindowElectron().cancelHttpRequest({ executionId, requestId: selectedRequestId })
+                }
                 return
               }
 
@@ -1215,24 +1227,52 @@ export default function View() {
         />
       ) : null}
 
-      <RequestDetailsResponsePanel
-        isSending={isSending}
-        requestName={draft.name}
-        requestHeaders={draft.headers}
-        requestBody={draft.body}
-        requestBodyType={draft.bodyType}
-        requestRawType={draft.rawType}
-        requestGraphqlQuery={draft.graphqlQuery}
-        requestGraphqlVariables={draft.graphqlVariables}
-        responseVisualizer={draft.responseVisualizer}
-        responseTableAccessor={draft.responseTableAccessor}
-        preferredResponseBodyView={draft.preferredResponseBodyView}
-        visualizerRequestDraft={responsePanelRequestDraft}
-        onJumpToScriptError={handleJumpToScriptError}
-        visualizerEnvironments={visualizerEnvironments}
-        sharedScripts={visualizerSharedScripts}
-        scriptPackageArtifacts={scriptPackageArtifacts}
-      />
+      {metaTab === 'batch' && selectedRequestId ? (
+        <RequestBatchTab
+          requestId={selectedRequestId}
+          draft={draft}
+          activeEnvironmentIds={activeEnvironmentIds}
+          historyKeepLast={historyKeepLast}
+          responsePanelProps={{
+            requestName: draft.name,
+            requestHeaders: draft.headers,
+            requestBody: draft.body,
+            requestBodyType: draft.bodyType,
+            requestRawType: draft.rawType,
+            requestGraphqlQuery: draft.graphqlQuery,
+            requestGraphqlVariables: draft.graphqlVariables,
+            responseVisualizer: draft.responseVisualizer,
+            responseTableAccessor: draft.responseTableAccessor,
+            preferredResponseBodyView: draft.preferredResponseBodyView,
+            visualizerRequestDraft: responsePanelRequestDraft,
+            onJumpToScriptError: handleJumpToScriptError,
+            visualizerEnvironments,
+            sharedScripts: visualizerSharedScripts,
+            scriptPackageArtifacts,
+          }}
+        />
+      ) : null}
+
+      {metaTab !== 'batch' ? (
+        <RequestDetailsResponsePanel
+          isSending={isSending}
+          requestName={draft.name}
+          requestHeaders={draft.headers}
+          requestBody={draft.body}
+          requestBodyType={draft.bodyType}
+          requestRawType={draft.rawType}
+          requestGraphqlQuery={draft.graphqlQuery}
+          requestGraphqlVariables={draft.graphqlVariables}
+          responseVisualizer={draft.responseVisualizer}
+          responseTableAccessor={draft.responseTableAccessor}
+          preferredResponseBodyView={draft.preferredResponseBodyView}
+          visualizerRequestDraft={responsePanelRequestDraft}
+          onJumpToScriptError={handleJumpToScriptError}
+          visualizerEnvironments={visualizerEnvironments}
+          sharedScripts={visualizerSharedScripts}
+          scriptPackageArtifacts={scriptPackageArtifacts}
+        />
+      ) : null}
     </div>
   )
 }
@@ -1522,6 +1562,18 @@ function VariableUsageBanner({
           onClick={() => onMetaTabChange('response-visualizer')}
         >
           <span>Response Visualizer</span>
+        </button>
+        <button
+          type="button"
+          className={[
+            'flex h-10 items-center gap-2 border-l border-base-content/10 px-3 text-xs font-semibold transition',
+            metaTab === 'batch'
+              ? 'border-b-2 border-b-base-content text-base-content'
+              : 'border-b-2 border-b-transparent text-base-content/45 hover:text-base-content/75',
+          ].join(' ')}
+          onClick={() => onMetaTabChange('batch')}
+        >
+          Batch
         </button>
         <button
           type="button"

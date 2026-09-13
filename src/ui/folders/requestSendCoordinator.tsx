@@ -10,9 +10,10 @@ import { folderExplorerEditorStore } from './folderExplorerEditorStore'
 import { toRequestDetailsDraft } from './folderExplorerUtils'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
+import { buildSendRequestInput } from './requestSendInput'
 
 export namespace RequestSendCoordinator {
-  export async function sendSelectedRequest(requestMetadata?: SendRequestMetadata) {
+  export async function sendSelectedRequest(requestMetadata?: SendRequestMetadata, executionId?: string) {
     const state = folderExplorerEditorStore.getSnapshot().context
     const selected = state.selected
     if (!selected || selected.itemType !== 'request') {
@@ -46,32 +47,20 @@ export namespace RequestSendCoordinator {
     requestExecutionStore.trigger.requestStarted({ requestId: selected.id, sentAt })
     requestExecutionStore.trigger.httpSseStreamCleared({ requestId: selected.id })
 
-    const result = await getWindowElectron().sendRequest({
-      requestId: selected.id,
-      method: latestDraft.method,
-      url: latestDraft.url,
-      pathParams: latestDraft.pathParams,
-      searchParams: latestDraft.searchParams,
-      auth: latestDraft.auth,
-      preRequestScript: latestDraft.preRequestScript,
-      postRequestScript: latestDraft.postRequestScript,
-      testScript: latestDraft.testScript,
-      headers: latestDraft.headers,
-      body: latestDraft.body,
-      bodyType: latestDraft.bodyType,
-      rawType: latestDraft.rawType,
-      graphqlQuery: latestDraft.graphqlQuery,
-      graphqlVariables: latestDraft.graphqlVariables,
-      tlsVerificationMode: latestDraft.tlsVerificationMode,
-      activeEnvironmentIds: state.activeEnvironmentIds,
-      saveToHistory: latestDraft.saveToHistory,
-      historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
-      requestMetadata: requestMetadata ?? {
-        sourceRuntime: 'request-editor',
-        isRetry: false,
-        retryCount: 0,
-      },
-    })
+    const result = await getWindowElectron().sendRequest(
+      buildSendRequestInput({
+        requestId: selected.id,
+        draft: latestDraft,
+        activeEnvironmentIds: state.activeEnvironmentIds,
+        historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
+        executionId,
+        requestMetadata: requestMetadata ?? {
+          sourceRuntime: 'request-editor',
+          isRetry: false,
+          retryCount: 0,
+        },
+      })
+    )
 
     if (!result.success) {
       const error = errorResponseToMessage(result.error)
@@ -106,33 +95,20 @@ export namespace RequestSendCoordinator {
   ): Promise<ScriptCallRequestPayload> {
     const { activeEnvironmentIds } = folderExplorerEditorStore.getSnapshot().context
     const requestDraft = await getRequestDraftForExecution(requestId)
-    const result = await getWindowElectron().sendRequest({
-      requestId,
-      method: requestDraft.method,
-      url: requestDraft.url,
-      pathParams: requestDraft.pathParams,
-      searchParams: requestDraft.searchParams,
-       auth: requestDraft.auth,
-       preRequestScript: requestDraft.preRequestScript,
-       postRequestScript: requestDraft.postRequestScript,
-       testScript: requestDraft.testScript,
-       headers: requestDraft.headers,
-       body: requestDraft.body,
-       bodyType: requestDraft.bodyType,
-        rawType: requestDraft.rawType,
-        graphqlQuery: requestDraft.graphqlQuery,
-        graphqlVariables: requestDraft.graphqlVariables,
-        tlsVerificationMode: requestDraft.tlsVerificationMode,
+    const result = await getWindowElectron().sendRequest(
+      buildSendRequestInput({
+        requestId,
+        draft: requestDraft,
         activeEnvironmentIds,
-      saveToHistory: requestDraft.saveToHistory,
-      historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
-      callRequestOverrides: overrides,
-      requestMetadata: {
-        sourceRuntime: 'call-request',
-        isRetry: false,
-        retryCount: 0,
-      },
-    })
+        historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
+        callRequestOverrides: overrides,
+        requestMetadata: {
+          sourceRuntime: 'call-request',
+          isRetry: false,
+          retryCount: 0,
+        },
+      })
+    )
 
     if (!result.success) {
       throw new Error(errorResponseToMessage(result.error))

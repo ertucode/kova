@@ -16,6 +16,7 @@ export type RequestMetaTab =
   | 'tests'
   | 'raw'
   | 'response-visualizer'
+  | 'batch'
 
 export type FolderExplorerTabRecord = {
   id: string

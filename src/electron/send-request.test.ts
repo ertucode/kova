@@ -7,7 +7,7 @@ import * as requestDb from './db/requests.js'
 import * as genericEvents from './generic-events.js'
 import * as httpRequestRuntime from './http-request-runtime.js'
 import type { PreparedHttpRequest } from './http-request-runtime.js'
-import { applyScriptCallRequestOverrides, sendRequest } from './send-request.js'
+import { applyScriptCallRequestOverrides, cancelHttpRequest, sendRequest } from './send-request.js'
 
 vi.mock('undici', async importOriginal => {
   const actual = await importOriginal<typeof import('undici')>()
@@ -26,6 +26,68 @@ afterEach(() => {
 })
 
 describe('applyScriptCallRequestOverrides', () => {
+  it('uses preassigned execution and batch IDs without publishing SSE editor events', async () => {
+    const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
+    vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(createPreparedRequest()))
+    vi.spyOn(cookieDb, 'storeResponseCookies').mockResolvedValue(undefined)
+    mockedUndiciFetch.mockResolvedValue(
+      new UndiciResponse('data: complete\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    )
+
+    const result = await sendRequest({
+      ...createSendRequestInput(),
+      executionId: 'execution-1',
+      requestBatchId: 'batch-1',
+      requestBatchRowId: 'row-1',
+      suppressSseEvents: true,
+    })
+
+    expect(result.success).toBe(true)
+    if (!result.success) {
+      throw new Error('Expected SSE request to succeed')
+    }
+    expect(result.data.execution).toMatchObject({
+      id: 'execution-1',
+      requestBatchId: 'batch-1',
+      requestBatchRowId: 'row-1',
+    })
+    expect(emitGenericEventSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'http-sse-stream-cleared' }))
+    expect(emitGenericEventSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'http-sse-stream-updated' }))
+  })
+
+  it('cancels an exact execution without cancelling another execution of the same request', async () => {
+    vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
+    vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(createPreparedRequest()))
+    const signals: AbortSignal[] = []
+    mockedUndiciFetch.mockImplementation(async (_url, init) => {
+      const signal = init?.signal
+      if (!signal) {
+        throw new Error('Expected an abort signal')
+      }
+      signals.push(signal)
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+      throw new Error('Unreachable')
+    })
+
+    const firstRequest = sendRequest({ ...createSendRequestInput(), executionId: 'execution-1' })
+    const secondRequest = sendRequest({ ...createSendRequestInput(), executionId: 'execution-2' })
+    await vi.waitFor(() => expect(signals).toHaveLength(2))
+
+    await cancelHttpRequest({ executionId: 'execution-1' })
+    expect(signals[0]?.aborted).toBe(true)
+    expect(signals[1]?.aborted).toBe(false)
+
+    await cancelHttpRequest({ requestId: 'request-1' })
+    expect(signals[1]?.aborted).toBe(true)
+    await expect(firstRequest).resolves.toMatchObject({ success: false })
+    await expect(secondRequest).resolves.toMatchObject({ success: false })
+  })
+
   it('preserves prepared values when overrides are omitted', () => {
     const result = applyScriptCallRequestOverrides({
       preparedRequest: createPreparedRequest(),
@@ -668,6 +730,28 @@ function createPreparedRequest(input?: {
     },
     postRequestScriptSources: [],
     testScriptSources: [],
+  }
+}
+
+function createSendRequestInput() {
+  return {
+    requestId: 'request-1',
+    method: 'POST' as const,
+    url: 'https://example.com',
+    pathParams: '',
+    searchParams: '',
+    auth: { type: 'noauth' as const },
+    preRequestScript: '',
+    postRequestScript: '',
+    testScript: '',
+    headers: '',
+    body: 'base-body',
+    bodyType: 'raw' as const,
+    rawType: 'text' as const,
+    tlsVerificationMode: 'inherit' as const,
+    activeEnvironmentIds: [],
+    saveToHistory: false,
+    historyKeepLast: 10,
   }
 }
 

@@ -5,12 +5,15 @@ import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
 import { folderRunStore } from '@/folders/folderRunStore'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
 import { ScriptAiReviewCoordinator } from '@/folders/scriptAiReviewStore'
+import { RequestBatchCoordinator, requestBatchStore } from '@/folders/requestBatchStore'
 import { toast } from '@/lib/components/toast'
+import { Typescript } from '@common/Typescript'
 import { dialogActions } from './dialogStore'
 
 export function subscribeToGenericEvents() {
   getWindowElectron().onGenericEvent(e => {
     if (e.type === 'reload-path') {
+      return
     } else if (e.type === 'fix-request-search-param-value') {
       return
     } else if (e.type === 'cookies-updated') {
@@ -30,9 +33,9 @@ export function subscribeToGenericEvents() {
     } else if (e.type === 'script-toast-hide') {
       toast.hide(e.id)
     } else if (e.type === 'script-prompt-request') {
-      void dialogActions.promptText(e.prompt.options).then(value =>
-        getWindowElectron().resolveScriptPrompt({ id: e.prompt.id, value })
-      )
+      void dialogActions
+        .promptText(e.prompt.options)
+        .then(value => getWindowElectron().resolveScriptPrompt({ id: e.prompt.id, value }))
     } else if (e.type === 'script-make-request') {
       void (async () => {
         try {
@@ -85,13 +88,35 @@ export function subscribeToGenericEvents() {
         completedAt: e.completedAt,
         summary: e.summary,
       })
+    } else if (e.type === 'request-batch-updated') {
+      requestBatchStore.trigger.batchUpdated({
+        batchId: e.batchId,
+        status: e.status,
+        summary: e.summary,
+        startedAt: e.startedAt,
+        completedAt: e.completedAt,
+      })
+      if (e.status !== 'running') {
+        const page = requestBatchStore.getSnapshot().context.pageByBatchId[e.batchId]
+        if (page) {
+          void RequestBatchCoordinator.loadPage(e.batchId, page.rowSearchQuery, page.rowOffset)
+        }
+      }
+    } else if (e.type === 'request-batch-row-updated') {
+      requestBatchStore.trigger.rowUpdated({
+        batchId: e.batchId,
+        rowId: e.rowId,
+        status: e.status,
+        historyId: e.historyId,
+        startedAt: e.startedAt,
+        completedAt: e.completedAt,
+      })
     } else if (e.type === 'script-ai-state-updated') {
       ScriptAiReviewCoordinator.applyWorkspaceState(e.state)
     } else if (e.type === 'management-agent-state-updated') {
       return
     } else {
-      const _exhaustiveCheck: never = e
-      return _exhaustiveCheck
+      return Typescript.assertUnreachable(e)
     }
   })
 }

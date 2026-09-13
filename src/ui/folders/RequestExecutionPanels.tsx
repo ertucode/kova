@@ -187,7 +187,9 @@ export function ExecutionCard({
   const requestTime = useMemo(() => formatTimestamp(execution.request.sentAt), [execution.request.sentAt])
   const consoleEntries = execution.consoleEntries ?? []
   const testRun = execution.testRun
-  const canDelete = execution.folderRunId === null || execution.folderRunId === undefined
+  const canDelete =
+    (execution.folderRunId === null || execution.folderRunId === undefined) &&
+    (execution.requestBatchId === null || execution.requestBatchId === undefined)
   const saveAsExampleButtonProps = useHoldAction({
     onClick: () => saveExecutionAsExample(execution),
     onHold: () => saveExecutionResponseToFile(execution),
@@ -868,7 +870,7 @@ function getExecutionTone(execution: RequestExecutionRecord) {
     return 'text-error'
   }
 
-   if (execution.testRun?.failedCount) {
+  if (execution.testRun?.failedCount) {
     return 'text-error'
   }
 

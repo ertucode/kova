@@ -15,26 +15,15 @@ import type { RequestCodeGenerationMode } from '../common/RequestCodegen.js'
 import { Typescript } from '../common/Typescript.js'
 import { serializeWindowArguments, WindowArguments } from '../common/WindowArguments.js'
 import { runCommand } from './utils/run-command.js'
-import {
-  getResolvedDatabaseConfig,
-  getServerConfig,
-} from './server-config.js'
-import { GenericError } from '../common/GenericError.js'
+import { getResolvedDatabaseConfig, getServerConfig } from './server-config.js'
+import { errorResponseToMessage, GenericError } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
 import { createScriptMakeRequestRegistry, createScriptPromptRegistry } from './script-ui-bridges.js'
-import {
-  configureScriptAiBaseDirectory,
-  shutdownScriptAiServer,
-} from './script-ai-sdk.js'
+import { configureScriptAiBaseDirectory, shutdownScriptAiServer } from './script-ai-sdk.js'
 import { configureScriptAiDiagnosticsBridge, getScriptAiDiagnostics } from './script-ai-diagnostics.js'
 import { startScriptAiDiagnosticsBridge } from './script-ai-diagnostics-bridge.js'
-import {
-  configureScriptPackageRegistry,
-} from './script-package-registry.js'
-import {
-  configureManagementAgentBaseDirectory,
-  shutdownManagementAgentServer,
-} from './management-agent.js'
+import { configureScriptPackageRegistry } from './script-package-registry.js'
+import { configureManagementAgentBaseDirectory, shutdownManagementAgentServer } from './management-agent.js'
 import type { SaveTextToFileInput } from '../common/TextFileSave.js'
 import { checkForAppUpdates, startAutoUpdater } from './auto-updater.js'
 
@@ -75,6 +64,7 @@ const loadFoldersDb = () => import('./db/folders.js')
 const loadEnvironmentsDb = () => import('./db/environments.js')
 const loadRequestHistoryDb = () => import('./db/request-history.js')
 const loadFolderRunHistoryDb = () => import('./db/folder-run-history.js')
+const loadRequestBatchesDb = () => import('./db/request-batches.js')
 const loadRequestsDb = () => import('./db/requests.js')
 const loadRequestExamplesDb = () => import('./db/request-examples.js')
 const loadWebSocketExamplesDb = () => import('./db/websocket-examples.js')
@@ -89,6 +79,8 @@ const loadTagsDb = () => import('./db/tags.js')
 const loadSendRequestRuntime = () => import('./send-request.js')
 const loadMcpRuntime = () => import('./mcp-runtime.js')
 const loadFolderRequestRunner = () => import('./folder-request-runner.js')
+const loadRequestBatchRunner = () => import('./request-batch-runner.js')
+const loadRequestBatchParser = () => import('./request-batch-parser.js')
 const loadHttpRequestRuntime = () => import('./http-request-runtime.js')
 const loadWebSocketRuntime = () => import('./websocket-runtime.js')
 const loadPostmanImport = () => import('./postman-import.js')
@@ -104,6 +96,22 @@ const loadScriptPackageRegistry = () => import('./script-package-registry.js')
 const loadOpenCodeModels = () => import('./opencode-models.js')
 const loadSupermavenService = async () => (await import('./supermaven-service.js')).supermavenService
 const loadManagementAgent = () => import('./management-agent.js')
+let requestBatchRecoveryPromise: Promise<void> | null = null
+
+function ensureRequestBatchRecovery() {
+  requestBatchRecoveryPromise ??= loadRequestBatchRunner()
+    .then(({ recoverStaleRequestBatches }) => recoverStaleRequestBatches())
+    .then(result => {
+      if (!result.success) {
+        throw new Error(errorResponseToMessage(result.error))
+      }
+    })
+    .catch(error => {
+      requestBatchRecoveryPromise = null
+      throw error
+    })
+  return requestBatchRecoveryPromise
+}
 
 function getDefaultDatabasePath() {
   return path.join(app.getPath('userData'), 'kova.sqlite')
@@ -121,6 +129,7 @@ async function syncConfiguredDatabase() {
     dbPath: activeDatabase?.path ?? getDefaultDatabasePath(),
     migrationsPath: getMigrationsPath(),
   })
+  requestBatchRecoveryPromise = null
 
   return databaseConfig
 }
@@ -521,6 +530,113 @@ app.on('ready', async () => {
   ipcHandle('getFolderRunHistory', async input => {
     const { getFolderRunHistory } = await loadFolderRunHistoryDb()
     return getFolderRunHistory(input)
+  })
+
+  ipcHandle('pickRequestBatchFile', async (_input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: Electron.OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [{ name: 'Batch data', extensions: ['csv', 'xlsx', 'json'] }],
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+    if (result.canceled || result.filePaths.length === 0) {
+      return GenericError.Message('File selection was cancelled')
+    }
+
+    try {
+      const filePath = result.filePaths[0]
+      const { getRequestBatchSourceType, listRequestBatchSheetNames } = await loadRequestBatchParser()
+      return Result.Success({
+        filePath,
+        sourceFileName: path.basename(filePath),
+        sourceType: getRequestBatchSourceType(filePath),
+        sheetNames: listRequestBatchSheetNames(filePath),
+      })
+    } catch (error) {
+      return GenericError.Unknown(error)
+    }
+  })
+
+  ipcHandle('importRequestBatchFile', async input => {
+    try {
+      const [{ parseRequestBatchFile }, { createRequestBatch }] = await Promise.all([
+        loadRequestBatchParser(),
+        loadRequestBatchesDb(),
+      ])
+      const parsed = parseRequestBatchFile({ filePath: input.filePath, sheetName: input.sheetName })
+      return createRequestBatch({
+        requestId: input.requestId,
+        requestName: input.requestName,
+        name: input.name,
+        sourceFileName: parsed.sourceFileName,
+        sourceType: parsed.sourceType,
+        sheetName: parsed.sheetName,
+        columns: parsed.columns,
+        rows: parsed.rows,
+      })
+    } catch (error) {
+      return GenericError.Unknown(error)
+    }
+  })
+
+  ipcHandle('listRequestBatches', async input => {
+    await ensureRequestBatchRecovery()
+    const { listRequestBatches } = await loadRequestBatchesDb()
+    return listRequestBatches(input)
+  })
+
+  ipcHandle('getRequestBatch', async input => {
+    await ensureRequestBatchRecovery()
+    const { getRequestBatch } = await loadRequestBatchesDb()
+    return getRequestBatch(input)
+  })
+
+  ipcHandle('listRequestBatchRows', async input => {
+    await ensureRequestBatchRecovery()
+    const { listRequestBatchRows } = await loadRequestBatchesDb()
+    return listRequestBatchRows(input)
+  })
+
+  ipcHandle('startRequestBatch', async (input, event) => {
+    await ensureRequestBatchRecovery()
+    const [{ startRequestBatch }, { createScriptToastBridge }] = await Promise.all([
+      loadRequestBatchRunner(),
+      loadScriptUiBridges(),
+    ])
+    return startRequestBatch(input, {
+      toast: createScriptToastBridge(event.sender),
+      prompt: scriptPromptRegistry.createBridge(event.sender),
+      clipboard: { writeText: value => clipboard.writeText(value) },
+      makeRequest: createScriptRequestBridge(event.sender),
+    })
+  })
+
+  ipcHandle('runRequestBatchRow', async (input, event) => {
+    await ensureRequestBatchRecovery()
+    const [{ runRequestBatchRow }, { createScriptToastBridge }] = await Promise.all([
+      loadRequestBatchRunner(),
+      loadScriptUiBridges(),
+    ])
+    return runRequestBatchRow(input, {
+      toast: createScriptToastBridge(event.sender),
+      prompt: scriptPromptRegistry.createBridge(event.sender),
+      clipboard: { writeText: value => clipboard.writeText(value) },
+      makeRequest: createScriptRequestBridge(event.sender),
+    })
+  })
+
+  ipcHandle('cancelRequestBatch', async input => {
+    await ensureRequestBatchRecovery()
+    const { cancelRequestBatch } = await loadRequestBatchRunner()
+    return cancelRequestBatch(input)
+  })
+
+  ipcHandle('deleteRequestBatch', async input => {
+    await ensureRequestBatchRecovery()
+    const { deleteRequestBatch } = await loadRequestBatchesDb()
+    return deleteRequestBatch(input)
   })
 
   ipcHandle('createFolder', async input => {
@@ -965,8 +1081,16 @@ app.on('ready', async () => {
   })
 
   ipcHandle('generateRequestCode', async input => {
-    const [{ getRequest }, { buildCurlCommand, buildFetchSnippet, maskEnvironmentValuesForCodegen, maskRequestAuthForCodegen, prepareHttpRequest }] =
-      await Promise.all([loadRequestsDb(), loadHttpRequestRuntime()])
+    const [
+      { getRequest },
+      {
+        buildCurlCommand,
+        buildFetchSnippet,
+        maskEnvironmentValuesForCodegen,
+        maskRequestAuthForCodegen,
+        prepareHttpRequest,
+      },
+    ] = await Promise.all([loadRequestsDb(), loadHttpRequestRuntime()])
     const requestResult = await getRequest({ id: input.requestId })
     if (!requestResult.success) {
       return requestResult
@@ -974,38 +1098,47 @@ app.on('ready', async () => {
 
     const beforePrepareHttpRequest =
       input.mode === 'mask-variables'
-        ? ({ environments, folderEnvironments }: { environments: EnvironmentRecord[]; folderEnvironments: EnvironmentRecord[] }) => ({
+        ? ({
+            environments,
+            folderEnvironments,
+          }: {
+            environments: EnvironmentRecord[]
+            folderEnvironments: EnvironmentRecord[]
+          }) => ({
             environments: maskEnvironmentValuesForCodegen(environments),
             folderEnvironments: maskEnvironmentValuesForCodegen(folderEnvironments),
           })
         : undefined
 
-    const preparedRequest = await prepareHttpRequest({
-      requestId: requestResult.data.id,
-      method: requestResult.data.method,
-      url: requestResult.data.url,
-      pathParams: requestResult.data.pathParams,
-      searchParams: requestResult.data.searchParams,
-      auth: requestResult.data.auth,
-      preRequestScript: requestResult.data.preRequestScript,
-      postRequestScript: requestResult.data.postRequestScript,
-      testScript: requestResult.data.testScript,
-      headers: requestResult.data.headers,
-      body: requestResult.data.body,
-      bodyType: requestResult.data.bodyType,
-      rawType: requestResult.data.rawType,
-      graphqlQuery: requestResult.data.graphqlQuery,
-      graphqlVariables: requestResult.data.graphqlVariables,
-      tlsVerificationMode: requestResult.data.tlsVerificationMode,
-      activeEnvironmentIds: input.activeEnvironmentIds,
-      saveToHistory: false,
-      historyKeepLast: 0,
-      requestMetadata: {
-        sourceRuntime: 'generate-request-code',
-        isRetry: false,
-        retryCount: 0,
+    const preparedRequest = await prepareHttpRequest(
+      {
+        requestId: requestResult.data.id,
+        method: requestResult.data.method,
+        url: requestResult.data.url,
+        pathParams: requestResult.data.pathParams,
+        searchParams: requestResult.data.searchParams,
+        auth: requestResult.data.auth,
+        preRequestScript: requestResult.data.preRequestScript,
+        postRequestScript: requestResult.data.postRequestScript,
+        testScript: requestResult.data.testScript,
+        headers: requestResult.data.headers,
+        body: requestResult.data.body,
+        bodyType: requestResult.data.bodyType,
+        rawType: requestResult.data.rawType,
+        graphqlQuery: requestResult.data.graphqlQuery,
+        graphqlVariables: requestResult.data.graphqlVariables,
+        tlsVerificationMode: requestResult.data.tlsVerificationMode,
+        activeEnvironmentIds: input.activeEnvironmentIds,
+        saveToHistory: false,
+        historyKeepLast: 0,
+        requestMetadata: {
+          sourceRuntime: 'generate-request-code',
+          isRetry: false,
+          retryCount: 0,
+        },
       },
-    }, { beforePrepareHttpRequest })
+      { beforePrepareHttpRequest }
+    )
     if (!preparedRequest.success) {
       return preparedRequest
     }
@@ -1137,6 +1270,11 @@ app.on('ready', async () => {
   ipcHandle('getRequestHistoryCount', async input => {
     const { getRequestHistoryCount } = await loadRequestHistoryDb()
     return getRequestHistoryCount(input)
+  })
+
+  ipcHandle('getRequestHistoryEntry', async input => {
+    const { getRequestHistoryEntry } = await loadRequestHistoryDb()
+    return getRequestHistoryEntry(input)
   })
 
   ipcHandle('listRecentHttpRequestUsage', async () => {

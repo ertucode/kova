@@ -5,6 +5,7 @@ import type {
   DeleteRequestHistoryEntryInput,
   GetRequestHistoryCountInput,
   GetRequestHistoryCountResponse,
+  GetRequestHistoryEntryInput,
   ListRecentHttpRequestUsageResponse,
   ListRequestHistoryInput,
   ListRequestHistoryResponse,
@@ -39,11 +40,12 @@ export async function listRequestHistory(input: ListRequestHistoryInput): Promis
     .limit(limit + 1)
     .offset(offset)
 
-  const httpCount = db
-    .select({ count: sql<number>`count(*)` })
-    .from(requestHistory)
-    .where(whereClause)
-    .get()?.count ?? 0
+  const httpCount =
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(requestHistory)
+      .where(whereClause)
+      .get()?.count ?? 0
 
   const httpItems = rows.slice(0, limit).map(toRequestExecutionRecord)
   const websocketResult = await listWebSocketHistory(input)
@@ -58,15 +60,25 @@ export async function listRequestHistory(input: ListRequestHistoryInput): Promis
   }
 }
 
-export async function getRequestHistoryCount(input: GetRequestHistoryCountInput): Promise<GetRequestHistoryCountResponse> {
+export async function getRequestHistoryCount(
+  input: GetRequestHistoryCountInput
+): Promise<GetRequestHistoryCountResponse> {
   const db = getDb()
-  const totalCount = db
-    .select({ count: sql<number>`count(*)` })
-    .from(requestHistory)
-    .where(eq(requestHistory.requestId, input.requestId))
-    .get()?.count ?? 0
+  const totalCount =
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(requestHistory)
+      .where(eq(requestHistory.requestId, input.requestId))
+      .get()?.count ?? 0
 
   return { totalCount }
+}
+
+export async function getRequestHistoryEntry(
+  input: GetRequestHistoryEntryInput
+): Promise<GenericResult<RequestExecutionRecord>> {
+  const row = getDb().select().from(requestHistory).where(eq(requestHistory.id, input.id)).get()
+  return row ? Result.Success(toRequestExecutionRecord(row)) : GenericError.Message('Request history entry not found')
 }
 
 export async function listRecentHttpRequestUsage(): Promise<ListRecentHttpRequestUsageResponse> {
@@ -90,6 +102,8 @@ export async function persistRequestHistory(input: { execution: RequestExecution
       id: execution.id,
       folderRunId: execution.folderRunId ?? null,
       folderRunFolderId: execution.folderRunFolderId ?? null,
+      batchId: execution.requestBatchId ?? null,
+      rowId: execution.requestBatchRowId ?? null,
       requestId: execution.requestId,
       requestName: execution.requestName,
       method: execution.request.method,
@@ -108,10 +122,10 @@ export async function persistRequestHistory(input: { execution: RequestExecution
       responseBodyOmitted: execution.response?.bodyOmitted ?? false,
       responseError: execution.responseError,
       responseDurationMs: execution.response?.durationMs ?? null,
-       responseReceivedAt: execution.response?.receivedAt ?? null,
-       scriptErrorsJson: JSON.stringify(execution.scriptErrors ?? []),
-       testRunJson: JSON.stringify(execution.testRun ?? null),
-       consoleEntriesJson: JSON.stringify(execution.consoleEntries ?? []),
+      responseReceivedAt: execution.response?.receivedAt ?? null,
+      scriptErrorsJson: JSON.stringify(execution.scriptErrors ?? []),
+      testRunJson: JSON.stringify(execution.testRun ?? null),
+      consoleEntriesJson: JSON.stringify(execution.consoleEntries ?? []),
       sentAt: execution.request.sentAt,
       createdAt: execution.request.sentAt,
     })
@@ -126,8 +140,12 @@ export async function deleteRequestHistoryEntry(input: DeleteRequestHistoryEntry
   const db = getDb()
 
   try {
-    const row = db.select({ folderRunId: requestHistory.folderRunId }).from(requestHistory).where(eq(requestHistory.id, input.id)).get()
-    if (row?.folderRunId) {
+    const row = db
+      .select({ folderRunId: requestHistory.folderRunId, batchId: requestHistory.batchId, rowId: requestHistory.rowId })
+      .from(requestHistory)
+      .where(eq(requestHistory.id, input.id))
+      .get()
+    if (row?.folderRunId || row?.batchId || row?.rowId) {
       return GenericError.Message('Attached request history entries cannot be deleted directly')
     }
 
@@ -156,7 +174,7 @@ function trimRequestHistoryInternal(keepLast: number) {
   const orderedIds = db
     .select({ id: requestHistory.id })
     .from(requestHistory)
-    .where(isNull(requestHistory.folderRunId))
+    .where(and(isNull(requestHistory.folderRunId), isNull(requestHistory.batchId), isNull(requestHistory.rowId)))
     .orderBy(desc(requestHistory.createdAt), desc(requestHistory.id))
     .all()
     .map(row => row.id)
@@ -230,6 +248,8 @@ function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecor
     id: row.id,
     folderRunId: row.folderRunId,
     folderRunFolderId: row.folderRunFolderId,
+    requestBatchId: row.batchId,
+    requestBatchRowId: row.rowId,
     requestId: row.requestId,
     requestName: row.requestName,
     request: {
@@ -247,7 +267,10 @@ function toRequestExecutionRecord(row: RequestHistoryRow): RequestExecutionRecor
       sentAt: row.sentAt,
     },
     response:
-      row.responseStatus === null || row.responseStatusText === null || row.responseDurationMs === null || row.responseReceivedAt === null
+      row.responseStatus === null ||
+      row.responseStatusText === null ||
+      row.responseDurationMs === null ||
+      row.responseReceivedAt === null
         ? null
         : {
             status: row.responseStatus,

@@ -16,7 +16,6 @@ import {
   VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_READY_EVENT,
   VIEW_RUNTIME_RENDER_EVENT,
-  VIEW_RUNTIME_TRIGGER_RUN_EVENT,
   type ViewRuntimeCacheRequestMessage,
   type ViewRuntimeClipboardWriteMessage,
   type ViewRuntimeCallRequestMessage,

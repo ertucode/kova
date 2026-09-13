@@ -37,7 +37,7 @@ import { getTlsDispatcher, resolveEffectiveTlsVerificationMode } from './tls-run
 import { DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE } from '../common/AppSettings.js'
 import type { AppSettingsTlsVerificationMode } from '../common/AppSettings.js'
 
-const activeHttpRequests = new Map<string, { executionId: string; abortController: AbortController }>()
+const activeHttpRequests = new Map<string, { requestId: string; abortController: AbortController }>()
 const REQUEST_METHODS: RequestMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
 type ScriptToastBridge = {
@@ -46,7 +46,16 @@ type ScriptToastBridge = {
 }
 
 export async function cancelHttpRequest(input: CancelHttpRequestInput): Promise<GenericResult<void>> {
-  activeHttpRequests.get(input.requestId)?.abortController.abort()
+  if (input.executionId) {
+    activeHttpRequests.get(input.executionId)?.abortController.abort()
+    return Result.Success(undefined)
+  }
+
+  for (const activeRequest of activeHttpRequests.values()) {
+    if (activeRequest.requestId === input.requestId) {
+      activeRequest.abortController.abort()
+    }
+  }
   return Result.Success(undefined)
 }
 
@@ -75,7 +84,11 @@ export async function fetchGraphqlSchema(
     const headers = new Headers(preparedRequest.data.headers)
     headers.set('accept', 'application/graphql-response+json, application/json')
     headers.set('content-type', 'application/json')
-    const dispatcher = await resolveRequestTlsDispatcher(preparedRequest.data.url, input.requestId, input.tlsVerificationMode)
+    const dispatcher = await resolveRequestTlsDispatcher(
+      preparedRequest.data.url,
+      input.requestId,
+      input.tlsVerificationMode
+    )
 
     const response = await undiciFetch(preparedRequest.data.url, {
       method: 'POST',
@@ -92,7 +105,9 @@ export async function fetchGraphqlSchema(
     if (!response.ok) {
       return GenericError.Http(
         response.status,
-        parsedPayload.data.errors[0] ?? parsedPayload.data.errorMessage ?? (response.statusText || 'Failed to fetch GraphQL schema')
+        parsedPayload.data.errors[0] ??
+          parsedPayload.data.errorMessage ??
+          (response.statusText || 'Failed to fetch GraphQL schema')
       )
     }
 
@@ -125,8 +140,13 @@ export async function sendRequest(
     makeRequest?: ScriptMakeRequestBridge
   }
 ): Promise<GenericResult<SendRequestResponse>> {
-  const executionId = crypto.randomUUID()
+  const executionId = input.executionId ?? crypto.randomUUID()
   const abortController = new AbortController()
+
+  if (activeHttpRequests.has(executionId)) {
+    return GenericError.Message('Request execution ID is already active')
+  }
+  activeHttpRequests.set(executionId, { requestId: input.requestId, abortController })
 
   try {
     const preparedRequest = await prepareHttpRequest(input, {
@@ -139,8 +159,9 @@ export async function sendRequest(
       return preparedRequest
     }
 
-    emitGenericEvent({ type: 'http-sse-stream-cleared', requestId: input.requestId })
-    activeHttpRequests.set(input.requestId, { executionId, abortController })
+    if (!input.suppressSseEvents) {
+      emitGenericEvent({ type: 'http-sse-stream-cleared', requestId: input.requestId })
+    }
 
     const overrideResult = applyScriptCallRequestOverrides({
       preparedRequest: preparedRequest.data,
@@ -151,7 +172,8 @@ export async function sendRequest(
     }
 
     const { headers, method, requestBody, url } = overrideResult.data
-    const { postRequestScriptSources, testScriptSources, requestName, resolvedAuth, runtime, variables } = preparedRequest.data
+    const { postRequestScriptSources, testScriptSources, requestName, resolvedAuth, runtime, variables } =
+      preparedRequest.data
     if (Object.hasOwn(input.callRequestOverrides ?? {}, 'method')) {
       runtime.request.method = method
     }
@@ -253,19 +275,24 @@ export async function sendRequest(
     const authRetryRequested = postRequestResult.retryRequested
       ? false
       : await maybeRetryWithTokenRefresh({
-        input,
-        options,
-        responseStatus: response.status,
-        resolvedAuth,
-      })
-    const shouldRetryRequest = (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.requestMetadata)
-    const testResult = shouldRetryRequest ? { scriptErrors: [], registeredTests: 0, testRun: null } : await runtime.runTestScripts(testScriptSources, scriptResponse)
+          input,
+          options,
+          responseStatus: response.status,
+          resolvedAuth,
+        })
+    const shouldRetryRequest =
+      (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.requestMetadata)
+    const testResult = shouldRetryRequest
+      ? { scriptErrors: [], registeredTests: 0, testRun: null }
+      : await runtime.runTestScripts(testScriptSources, scriptResponse)
 
     const execution: RequestExecutionRecord = {
       itemType: 'http',
       id: executionId,
       folderRunId: input.folderRunId ?? null,
       folderRunFolderId: input.folderRunFolderId ?? null,
+      requestBatchId: input.requestBatchId ?? null,
+      requestBatchRowId: input.requestBatchRowId ?? null,
       requestId: input.requestId,
       requestName,
       request: executedRequest,
@@ -306,7 +333,7 @@ export async function sendRequest(
     console.error('sendRequest failed', error)
     return GenericError.Message(isAbortError(error) ? 'Request cancelled' : formatRequestError(error))
   } finally {
-    clearActiveHttpRequest(input.requestId, executionId)
+    activeHttpRequests.delete(executionId)
   }
 }
 
@@ -363,7 +390,10 @@ export function applyScriptCallRequestOverrides(input: {
   }
 
   if (Object.hasOwn(input.overrides, 'body')) {
-    requestBody = input.overrides.body === undefined ? { body: undefined, preview: '' } : { body: input.overrides.body, preview: input.overrides.body }
+    requestBody =
+      input.overrides.body === undefined
+        ? { body: undefined, preview: '' }
+        : { body: input.overrides.body, preview: input.overrides.body }
   }
 
   return Result.Success({ method, url, headers, requestBody })
@@ -391,7 +421,16 @@ async function consumeSseResponse(input: {
   sentAt: number
   startedAt: number
 }): Promise<GenericResult<SendRequestResponse>> {
-  const { response, requestName, runtime, postRequestScriptSources, testScriptSources, executedRequest, executionId, sentAt } = input
+  const {
+    response,
+    requestName,
+    runtime,
+    postRequestScriptSources,
+    testScriptSources,
+    executedRequest,
+    executionId,
+    sentAt,
+  } = input
   let { responseHeaders } = input
   const reader = response.body?.getReader()
   let bodyText = ''
@@ -410,7 +449,7 @@ async function consumeSseResponse(input: {
     events: [],
   }
 
-  emitHttpSseStreamUpdated(streamState)
+  emitHttpSseStreamUpdated(streamState, input.input.suppressSseEvents)
 
   try {
     if (reader) {
@@ -428,6 +467,7 @@ async function consumeSseResponse(input: {
           bodyText,
           streamState,
           startedAt: input.startedAt,
+          suppressSseEvents: input.input.suppressSseEvents,
         }))
       }
 
@@ -439,6 +479,7 @@ async function consumeSseResponse(input: {
       bodyText,
       streamState,
       startedAt: input.startedAt,
+      suppressSseEvents: input.input.suppressSseEvents,
       flush: true,
     }))
 
@@ -470,13 +511,16 @@ async function consumeSseResponse(input: {
     const authRetryRequested = postRequestResult.retryRequested
       ? false
       : await maybeRetryWithTokenRefresh({
-        input: input.input,
-        options: input.options,
-        responseStatus: response.status,
-        resolvedAuth: input.resolvedAuth,
-      })
-    const shouldRetryRequest = (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.input.requestMetadata)
-    const testResult = shouldRetryRequest ? { scriptErrors: [], registeredTests: 0, testRun: null } : await runtime.runTestScripts(testScriptSources, scriptResponse)
+          input: input.input,
+          options: input.options,
+          responseStatus: response.status,
+          resolvedAuth: input.resolvedAuth,
+        })
+    const shouldRetryRequest =
+      (postRequestResult.retryRequested || authRetryRequested) && shouldEmitRetryRequest(input.input.requestMetadata)
+    const testResult = shouldRetryRequest
+      ? { scriptErrors: [], registeredTests: 0, testRun: null }
+      : await runtime.runTestScripts(testScriptSources, scriptResponse)
 
     const responseSnapshot: ReceivedResponseSnapshot = {
       status: response.status,
@@ -493,6 +537,8 @@ async function consumeSseResponse(input: {
       id: executionId,
       folderRunId: input.input.folderRunId ?? null,
       folderRunFolderId: input.input.folderRunFolderId ?? null,
+      requestBatchId: input.input.requestBatchId ?? null,
+      requestBatchRowId: input.input.requestBatchRowId ?? null,
       requestId: input.input.requestId,
       requestName,
       request: executedRequest,
@@ -523,7 +569,7 @@ async function consumeSseResponse(input: {
       durationMs,
       state: 'completed',
     }
-    emitHttpSseStreamUpdated(streamState)
+    emitHttpSseStreamUpdated(streamState, input.input.suppressSseEvents)
 
     return Result.Success({
       status: response.status,
@@ -540,24 +586,30 @@ async function consumeSseResponse(input: {
     })
   } catch (error) {
     if (isAbortError(error)) {
-      emitHttpSseStreamUpdated({
-        ...streamState,
-        body: bodyText,
-        durationMs: Date.now() - input.startedAt,
-        state: 'cancelled',
-        responseError: 'Request cancelled',
-      })
+      emitHttpSseStreamUpdated(
+        {
+          ...streamState,
+          body: bodyText,
+          durationMs: Date.now() - input.startedAt,
+          state: 'cancelled',
+          responseError: 'Request cancelled',
+        },
+        input.input.suppressSseEvents
+      )
       return GenericError.Message('Request cancelled')
     }
 
     const errorMessage = formatRequestError(error)
-    emitHttpSseStreamUpdated({
-      ...streamState,
-      body: bodyText,
-      durationMs: Date.now() - input.startedAt,
-      state: 'failed',
-      responseError: errorMessage,
-    })
+    emitHttpSseStreamUpdated(
+      {
+        ...streamState,
+        body: bodyText,
+        durationMs: Date.now() - input.startedAt,
+        state: 'failed',
+        responseError: errorMessage,
+      },
+      input.input.suppressSseEvents
+    )
     return GenericError.Message(errorMessage)
   }
 }
@@ -567,6 +619,7 @@ function appendBufferedSseEvents(input: {
   bodyText: string
   streamState: HttpSseStreamState
   startedAt: number
+  suppressSseEvents?: boolean
   flush?: boolean
 }) {
   let buffer = normalizeSseText(input.buffer)
@@ -581,18 +634,36 @@ function appendBufferedSseEvents(input: {
 
     const block = buffer.slice(0, separatorIndex)
     buffer = buffer.slice(separatorIndex + 2)
-    ;({ bodyText, streamState } = appendSseBlock({ block, bodyText, streamState, startedAt: input.startedAt }))
+    ;({ bodyText, streamState } = appendSseBlock({
+      block,
+      bodyText,
+      streamState,
+      startedAt: input.startedAt,
+      suppressSseEvents: input.suppressSseEvents,
+    }))
   }
 
   if (input.flush && buffer.trim()) {
-    ;({ bodyText, streamState } = appendSseBlock({ block: buffer, bodyText, streamState, startedAt: input.startedAt }))
+    ;({ bodyText, streamState } = appendSseBlock({
+      block: buffer,
+      bodyText,
+      streamState,
+      startedAt: input.startedAt,
+      suppressSseEvents: input.suppressSseEvents,
+    }))
     buffer = ''
   }
 
   return { buffer, bodyText, streamState }
 }
 
-function appendSseBlock(input: { block: string; bodyText: string; streamState: HttpSseStreamState; startedAt: number }) {
+function appendSseBlock(input: {
+  block: string
+  bodyText: string
+  streamState: HttpSseStreamState
+  startedAt: number
+  suppressSseEvents?: boolean
+}) {
   const parsedEvent = parseSseBlock(input.block)
   if (!parsedEvent) {
     return { bodyText: input.bodyText, streamState: input.streamState }
@@ -610,7 +681,7 @@ function appendSseBlock(input: { block: string; bodyText: string; streamState: H
     events: [...input.streamState.events, nextEvent],
   }
 
-  emitHttpSseStreamUpdated(nextStreamState)
+  emitHttpSseStreamUpdated(nextStreamState, input.suppressSseEvents)
 
   return {
     bodyText: nextBodyText,
@@ -618,19 +689,15 @@ function appendSseBlock(input: { block: string; bodyText: string; streamState: H
   }
 }
 
-function emitHttpSseStreamUpdated(stream: HttpSseStreamState) {
+function emitHttpSseStreamUpdated(stream: HttpSseStreamState, suppressSseEvents = false) {
+  if (suppressSseEvents) {
+    return
+  }
   emitGenericEvent({ type: 'http-sse-stream-updated', stream })
 }
 
 function normalizeSseText(value: string) {
   return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-}
-
-function clearActiveHttpRequest(requestId: string, executionId: string) {
-  const activeRequest = activeHttpRequests.get(requestId)
-  if (activeRequest?.executionId === executionId) {
-    activeHttpRequests.delete(requestId)
-  }
 }
 
 function isAbortError(error: unknown) {
@@ -640,7 +707,20 @@ function isAbortError(error: unknown) {
 function buildExecutedRequestSnapshot(input: {
   requestId: string
   requestName: string
-  request: Pick<SendRequestInput, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType' | 'graphqlQuery' | 'graphqlVariables'>
+  request: Pick<
+    SendRequestInput,
+    | 'method'
+    | 'url'
+    | 'pathParams'
+    | 'searchParams'
+    | 'auth'
+    | 'headers'
+    | 'body'
+    | 'bodyType'
+    | 'rawType'
+    | 'graphqlQuery'
+    | 'graphqlVariables'
+  >
   url: string
   headers: Headers
   body: string
@@ -723,7 +803,18 @@ function parseResponseHeaderEntries(headers: string) {
 }
 
 function collectUsedVariables(
-  input: Pick<SendRequestInput, 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'graphqlQuery' | 'graphqlVariables'>,
+  input: Pick<
+    SendRequestInput,
+    | 'url'
+    | 'pathParams'
+    | 'searchParams'
+    | 'auth'
+    | 'headers'
+    | 'body'
+    | 'bodyType'
+    | 'graphqlQuery'
+    | 'graphqlVariables'
+  >,
   variables: Record<string, string>
 ) {
   const variableNames = new Set<string>()
@@ -881,7 +972,7 @@ async function maybeRetryWithTokenRefresh(input: {
   if (
     input.input.requestMetadata?.sourceRuntime !== 'request-editor' ||
     (input.input.requestMetadata?.isRetry ?? false) ||
-    input.responseStatus !== 401 && input.responseStatus !== 403 ||
+    (input.responseStatus !== 401 && input.responseStatus !== 403) ||
     !tokenRefreshRequestId ||
     tokenRefreshRequestId === input.input.requestId
   ) {
@@ -913,8 +1004,10 @@ async function maybeRetryWithTokenRefresh(input: {
       graphqlVariables: tokenRefreshRequest.graphqlVariables,
       tlsVerificationMode: tokenRefreshRequest.tlsVerificationMode,
       activeEnvironmentIds: input.input.activeEnvironmentIds,
+      immutableVariables: input.input.immutableVariables,
       saveToHistory: tokenRefreshRequest.saveToHistory,
       historyKeepLast: input.input.historyKeepLast,
+      suppressSseEvents: input.input.suppressSseEvents,
       requestMetadata: {
         sourceRuntime: 'call-request',
         isRetry: false,

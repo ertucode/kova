@@ -16,6 +16,7 @@ import type { SharedScriptRecord } from '@common/SharedScripts'
 import { getSseEventDisplayName, isSseContentType, parseSseEvents } from '@common/Sse'
 import type {
   HttpSseStreamState,
+  RequestExecutionRecord,
   RequestScriptError,
   RequestTestRun,
   SendRequestResponse,
@@ -49,25 +50,9 @@ import { saveHttpResponseBodyToFile } from './saveResponseToFile'
 const readOnlyCodeEditorOnChange = () => undefined
 const jsonResponsePathExtension = createJsonResponsePathExtension()
 
-export const RequestDetailsResponsePanel = memo(function RequestDetailsResponsePanel({
-  isSending,
-  requestName,
-  requestHeaders,
-  requestBody,
-  requestBodyType,
-  requestRawType,
-  requestGraphqlQuery,
-  requestGraphqlVariables,
-  responseVisualizer,
-  responseTableAccessor,
-  preferredResponseBodyView,
-  visualizerRequestDraft,
-  onJumpToScriptError,
-  visualizerEnvironments,
-  sharedScripts,
-  scriptPackageArtifacts,
-}: {
+export type RequestDetailsResponsePanelProps = {
   isSending: boolean
+  execution?: RequestExecutionRecord
   requestName: string
   requestHeaders: string
   requestBody: string
@@ -93,8 +78,28 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
   }>
   sharedScripts: SharedScriptRecord[]
   scriptPackageArtifacts: ScriptPackageArtifact[]
-}) {
-  const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
+}
+
+export const RequestDetailsResponsePanel = memo(function RequestDetailsResponsePanel({
+  isSending,
+  execution,
+  requestName,
+  requestHeaders,
+  requestBody,
+  requestBodyType,
+  requestRawType,
+  requestGraphqlQuery,
+  requestGraphqlVariables,
+  responseVisualizer,
+  responseTableAccessor,
+  preferredResponseBodyView,
+  visualizerRequestDraft,
+  onJumpToScriptError,
+  visualizerEnvironments,
+  sharedScripts,
+  scriptPackageArtifacts,
+}: RequestDetailsResponsePanelProps) {
+  const liveSelectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
   const responsePaneHeight = useSelector(folderExplorerEditorStore, state => state.context.responsePaneHeight)
@@ -102,19 +107,59 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
     appSettingsStore,
     state => state.context.settings?.responseBodyDisplayMode ?? 'raw'
   )
-  const response = useSelector(requestExecutionStore, state =>
-    selectedRequestId ? (state.context.responseByRequestId[selectedRequestId] ?? null) : null
+  const liveResponse = useSelector(requestExecutionStore, state =>
+    liveSelectedRequestId ? (state.context.responseByRequestId[liveSelectedRequestId] ?? null) : null
   )
-  const responseError = useSelector(requestExecutionStore, state =>
-    selectedRequestId ? (state.context.errorByRequestId[selectedRequestId] ?? null) : null
+  const liveResponseError = useSelector(requestExecutionStore, state =>
+    liveSelectedRequestId ? (state.context.errorByRequestId[liveSelectedRequestId] ?? null) : null
   )
-  const scriptErrors = useSelector(requestExecutionStore, state =>
-    selectedRequestId
-      ? (state.context.scriptErrorsByRequestId[selectedRequestId] ?? EMPTY_SCRIPT_ERRORS)
+  const liveScriptErrors = useSelector(requestExecutionStore, state =>
+    liveSelectedRequestId
+      ? (state.context.scriptErrorsByRequestId[liveSelectedRequestId] ?? EMPTY_SCRIPT_ERRORS)
       : EMPTY_SCRIPT_ERRORS
   )
-  const sseStream = useSelector(requestExecutionStore, state =>
-    selectedRequestId ? (state.context.httpSseByRequestId[selectedRequestId] ?? null) : null
+  const liveSseStream = useSelector(requestExecutionStore, state =>
+    liveSelectedRequestId ? (state.context.httpSseByRequestId[liveSelectedRequestId] ?? null) : null
+  )
+  const historicalResponse = useMemo<SendRequestResponse | null>(() => {
+    if (!execution?.response) return null
+    return {
+      ...execution.response,
+      requestScope: execution.request.variables,
+      scriptErrors: execution.scriptErrors,
+      testRun: execution.testRun,
+      updatedEnvironments: [],
+      consoleEntries: execution.consoleEntries,
+      execution,
+    }
+  }, [execution])
+  const selectedRequestId = execution?.requestId ?? liveSelectedRequestId
+  const response = execution ? historicalResponse : liveResponse
+  const responseError = execution ? execution.responseError : liveResponseError
+  const scriptErrors = execution ? execution.scriptErrors : liveScriptErrors
+  const sseStream = execution ? null : liveSseStream
+  const sending = execution ? false : isSending
+  const displayedRequestName = execution?.requestName ?? requestName
+  const displayedRequestHeaders = execution?.request.headers ?? requestHeaders
+  const displayedRequestBody = execution?.request.body ?? requestBody
+  const displayedRequestBodyType = execution?.request.bodyType ?? requestBodyType
+  const displayedRequestRawType = execution?.request.rawType ?? requestRawType
+  const displayedGraphqlQuery = execution?.request.graphqlQuery ?? requestGraphqlQuery
+  const displayedGraphqlVariables = execution?.request.graphqlVariables ?? requestGraphqlVariables
+  const displayedRequestDraft = useMemo(
+    () =>
+      execution
+        ? {
+            ...visualizerRequestDraft,
+            method: execution.request.method,
+            url: execution.request.url,
+            headers: execution.request.headers,
+            body: execution.request.body,
+            bodyType: execution.request.bodyType,
+            rawType: execution.request.rawType,
+          }
+        : visualizerRequestDraft,
+    [execution, visualizerRequestDraft]
   )
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
   const [requestHistoryCount, setRequestHistoryCount] = useState<number | null>(null)
@@ -166,13 +211,13 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
 
     const result = await getWindowElectron().createRequestExample({
       requestId: selectedRequestId,
-      name: `${requestName} ${responseSource.status || responseSource.statusText}`,
-      requestHeaders,
-      requestBody,
-      requestBodyType,
-      requestRawType,
-      graphqlQuery: requestGraphqlQuery,
-      graphqlVariables: requestGraphqlVariables,
+      name: `${displayedRequestName} ${responseSource.status || responseSource.statusText}`,
+      requestHeaders: displayedRequestHeaders,
+      requestBody: displayedRequestBody,
+      requestBodyType: displayedRequestBodyType,
+      requestRawType: displayedRequestRawType,
+      graphqlQuery: displayedGraphqlQuery,
+      graphqlVariables: displayedGraphqlVariables,
       responseStatus: responseSource.status,
       responseStatusText: responseSource.statusText,
       responseHeaders: responseSource.headers,
@@ -186,15 +231,19 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
 
     await FolderExplorerCoordinator.loadItems()
     FolderExplorerCoordinator.selectItem({ itemType: 'example', id: result.data.id })
-    toast.show({ severity: 'success', title: 'Example saved', message: `Saved response example for ${requestName}.` })
+    toast.show({
+      severity: 'success',
+      title: 'Example saved',
+      message: `Saved response example for ${displayedRequestName}.`,
+    })
   }, [
-    requestBody,
-    requestBodyType,
-    requestHeaders,
-    requestName,
-    requestRawType,
-    requestGraphqlQuery,
-    requestGraphqlVariables,
+    displayedGraphqlQuery,
+    displayedGraphqlVariables,
+    displayedRequestBody,
+    displayedRequestBodyType,
+    displayedRequestHeaders,
+    displayedRequestName,
+    displayedRequestRawType,
     response,
     selectedRequestId,
     sseStream,
@@ -218,11 +267,11 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
     }
 
     await saveHttpResponseBodyToFile({
-      requestName,
+      requestName: displayedRequestName,
       headers: responseSource.headers,
       body: responseSource.body,
     })
-  }, [requestName, response, sseStream])
+  }, [displayedRequestName, response, sseStream])
 
   const updateResponseTableAccessor = useCallback((value: string) => {
     const { selected, entries } = folderExplorerEditorStore.getSnapshot().context
@@ -263,7 +312,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
     }
   }, [
     selectedRequestId,
-    isSending,
+    sending,
     response?.execution.response?.receivedAt,
     responseError,
     scriptErrors.length,
@@ -337,7 +386,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
       />
 
       <div className="relative flex h-[calc(100%-3px)] min-h-0 flex-col overflow-hidden">
-        {isSending ? (
+        {sending ? (
           <>
             <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px overflow-hidden bg-base-content/8">
               <div className="h-full w-1/3 animate-[request-loading_1.25s_ease-in-out_infinite] rounded-full bg-info/80 shadow-[0_0_18px_rgba(59,130,246,0.4)]" />
@@ -347,7 +396,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
         <ResponseScriptErrors responseError={responseError} errors={scriptErrors} onJumpToError={onJumpToScriptError} />
         <div
           className={`flex min-h-0 flex-1 overflow-hidden transition duration-200 ${
-            isSending && !shouldShowSsePanel ? 'pointer-events-none blur-[1.5px] saturate-50 opacity-60' : ''
+            sending && !shouldShowSsePanel ? 'pointer-events-none blur-[1.5px] saturate-50 opacity-60' : ''
           }`}
         >
           {shouldShowSsePanel ? (
@@ -355,7 +404,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
               stream={sseStream}
               response={response}
               requestId={selectedRequestId}
-              requestName={requestName}
+              requestName={displayedRequestName}
               requestHistoryCount={requestHistoryCount}
               events={displayedSseEvents}
               onSaveAsExample={
@@ -370,9 +419,9 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
                 rawBody={response?.body ?? ''}
                 headers={response?.headers ?? ''}
                 requestId={selectedRequestId}
-                requestName={requestName}
+                requestName={displayedRequestName}
                 requestHistoryCount={requestHistoryCount}
-                description="Response body will appear here."
+                description={execution?.response?.bodyOmitted ? 'Body omitted from history (over 500 KB).' : 'Response body will appear here.'}
                 headersDescription="Response headers will appear here."
                 contentType={responseContentType}
                 responseVisualizer={responseVisualizer}
@@ -380,7 +429,7 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
                 preferredResponseBodyView={preferredResponseBodyView}
                 responseBodyDisplayMode={responseBodyDisplayMode}
                 requestSelection={responseBodyRequestSelection}
-                requestDraft={visualizerRequestDraft}
+                requestDraft={displayedRequestDraft}
                 sharedScripts={sharedScripts}
                 scriptPackageArtifacts={scriptPackageArtifacts}
                 onUpdateResponseTableAccessor={updateResponseTableAccessor}

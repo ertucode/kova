@@ -6,7 +6,11 @@ import {
   type DeleteCookieInput,
   type UpdateCookieInput,
 } from './Cookies.js'
-import { type FolderExplorerTabRecord, type SaveFolderExplorerTabsInput, type UpdateFolderExplorerTabInput } from './FolderExplorerTabs.js'
+import {
+  type FolderExplorerTabRecord,
+  type SaveFolderExplorerTabsInput,
+  type UpdateFolderExplorerTabInput,
+} from './FolderExplorerTabs.js'
 import {
   type CreateFolderInput,
   type DeleteFolderInput,
@@ -26,6 +30,23 @@ import type {
   RunFolderRequestsInput,
   RunFolderRequestsResponse,
 } from './FolderRuns.js'
+import type {
+  CancelRequestBatchInput,
+  DeleteRequestBatchInput,
+  GetRequestBatchInput,
+  GetRequestBatchResponse,
+  ImportRequestBatchFileInput,
+  ListRequestBatchesInput,
+  ListRequestBatchesResponse,
+  ListRequestBatchRowsInput,
+  ListRequestBatchRowsResponse,
+  PickRequestBatchFileResponse,
+  RequestBatchRecord,
+  RunRequestBatchRowInput,
+  RunRequestBatchRowResponse,
+  StartRequestBatchInput,
+  StartRequestBatchResponse,
+} from './RequestBatches.js'
 import {
   type CreateEnvironmentInput,
   type DeleteEnvironmentInput,
@@ -66,12 +87,14 @@ import {
   type DeleteRequestInput,
   type GetRequestHistoryCountInput,
   type GetRequestHistoryCountResponse,
+  type GetRequestHistoryEntryInput,
   type GetRequestInput,
   type HttpRequestRecord,
   type ListRecentHttpRequestUsageResponse,
   type ListRequestHistoryInput,
   type ListRequestHistoryResponse,
   type ListWebSocketSavedMessagesInput,
+  type RequestExecutionRecord,
   type SendRequestInput,
   type SendRequestResponse,
   type TrimRequestHistoryInput,
@@ -261,6 +284,15 @@ export type EventResponseMapping = {
   deleteFolderRunHistory: Promise<GenericResult<void>>
   listFolderRunHistory: Promise<ListFolderRunHistoryResponse>
   getFolderRunHistory: Promise<GenericResult<GetFolderRunHistoryResponse>>
+  pickRequestBatchFile: Promise<GenericResult<PickRequestBatchFileResponse>>
+  importRequestBatchFile: Promise<GenericResult<RequestBatchRecord>>
+  listRequestBatches: Promise<ListRequestBatchesResponse>
+  getRequestBatch: Promise<GenericResult<GetRequestBatchResponse>>
+  listRequestBatchRows: Promise<ListRequestBatchRowsResponse>
+  startRequestBatch: Promise<GenericResult<StartRequestBatchResponse>>
+  runRequestBatchRow: Promise<GenericResult<RunRequestBatchRowResponse>>
+  cancelRequestBatch: Promise<GenericResult<void>>
+  deleteRequestBatch: Promise<GenericResult<void>>
   createFolder: Promise<GenericResult<FolderRecord>>
   getFolder: Promise<GenericResult<FolderRecord>>
   renameFolder: Promise<GenericResult<void>>
@@ -326,6 +358,7 @@ export type EventResponseMapping = {
   updateWebSocketSavedMessage: Promise<GenericResult<WebSocketSavedMessageRecord>>
   deleteWebSocketSavedMessage: Promise<GenericResult<void>>
   getRequestHistoryCount: Promise<GetRequestHistoryCountResponse>
+  getRequestHistoryEntry: Promise<GenericResult<RequestExecutionRecord>>
   listRecentHttpRequestUsage: Promise<ListRecentHttpRequestUsageResponse>
   listRequestHistory: Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: Promise<GenericResult<void>>
@@ -417,6 +450,15 @@ export type EventRequestMapping = {
   deleteFolderRunHistory: DeleteFolderRunHistoryInput
   listFolderRunHistory: ListFolderRunHistoryInput
   getFolderRunHistory: GetFolderRunHistoryInput
+  pickRequestBatchFile: void
+  importRequestBatchFile: ImportRequestBatchFileInput
+  listRequestBatches: ListRequestBatchesInput
+  getRequestBatch: GetRequestBatchInput
+  listRequestBatchRows: ListRequestBatchRowsInput
+  startRequestBatch: StartRequestBatchInput
+  runRequestBatchRow: RunRequestBatchRowInput
+  cancelRequestBatch: CancelRequestBatchInput
+  deleteRequestBatch: DeleteRequestBatchInput
   createFolder: CreateFolderInput
   getFolder: GetFolderInput
   renameFolder: RenameFolderInput
@@ -482,6 +524,7 @@ export type EventRequestMapping = {
   updateWebSocketSavedMessage: UpdateWebSocketSavedMessageInput
   deleteWebSocketSavedMessage: DeleteWebSocketSavedMessageInput
   getRequestHistoryCount: GetRequestHistoryCountInput
+  getRequestHistoryEntry: GetRequestHistoryEntryInput
   listRecentHttpRequestUsage: void
   listRequestHistory: ListRequestHistoryInput
   deleteRequestHistoryEntry: DeleteRequestHistoryEntryInput
@@ -583,6 +626,15 @@ export type WindowElectron = {
   deleteFolderRunHistory: (input: DeleteFolderRunHistoryInput) => Promise<GenericResult<void>>
   listFolderRunHistory: (input: ListFolderRunHistoryInput) => Promise<ListFolderRunHistoryResponse>
   getFolderRunHistory: (input: GetFolderRunHistoryInput) => Promise<GenericResult<GetFolderRunHistoryResponse>>
+  pickRequestBatchFile: () => Promise<GenericResult<PickRequestBatchFileResponse>>
+  importRequestBatchFile: (input: ImportRequestBatchFileInput) => Promise<GenericResult<RequestBatchRecord>>
+  listRequestBatches: (input: ListRequestBatchesInput) => Promise<ListRequestBatchesResponse>
+  getRequestBatch: (input: GetRequestBatchInput) => Promise<GenericResult<GetRequestBatchResponse>>
+  listRequestBatchRows: (input: ListRequestBatchRowsInput) => Promise<ListRequestBatchRowsResponse>
+  startRequestBatch: (input: StartRequestBatchInput) => Promise<GenericResult<StartRequestBatchResponse>>
+  runRequestBatchRow: (input: RunRequestBatchRowInput) => Promise<GenericResult<RunRequestBatchRowResponse>>
+  cancelRequestBatch: (input: CancelRequestBatchInput) => Promise<GenericResult<void>>
+  deleteRequestBatch: (input: DeleteRequestBatchInput) => Promise<GenericResult<void>>
   createFolder: (input: CreateFolderInput) => Promise<GenericResult<FolderRecord>>
   getFolder: (input: GetFolderInput) => Promise<GenericResult<FolderRecord>>
   renameFolder: (input: RenameFolderInput) => Promise<GenericResult<void>>
@@ -640,20 +692,35 @@ export type WindowElectron = {
   loadScriptAiMessagePatchDiff: (
     input: LoadScriptAiMessagePatchDiffInput
   ) => Promise<GenericResult<LoadScriptAiMessagePatchDiffResponse>>
-  loadManagementAgentWorkspace: (input: LoadManagementAgentWorkspaceInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
-  createManagementAgentSession: (input: CreateManagementAgentSessionInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
-  sendManagementAgentMessage: (input: SendManagementAgentMessageInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
-  abortManagementAgentSession: (input: AbortManagementAgentSessionInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
-  applyManagementAgentPlan: (input: ApplyManagementAgentPlanInput) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  loadManagementAgentWorkspace: (
+    input: LoadManagementAgentWorkspaceInput
+  ) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  createManagementAgentSession: (
+    input: CreateManagementAgentSessionInput
+  ) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  sendManagementAgentMessage: (
+    input: SendManagementAgentMessageInput
+  ) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  abortManagementAgentSession: (
+    input: AbortManagementAgentSessionInput
+  ) => Promise<GenericResult<ManagementAgentWorkspaceState>>
+  applyManagementAgentPlan: (
+    input: ApplyManagementAgentPlanInput
+  ) => Promise<GenericResult<ManagementAgentWorkspaceState>>
   listOpenCodeModels: () => Promise<GenericResult<ListOpenCodeModelsResponse>>
   connectWebSocket: (input: WebSocketConnectInput) => Promise<GenericResult<WebSocketConnectResponse>>
   sendWebSocketMessage: (input: WebSocketSendMessageInput) => Promise<GenericResult<void>>
   disconnectWebSocket: (input: WebSocketDisconnectInput) => Promise<GenericResult<void>>
   listWebSocketSavedMessages: (input: ListWebSocketSavedMessagesInput) => Promise<WebSocketSavedMessageRecord[]>
-  createWebSocketSavedMessage: (input: CreateWebSocketSavedMessageInput) => Promise<GenericResult<WebSocketSavedMessageRecord>>
-  updateWebSocketSavedMessage: (input: UpdateWebSocketSavedMessageInput) => Promise<GenericResult<WebSocketSavedMessageRecord>>
+  createWebSocketSavedMessage: (
+    input: CreateWebSocketSavedMessageInput
+  ) => Promise<GenericResult<WebSocketSavedMessageRecord>>
+  updateWebSocketSavedMessage: (
+    input: UpdateWebSocketSavedMessageInput
+  ) => Promise<GenericResult<WebSocketSavedMessageRecord>>
   deleteWebSocketSavedMessage: (input: DeleteWebSocketSavedMessageInput) => Promise<GenericResult<void>>
   getRequestHistoryCount: (input: GetRequestHistoryCountInput) => Promise<GetRequestHistoryCountResponse>
+  getRequestHistoryEntry: (input: GetRequestHistoryEntryInput) => Promise<GenericResult<RequestExecutionRecord>>
   listRecentHttpRequestUsage: () => Promise<ListRecentHttpRequestUsageResponse>
   listRequestHistory: (input: ListRequestHistoryInput) => Promise<ListRequestHistoryResponse>
   deleteRequestHistoryEntry: (input: DeleteRequestHistoryEntryInput) => Promise<GenericResult<void>>
@@ -664,22 +731,46 @@ export type WindowElectron = {
   deleteDatabaseConfig: (input: DeleteDatabaseConfigInput) => Promise<GenericResult<DatabaseConfigState>>
   setActiveDatabaseConfig: (input: SetActiveDatabaseConfigInput) => Promise<GenericResult<DatabaseConfigState>>
   pickPostmanCollectionFile: () => Promise<GenericResult<PickPostmanCollectionFileResponse>>
-  analyzePostmanCollection: (input: AnalyzePostmanCollectionInput) => Promise<GenericResult<AnalyzePostmanCollectionResponse>>
-  importPostmanCollection: (input: ImportPostmanCollectionInput) => Promise<GenericResult<ImportPostmanCollectionResponse>>
-  pickPostmanCollectionExportFile: (input: PickPostmanCollectionExportFileInput) => Promise<GenericResult<PickPostmanCollectionExportFileResponse>>
-  analyzePostmanCollectionExport: (input: AnalyzePostmanCollectionExportInput) => Promise<GenericResult<AnalyzePostmanCollectionExportResponse>>
-  exportPostmanCollection: (input: ExportPostmanCollectionInput) => Promise<GenericResult<ExportPostmanCollectionResponse>>
+  analyzePostmanCollection: (
+    input: AnalyzePostmanCollectionInput
+  ) => Promise<GenericResult<AnalyzePostmanCollectionResponse>>
+  importPostmanCollection: (
+    input: ImportPostmanCollectionInput
+  ) => Promise<GenericResult<ImportPostmanCollectionResponse>>
+  pickPostmanCollectionExportFile: (
+    input: PickPostmanCollectionExportFileInput
+  ) => Promise<GenericResult<PickPostmanCollectionExportFileResponse>>
+  analyzePostmanCollectionExport: (
+    input: AnalyzePostmanCollectionExportInput
+  ) => Promise<GenericResult<AnalyzePostmanCollectionExportResponse>>
+  exportPostmanCollection: (
+    input: ExportPostmanCollectionInput
+  ) => Promise<GenericResult<ExportPostmanCollectionResponse>>
   pickPostmanEnvironmentFile: () => Promise<GenericResult<PickPostmanEnvironmentFileResponse>>
-  analyzePostmanEnvironment: (input: AnalyzePostmanEnvironmentInput) => Promise<GenericResult<AnalyzePostmanEnvironmentResponse>>
-  importPostmanEnvironment: (input: ImportPostmanEnvironmentInput) => Promise<GenericResult<ImportPostmanEnvironmentResponse>>
-  pickPostmanEnvironmentExportFile: (input: PickPostmanEnvironmentExportFileInput) => Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
-  analyzePostmanEnvironmentExport: (input: AnalyzePostmanEnvironmentExportInput) => Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
-  exportPostmanEnvironment: (input: ExportPostmanEnvironmentInput) => Promise<GenericResult<ExportPostmanEnvironmentResponse>>
+  analyzePostmanEnvironment: (
+    input: AnalyzePostmanEnvironmentInput
+  ) => Promise<GenericResult<AnalyzePostmanEnvironmentResponse>>
+  importPostmanEnvironment: (
+    input: ImportPostmanEnvironmentInput
+  ) => Promise<GenericResult<ImportPostmanEnvironmentResponse>>
+  pickPostmanEnvironmentExportFile: (
+    input: PickPostmanEnvironmentExportFileInput
+  ) => Promise<GenericResult<PickPostmanEnvironmentExportFileResponse>>
+  analyzePostmanEnvironmentExport: (
+    input: AnalyzePostmanEnvironmentExportInput
+  ) => Promise<GenericResult<AnalyzePostmanEnvironmentExportResponse>>
+  exportPostmanEnvironment: (
+    input: ExportPostmanEnvironmentInput
+  ) => Promise<GenericResult<ExportPostmanEnvironmentResponse>>
   pickOpenApiSpecFile: () => Promise<GenericResult<PickOpenApiSpecFileResponse>>
   analyzeOpenApiSpec: (input: AnalyzeOpenApiSpecInput) => Promise<GenericResult<AnalyzeOpenApiSpecResponse>>
   importOpenApiSpec: (input: ImportOpenApiSpecInput) => Promise<GenericResult<ImportOpenApiSpecResponse>>
-  pickOpenApiSpecExportFile: (input: PickOpenApiSpecExportFileInput) => Promise<GenericResult<PickOpenApiSpecExportFileResponse>>
-  analyzeOpenApiSpecExport: (input: AnalyzeOpenApiSpecExportInput) => Promise<GenericResult<AnalyzeOpenApiSpecExportResponse>>
+  pickOpenApiSpecExportFile: (
+    input: PickOpenApiSpecExportFileInput
+  ) => Promise<GenericResult<PickOpenApiSpecExportFileResponse>>
+  analyzeOpenApiSpecExport: (
+    input: AnalyzeOpenApiSpecExportInput
+  ) => Promise<GenericResult<AnalyzeOpenApiSpecExportResponse>>
   exportOpenApiSpec: (input: ExportOpenApiSpecInput) => Promise<GenericResult<ExportOpenApiSpecResponse>>
   listSharedScripts: (input: ListSharedScriptsInput) => Promise<SharedScriptRecord[]>
   createSharedScript: (input: CreateSharedScriptInput) => Promise<GenericResult<SharedScriptRecord>>

@@ -85,6 +85,7 @@ type PrepareHttpRequestBaseInput = Pick<
   | 'graphqlVariables'
   | 'activeEnvironmentIds'
   | 'environmentSnapshot'
+  | 'immutableVariables'
 > &
   Partial<Pick<SendRequestInput, 'body' | 'postRequestScript' | 'testScript' | 'requestMetadata'>>
 
@@ -177,6 +178,7 @@ export async function prepareHttpRequestBase(
       graphqlVariables: input.graphqlVariables ?? '',
     },
     requestMetadata: input.requestMetadata,
+    immutableVariables: input.immutableVariables,
     environments: prepareContext.environments,
     folderEnvironments: prepareContext.folderEnvironments,
     sharedScripts,

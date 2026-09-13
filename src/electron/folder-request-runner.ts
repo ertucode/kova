@@ -24,7 +24,7 @@ type SendRequestOptions = Parameters<typeof sendRequest>[1]
 
 type ActiveRunState = {
   run: FolderRunRecord
-  activeRequestIds: Set<string>
+  activeExecutions: Map<string, string>
   isCancelling: boolean
 }
 
@@ -69,7 +69,7 @@ export async function runFolderRequests(
     startedAt: now,
     completedAt: null,
   }
-  const state: ActiveRunState = { run, activeRequestIds: new Set(), isCancelling: false }
+  const state: ActiveRunState = { run, activeExecutions: new Map(), isCancelling: false }
 
   activeRunsById.set(run.id, state)
   activeRunIdByFolderId.set(run.folderId, run.id)
@@ -91,7 +91,9 @@ export async function cancelFolderRun(input: { runId: string }): Promise<Generic
   }
 
   state.isCancelling = true
-  await Promise.all(Array.from(state.activeRequestIds).map(requestId => cancelHttpRequest({ requestId })))
+  await Promise.all(
+    Array.from(state.activeExecutions).map(([executionId, requestId]) => cancelHttpRequest({ requestId, executionId }))
+  )
   return Result.Success(undefined)
 }
 
@@ -151,7 +153,8 @@ async function executeRequest(
   }
 
   const startedAt = Date.now()
-  state.activeRequestIds.add(resolved.request.id)
+  const executionId = crypto.randomUUID()
+  state.activeExecutions.set(executionId, resolved.request.id)
   updateRequestState(state, resolved.request.id, { status: 'running', startedAt })
   emitGenericEvent({
     type: 'folder-run-request-started',
@@ -163,7 +166,10 @@ async function executeRequest(
   })
 
   try {
-    const result = await sendRequest(toSendRequestInput(resolved.request, input, state.run.id, environmentSnapshot), options)
+    const result = await sendRequest(
+      toSendRequestInput(resolved.request, input, state.run.id, executionId, environmentSnapshot),
+      options
+    )
     if (!result.success) {
       updateRequestState(state, resolved.request.id, {
         status: state.isCancelling ? 'cancelled' : 'failed',
@@ -187,7 +193,7 @@ async function executeRequest(
       completedAt: Date.now(),
     })
   } finally {
-    state.activeRequestIds.delete(resolved.request.id)
+    state.activeExecutions.delete(executionId)
     const request = state.run.requests.find(item => item.requestId === resolved.request.id)
     if (request) {
       emitGenericEvent({
@@ -201,12 +207,18 @@ async function executeRequest(
   }
 }
 
-async function resolveFolderRequests(items: ExplorerItem[], input: RunFolderRequestsInput): Promise<ResolvedFolderRequest[]> {
+async function resolveFolderRequests(
+  items: ExplorerItem[],
+  input: RunFolderRequestsInput
+): Promise<ResolvedFolderRequest[]> {
   const descendantFolderIds = getDescendantFolderIds(items, input.folderId)
   const requestItems = items
     .filter(
       (item): item is Extract<ExplorerItem, { itemType: 'request' }> =>
-        item.itemType === 'request' && item.requestType === 'http' && item.parentFolderId !== null && descendantFolderIds.has(item.parentFolderId)
+        item.itemType === 'request' &&
+        item.requestType === 'http' &&
+        item.parentFolderId !== null &&
+        descendantFolderIds.has(item.parentFolderId)
     )
     .sort((left, right) => left.position - right.position || left.createdAt - right.createdAt)
 
@@ -268,9 +280,11 @@ function toSendRequestInput(
   request: HttpRequestRecord,
   input: RunFolderRequestsInput,
   runId: string,
+  executionId: string,
   environmentSnapshot: SendRequestInput['environmentSnapshot']
 ): SendRequestInput {
   return {
+    executionId,
     requestId: request.id,
     method: request.method,
     url: request.url,
@@ -293,6 +307,7 @@ function toSendRequestInput(
     historyKeepLast: input.historyKeepLast,
     folderRunId: runId,
     folderRunFolderId: input.folderId,
+    suppressSseEvents: true,
     requestMetadata: {
       sourceRuntime: 'folder-run',
       isRetry: false,
@@ -312,7 +327,10 @@ function updateRequestState(
   state.run.summary = buildSummary(state.run)
 }
 
-function markRemainingRequests(state: ActiveRunState, status: Extract<FolderRunRequestStatus, 'cancelled' | 'skipped'>) {
+function markRemainingRequests(
+  state: ActiveRunState,
+  status: Extract<FolderRunRequestStatus, 'cancelled' | 'skipped'>
+) {
   const now = Date.now()
   state.run.requests = state.run.requests.map(request =>
     request.status === 'pending'
@@ -396,7 +414,12 @@ function getDescendantFolderIds(items: ExplorerItem[], folderId: string) {
   while (changed) {
     changed = false
     for (const item of items) {
-      if (item.itemType === 'folder' && item.parentFolderId && folderIds.has(item.parentFolderId) && !folderIds.has(item.id)) {
+      if (
+        item.itemType === 'folder' &&
+        item.parentFolderId &&
+        folderIds.has(item.parentFolderId) &&
+        !folderIds.has(item.id)
+      ) {
         folderIds.add(item.id)
         changed = true
       }
@@ -417,12 +440,22 @@ function getOverlappingRuns(items: ExplorerItem[], folderId: string): Overlappin
     }
 
     if (currentAncestors.has(state.run.folderId)) {
-      overlappingRuns.push({ runId: state.run.id, folderId: state.run.folderId, folderName: state.run.folderName, relationship: 'ancestor' })
+      overlappingRuns.push({
+        runId: state.run.id,
+        folderId: state.run.folderId,
+        folderName: state.run.folderName,
+        relationship: 'ancestor',
+      })
       continue
     }
 
     if (descendants.has(state.run.folderId)) {
-      overlappingRuns.push({ runId: state.run.id, folderId: state.run.folderId, folderName: state.run.folderName, relationship: 'descendant' })
+      overlappingRuns.push({
+        runId: state.run.id,
+        folderId: state.run.folderId,
+        folderName: state.run.folderName,
+        relationship: 'descendant',
+      })
     }
   }
 
@@ -430,7 +463,11 @@ function getOverlappingRuns(items: ExplorerItem[], folderId: string): Overlappin
 }
 
 function getAncestorFolderIds(items: ExplorerItem[], folderId: string) {
-  const foldersById = new Map(items.filter((item): item is Extract<ExplorerItem, { itemType: 'folder' }> => item.itemType === 'folder').map(item => [item.id, item]))
+  const foldersById = new Map(
+    items
+      .filter((item): item is Extract<ExplorerItem, { itemType: 'folder' }> => item.itemType === 'folder')
+      .map(item => [item.id, item])
+  )
   const ids = new Set<string>()
   let current = foldersById.get(folderId)?.parentFolderId ?? null
   while (current) {
