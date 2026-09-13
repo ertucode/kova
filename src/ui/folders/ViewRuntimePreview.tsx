@@ -294,7 +294,8 @@ export function ViewRuntimePreview({
 
     lastHandledRunRequestIdRef.current = runRequestId
 
-    iframeRef.current.contentWindow.postMessage({ type: VIEW_RUNTIME_TRIGGER_RUN_EVENT }, '*')
+    // Uncomment to autorun
+    // iframeRef.current.contentWindow.postMessage({ type: VIEW_RUNTIME_TRIGGER_RUN_EVENT }, '*')
     onRunHandled(runRequestId)
   }, [isCacheReady, isIframeReady, onRunHandled, runRequestId])
 
