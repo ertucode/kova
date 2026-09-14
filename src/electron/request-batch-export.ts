@@ -25,10 +25,19 @@ export function buildRequestBatchWorkbook({ batch, rows }: RequestBatchExportDat
     'Response body',
     'Response error',
     'Response body omitted',
+    'Request error',
+    'Test status',
+    'Tests total',
+    'Tests passed',
+    'Tests failed',
+    'Tests skipped',
+    'Test duration (ms)',
+    'Test results (JSON)',
+    'Script errors (JSON)',
   ]
   const values: CellValue[][] = rows.map(({ row, history }) => [
     row.rowIndex + 1,
-    row.status === 'http-error' ? 'HTTP error' : row.status,
+    row.status === 'http-error' ? 'HTTP error' : row.status === 'failed-test' ? 'Failed test' : row.status,
     ...batch.columns.map(column => row.variables[column] ?? ''),
     history?.requestUrl ?? '',
     history?.responseStatus ?? '',
@@ -38,6 +47,15 @@ export function buildRequestBatchWorkbook({ batch, rows }: RequestBatchExportDat
     history?.responseBody ?? '',
     history?.responseError ?? '',
     history ? (history.responseBodyOmitted ? 'Yes' : 'No') : '',
+    row.errorMessage ?? '',
+    history?.testRun?.status ?? '',
+    history?.testRun?.totalCount ?? '',
+    history?.testRun?.passedCount ?? '',
+    history?.testRun?.failedCount ?? '',
+    history?.testRun?.skippedCount ?? '',
+    history?.testRun?.durationMs ?? '',
+    history?.testRun ? JSON.stringify(history.testRun, null, 2) : '',
+    history?.scriptErrors.length ? JSON.stringify(history.scriptErrors, null, 2) : '',
   ])
 
   // Excel cannot store more than 32,767 characters in one cell. Keep all saved

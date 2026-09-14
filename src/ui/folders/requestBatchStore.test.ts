@@ -6,6 +6,28 @@ import { buildSendRequestInput } from './requestSendInput'
 import { REQUEST_BATCH_ROW_PAGE_SIZE, RequestBatchCoordinator, requestBatchStore } from './requestBatchStore'
 
 describe('request batch frontend state', () => {
+  it('shows live failure details without history and clears them when the row restarts', () => {
+    const batch = createBatch('batch-error-details')
+    const row = createRow(batch.id, 0)
+    requestBatchStore.trigger.batchesLoaded({ requestId: batch.requestId, batches: [batch] })
+    requestBatchStore.trigger.pageLoading({ batch, rowOffset: 0, rowPageSize: 50, rowSearchQuery: '' })
+    requestBatchStore.trigger.pageLoaded({
+      batch, rows: [row], rowOffset: 0, rowPageSize: 50, rowSearchQuery: '', nextRowOffset: null, totalRowCount: 1,
+    })
+    requestBatchStore.trigger.rowUpdated({
+      batchId: batch.id, rowId: row.id, status: 'failed', historyId: null,
+      errorMessage: 'Environment variable "API_URL" was not found', startedAt: 10, completedAt: 20,
+    })
+    expect(requestBatchStore.getSnapshot().context.pageByBatchId[batch.id].rows[0]).toMatchObject({
+      status: 'failed', historyId: null, errorMessage: 'Environment variable "API_URL" was not found',
+    })
+    requestBatchStore.trigger.rowUpdated({
+      batchId: batch.id, rowId: row.id, status: 'running', historyId: null,
+      errorMessage: null, startedAt: 30, completedAt: null,
+    })
+    expect(requestBatchStore.getSnapshot().context.pageByBatchId[batch.id].rows[0].errorMessage).toBeNull()
+  })
+
   it('persists a global custom page size and uses it for every batch with status filtering', async () => {
     const first = createBatch('global-size-first')
     const second = createBatch('global-size-second')
@@ -82,6 +104,7 @@ describe('request batch frontend state', () => {
       rowId: rows[0].id,
       status: 'completed',
       historyId: 'history-1',
+      errorMessage: null,
       startedAt: 10,
       completedAt: 20,
     })
@@ -213,11 +236,11 @@ describe('throttled batch progress', () => {
       for (let index = 0; index < 1000; index++) {
         RequestBatchCoordinator.queueRowUpdate({
           batchId: batch.id, rowId: rows[index].id, status: 'running',
-          historyId: null, startedAt: 10, completedAt: null,
+          historyId: null, errorMessage: null, startedAt: 10, completedAt: null,
         })
         RequestBatchCoordinator.queueRowUpdate({
           batchId: batch.id, rowId: rows[index].id, status: 'completed',
-          historyId: `history-${index}`, startedAt: 10, completedAt: 20,
+          historyId: `history-${index}`, errorMessage: null, startedAt: 10, completedAt: 20,
         })
         RequestBatchCoordinator.queueBatchUpdate({
           batchId: batch.id, status: 'running', startedAt: 10, completedAt: null,
@@ -250,7 +273,7 @@ describe('throttled batch progress', () => {
         for (const { batch, rows } of [first, second]) {
           RequestBatchCoordinator.queueRowUpdate({
             batchId: batch.id, rowId: rows[0].id, status: 'completed',
-            historyId: `history-${index}`, startedAt: 10, completedAt: 20,
+            historyId: `history-${index}`, errorMessage: null, startedAt: 10, completedAt: 20,
           })
         }
         vi.advanceTimersByTime(100)
@@ -269,7 +292,7 @@ describe('throttled batch progress', () => {
     const reload = vi.spyOn(RequestBatchCoordinator, 'loadPage').mockResolvedValue(undefined)
     RequestBatchCoordinator.queueRowUpdate({
       batchId: batch.id, rowId: rows[0].id, status: 'http-error',
-      historyId: 'error-history', startedAt: 10, completedAt: 20,
+      historyId: 'error-history', errorMessage: null, startedAt: 10, completedAt: 20,
     })
     for (const status of ['running', 'failed', 'failed'] as const) {
       RequestBatchCoordinator.queueBatchUpdate({
@@ -306,6 +329,7 @@ function createBatch(id: string): RequestBatchRecord {
       runningCount: 0,
       completedCount: 0,
       httpErrorCount: 0,
+      failedTestCount: 0,
       failedCount: 0,
       cancelledCount: 0,
     },
@@ -324,6 +348,7 @@ function createRow(batchId: string, rowIndex: number): RequestBatchRowRecord {
     variables: { customer: `customer-${rowIndex}` },
     status: 'pending',
     historyId: null,
+    errorMessage: null,
     startedAt: null,
     completedAt: null,
     createdAt: 1,

@@ -68,6 +68,18 @@ export const requestBatchStore = createStore({
     pageByBatchId: {},
   } as RequestBatchContext,
   on: {
+    concurrencyUpdated: (context, event: { batchId: string; concurrency: number }) => {
+      const batch = findBatch(context, event.batchId)
+      if (!batch) return context
+      const updatedBatch = { ...batch, concurrency: event.concurrency }
+      const page = context.pageByBatchId[event.batchId]
+      return {
+        ...replaceBatch(context, updatedBatch),
+        pageByBatchId: page
+          ? { ...context.pageByBatchId, [event.batchId]: { ...page, batch: updatedBatch } }
+          : context.pageByBatchId,
+      }
+    },
     progressUpdated: (context, event: ProgressUpdates) => applyProgressUpdates(context, event),
     rowPageSizeChanged: (context, event: { size: number }) => ({ ...context, rowPageSize: event.size }),
     rowDetailViewChanged: (context, event: { view: RequestBatchRowDetailView }) => ({ ...context, rowDetailView: event.view }),
@@ -377,6 +389,15 @@ export const RequestBatchCoordinator = {
     }
   },
 
+  async updateConcurrency(batchId: string, concurrency: number) {
+    const result = await getWindowElectron().updateRequestBatchConcurrency({ batchId, concurrency })
+    if (!result.success) {
+      toast.show(result)
+      throw new Error(errorResponseToMessage(result.error))
+    }
+    requestBatchStore.trigger.concurrencyUpdated({ batchId, concurrency })
+  },
+
   async deleteBatch(requestId: string, batchId: string) {
     const batch = findBatch(requestBatchStore.getSnapshot().context, batchId)
     if (batch?.status === 'running') return
@@ -427,6 +448,7 @@ function applyProgressUpdates(context: RequestBatchContext, updates: ProgressUpd
         ...row,
         status: update.status,
         historyId: update.historyId,
+        errorMessage: update.errorMessage,
         startedAt: update.startedAt,
         completedAt: update.completedAt,
         updatedAt,

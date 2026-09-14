@@ -2,11 +2,62 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GenericEvent } from '../common/GenericEvent.js'
 import { GenericError } from '../common/GenericError.js'
 import type { RequestBatchRecord, RequestBatchRowRecord, RequestBatchSummary } from '../common/RequestBatches.js'
-import type { SendRequestInput, SendRequestResponse } from '../common/Requests.js'
+import type { RequestTestRun, SendRequestInput, SendRequestResponse } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
 import { createRequestBatchRunner, type RequestBatchRunnerDependencies } from './request-batch-runner.js'
 
 describe('request batch runner', () => {
+  it('applies increased concurrency immediately and drains in-flight requests when decreased', async () => {
+    const releases: (() => void)[] = []
+    const harness = createHarness(5, async input => {
+      await new Promise<void>(resolve => releases.push(resolve))
+      return successfulSend(input.executionId ?? '')
+    })
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await waitUntil(() => releases.length === 1)
+
+    expect((await harness.runner.updateConcurrency({ batchId: 'batch-1', concurrency: 3 })).success).toBe(true)
+    await waitUntil(() => releases.length === 3)
+    expect(harness.batch.concurrency).toBe(3)
+
+    expect((await harness.runner.updateConcurrency({ batchId: 'batch-1', concurrency: 1 })).success).toBe(true)
+    releases[0]!()
+    releases[1]!()
+    await waitUntil(() => harness.runner.listActive()[0]?.activeRowIds.length === 1)
+    expect(releases).toHaveLength(3)
+    expect(harness.dependencies.cancel).not.toHaveBeenCalled()
+    releases[2]!()
+    await waitUntil(() => releases.length === 4)
+    releases[3]!()
+    await waitUntil(() => releases.length === 5)
+    releases[4]!()
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.batch.summary.completedCount).toBe(5)
+    expect(harness.batch.concurrency).toBe(1)
+    expect((await harness.runner.updateConcurrency({ batchId: 'batch-1', concurrency: 2 })).success).toBe(false)
+  })
+
+  it('keeps the current concurrency when validation or persistence fails', async () => {
+    const releases: (() => void)[] = []
+    const harness = createHarness(2, async input => {
+      await new Promise<void>(resolve => releases.push(resolve))
+      return successfulSend(input.executionId ?? '')
+    })
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await waitUntil(() => releases.length === 1)
+    for (const concurrency of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect((await harness.runner.updateConcurrency({ batchId: 'batch-1', concurrency })).success).toBe(false)
+    }
+    expect(harness.dependencies.updateConcurrency).not.toHaveBeenCalled()
+    harness.dependencies.updateConcurrency = vi.fn(async () => GenericError.Message('Persistence failed'))
+    expect((await harness.runner.updateConcurrency({ batchId: 'batch-1', concurrency: 2 })).success).toBe(false)
+    expect(releases).toHaveLength(1)
+    releases[0]!()
+    await waitUntil(() => releases.length === 2)
+    releases[1]!()
+    await harness.runner.waitForCompletion('batch-1')
+  })
+
   it('bounds concurrency and sends an immutable snapshot for every row', async () => {
     let activeCount = 0
     let maximumActiveCount = 0
@@ -57,8 +108,28 @@ describe('request batch runner', () => {
     await harness.runner.waitForCompletion('batch-1')
 
     expect(harness.batch.status).toBe('failed')
-    expect(harness.rows[0]).toMatchObject({ status: 'failed', historyId: null })
+    expect(harness.rows[0]).toMatchObject({ status: 'failed', historyId: null, errorMessage: 'send failed' })
     expect(harness.rows[1]).toMatchObject({ status: 'completed', historyId: 'execution-2' })
+  })
+
+  it('preserves thrown request errors and clears them on a successful rerun', async () => {
+    let shouldFail = true
+    const message = 'Environment variable "API_URL" was not found'
+    const harness = createHarness(1, async input => {
+      if (shouldFail) throw new Error(message)
+      return successfulSend(input.executionId ?? '')
+    })
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.rows[0]).toMatchObject({ status: 'failed', historyId: null, errorMessage: message })
+    expect(harness.events).toContainEqual(expect.objectContaining({
+      type: 'request-batch-row-updated', status: 'failed', errorMessage: message,
+    }))
+
+    shouldFail = false
+    await harness.runner.runRow({ batchId: 'batch-1', rowId: 'row-0', request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.rows[0]).toMatchObject({ status: 'completed', historyId: 'execution-2', errorMessage: null })
   })
 
   it.each([
@@ -98,6 +169,49 @@ describe('request batch runner', () => {
     await harness.runner.waitForCompletion('batch-1')
     expect(harness.rows[0]).toMatchObject({ status: 'failed', historyId: 'execution-1' })
     expect(harness.batch.summary).toMatchObject({ failedCount: 1, httpErrorCount: 0, completedCount: 0 })
+  })
+
+  it.each([
+    ['failed', 200, 'failed-test'],
+    ['passed', 200, 'completed'],
+    ['skipped', 200, 'completed'],
+    ['failed', 500, 'http-error'],
+  ] as const)('classifies %s tests with HTTP %i as %s', async (testStatus, httpStatus, rowStatus) => {
+    const harness = createHarness(1, async input => successfulSend(input.executionId ?? '', httpStatus, {
+      status: testStatus, totalCount: 1,
+      passedCount: testStatus === 'passed' ? 1 : 0,
+      failedCount: testStatus === 'failed' ? 1 : 0,
+      skippedCount: testStatus === 'skipped' ? 1 : 0,
+      durationMs: 1, suites: [],
+    }))
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+
+    expect(harness.rows[0]).toMatchObject({ status: rowStatus, historyId: 'execution-1' })
+    expect(harness.batch.summary.failedTestCount).toBe(rowStatus === 'failed-test' ? 1 : 0)
+    expect(harness.batch.status).toBe(rowStatus === 'completed' ? 'completed' : 'failed')
+    expect(harness.events).toContainEqual(expect.objectContaining({
+      type: 'request-batch-row-updated', status: rowStatus, historyId: 'execution-1',
+    }))
+  })
+
+  it('clears the failed-test count when a row rerun passes', async () => {
+    let failed = true
+    const harness = createHarness(1, async input => successfulSend(input.executionId ?? '', 200, {
+      status: failed ? 'failed' : 'passed', totalCount: 1,
+      failedCount: failed ? 1 : 0, passedCount: failed ? 0 : 1,
+      skippedCount: 0, durationMs: 1, suites: [],
+    }))
+    await harness.runner.start({ batchId: 'batch-1', concurrency: 1, request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.batch.summary.failedTestCount).toBe(1)
+
+    failed = false
+    await harness.runner.runRow({ batchId: 'batch-1', rowId: 'row-0', request: createSendRequestInput() })
+    await harness.runner.waitForCompletion('batch-1')
+    expect(harness.rows[0]).toMatchObject({ status: 'completed', historyId: 'execution-2' })
+    expect(harness.batch.summary).toMatchObject({ failedTestCount: 0, completedCount: 1 })
+    expect(harness.batch.status).toBe('completed')
   })
 
   it('replaces an HTTP error with completed when a row rerun succeeds', async () => {
@@ -182,6 +296,7 @@ function createHarness(rowCount: number, send: RequestBatchRunnerDependencies['s
     variables: { value: String(index) },
     status: 'pending',
     historyId: null,
+    errorMessage: null,
     startedAt: null,
     completedAt: null,
     createdAt: now,
@@ -208,6 +323,10 @@ function createHarness(rowCount: number, send: RequestBatchRunnerDependencies['s
   let executionNumber = 0
   const events: GenericEvent[] = []
   const dependencies: RequestBatchRunnerDependencies = {
+    updateConcurrency: vi.fn(async input => {
+      batch.concurrency = input.concurrency
+      return Result.Success(undefined)
+    }),
     begin: vi.fn(async input => {
       batch.status = 'running'
       batch.concurrency = input.concurrency
@@ -233,6 +352,7 @@ function createHarness(rowCount: number, send: RequestBatchRunnerDependencies['s
       }
       row.status = input.status
       row.historyId = input.historyId
+      row.errorMessage = input.errorMessage ?? null
       if (input.startedAt !== undefined) row.startedAt = input.startedAt
       if (input.completedAt !== undefined) row.completedAt = input.completedAt
       batch.summary = buildSummary(rows)
@@ -251,7 +371,7 @@ function createHarness(rowCount: number, send: RequestBatchRunnerDependencies['s
     finish: vi.fn(async () => {
       const summary = buildSummary(rows)
       batch.status =
-        summary.failedCount > 0 || summary.httpErrorCount > 0
+        summary.failedCount > 0 || summary.httpErrorCount > 0 || summary.failedTestCount > 0
           ? 'failed'
           : summary.cancelledCount > 0
             ? 'cancelled'
@@ -278,13 +398,14 @@ function buildSummary(rows: RequestBatchRowRecord[]): RequestBatchSummary {
     runningCount: rows.filter(row => row.status === 'running').length,
     completedCount: rows.filter(row => row.status === 'completed').length,
     httpErrorCount: rows.filter(row => row.status === 'http-error').length,
+    failedTestCount: rows.filter(row => row.status === 'failed-test').length,
     failedCount: rows.filter(row => row.status === 'failed').length,
     cancelledCount: rows.filter(row => row.status === 'cancelled').length,
   }
 }
 
-function successfulSend(executionId: string, status = 200) {
-  return Result.Success({ execution: { id: executionId, response: { status }, responseError: null } } as SendRequestResponse)
+function successfulSend(executionId: string, status = 200, testRun: RequestTestRun | null = null) {
+  return Result.Success({ execution: { id: executionId, response: { status }, responseError: null, testRun } } as SendRequestResponse)
 }
 
 function createSendRequestInput(): SendRequestInput {

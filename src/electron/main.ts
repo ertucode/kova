@@ -658,6 +658,12 @@ app.on('ready', async () => {
     return cancelRequestBatch(input)
   })
 
+  ipcHandle('updateRequestBatchConcurrency', async input => {
+    await ensureRequestBatchRecovery()
+    const { updateRequestBatchConcurrency } = await loadRequestBatchRunner()
+    return updateRequestBatchConcurrency(input)
+  })
+
   ipcHandle('deleteRequestBatch', async input => {
     await ensureRequestBatchRecovery()
     const { deleteRequestBatch } = await loadRequestBatchesDb()

@@ -20,8 +20,10 @@ import {
   type RequestBatchSummary,
   type RequestBatchVariables,
   type UpdateRequestBatchRowInput,
+  type UpdateRequestBatchConcurrencyInput,
 } from '../../common/RequestBatches.js'
 import { Result } from '../../common/Result.js'
+import type { RequestScriptError, RequestTestRun } from '../../common/Requests.js'
 import { getDb } from './index.js'
 import { requestBatchRows, requestBatches, requestHistory } from './schema.js'
 
@@ -38,6 +40,7 @@ const EMPTY_BATCH_SUMMARY: RequestBatchSummary = {
   runningCount: 0,
   completedCount: 0,
   httpErrorCount: 0,
+  failedTestCount: 0,
   failedCount: 0,
   cancelledCount: 0,
 }
@@ -129,6 +132,7 @@ export async function beginRequestBatchExecution(input: {
       existingSummary.runningCount === 0 &&
       existingSummary.completedCount === 0 &&
       existingSummary.httpErrorCount === 0 &&
+      existingSummary.failedTestCount === 0 &&
       existingSummary.failedCount === 0 &&
       existingSummary.cancelledCount === 0
     if (!isPristine) {
@@ -271,7 +275,7 @@ export async function beginRequestBatchRowExecution(input: {
       if (!updatedBatch) return null
       const updatedRow = transaction
         .update(requestBatchRows)
-        .set({ status: 'pending', historyId: null, startedAt: null, completedAt: null, updatedAt: now })
+        .set({ status: 'pending', historyId: null, errorMessage: null, startedAt: null, completedAt: null, updatedAt: now })
         .where(and(eq(requestBatchRows.id, input.rowId), eq(requestBatchRows.batchId, input.batchId)))
         .returning()
         .get()
@@ -312,6 +316,7 @@ export async function updateRequestBatchExecutionRow(
     const patch: Partial<typeof requestBatchRows.$inferInsert> = {
       status: input.status,
       historyId: input.historyId,
+      errorMessage: input.errorMessage ?? null,
       updatedAt: now,
     }
     if (input.startedAt !== undefined) {
@@ -368,6 +373,18 @@ export async function cancelPendingRequestBatchRows(
   }
 }
 
+export async function updateRequestBatchConcurrency(input: UpdateRequestBatchConcurrencyInput): Promise<GenericResult<void>> {
+  try {
+    const db = getDb()
+    await db.update(requestBatches)
+      .set({ concurrency: input.concurrency, updatedAt: Date.now() })
+      .where(eq(requestBatches.id, input.batchId))
+    return Result.Success(undefined)
+  } catch (error) {
+    return GenericError.Unknown(error)
+  }
+}
+
 export async function finishRequestBatchExecution(input: {
   batchId: string
 }): Promise<GenericResult<RequestBatchRecord>> {
@@ -379,7 +396,7 @@ export async function finishRequestBatchExecution(input: {
       return GenericError.Message('Request batch still has running rows')
     }
     const status: RequestBatchStatus =
-      summary.failedCount > 0 || summary.httpErrorCount > 0
+      summary.failedCount > 0 || summary.httpErrorCount > 0 || summary.failedTestCount > 0
         ? 'failed'
         : summary.cancelledCount > 0
           ? 'cancelled'
@@ -508,6 +525,8 @@ export type RequestBatchExportData = {
       durationMs: number | null
       responseError: string | null
       responseBodyOmitted: boolean
+      testRun: RequestTestRun | null
+      scriptErrors: RequestScriptError[]
     } | null
   }[]
 }
@@ -529,6 +548,8 @@ export function getRequestBatchExportData(batchId: string): GenericResult<Reques
         durationMs: requestHistory.responseDurationMs,
         responseError: requestHistory.responseError,
         responseBodyOmitted: requestHistory.responseBodyOmitted,
+        testRunJson: requestHistory.testRunJson,
+        scriptErrorsJson: requestHistory.scriptErrorsJson,
       },
     })
     .from(requestBatchRows)
@@ -539,7 +560,14 @@ export function getRequestBatchExportData(batchId: string): GenericResult<Reques
 
   return Result.Success({
     batch: toRequestBatchRecord(batch),
-    rows: rows.map(({ row, history }) => ({ row: toRequestBatchRowRecord(row), history })),
+    rows: rows.map(({ row, history }) => ({
+      row: toRequestBatchRowRecord(row),
+      history: history ? {
+        ...history,
+        testRun: parseJson<RequestTestRun | null>(history.testRunJson, null),
+        scriptErrors: parseJson<RequestScriptError[]>(history.scriptErrorsJson, []),
+      } : null,
+    })),
   })
 }
 
@@ -672,6 +700,7 @@ function toRequestBatchRowRecord(row: RequestBatchRowDbRow): RequestBatchRowReco
     variables: parseJson<RequestBatchVariables>(row.variablesJson, {}),
     status: parseRowStatus(row.status),
     historyId: row.historyId,
+    errorMessage: row.errorMessage,
     startedAt: row.startedAt,
     completedAt: row.completedAt,
     createdAt: row.createdAt,
@@ -700,6 +729,7 @@ const SUMMARY_COUNT_KEY_BY_ROW_STATUS = {
   running: 'runningCount',
   completed: 'completedCount',
   'http-error': 'httpErrorCount',
+  'failed-test': 'failedTestCount',
   failed: 'failedCount',
   cancelled: 'cancelledCount',
 } as const satisfies Record<RequestBatchRowStatus, keyof RequestBatchSummary>

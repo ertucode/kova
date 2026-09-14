@@ -453,6 +453,7 @@ export const requestBatchRows = sqliteTable(
     variablesJson: text('variables_json').notNull().default('{}'),
     status: text('status').notNull().default('pending'),
     historyId: text('history_id'),
+    errorMessage: text('error_message'),
     startedAt: integer('started_at'),
     completedAt: integer('completed_at'),
     createdAt: integer('created_at').notNull(),

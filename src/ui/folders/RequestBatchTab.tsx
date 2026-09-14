@@ -280,6 +280,7 @@ function BatchDetails({
   const [concurrencyValue, setConcurrencyValue] = useState(() => batch.concurrency?.toString() ?? '1')
   const [searchValue, setSearchValue] = useState(() => page.rowSearchQuery)
   const [starting, setStarting] = useState(false)
+  const [updatingConcurrency, setUpdatingConcurrency] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
@@ -403,6 +404,22 @@ function BatchDetails({
     }
   }
 
+  const updateConcurrency = async () => {
+    const concurrency = Number(concurrencyValue)
+    if (!Number.isSafeInteger(concurrency) || concurrency <= 0) {
+      toast.show({ severity: 'warning', message: 'Concurrency must be a positive integer.' })
+      return
+    }
+    setUpdatingConcurrency(true)
+    try {
+      await RequestBatchCoordinator.updateConcurrency(batch.id, concurrency)
+    } catch {
+      return
+    } finally {
+      setUpdatingConcurrency(false)
+    }
+  }
+
   const runRow = async (row: RequestBatchRowRecord) => {
     setRunningRowId(row.id)
     setExpandedRowId(null)
@@ -457,7 +474,7 @@ function BatchDetails({
               {batch.sheetName ? ` / ${batch.sheetName}` : ''} · {batch.rowCount} rows
             </div>
           </div>
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="inline-flex items-center gap-2 rounded-xl border border-base-content/15 bg-base-100 px-3 py-2 text-xs font-semibold text-base-content/70 transition hover:border-base-content/25 hover:text-base-content disabled:opacity-45"
@@ -467,18 +484,27 @@ function BatchDetails({
             >
               <DownloadIcon className="size-3.5" /> {exporting ? 'Exporting...' : 'Export Excel'}
             </button>
-            {canStart ? (
-              <label className="grid gap-1 text-[11px] font-medium text-base-content/50">
-                Concurrency
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  className="w-24 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2 text-sm text-base-content outline-none"
-                  value={concurrencyValue}
-                  onChange={event => setConcurrencyValue(event.target.value)}
-                />
-              </label>
+            <label className="flex items-center gap-2 text-[11px] font-medium text-base-content/50">
+              Concurrency
+              <input
+                type="number"
+                min="1"
+                step="1"
+                className="w-24 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2 text-xs text-base-content outline-none disabled:opacity-45"
+                value={concurrencyValue}
+                onChange={event => setConcurrencyValue(event.target.value)}
+                disabled={starting || updatingConcurrency || (isActive && cancelling)}
+              />
+            </label>
+            {isActive ? (
+              <button
+                type="button"
+                className="rounded-xl border border-base-content/15 bg-base-100 px-3 py-2 text-xs font-semibold text-base-content/70 hover:border-base-content/25 disabled:opacity-45"
+                onClick={() => void updateConcurrency()}
+                disabled={updatingConcurrency || cancelling || Number(concurrencyValue) === batch.concurrency}
+              >
+                {updatingConcurrency ? 'Updating...' : 'Update'}
+              </button>
             ) : null}
             {canStart ? (
               <button
@@ -514,12 +540,13 @@ function BatchDetails({
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-8">
           <BatchMetric label="Total" value={batch.summary.totalCount} selected={page.rowFilter === 'all'} onClick={() => toggleFilter('all')} />
           <BatchMetric label="Pending" value={batch.summary.pendingCount} selected={page.rowFilter === 'pending'} onClick={() => toggleFilter('pending')} />
           <BatchMetric label="Running" value={batch.summary.runningCount} tone="text-info" selected={page.rowFilter === 'running'} onClick={() => toggleFilter('running')} />
           <BatchMetric label="Completed" value={batch.summary.completedCount} tone="text-success" selected={page.rowFilter === 'completed'} onClick={() => toggleFilter('completed')} />
           <BatchMetric label="HTTP error" value={batch.summary.httpErrorCount} tone="text-warning" selected={page.rowFilter === 'http-error'} onClick={() => toggleFilter('http-error')} />
+          <BatchMetric label="Failed test" value={batch.summary.failedTestCount} tone="text-error" selected={page.rowFilter === 'failed-test'} onClick={() => toggleFilter('failed-test')} />
           <BatchMetric label="Failed" value={batch.summary.failedCount} tone="text-error" selected={page.rowFilter === 'failed'} onClick={() => toggleFilter('failed')} />
           <BatchMetric label="Cancelled" value={batch.summary.cancelledCount} tone="text-warning" selected={page.rowFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
         </div>
@@ -719,7 +746,12 @@ function RowWithDetails({
           </span>
         </td>
         <td className={`border-b border-base-content/7 px-3 py-2.5 font-medium ${getRowStatusClassName(row.status)}`}>
-          {row.status === 'http-error' ? 'HTTP error' : row.status}
+          {row.status === 'http-error' ? 'HTTP error' : row.status === 'failed-test' ? 'Failed test' : row.status}
+          {row.errorMessage ? (
+            <div className="mt-1 max-w-56 truncate text-[11px] font-normal text-error" title={row.errorMessage}>
+              {row.errorMessage}
+            </div>
+          ) : null}
         </td>
         {columns.map(column => (
           <td
@@ -751,11 +783,17 @@ function RowWithDetails({
       {expanded ? (
         <tr>
           <td colSpan={columns.length + 3} className="border-b border-base-content/10 bg-base-200/20 px-4 py-4">
+            {row.errorMessage ? (
+              <div className="mb-3 whitespace-pre-wrap break-words rounded-xl border border-error/20 bg-error/5 p-3 text-sm text-error">
+                <div className="mb-1 font-semibold">Request error</div>
+                {row.errorMessage}
+              </div>
+            ) : null}
             {loading ? <div className="text-sm text-base-content/40">Loading request history...</div> : null}
             {!loading && history ? (
               <BatchRowDetailView key={history.id} history={history} responsePanelProps={responsePanelProps} />
             ) : null}
-            {!loading && !history ? (
+            {!loading && !history && (!row.errorMessage || row.historyId) ? (
               <div className="text-sm text-base-content/45">
                 {historyError ??
                   (row.historyId ? 'Loading request history...' : 'No saved history is associated with this row.')}
@@ -845,6 +883,7 @@ function getRowStatusClassName(status: RequestBatchRowRecord['status']) {
     case 'http-error':
       return 'text-warning'
     case 'failed':
+    case 'failed-test':
       return 'text-error'
     case 'cancelled':
       return 'text-warning'
@@ -854,7 +893,7 @@ function getRowStatusClassName(status: RequestBatchRowRecord['status']) {
 }
 
 function canExpandRow(row: RequestBatchRowRecord) {
-  return row.status === 'completed' || row.status === 'http-error' || (row.status === 'failed' && row.historyId !== null)
+  return Boolean(row.errorMessage) || row.status === 'completed' || row.status === 'http-error' || row.status === 'failed-test' || (row.status === 'failed' && row.historyId !== null)
 }
 
 function formatDate(timestamp: number) {

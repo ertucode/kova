@@ -1,4 +1,5 @@
-import { GenericError, type GenericResult } from '../common/GenericError.js'
+import { errorResponseToMessage, GenericError, type GenericResult } from '../common/GenericError.js'
+import { errorToString } from '../common/errorToString.js'
 import type {
   ActiveRequestBatchState,
   CancelRequestBatchInput,
@@ -9,6 +10,7 @@ import type {
   RunRequestBatchRowResponse,
   StartRequestBatchInput,
   StartRequestBatchResponse,
+  UpdateRequestBatchConcurrencyInput,
 } from '../common/RequestBatches.js'
 import type { RequestExecutionRecord, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
@@ -19,6 +21,7 @@ import {
   finishRequestBatchExecution,
   recoverStaleRequestBatchExecutions,
   updateRequestBatchExecutionRow,
+  updateRequestBatchConcurrency as persistRequestBatchConcurrency,
 } from './db/request-batches.js'
 import { emitGenericEvent } from './generic-events.js'
 import { cancelHttpRequest, sendRequest } from './send-request.js'
@@ -36,6 +39,7 @@ type ActiveBatch = {
   activeExecutions: Map<string, string>
   isCancelling: boolean
   completion: Promise<void> | null
+  wakeScheduler?: () => void
 }
 
 export type RequestBatchRunnerDependencies = {
@@ -44,6 +48,7 @@ export type RequestBatchRunnerDependencies = {
   updateRow: typeof updateRequestBatchExecutionRow
   cancelPendingRows: typeof cancelPendingRequestBatchRows
   finish: typeof finishRequestBatchExecution
+  updateConcurrency: typeof persistRequestBatchConcurrency
   recoverStale: typeof recoverStaleRequestBatchExecutions
   send: typeof sendRequest
   cancel: typeof cancelHttpRequest
@@ -58,6 +63,7 @@ const defaultDependencies: RequestBatchRunnerDependencies = {
   updateRow: updateRequestBatchExecutionRow,
   cancelPendingRows: cancelPendingRequestBatchRows,
   finish: finishRequestBatchExecution,
+  updateConcurrency: persistRequestBatchConcurrency,
   recoverStale: recoverStaleRequestBatchExecutions,
   send: sendRequest,
   cancel: cancelHttpRequest,
@@ -203,12 +209,28 @@ export function createRequestBatchRunner(dependencies: RequestBatchRunnerDepende
     )
   }
 
-  return { start, runRow, cancel, listActive, waitForCompletion, recoverStale }
+  async function updateConcurrency(input: UpdateRequestBatchConcurrencyInput): Promise<GenericResult<void>> {
+    if (!Number.isSafeInteger(input.concurrency) || input.concurrency <= 0) {
+      return GenericError.Message('Batch concurrency must be a positive integer')
+    }
+    const state = activeBatches.get(input.batchId)
+    if (!state || state.isCancelling || !state.wakeScheduler) {
+      return GenericError.Message('Request batch is not active')
+    }
+    const result = await dependencies.updateConcurrency(input)
+    if (!result.success) return result
+    state.concurrency = input.concurrency
+    state.wakeScheduler?.()
+    return Result.Success(undefined)
+  }
+
+  return { start, runRow, cancel, updateConcurrency, listActive, waitForCompletion, recoverStale }
 }
 
 const requestBatchRunner = createRequestBatchRunner()
 
 export const startRequestBatch = requestBatchRunner.start
+export const updateRequestBatchConcurrency = requestBatchRunner.updateConcurrency
 export const runRequestBatchRow = requestBatchRunner.runRow
 export const cancelRequestBatch = requestBatchRunner.cancel
 export const listActiveRequestBatches = requestBatchRunner.listActive
@@ -221,22 +243,28 @@ async function executeBatch(
   options: SendRequestOptions | undefined
 ) {
   let nextRowIndex = 0
-  const workerCount = Math.min(state.concurrency, state.rows.length)
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (true) {
-      const row = state.rows[nextRowIndex]
-      nextRowIndex += 1
-      if (!row) {
-        return
+  let runningCount = 0
+  let workerFailed = false
+  await new Promise<void>(resolve => {
+    const schedule = () => {
+      while (!state.isCancelling && !workerFailed && runningCount < state.concurrency && nextRowIndex < state.rows.length) {
+        const row = state.rows[nextRowIndex++]!
+        runningCount += 1
+        void executeRow(dependencies, state, row, options)
+          .catch(() => { workerFailed = true })
+          .finally(() => {
+            runningCount -= 1
+            schedule()
+          })
       }
-      if (state.isCancelling) {
-        return
+      if (runningCount === 0) {
+        state.wakeScheduler = undefined
+        resolve()
       }
-      await executeRow(dependencies, state, row, options)
     }
+    state.wakeScheduler = schedule
+    schedule()
   })
-  const workerResults = await Promise.allSettled(workers)
-  const workerFailed = workerResults.some(result => result.status === 'rejected')
 
   if (workerFailed && !state.isCancelling) {
     const pendingResult = await dependencies.cancelPendingRows(
@@ -289,10 +317,12 @@ async function executeRow(
       dependencies,
       row.id,
       state.isCancelling ? 'cancelled' : result.success ? getExecutionRowStatus(result.data.execution) : 'failed',
-      result.success ? result.data.execution.id : null
+      result.success ? result.data.execution.id : null,
+      result.success ? result.data.execution.responseError : errorResponseToMessage(result.error)
     )
-  } catch {
-    await finishRow(dependencies, row.id, state.isCancelling ? 'cancelled' : 'failed', null)
+  } catch (error) {
+    await finishRow(dependencies, row.id, state.isCancelling ? 'cancelled' : 'failed', null,
+      error instanceof Error ? error.message : errorToString(error))
   } finally {
     state.activeExecutions.delete(executionId)
   }
@@ -302,18 +332,21 @@ async function finishRow(
   dependencies: RequestBatchRunnerDependencies,
   rowId: string,
   status: Exclude<RequestBatchRowStatus, 'pending' | 'running'>,
-  historyId: string | null
+  historyId: string | null,
+  errorMessage: string | null = null
 ) {
-  const result = await dependencies.updateRow({ id: rowId, status, historyId, completedAt: Date.now() })
+  const result = await dependencies.updateRow({ id: rowId, status, historyId, errorMessage, completedAt: Date.now() })
   if (!result.success) {
     throw new Error('Failed to persist request batch row completion')
   }
   emitRowUpdated(dependencies, result.data.batch, result.data.row)
 }
 
-function getExecutionRowStatus(execution: RequestExecutionRecord): 'completed' | 'http-error' | 'failed' {
+function getExecutionRowStatus(execution: RequestExecutionRecord): 'completed' | 'http-error' | 'failed-test' | 'failed' {
   if (!execution.response || execution.responseError) return 'failed'
-  return execution.response.status >= 200 && execution.response.status < 300 ? 'completed' : 'http-error'
+  if (execution.response.status < 200 || execution.response.status >= 300) return 'http-error'
+  if ((execution.testRun?.failedCount ?? 0) > 0 || execution.testRun?.status === 'failed') return 'failed-test'
+  return 'completed'
 }
 
 function toRowSendRequestInput(state: ActiveBatch, row: RequestBatchRowRecord, executionId: string): SendRequestInput {
@@ -357,6 +390,7 @@ function emitRowUpdated(
     rowId: row.id,
     status: row.status,
     historyId: row.historyId,
+    errorMessage: row.errorMessage,
     startedAt: row.startedAt,
     completedAt: row.completedAt,
   })

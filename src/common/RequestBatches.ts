@@ -1,7 +1,7 @@
 export const REQUEST_BATCH_SOURCE_TYPES = ['csv', 'xlsx', 'json'] as const
 export type RequestBatchSourceType = (typeof REQUEST_BATCH_SOURCE_TYPES)[number]
 
-export const REQUEST_BATCH_ROW_STATUSES = ['pending', 'running', 'completed', 'http-error', 'failed', 'cancelled'] as const
+export const REQUEST_BATCH_ROW_STATUSES = ['pending', 'running', 'completed', 'http-error', 'failed-test', 'failed', 'cancelled'] as const
 export type RequestBatchRowStatus = (typeof REQUEST_BATCH_ROW_STATUSES)[number]
 
 export const REQUEST_BATCH_STATUSES = ['ready', 'running', 'completed', 'failed', 'cancelled'] as const
@@ -15,6 +15,7 @@ export type RequestBatchSummary = {
   runningCount: number
   completedCount: number
   httpErrorCount: number
+  failedTestCount: number
   failedCount: number
   cancelledCount: number
 }
@@ -74,6 +75,7 @@ export type RequestBatchRowRecord = {
   variables: RequestBatchVariables
   status: RequestBatchRowStatus
   historyId: string | null
+  errorMessage: string | null
   startedAt: number | null
   completedAt: number | null
   createdAt: number
@@ -149,6 +151,7 @@ export type UpdateRequestBatchRowInput = {
   id: string
   status: RequestBatchRowStatus
   historyId: string | null
+  errorMessage?: string | null
   startedAt?: number | null
   completedAt?: number | null
 }
@@ -157,6 +160,11 @@ export type StartRequestBatchInput = {
   batchId: string
   concurrency: number
   request: import('./Requests.js').SendRequestInput
+}
+
+export type UpdateRequestBatchConcurrencyInput = {
+  batchId: string
+  concurrency: number
 }
 
 export type StartRequestBatchResponse = {

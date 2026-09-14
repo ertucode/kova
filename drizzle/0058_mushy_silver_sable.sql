@@ -1,0 +1,1 @@
+ALTER TABLE `request_batch_rows` ADD `error_message` text;

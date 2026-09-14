@@ -107,6 +107,7 @@ export type GenericEvent =
       rowId: string
       status: RequestBatchRowStatus
       historyId: string | null
+      errorMessage: string | null
       startedAt: number | null
       completedAt: number | null
     }

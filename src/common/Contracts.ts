@@ -47,6 +47,7 @@ import type {
   RunRequestBatchRowInput,
   RunRequestBatchRowResponse,
   StartRequestBatchInput,
+  UpdateRequestBatchConcurrencyInput,
   StartRequestBatchResponse,
 } from './RequestBatches.js'
 import {
@@ -293,6 +294,7 @@ export type EventResponseMapping = {
   exportRequestBatch: Promise<GenericResult<ExportRequestBatchResponse | null>>
   listRequestBatchRows: Promise<ListRequestBatchRowsResponse>
   startRequestBatch: Promise<GenericResult<StartRequestBatchResponse>>
+  updateRequestBatchConcurrency: Promise<GenericResult<void>>
   runRequestBatchRow: Promise<GenericResult<RunRequestBatchRowResponse>>
   cancelRequestBatch: Promise<GenericResult<void>>
   deleteRequestBatch: Promise<GenericResult<void>>
@@ -460,6 +462,7 @@ export type EventRequestMapping = {
   exportRequestBatch: ExportRequestBatchInput
   listRequestBatchRows: ListRequestBatchRowsInput
   startRequestBatch: StartRequestBatchInput
+  updateRequestBatchConcurrency: UpdateRequestBatchConcurrencyInput
   runRequestBatchRow: RunRequestBatchRowInput
   cancelRequestBatch: CancelRequestBatchInput
   deleteRequestBatch: DeleteRequestBatchInput
@@ -637,6 +640,7 @@ export type WindowElectron = {
   exportRequestBatch: (input: ExportRequestBatchInput) => Promise<GenericResult<ExportRequestBatchResponse | null>>
   listRequestBatchRows: (input: ListRequestBatchRowsInput) => Promise<ListRequestBatchRowsResponse>
   startRequestBatch: (input: StartRequestBatchInput) => Promise<GenericResult<StartRequestBatchResponse>>
+  updateRequestBatchConcurrency: (input: UpdateRequestBatchConcurrencyInput) => Promise<GenericResult<void>>
   runRequestBatchRow: (input: RunRequestBatchRowInput) => Promise<GenericResult<RunRequestBatchRowResponse>>
   cancelRequestBatch: (input: CancelRequestBatchInput) => Promise<GenericResult<void>>
   deleteRequestBatch: (input: DeleteRequestBatchInput) => Promise<GenericResult<void>>

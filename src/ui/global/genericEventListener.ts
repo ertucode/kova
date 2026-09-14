@@ -102,6 +102,7 @@ export function subscribeToGenericEvents() {
         rowId: e.rowId,
         status: e.status,
         historyId: e.historyId,
+        errorMessage: e.errorMessage,
         startedAt: e.startedAt,
         completedAt: e.completedAt,
       })
