@@ -83,8 +83,63 @@ export function formatJson(value: string, indentation?: number) {
 }
 
 export function normalizeJson5ToJson(value: string) {
-  const parsed = JSON5.parse(value)
-  return JSON.stringify(parsed)
+  try {
+    // Already JSON: native validation is fast. Return the source, not the parsed
+    // value, so even numbers beyond JavaScript's precision remain untouched.
+    JSON.parse(value)
+    return value
+  } catch {
+    // JSON5 syntax needs conversion below.
+  }
+
+  // Validate with JSON5, but never serialize its parsed numbers: they may have
+  // already lost precision. Convert the original tokens instead.
+  JSON5.parse(value)
+  // Strings must be matched before comments so comment markers inside strings
+  // remain data. Validation above guarantees every other token is JSON5 syntax.
+  const tokens =
+    value.match(
+      /"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\/\/[^\r\n\u2028\u2029]*|\/\*[\s\S]*?\*\/|[{}\[\]:,]|[^\s{}\[\]:,\/]+/gu
+    ) ?? []
+  const significantTokens = tokens.filter(token => !token.startsWith('//') && !token.startsWith('/*'))
+
+  return significantTokens
+    .map((token, index) => {
+      const nextToken = significantTokens[index + 1]
+      if (token === ',' && (nextToken === '}' || nextToken === ']')) {
+        return ''
+      }
+      if (token.startsWith('"') || token.startsWith("'")) {
+        // Only escaped strings need a parser; ordinary strings just need JSON
+        // quoting (including any literal control characters allowed by JSON5).
+        return JSON.stringify(token.includes('\\') ? JSON5.parse<string>(token) : token.slice(1, -1))
+      }
+      if (nextToken === ':') {
+        // Validated identifier keys only support \\uXXXX escapes, also valid JSON.
+        return JSON.stringify(token.includes('\\') ? JSON.parse(`"${token}"`) : token)
+      }
+      return normalizeJson5Number(token)
+    })
+    .join('')
+}
+
+function normalizeJson5Number(token: string) {
+  if (/^[+-]?(?:Infinity|NaN)$/.test(token)) {
+    // Match JSON.stringify's treatment of non-finite JSON5 values.
+    return 'null'
+  }
+  if (/^[+-]?0x/i.test(token)) {
+    const negative = token.startsWith('-')
+    const integer = BigInt(token.replace(/^[+-]/, ''))
+    return (negative ? -integer : integer).toString()
+  }
+  if (/^[+\-.\d]/.test(token)) {
+    return token
+      .replace(/^\+/, '')
+      .replace(/^(-?)\./, '$10.')
+      .replace(/\.(?=[eE]|$)/, '.0')
+  }
+  return token
 }
 
 export async function formatJson5PreferringJson(value: string) {

@@ -1,9 +1,14 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HttpAuth } from '../common/Auth.js'
 import { Result } from '../common/Result.js'
 import { fetch as undiciFetch, Response as UndiciResponse } from 'undici'
 import * as cookieDb from './db/cookies.js'
 import * as requestDb from './db/requests.js'
+import * as explorerDb from './db/explorer.js'
+import * as folderDb from './db/folders.js'
+import * as environmentDb from './db/environments.js'
+import * as sharedScriptDb from './db/shared-scripts.js'
+import * as scriptPackageDb from './db/script-packages.js'
 import * as genericEvents from './generic-events.js'
 import * as httpRequestRuntime from './http-request-runtime.js'
 import type { PreparedHttpRequest } from './http-request-runtime.js'
@@ -23,6 +28,89 @@ afterEach(() => {
   mockedUndiciFetch.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('sendRequest JSON body transport', () => {
+  beforeEach(() => {
+    // Keep request preparation and the script runtime real; stub only external IO.
+    vi.spyOn(requestDb, 'getRequest').mockResolvedValue(Result.Success({
+      ...createSendRequestInput(),
+      id: 'request-1',
+      name: 'JSON request',
+      requestType: 'http',
+      responseVisualizer: '',
+      responseTableAccessor: '',
+      preferredResponseBodyView: 'raw',
+      websocketSubprotocols: '',
+      websocketOnOpenMessage: '',
+      websocketAutoSendEnabled: false,
+      websocketAutoSendMessage: '',
+      websocketAutoSendIntervalSeconds: 0,
+      ...mcpRequestFieldDefaults(),
+      createdAt: 1,
+      deletedAt: null,
+    }))
+    vi.spyOn(explorerDb, 'getRequestParentFolderId').mockResolvedValue(null)
+    vi.spyOn(folderDb, 'getFolderAncestorChain').mockResolvedValue([])
+    vi.spyOn(environmentDb, 'listVisibleEnvironments').mockResolvedValue([])
+    vi.spyOn(sharedScriptDb, 'listVisibleSharedScripts').mockResolvedValue([])
+    vi.spyOn(scriptPackageDb, 'listScriptPackages').mockResolvedValue([])
+    vi.spyOn(cookieDb, 'getCookieHeaderForUrl').mockResolvedValue('')
+    vi.spyOn(cookieDb, 'storeResponseCookies').mockResolvedValue(undefined)
+    vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
+    mockedUndiciFetch.mockResolvedValue(new UndiciResponse('ok'))
+  })
+
+  it.each([
+    {
+      body: '{ "asdfasdf": 21093120398102398123, asdasdasd: 45, // lkasjdfl\n}',
+      expected: '{"asdfasdf":21093120398102398123,"asdasdasd":45}',
+    },
+    {
+      body: "{nested: [{id: {{longId}}, label: 'test',},], /* comment */}",
+      expected: '{"nested":[{"id":21093120398102398123,"label":"test"}]}',
+    },
+  ])('sends strict JSON with exact numeric digits: $body', async ({ body, expected }) => {
+    const result = await sendRequest({
+      ...createSendRequestInput(),
+      rawType: 'json',
+      body,
+      immutableVariables: { longId: '21093120398102398123' },
+    })
+
+    expect(result.success).toBe(true)
+    expect(mockedUndiciFetch).toHaveBeenCalledTimes(1)
+    const init = mockedUndiciFetch.mock.calls[0]?.[1]
+    expect(init?.body).toBe(expected)
+    expect(() => JSON.parse(String(init?.body))).not.toThrow()
+    expect(new Headers(init?.headers as Headers).get('content-type')).toBe('application/json')
+    if (!result.success) throw new Error('Expected request to succeed')
+    expect(result.data.execution.request.body).toBe(expected)
+  })
+
+  it('normalizes JSON5 assigned by a pre-request script', async () => {
+    const result = await sendRequest({
+      ...createSendRequestInput(),
+      rawType: 'json',
+      body: '{}',
+      preRequestScript: `request.body = "{id: 21093120398102398123,}"`,
+    })
+    expect(result.success).toBe(true)
+    expect(mockedUndiciFetch.mock.calls[0]?.[1]?.body).toBe('{"id":21093120398102398123}')
+  })
+
+  it('rejects invalid JSON5 before sending', async () => {
+    const result = await sendRequest({ ...createSendRequestInput(), rawType: 'json', body: '{' })
+    expect(result).toMatchObject({ success: false, error: { message: expect.stringContaining('Invalid JSON body:') } })
+    expect(mockedUndiciFetch).not.toHaveBeenCalled()
+  })
+
+  it('sends raw text verbatim', async () => {
+    const body = "{unquoted: 'text', // keep this\n}"
+    const result = await sendRequest({ ...createSendRequestInput(), body })
+    expect(result.success).toBe(true)
+    expect(mockedUndiciFetch.mock.calls[0]?.[1]?.body).toBe(body)
+  })
 })
 
 describe('applyScriptCallRequestOverrides', () => {

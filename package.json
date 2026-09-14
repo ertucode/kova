@@ -29,6 +29,7 @@
     "test:all": "vitest run",
     "test:ui": "vitest --ui",
     "bench:frontend-autocomplete": "vitest bench src/ui/folders/scriptAutocomplete.bench.ts",
+    "bench:json5": "vitest bench --run src/common/Json5.bench.ts",
     "lint": "eslint .",
     "preview": "npm run build:frontend-artifacts && vite preview",
     "transpile:electron": "tsc -p ./src/electron/tsconfig.json",
