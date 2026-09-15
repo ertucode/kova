@@ -57,6 +57,7 @@ export function AuthorizationEditor({
                 language="plain"
                 singleLine
                 compact
+                linePaddingOverride="0 1rem !important"
                 size="small"
                 hideFocusOutline
                 className="h-9 border border-base-content/10 bg-base-100/70"
@@ -75,6 +76,7 @@ export function AuthorizationEditor({
                   language="plain"
                   singleLine
                   compact
+                  linePaddingOverride="0 1rem !important"
                   size="small"
                   hideFocusOutline
                    className="h-9 border border-base-content/10 bg-base-100/70"
@@ -90,6 +92,7 @@ export function AuthorizationEditor({
                   language="plain"
                   singleLine
                   compact
+                  linePaddingOverride="0 1rem !important"
                   size="small"
                   hideFocusOutline
                    className="h-9 border border-base-content/10 bg-base-100/70"
@@ -109,6 +112,7 @@ export function AuthorizationEditor({
                   language="plain"
                   singleLine
                   compact
+                  linePaddingOverride="0 1rem !important"
                   size="small"
                   hideFocusOutline
                    className="h-9 border border-base-content/10 bg-base-100/70"
@@ -124,6 +128,7 @@ export function AuthorizationEditor({
                   language="plain"
                   singleLine
                   compact
+                  linePaddingOverride="0 1rem !important"
                   size="small"
                   hideFocusOutline
                    className="h-9 border border-base-content/10 bg-base-100/70"
