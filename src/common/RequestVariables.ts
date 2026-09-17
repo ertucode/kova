@@ -3,7 +3,6 @@ import { POSTMAN_DYNAMIC_VARIABLE_ALIASES, POSTMAN_DYNAMIC_VARIABLE_NAMES } from
 
 const VARIABLE_TOKEN_REGEX = /\\?\{\{\s*([a-zA-Z0-9._-]+)\s*\}\}/g
 const EXPRESSION_TOKEN_REGEX = /\\?\{\{(?:\$([\s\S]*?)|\s*([a-zA-Z0-9._-]+)\s*)\}\}/g
-export const TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX = '\0kova-module-alias:'
 
 export function extractTemplateVariables(value: string) {
   const variableNames = new Set<string>()
@@ -69,10 +68,8 @@ export async function resolveTemplateExpressions(
     const postmanExpression = explicitExpression !== undefined && POSTMAN_DYNAMIC_VARIABLE_NAMES.has(`$${explicitExpression.trim()}`)
       ? `$${explicitExpression.trim()}`
       : explicitExpression
-    const resolvedExpression = await resolveExpression(
-      postmanExpression ?? dynamicVariable ?? `${TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX}${alias ?? ''}`
-    )
-    nextValue += resolvedExpression
+    const expression = postmanExpression ?? dynamicVariable
+    nextValue += expression === undefined ? match[0] : await resolveExpression(expression)
   }
 
   nextValue += value.slice(cursor)

@@ -11,7 +11,7 @@ import { EditorView } from '@codemirror/view'
 import { formatScriptPackageSpecifier } from '@common/ScriptPackages'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
-import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import type { ScriptAutocompletePhase, ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 import type { SharedScriptTarget } from '@common/SharedScripts'
 import type { ScriptAutocompleteOption, ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 
@@ -19,6 +19,7 @@ type ScriptAutocompleteOptions = {
   includeResponse: boolean
   phase?: ScriptAutocompletePhase
   targets?: SharedScriptTarget[]
+  runtimeContext?: ScriptRuntimeContext
   getEnvironmentNames?: () => string[]
   getVariableNames?: () => string[]
   getRequestPaths?: () => string[][]
@@ -29,7 +30,7 @@ type ScriptAutocompleteOptions = {
 
 export function scriptAutocompleteExtension(options: ScriptAutocompleteOptions): Extension {
   const phase: ScriptAutocompletePhase = options.phase ?? (options.includeResponse ? 'post-request' : 'pre-request')
-  const runtimeContext = options.targets ? { targets: options.targets } : { phase }
+  const runtimeContext = options.runtimeContext ?? (options.targets ? { targets: options.targets } : { phase })
   const supportsRequestPathAutocomplete = options.targets
     ? options.targets.includes('post-request') || options.targets.includes('view-runtime')
     : phase === 'post-request' || phase === 'view-runtime'
@@ -193,7 +194,7 @@ function completePackageSpecifier(
 
 async function completeScriptApi(
   context: CompletionContext,
-  runtimeContext: { phase: ScriptAutocompletePhase } | { targets: SharedScriptTarget[] },
+  runtimeContext: ScriptRuntimeContext,
   getRequestPaths: (() => string[][]) | undefined,
   getSharedScripts: (() => ScriptAutocompleteSharedScript[]) | undefined,
   getPackages: (() => ScriptAutocompletePackage[]) | undefined

@@ -10,11 +10,12 @@ import type {
   ScriptHoverPart,
   ScriptHoverTag,
 } from './scriptAutocompleteTypes'
-import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import type { ScriptAutocompletePhase, ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 
 type ScriptHoverOptions = {
   phase?: ScriptAutocompletePhase
   targets?: SharedScriptTarget[]
+  runtimeContext?: ScriptRuntimeContext
   getRequestPaths?: () => string[][]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
   getPackages?: () => ScriptAutocompletePackage[]
@@ -61,7 +62,7 @@ function installScriptHoverVimMappings() {
 export function scriptHoverExtension(options: ScriptHoverOptions): Extension {
   installScriptHoverVimMappings()
 
-  const runtimeContext = options.targets ? { targets: options.targets } : { phase: options.phase ?? 'pre-request' }
+  const runtimeContext = options.runtimeContext ?? (options.targets ? { targets: options.targets } : { phase: options.phase ?? 'pre-request' })
 
   const loadHover = async (view: EditorView, position: number) => {
     if (!isHoverableScriptPosition(view.state.doc.toString(), position)) {

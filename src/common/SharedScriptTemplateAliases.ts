@@ -1,39 +1,51 @@
-import type { SharedScriptRecord } from './SharedScripts.js'
+import ts from 'typescript'
 
-const EXPORTED_FUNCTION_PATTERN = /\bexport\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g
-const EXPORTED_VALUE_PATTERN = /\bexport\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\b/g
-
-export function getSharedScriptTemplateAliasNames(
-  scripts: Array<Pick<SharedScriptRecord, 'kind' | 'targets' | 'isActive' | 'code'>>
-) {
+export function getSharedScriptCodeExportNames(source: string) {
   const names = new Set<string>()
+  const sourceFile = ts.createSourceFile('shared-script.ts', source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
 
-  for (const script of scripts) {
-    if (!script.isActive || script.kind !== 'module' || !script.targets.includes('pre-request')) {
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name && hasExportModifier(statement) && !hasDefaultModifier(statement)) {
+      names.add(statement.name.text)
       continue
     }
 
-    for (const name of getSharedScriptCodeTemplateAliasNames(script.code)) {
-      names.add(name)
+    if (ts.isVariableStatement(statement) && hasExportModifier(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        collectBindingNames(declaration.name, names)
+      }
+      continue
+    }
+
+    if (ts.isExportDeclaration(statement) && !statement.isTypeOnly && !statement.moduleSpecifier && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) {
+        if (!element.isTypeOnly) {
+          names.add(element.name.text)
+        }
+      }
     }
   }
 
   return Array.from(names)
 }
 
-export function getSharedScriptCodeTemplateAliasNames(source: string) {
-  const names = new Set<string>()
-  collectMatches(source, EXPORTED_FUNCTION_PATTERN, names)
-  collectMatches(source, EXPORTED_VALUE_PATTERN, names)
-  return Array.from(names)
+function hasExportModifier(node: ts.Node) {
+  return ts.canHaveModifiers(node) && ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) === true
 }
 
-function collectMatches(source: string, pattern: RegExp, names: Set<string>) {
-  pattern.lastIndex = 0
-  for (const match of source.matchAll(pattern)) {
-    const name = match[1]
-    if (name) {
-      names.add(name)
+function hasDefaultModifier(node: ts.Node) {
+  return ts.canHaveModifiers(node) && ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword) === true
+}
+
+function collectBindingNames(name: ts.BindingName, names: Set<string>) {
+  if (ts.isIdentifier(name)) {
+    names.add(name.text)
+    return
+  }
+
+  for (const element of name.elements) {
+    if (ts.isBindingElement(element)) {
+      collectBindingNames(element.name, names)
     }
   }
 }

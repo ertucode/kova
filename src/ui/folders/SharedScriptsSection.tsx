@@ -30,6 +30,7 @@ import { ScriptAiIconButton } from './ScriptAiIconButton'
 import { ScriptDocumentationDialog } from './ScriptDocumentationDialog'
 import { ScriptAiReviewCoordinator } from './scriptAiReviewStore'
 import { Tooltip } from '../components/Tooltip'
+import type { ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 
 const SCRIPT_TARGET_OPTIONS: SharedScriptTarget[] = ['pre-request', 'post-request', 'test', 'response-visualizer', 'view-runtime']
 const ALL_SCRIPT_DOCUMENTATION_PHASES = ['pre-request', 'post-request', 'test', 'response-visualizer', 'view-runtime'] as const
@@ -111,7 +112,7 @@ export function SharedScriptsSection({
       name: buildNewScriptName(kind, items),
       kind,
       isActive: kind === 'global',
-      targets: ['pre-request'],
+      targets: kind === 'expression' ? [] : ['pre-request'],
       code: '',
     })
 
@@ -179,7 +180,7 @@ export function SharedScriptsSection({
         {
           ownerType: 'shared-script',
           ownerId: draftValue.id,
-          runtimeContext: { targets: draftValue.targets },
+          runtimeContext: draftValue.kind === 'expression' ? { templatePhase: 'pre-request' } : { targets: draftValue.targets },
         },
         draftValue.code
       )
@@ -234,7 +235,7 @@ export function SharedScriptsSection({
               <div className="text-sm font-medium text-base-content">{title}</div>
               {description ? <p className="mt-1 text-sm text-base-content/60">{description}</p> : null}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 className="flex h-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-200"
@@ -248,6 +249,13 @@ export function SharedScriptsSection({
                 onClick={() => void handleCreate('module')}
               >
                 Add Module
+              </button>
+              <button
+                type="button"
+                className="flex h-10 items-center justify-center rounded-xl border border-base-content/10 bg-base-100 px-3 text-sm font-medium text-base-content transition hover:border-base-content/20 hover:bg-base-200"
+                onClick={() => void handleCreate('expression')}
+              >
+                Add Expression
               </button>
             </div>
           </div>
@@ -367,6 +375,10 @@ function SharedScriptDetail({
 }) {
   const targets = useMemo(() => normalizeSharedScriptTargets(draft.targets), [draft.targets])
   const isVisualizerOnly = targets.length === 1 && (targets[0] === 'response-visualizer' || targets[0] === 'view-runtime')
+  const runtimeContext = useMemo<ScriptRuntimeContext>(
+    () => draft.kind === 'expression' ? { templatePhase: 'pre-request' } : { targets },
+    [draft.kind, targets]
+  )
 
   const autocompleteSharedScripts = useMemo(
     () => visibleSharedScripts.filter(item => item.id !== draft.id),
@@ -381,30 +393,30 @@ function SharedScriptDetail({
   const extensions = useMemo(
     () => [
       scriptDiagnosticsExtension({
-        targets,
+        runtimeContext,
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
         getPackages: () => scriptPackagesRef.current,
       }),
       scriptAutocompleteExtension({
         includeResponse: false,
-        targets,
+        runtimeContext,
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
         getPackages: () => scriptPackagesRef.current,
       }),
       scriptHoverExtension({
-        targets,
+        runtimeContext,
         getRequestPaths: () => buildHttpRequestPaths(folderExplorerTreeStore.getSnapshot().context.items),
         getSharedScripts: () => autocompleteSharedScriptsRef.current,
         getPackages: () => scriptPackagesRef.current,
       }),
       supermavenGhostCompletionExtension({
         getDocumentPath: () => buildSharedScriptDocumentPath(draft.id, isVisualizerOnly),
-        targets,
+        ...(draft.kind === 'expression' ? { phase: 'pre-request' as const } : { targets }),
       }),
     ],
-    [draft.id, isVisualizerOnly, targets]
+    [draft.id, isVisualizerOnly, runtimeContext, targets]
   )
 
   return (
@@ -429,7 +441,7 @@ function SharedScriptDetail({
               ref={nameInputRef}
               className="w-full border-0 bg-transparent px-0 py-0.5 text-3xl font-semibold tracking-tight text-base-content outline-none"
               value={draft.name}
-              placeholder={draft.kind === 'module' ? 'Module name' : 'Global script name'}
+              placeholder={getScriptNamePlaceholder(draft.kind)}
               onChange={event => onChange({ ...draft, name: event.target.value })}
             />
             <SaveIndicator isDirty={isDirty} isSaving={isSaving} labelPrefix="Script" />
@@ -449,26 +461,29 @@ function SharedScriptDetail({
             <div className="min-w-0">
               <div className="text-sm font-medium text-base-content">Type</div>
               <div className="mt-1 text-sm text-base-content/55">
-                Globals auto-run in their target phases. Modules are loaded manually with `requireScript(name)`.
+                Globals auto-run, modules are loaded with `requireScript(name)`, and expression exports are available in {'{{$...}}'}.
               </div>
             </div>
 
             <select
               className="select h-11 w-full rounded-xl border-base-content/10 bg-base-100 md:w-[180px]"
               value={draft.kind}
-              onChange={event =>
+              onChange={event => {
+                const kind = parseSharedScriptKind(event.target.value)
                 onChange({
                   ...draft,
-                  kind: event.target.value === 'global' ? 'global' : 'module',
+                  kind,
+                  targets: kind === 'expression' ? [] : (draft.targets.length > 0 ? draft.targets : ['pre-request']),
                 })
-              }
+              }}
             >
               <option value="global">Global</option>
               <option value="module">Module</option>
+              <option value="expression">Expression</option>
             </select>
           </label>
 
-          <div className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
+          {draft.kind !== 'expression' ? <div className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
               <div className="text-sm font-medium text-base-content">Targets</div>
             </div>
@@ -506,7 +521,7 @@ function SharedScriptDetail({
                 )
               })}
             </div>
-          </div>
+          </div> : null}
         </div>
       </div>
 
@@ -515,7 +530,7 @@ function SharedScriptDetail({
           <ScriptAiIconButton
             ownerType="shared-script"
             ownerId={draft.id}
-            runtimeContext={{ targets }}
+            runtimeContext={runtimeContext}
             currentCode={draft.code}
             onApply={nextCode => onChange({ ...draft, code: nextCode })}
             tooltip="Generate with AI"
@@ -598,7 +613,7 @@ function SaveIndicator({
 }
 
 function buildNewScriptName(kind: SharedScriptRecord['kind'], scripts: SharedScriptRecord[]) {
-  const prefix = kind === 'global' ? 'Global Script' : 'Module Script'
+  const prefix = formatScriptKind(kind, 'Script')
   const usedNames = new Set(scripts.map(script => script.name.trim()).filter(Boolean))
 
   for (let index = 1; index < 10_000; index += 1) {
@@ -612,7 +627,9 @@ function buildNewScriptName(kind: SharedScriptRecord['kind'], scripts: SharedScr
 }
 
 function formatScriptMeta(script: SharedScriptRecord) {
-  return `${script.kind === 'global' ? 'Global' : 'Module'} · ${script.targets.map(formatTargetLabel).join(', ')}`
+  return script.kind === 'expression'
+    ? 'Expression'
+    : `${formatScriptKind(script.kind)} · ${script.targets.map(formatTargetLabel).join(', ')}`
 }
 
 function formatTargetLabel(target: SharedScriptTarget) {
@@ -633,7 +650,38 @@ function formatTargetLabel(target: SharedScriptTarget) {
 }
 
 function getUntitledLabel(kind: SharedScriptRecord['kind']) {
-  return kind === 'global' ? 'Untitled global script' : 'Untitled module script'
+  return `Untitled ${formatScriptKind(kind).toLowerCase()} script`
+}
+
+function getScriptNamePlaceholder(kind: SharedScriptRecord['kind']) {
+  return `${formatScriptKind(kind)} script name`
+}
+
+function formatScriptKind(kind: SharedScriptRecord['kind'], suffix = '') {
+  const label = (() => {
+    switch (kind) {
+      case 'global':
+        return 'Global'
+      case 'module':
+        return 'Module'
+      case 'expression':
+        return 'Expression'
+      default:
+        return Typescript.assertUnreachable(kind)
+    }
+  })()
+  return suffix ? `${label} ${suffix}` : label
+}
+
+function parseSharedScriptKind(value: string): SharedScriptRecord['kind'] {
+  switch (value) {
+    case 'global':
+    case 'module':
+    case 'expression':
+      return value
+    default:
+      throw new Error(`Invalid shared script kind: ${value}`)
+  }
 }
 
 function normalizeSharedScriptTargets(targets: SharedScriptTarget[]) {

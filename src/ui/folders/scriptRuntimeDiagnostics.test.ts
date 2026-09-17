@@ -9,6 +9,8 @@ import {
   createScriptRuntimePhaseStateManager,
   updateScriptRuntimePhaseSource,
 } from './scriptRuntimeDiagnostics'
+import type { ScriptRuntimeContext } from './scriptRuntimeDeclarations'
+import type { ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 
 const declarationFilesPromise = buildScriptRuntimeDeclarationPayload({
   rootDir: process.cwd(),
@@ -147,23 +149,44 @@ describe('script runtime DOM completions', () => {
 
     expect(diagnostics.some(message => message.includes("Cannot find name 'navigateAndCallRequest'"))).toBe(true)
   })
+
+  it('types expression script exports only in template expressions', async () => {
+    const sharedScripts: ScriptAutocompleteSharedScript[] = [{
+      id: 'phone-expression',
+      name: 'Phone expressions',
+      kind: 'expression',
+      code: 'export function randomPhone(input: { country: string }) { return input.country }',
+      targets: [],
+      isActive: true,
+    }]
+    const templateState = await createPhaseState({ templatePhase: 'pre-request' }, 'randomPh', sharedScripts)
+    const completions = templateState.service.getCompletionsAtPosition(templateState.userFileName, 'randomPh'.length, {})
+    const diagnosticsState = await createPhaseState(
+      { templatePhase: 'pre-request' },
+      "randomPhone({ country: 1 })",
+      sharedScripts
+    )
+    const diagnostics = diagnosticsState.service.getSemanticDiagnostics(diagnosticsState.userFileName)
+    const normalScriptState = await createPhaseState({ phase: 'pre-request' }, 'randomPhone', sharedScripts)
+
+    expect(completions?.entries.map(entry => entry.name)).toContain('randomPhone')
+    expect(diagnostics.map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')))
+      .toContain("Type 'number' is not assignable to type 'string'.")
+    expect(normalScriptState.service.getSemanticDiagnostics(normalScriptState.userFileName)
+      .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')))
+      .toContain("Cannot find name 'randomPhone'.")
+  })
 })
 
 async function getCompletionLabels(
-  runtimeContext:
-    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
-    | { targets: ['response-visualizer', 'view-runtime'] }
-    | { targets: ['pre-request', 'test'] },
+  runtimeContext: ScriptRuntimeContext,
   code: string
 ) {
   return await getCompletionLabelsAt(runtimeContext, code, code.length)
 }
 
 async function getCompletionLabelsAt(
-  runtimeContext:
-    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
-    | { targets: ['response-visualizer', 'view-runtime'] }
-    | { targets: ['pre-request', 'test'] },
+  runtimeContext: ScriptRuntimeContext,
   code: string,
   position: number
 ) {
@@ -178,10 +201,7 @@ async function getCompletionLabelsAt(
 }
 
 async function getShapedCompletionLabels(
-  runtimeContext:
-    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
-    | { targets: ['response-visualizer', 'view-runtime'] }
-    | { targets: ['pre-request', 'test'] },
+  runtimeContext: ScriptRuntimeContext,
   code: string,
   position = code.length
 ) {
@@ -202,10 +222,7 @@ async function getShapedCompletionLabels(
 }
 
 async function getQuickInfoDisplayText(
-  runtimeContext:
-    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
-    | { targets: ['response-visualizer', 'view-runtime'] }
-    | { targets: ['pre-request', 'test'] },
+  runtimeContext: ScriptRuntimeContext,
   code: string,
   position: number
 ) {
@@ -216,24 +233,20 @@ async function getQuickInfoDisplayText(
 }
 
 async function getDiagnostics(
-  runtimeContext:
-    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
-    | { targets: ['response-visualizer', 'view-runtime'] }
-    | { targets: ['pre-request', 'test'] },
-  code: string
+  runtimeContext: ScriptRuntimeContext,
+  code: string,
+  sharedScripts: ScriptAutocompleteSharedScript[] = []
 ) {
-  const phaseState = await createPhaseState(runtimeContext, code)
+  const phaseState = await createPhaseState(runtimeContext, code, sharedScripts)
   return phaseState.service
     .getSemanticDiagnostics(phaseState.userFileName)
     .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
 }
 
 async function createPhaseState(
-  runtimeContext:
-    | { phase: 'response-visualizer' | 'view-runtime' | 'pre-request' | 'test' }
-    | { targets: ['response-visualizer', 'view-runtime'] }
-    | { targets: ['pre-request', 'test'] },
-  code: string
+  runtimeContext: ScriptRuntimeContext,
+  code: string,
+  sharedScripts: ScriptAutocompleteSharedScript[] = []
 ) {
   const declarationFiles = await declarationFilesPromise
   const phaseStateManager = createScriptRuntimePhaseStateManager(async () => declarationFiles)
@@ -242,7 +255,7 @@ async function createPhaseState(
   updateScriptRuntimePhaseSource(phaseState, {
     code,
     requestPaths: [],
-    sharedScripts: [],
+    sharedScripts,
     packages: [],
   })
 

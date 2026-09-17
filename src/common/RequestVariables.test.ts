@@ -10,10 +10,10 @@ describe('resolveTemplateExpressions', () => {
   })
 
   it('leaves normal environment variables for the regular variable resolver', async () => {
-    const resolve = vi.fn(async (source: string) => source.includes('baseUrl') ? '{{baseUrl}}' : `[${source}]`)
+    const resolve = vi.fn(async (source: string) => `[${source}]`)
 
     await expect(resolveTemplateExpressions('{{baseUrl}}', resolve)).resolves.toBe('{{baseUrl}}')
-    expect(resolve).toHaveBeenCalledOnce()
+    expect(resolve).not.toHaveBeenCalled()
   })
 
   it('keeps escaped aliases literal', async () => {

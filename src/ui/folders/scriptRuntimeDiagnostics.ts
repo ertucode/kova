@@ -1,4 +1,5 @@
 import ts from 'typescript'
+import { getSharedScriptCodeExportNames } from '../../common/SharedScriptTemplateAliases.js'
 import {
   formatScriptPackageSpecifier,
   parseScriptPackageSpecifier,
@@ -156,6 +157,7 @@ export function updateScriptRuntimePhaseSource(
       getScriptRuntimeDeclarations(phaseState.runtimeContext),
       buildRequestPathDeclarations(phaseState.runtimeContext, input.requestPaths),
       buildRequireScriptDeclarations(sharedScriptFiles.modules),
+      buildExpressionExportDeclarations(sharedScriptFiles.expressionExports),
       buildLoadPackageDeclarations(input.packages),
     ])
   )
@@ -401,10 +403,31 @@ function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScr
   const extension = isScriptRuntimeVisualizerOnly(runtimeContext) ? 'tsx' : 'ts'
   const files: Array<{ fileName: string; content: string }> = []
   const modules = new Map<string, string>()
+  const expressionExports = new Map<string, string>()
   const requiredTargets = getScriptRuntimeTargets(runtimeContext)
+  const isTemplateExpression = 'templatePhase' in runtimeContext
 
   for (const script of sharedScripts) {
-    if (!script.isActive || !script.code.trim() || !requiredTargets.every(target => script.targets.includes(target))) {
+    if (!script.isActive || !script.code.trim()) {
+      continue
+    }
+
+    if (script.kind === 'expression') {
+      if (!isTemplateExpression) {
+        continue
+      }
+
+      const fileName = `shared-script-${script.id}.${extension}`
+      files.push({ fileName, content: script.code })
+      for (const exportName of getSharedScriptCodeExportNames(script.code)) {
+        if (!expressionExports.has(exportName)) {
+          expressionExports.set(exportName, fileName)
+        }
+      }
+      continue
+    }
+
+    if (!requiredTargets.every(target => script.targets.includes(target))) {
       continue
     }
 
@@ -416,7 +439,7 @@ function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScr
     }
   }
 
-  return { files, modules }
+  return { files, modules, expressionExports }
 }
 
 function buildRequireScriptDeclarations(modules: Map<string, string>) {
@@ -426,6 +449,12 @@ function buildRequireScriptDeclarations(modules: Map<string, string>) {
 
   lines.push('declare function requireScript(name: string): unknown')
   return lines.join('\n')
+}
+
+function buildExpressionExportDeclarations(exports: Map<string, string>) {
+  return Array.from(exports.entries())
+    .map(([name, fileName]) => `declare const ${name}: typeof import('./${fileName.replace(/\.tsx?$/, '')}').${name}`)
+    .join('\n')
 }
 
 function buildLoadPackageDeclarations(packages: ScriptRuntimePackage[]) {
@@ -468,6 +497,16 @@ function resolvePackageAwareModuleName(
   files: Map<string, string>,
   packages: ScriptRuntimePackage[]
 ) {
+  if (moduleName.startsWith('./')) {
+    const relativeName = moduleName.slice(2)
+    for (const [suffix, extension] of [['.ts', ts.Extension.Ts], ['.tsx', ts.Extension.Tsx]] as const) {
+      const fileName = `${relativeName}${suffix}`
+      if (files.has(fileName)) {
+        return { resolvedFileName: fileName, extension, isExternalLibraryImport: false }
+      }
+    }
+  }
+
   const parsedSpecifier = parseScriptPackageSpecifier(moduleName)
   const matchingPackages = parsedSpecifier ? packages.filter(pkg => pkg.packageName === parsedSpecifier.packageName) : []
 

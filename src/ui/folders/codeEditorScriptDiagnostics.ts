@@ -4,7 +4,7 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import type { SharedScriptTarget } from '@common/SharedScripts'
 import { toast } from '@/lib/components/toast'
 import { requestScriptDiagnostics } from './scriptAutocompleteClient'
-import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import type { ScriptAutocompletePhase, ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript, ScriptEditorDiagnostic } from './scriptAutocompleteTypes'
 
 const DIAGNOSTIC_DEBOUNCE_MS = 180
@@ -74,12 +74,13 @@ const inlineDiagnosticsTheme = EditorView.theme({
 export function scriptDiagnosticsExtension(options: {
   phase?: ScriptAutocompletePhase
   targets?: SharedScriptTarget[]
+  runtimeContext?: ScriptRuntimeContext
   getRequestPaths?: () => string[][]
   getSharedScripts?: () => ScriptAutocompleteSharedScript[]
   getPackages?: () => ScriptAutocompletePackage[]
 }): Extension {
   const { phase = 'pre-request', getRequestPaths, getSharedScripts, getPackages, targets } = options
-  const runtimeContext = targets ? { targets } : { phase }
+  const runtimeContext = options.runtimeContext ?? (targets ? { targets } : { phase })
 
   return [
     inlineDiagnosticsField,
