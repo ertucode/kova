@@ -55,6 +55,7 @@
     "@codemirror/merge": "^6.12.1",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.40.0",
+    "@faker-js/faker": "^10.6.0",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.8",

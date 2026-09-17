@@ -6,6 +6,7 @@ import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
+import { PostmanBatchExportDialog } from './PostmanBatchExportDialog'
 
 export function PostmanExportDialog({ scope, folderId, requestId }: { scope: 'workspace' | 'folder' | 'request'; folderId?: string; requestId?: string }) {
   const [analysis, setAnalysis] = useState<AnalyzePostmanCollectionExportResponse | null>(null)
@@ -118,6 +119,10 @@ export function PostmanExportDialog({ scope, folderId, requestId }: { scope: 'wo
       }
     >
       <div className="flex min-h-0 h-full flex-col gap-4">
+        <button type="button" className="btn btn-outline self-start" disabled={isExporting}
+          onClick={() => dialogActions.open({ component: PostmanBatchExportDialog, props: { kind: 'collection' } })}>
+          Select multiple collections / requests...
+        </button>
         {isAnalyzing ? (
           <div className="flex items-center gap-3 rounded-2xl border border-base-content/10 bg-base-100/65 p-4 text-sm text-base-content/70">
             <LoaderCircleIcon className="size-4 animate-spin" />

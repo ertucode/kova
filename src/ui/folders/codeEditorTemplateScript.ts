@@ -35,7 +35,7 @@ type TemplateExpressionMatch = {
 
 const TEMPLATE_EXPRESSION_REGEX = /\\?\{\{\$([\s\S]*?)\}\}/g
 const templateScriptParser = javaScriptParser.configure({ dialect: 'ts jsx' })
-const preferredTemplateGlobals = new Set(['env', 'scope', 'request', 'crypto', 'z'])
+const preferredTemplateGlobals = new Set(['env', 'scope', 'request', 'crypto', 'faker', 'z'])
 const templateScriptHighlighter = tagHighlighter([
   { tag: [tags.keyword, tags.modifier], class: 'cm-template-script-keyword' },
   { tag: [tags.string, tags.special(tags.string)], class: 'cm-template-script-string' },

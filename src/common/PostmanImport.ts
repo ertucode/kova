@@ -23,6 +23,7 @@ export type AnalyzePostmanCollectionInput = {
 
 export type PickPostmanCollectionFileResponse = {
   filePath: string
+  filePaths: string[]
 }
 
 export type AnalyzePostmanCollectionResponse = {

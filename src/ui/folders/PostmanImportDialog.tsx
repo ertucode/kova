@@ -9,6 +9,7 @@ import { getWindowElectron } from '@/getWindowElectron'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { toast } from '@/lib/components/toast'
+import { PostmanBatchImportDialog } from './PostmanBatchImportDialog'
 
 type ImportTarget = 'new-folder' | 'existing-folder' | 'global'
 
@@ -109,6 +110,10 @@ export function PostmanImportDialog() {
       return
     }
 
+    if (picked.data.filePaths.length > 1) {
+      dialogActions.open({ component: PostmanBatchImportDialog, props: { kind: 'collection', filePaths: picked.data.filePaths } })
+      return
+    }
     setIsAnalyzing(true)
     setFilePath(picked.data.filePath)
     const nextAnalysis = await getWindowElectron().analyzePostmanCollection({ filePath: picked.data.filePath })
@@ -190,7 +195,7 @@ export function PostmanImportDialog() {
             <div>
               <div className="text-sm font-semibold text-base-content">Source File</div>
               <div className="mt-1 text-sm text-base-content/55">
-                Pick a Postman collection JSON file. We will analyze it first and show any unsupported features before import.
+                Pick one or more Postman collection JSON files. We will analyze them first and show any unsupported features before import.
               </div>
               <div className="mt-3 flex items-center gap-2 text-sm text-base-content/72">
                 <FileJsonIcon className="size-4 shrink-0" />
@@ -200,7 +205,7 @@ export function PostmanImportDialog() {
 
             <button type="button" className="btn btn-sm btn-outline" onClick={() => void pickFile()} disabled={isAnalyzing || isImporting}>
               {isAnalyzing ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-              Choose File
+              Choose Files
             </button>
           </div>
         </div>

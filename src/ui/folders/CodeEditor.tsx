@@ -12,7 +12,7 @@ import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
 import { graphqlLanguageSupport } from 'cm6-graphql'
 import { EditorView, keymap, lineNumbers, placeholder as placeholderExtension } from '@codemirror/view'
-import { defaultSettingsTokyoNight, tokyoNight } from '@uiw/codemirror-theme-tokyo-night'
+import { defaultSettingsTokyoNight, tokyoNightInit, tokyoNightStyle } from '@uiw/codemirror-theme-tokyo-night'
 import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
 import type { SyntaxNode } from '@lezer/common'
 import { tags as highlightTags } from '@lezer/highlight'
@@ -112,28 +112,44 @@ const cssLanguageExtension = css()
 const xmlLanguageExtension = xml()
 const graphqlLanguageExtension = graphqlLanguageSupport()
 const tokyoNightColors = {
-  background: defaultSettingsTokyoNight.background ?? '#1a1b26',
-  foreground: '#a9b1d6',
-  caret: defaultSettingsTokyoNight.caret ?? '#c0caf5',
-  selection: defaultSettingsTokyoNight.selection ?? '#515c7e40',
-  selectionMatch: defaultSettingsTokyoNight.selectionMatch ?? '#16161e',
-  gutterBackground: defaultSettingsTokyoNight.gutterBackground ?? '#1a1b26',
-  gutterForeground: '#565f89',
-  lineHighlight: defaultSettingsTokyoNight.lineHighlight ?? '#474b6611',
-  keyword: '#bb9af7',
-  name: '#a9b1d6',
-  property: '#7aa2f7',
-  string: '#9ece6a',
-  number: '#ff9e64',
-  type: '#0db9d7',
-  operator: '#bb9af7',
-  punctuation: '#c0caf5',
-  comment: '#444b6a',
-  invalid: '#ff5370',
-  link: '#b4f9f8',
-  heading: '#89ddff',
-  tagContent: '#e1e3ec',
+  background: 'var(--color-base-100, #1a1b26)',
+  foreground: 'var(--editor-foreground, #a9b1d6)',
+  caret: 'var(--editor-caret, #c0caf5)',
+  selection: 'var(--editor-selection, #515c7e40)',
+  selectionMatch: 'var(--editor-selection-match, #16161e)',
+  gutterBackground: 'var(--color-base-100, #1a1b26)',
+  gutterForeground: 'var(--editor-gutter, #565f89)',
+  lineHighlight: 'var(--editor-line-highlight, #474b6611)',
+  keyword: 'var(--editor-keyword, #bb9af7)',
+  name: 'var(--editor-foreground, #a9b1d6)',
+  property: 'var(--editor-property, #7aa2f7)',
+  string: 'var(--editor-string, #9ece6a)',
+  number: 'var(--editor-number, #ff9e64)',
+  type: 'var(--editor-type, #0db9d7)',
+  operator: 'var(--editor-keyword, #bb9af7)',
+  punctuation: 'var(--editor-foreground, #c0caf5)',
+  comment: 'var(--editor-comment, #444b6a)',
+  invalid: 'var(--editor-invalid, #ff5370)',
+  link: 'var(--editor-link, #b4f9f8)',
+  heading: 'var(--editor-heading, #89ddff)',
+  tagContent: 'var(--color-base-content, #e1e3ec)',
 } as const
+const syntaxColors: Record<string, string> = {
+  '#bb9af7': tokyoNightColors.keyword,
+  '#c0caf5': tokyoNightColors.punctuation,
+  '#7aa2f7': tokyoNightColors.property,
+  '#9ece6a': tokyoNightColors.string,
+  '#ff9e64': tokyoNightColors.number,
+  '#0db9d7': tokyoNightColors.type,
+  '#b4f9f8': tokyoNightColors.link,
+  '#444b6a': tokyoNightColors.comment,
+  '#89ddff': tokyoNightColors.heading,
+  '#ff5370': tokyoNightColors.invalid,
+}
+const adaptiveSyntaxTheme = tokyoNightInit({
+  settings: tokyoNightColors,
+  styles: tokyoNightStyle.map(style => ({ ...style, color: style.color ? syntaxColors[style.color] ?? style.color : undefined })),
+})
 const jsxHighlightExtension = syntaxHighlighting(
   HighlightStyle.define([
     { tag: highlightTags.content, color: tokyoNightColors.tagContent },
@@ -160,9 +176,6 @@ const editorTheme = EditorView.theme({
   '&.cm-focused': {
     outline: `2px solid ${tokyoNightColors.caret}`,
     outlineOffset: '-2px',
-  },
-  '.cm-scroller, .cm-layer': {
-    backgroundColor: `${tokyoNightColors.background} !important`,
   },
   '.cm-gutters': {
     backgroundColor: `${tokyoNightColors.gutterBackground} !important`,
@@ -224,6 +237,7 @@ const editorTheme = EditorView.theme({
     zIndex: '9999',
   },
   '.cm-scroller': {
+    backgroundColor: `${tokyoNightColors.background} !important`,
     height: '100%',
     overflow: 'auto',
     fontFamily: 'inherit',
@@ -1027,7 +1041,7 @@ export const CodeEditor = memo(function CodeEditor({
       selectionMatchesExtension,
       ...baseSetupExtensions,
       tabSizeExtension,
-      tokyoNight,
+      adaptiveSyntaxTheme,
       jsxHighlightExtension,
       editorTheme,
       scaledEditorTheme,

@@ -12,6 +12,7 @@ import { graphqlLanguage } from 'cm6-graphql'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
+import { POSTMAN_DYNAMIC_VARIABLES } from '@common/PostmanDynamicVariables'
 
 export type VariableAutocompleteItem = {
   name: string
@@ -46,7 +47,7 @@ export function variableAutocompleteExtension(
       }
 
       const textBeforeCursor = update.state.doc.sliceString(Math.max(0, selection.from - 200), selection.from)
-      if (!/\{\{[a-zA-Z0-9._-]*$/.test(textBeforeCursor)) {
+      if (!/\{\{\$?[a-zA-Z0-9._-]*$/.test(textBeforeCursor)) {
         return
       }
 
@@ -69,7 +70,7 @@ function completeVariables(
   context: CompletionContext,
   getVariables: () => VariableAutocompleteItem[]
 ): CompletionResult | null {
-  const match = context.matchBefore(/\{\{[a-zA-Z0-9._-]*$/)
+  const match = context.matchBefore(/\{\{\$?[a-zA-Z0-9._-]*$/)
   if (!match) {
     return null
   }
@@ -80,11 +81,21 @@ function completeVariables(
 
   const query = match.text.slice(2).toLowerCase()
   const variables = getVariables()
-  const options = variables
+  const variableOptions = variables
     .filter(variable => variable.name.trim() !== '')
     .filter(variable => variable.name.toLowerCase().includes(query))
     .sort(compareAutocompleteItems(query))
     .map(variable => toCompletion(variable))
+  const dynamicOptions: Completion[] = POSTMAN_DYNAMIC_VARIABLES
+    .flatMap(variable => [variable.name, ...variable.aliases].map(name => ({
+      label: name,
+      type: 'constant',
+      detail: `dynamic · ${variable.description}`,
+      boost: name.toLowerCase().startsWith(query) ? 140 : 60,
+      apply: applyTemplateVariableCompletion,
+    })))
+    .filter(option => option.label.toLowerCase().includes(query))
+  const options = [...dynamicOptions, ...variableOptions]
 
   if (options.length === 0) {
     return null
@@ -106,17 +117,19 @@ function toCompletion(variable: VariableAutocompleteItem): Completion {
     type: 'variable',
     detail: buildEnvironmentDetail(variable),
     boost: getCompletionBoost(variable),
-    apply(view, completion, from, to) {
-      const replacement = `{{${completion.label}}}`
-      const trailingText = view.state.doc.sliceString(to, Math.min(view.state.doc.length, to + 2))
-      const replacementTo = trailingText === '}}' ? to + 2 : to
-
-      view.dispatch({
-        changes: { from, to: replacementTo, insert: replacement },
-        selection: { anchor: from + replacement.length },
-      })
-    },
+    apply: applyTemplateVariableCompletion,
   }
+}
+
+function applyTemplateVariableCompletion(view: EditorView, completion: Completion, from: number, to: number) {
+  const replacement = `{{${completion.label}}}`
+  const trailingText = view.state.doc.sliceString(to, Math.min(view.state.doc.length, to + 2))
+  const replacementTo = trailingText === '}}' ? to + 2 : to
+
+  view.dispatch({
+    changes: { from, to: replacementTo, insert: replacement },
+    selection: { anchor: from + replacement.length },
+  })
 }
 
 function buildEnvironmentDetail(variable: VariableAutocompleteItem) {

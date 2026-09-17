@@ -313,7 +313,7 @@ export function buildCollectionExportDocument(source: CollectionExportSource, co
   }
 }
 
-async function loadCollectionExportSource(target: AnalyzePostmanCollectionExportInput | ExportPostmanCollectionInput): Promise<CollectionExportSource> {
+export async function loadCollectionExportSource(target: AnalyzePostmanCollectionExportInput | ExportPostmanCollectionInput): Promise<CollectionExportSource> {
   const items = await listExplorerItems()
   const folderItems = items.filter((item): item is Extract<ExplorerItem, { itemType: 'folder' }> => item.itemType === 'folder')
   const requestItems = items.filter((item): item is Extract<ExplorerItem, { itemType: 'request' }> => item.itemType === 'request')

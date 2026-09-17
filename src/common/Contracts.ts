@@ -1,4 +1,5 @@
 import { type GenericResult } from './GenericError.js'
+import type { ExportPostmanArchiveInput, ExportPostmanArchiveResponse } from './PostmanArchive.js'
 import {
   type ClearCookiesInput,
   type CookieRecord,
@@ -374,6 +375,7 @@ export type EventResponseMapping = {
   deleteDatabaseConfig: Promise<GenericResult<DatabaseConfigState>>
   setActiveDatabaseConfig: Promise<GenericResult<DatabaseConfigState>>
   pickPostmanCollectionFile: Promise<GenericResult<PickPostmanCollectionFileResponse>>
+  exportPostmanArchive: Promise<GenericResult<ExportPostmanArchiveResponse>>
   analyzePostmanCollection: Promise<GenericResult<AnalyzePostmanCollectionResponse>>
   importPostmanCollection: Promise<GenericResult<ImportPostmanCollectionResponse>>
   pickPostmanCollectionExportFile: Promise<GenericResult<PickPostmanCollectionExportFileResponse>>
@@ -542,6 +544,7 @@ export type EventRequestMapping = {
   deleteDatabaseConfig: DeleteDatabaseConfigInput
   setActiveDatabaseConfig: SetActiveDatabaseConfigInput
   pickPostmanCollectionFile: void
+  exportPostmanArchive: ExportPostmanArchiveInput
   analyzePostmanCollection: AnalyzePostmanCollectionInput
   importPostmanCollection: ImportPostmanCollectionInput
   pickPostmanCollectionExportFile: PickPostmanCollectionExportFileInput
@@ -740,6 +743,7 @@ export type WindowElectron = {
   deleteDatabaseConfig: (input: DeleteDatabaseConfigInput) => Promise<GenericResult<DatabaseConfigState>>
   setActiveDatabaseConfig: (input: SetActiveDatabaseConfigInput) => Promise<GenericResult<DatabaseConfigState>>
   pickPostmanCollectionFile: () => Promise<GenericResult<PickPostmanCollectionFileResponse>>
+  exportPostmanArchive: (input: ExportPostmanArchiveInput) => Promise<GenericResult<ExportPostmanArchiveResponse>>
   analyzePostmanCollection: (
     input: AnalyzePostmanCollectionInput
   ) => Promise<GenericResult<AnalyzePostmanCollectionResponse>>

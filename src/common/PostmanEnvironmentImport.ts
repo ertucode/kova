@@ -14,6 +14,7 @@ export type PostmanEnvironmentImportWarning = {
 
 export type PickPostmanEnvironmentFileResponse = {
   filePath: string
+  filePaths: string[]
 }
 
 export type AnalyzePostmanEnvironmentInput = {
