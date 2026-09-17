@@ -102,10 +102,15 @@ export function SharedScriptsPanel() {
       return
     }
 
-    nameInputRef.current?.focus()
-    nameInputRef.current?.select()
+    const nameInput = nameInputRef.current
+    if (!nameInput) {
+      return
+    }
+
+    nameInput.focus()
+    nameInput.select()
     sharedScriptEditorStore.trigger.focusHandled({ scopeKey })
-  }, [focusScriptId, scopeKey, selectedId])
+  }, [entries, focusScriptId, scopeKey, selectedId])
 
   const items = useMemo(() => scripts.map(script => entries[script.id]?.current ?? script), [entries, scripts])
 

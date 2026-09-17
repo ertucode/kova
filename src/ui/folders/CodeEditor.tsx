@@ -361,6 +361,46 @@ const editorTheme = EditorView.theme({
     lineHeight: '1.35rem',
     whiteSpace: 'pre-wrap',
   },
+  '.cm-script-hover-source': {
+    marginTop: '0.55rem',
+    paddingTop: '0.55rem',
+    borderTop: `1px solid ${tokyoNightColors.lineHighlight}`,
+  },
+  '.cm-script-hover-source-heading': {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '0.3rem',
+    marginBottom: '0.35rem',
+    fontSize: '0.72rem',
+  },
+  '.cm-script-hover-source-label': {
+    color: tokyoNightColors.comment,
+  },
+  '.cm-script-hover-source-name': {
+    padding: '0',
+    border: '0',
+    background: 'transparent',
+    color: tokyoNightColors.link,
+    cursor: 'pointer',
+    font: 'inherit',
+    textAlign: 'left',
+  },
+  '.cm-script-hover-source-name:hover': {
+    color: tokyoNightColors.property,
+    textDecoration: 'underline',
+    textUnderlineOffset: '0.15rem',
+  },
+  '.cm-script-hover-source-code': {
+    maxHeight: '14rem',
+    margin: '0',
+    overflow: 'auto',
+    color: tokyoNightColors.foreground,
+    fontFamily:
+      'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace',
+    fontSize: '0.76rem',
+    lineHeight: '1.25rem',
+    whiteSpace: 'pre-wrap',
+  },
   '.cm-script-hover-part-keyword': {
     color: tokyoNightColors.keyword,
   },

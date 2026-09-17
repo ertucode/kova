@@ -16,7 +16,10 @@ import {
 } from './scriptRuntimeDeclarations.js'
 import { sanitizePackageTypeFileContent } from './scriptAutocompletePackageTypes.js'
 
-export type ScriptRuntimeSharedScript = Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>
+export type ScriptRuntimeSharedScript = Pick<
+  SharedScriptRecord,
+  'id' | 'scopeType' | 'scopeId' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'
+>
 
 export type ScriptRuntimePackage = Pick<
   ScriptPackageArtifact,
@@ -49,6 +52,7 @@ export type ScriptRuntimePhaseState = {
   dynamicFileNames: Set<string>
   dynamicRootFileNames: Set<string>
   packages: ScriptRuntimePackage[]
+  expressionExportSources: Map<string, { id: string; scopeType: SharedScriptRecord['scopeType']; scopeId: string | null; name: string; code: string }>
 }
 
 const allowedTopLevelScriptDiagnosticCodes = new Set([1108, 1375])
@@ -134,6 +138,7 @@ export function updateScriptRuntimePhaseSource(
   phaseState.dynamicRootFileNames.clear()
 
   const sharedScriptFiles = createSharedScriptFiles(phaseState.runtimeContext, input.sharedScripts)
+  phaseState.expressionExportSources = sharedScriptFiles.expressionExportSources
   for (const file of sharedScriptFiles.files) {
     phaseState.dynamicFileNames.add(file.fileName)
     phaseState.dynamicRootFileNames.add(file.fileName)
@@ -383,6 +388,7 @@ function createPhaseState(runtimeContext: ScriptRuntimeContext, declarationFiles
     dynamicFileNames: new Set<string>(),
     dynamicRootFileNames: new Set<string>(),
     packages: [],
+    expressionExportSources: new Map(),
   }
 
   return phaseState
@@ -404,6 +410,13 @@ function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScr
   const files: Array<{ fileName: string; content: string }> = []
   const modules = new Map<string, string>()
   const expressionExports = new Map<string, string>()
+  const expressionExportSources = new Map<string, {
+    id: string
+    scopeType: SharedScriptRecord['scopeType']
+    scopeId: string | null
+    name: string
+    code: string
+  }>()
   const requiredTargets = getScriptRuntimeTargets(runtimeContext)
   const isTemplateExpression = 'templatePhase' in runtimeContext
 
@@ -422,6 +435,13 @@ function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScr
       for (const exportName of getSharedScriptCodeExportNames(script.code)) {
         if (!expressionExports.has(exportName)) {
           expressionExports.set(exportName, fileName)
+          expressionExportSources.set(exportName, {
+            id: script.id,
+            scopeType: script.scopeType,
+            scopeId: script.scopeId,
+            name: script.name.trim() || 'Expression script',
+            code: getExportSource(script.code, exportName),
+          })
         }
       }
       continue
@@ -439,7 +459,45 @@ function createSharedScriptFiles(runtimeContext: ScriptRuntimeContext, sharedScr
     }
   }
 
-  return { files, modules, expressionExports }
+  return { files, modules, expressionExports, expressionExportSources }
+}
+
+function getExportSource(code: string, exportName: string) {
+  const sourceFile = ts.createSourceFile('expression.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const declarations = new Map<string, string>()
+  const aliases = new Map<string, string>()
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name) {
+      declarations.set(statement.name.text, statement.getText(sourceFile))
+      continue
+    }
+
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        for (const name of getBindingNames(declaration.name)) {
+          declarations.set(name, statement.getText(sourceFile))
+        }
+      }
+      continue
+    }
+
+    if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) {
+        aliases.set(element.name.text, element.propertyName?.text ?? element.name.text)
+      }
+    }
+  }
+
+  return declarations.get(aliases.get(exportName) ?? exportName) ?? code
+}
+
+function getBindingNames(name: ts.BindingName): string[] {
+  if (ts.isIdentifier(name)) {
+    return [name.text]
+  }
+
+  return name.elements.flatMap(element => (ts.isOmittedExpression(element) ? [] : getBindingNames(element.name)))
 }
 
 function buildRequireScriptDeclarations(modules: Map<string, string>) {

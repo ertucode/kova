@@ -11,6 +11,7 @@ import type {
   ScriptHoverTag,
 } from './scriptAutocompleteTypes'
 import type { ScriptAutocompletePhase, ScriptRuntimeContext } from './scriptRuntimeDeclarations'
+import { SharedScriptCoordinator } from './sharedScriptCoordinator'
 
 type ScriptHoverOptions = {
   phase?: ScriptAutocompletePhase
@@ -159,7 +160,7 @@ function getSelectionHoverPosition(selection: SelectionRange) {
   return Math.max(0, selection.head)
 }
 
-function createScriptHoverTooltip(hover: ScriptHoverInfo): Tooltip {
+export function createScriptHoverTooltip(hover: ScriptHoverInfo): Tooltip {
   return {
     pos: hover.from,
     end: hover.to,
@@ -173,6 +174,33 @@ function createScriptHoverTooltip(hover: ScriptHoverInfo): Tooltip {
       detail.className = 'cm-script-hover-detail'
       appendParts(detail, hover.detailParts)
       dom.append(detail)
+
+      if (hover.source) {
+        const source = document.createElement('div')
+        source.className = 'cm-script-hover-source'
+
+        const sourceHeading = document.createElement('div')
+        sourceHeading.className = 'cm-script-hover-source-heading'
+
+        const sourceLabel = document.createElement('span')
+        sourceLabel.className = 'cm-script-hover-source-label'
+        sourceLabel.textContent = 'Source:'
+        sourceHeading.append(sourceLabel)
+
+        const sourceName = document.createElement('button')
+        sourceName.type = 'button'
+        sourceName.className = 'cm-script-hover-source-name'
+        sourceName.textContent = hover.source.name
+        sourceName.addEventListener('click', () => void SharedScriptCoordinator.openScript(hover.source!))
+        sourceHeading.append(sourceName)
+        source.append(sourceHeading)
+
+        const sourceCode = document.createElement('pre')
+        sourceCode.className = 'cm-script-hover-source-code'
+        sourceCode.textContent = hover.source.code
+        source.append(sourceCode)
+        dom.append(source)
+      }
 
       if (hover.documentationParts.length > 0) {
         const documentation = document.createElement('div')

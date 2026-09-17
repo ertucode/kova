@@ -132,6 +132,9 @@ async function getHover(request: ScriptHoverRequest): Promise<ScriptHoverRespons
           name: tag.name,
           textParts: toHoverParts(tag.text),
         })),
+        source: phaseState.expressionExportSources.get(
+          request.code.slice(quickInfo.textSpan.start, quickInfo.textSpan.start + quickInfo.textSpan.length)
+        ),
       },
     }
   } catch (error) {

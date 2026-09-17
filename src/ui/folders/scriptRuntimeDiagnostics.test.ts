@@ -153,9 +153,11 @@ describe('script runtime DOM completions', () => {
   it('types expression script exports only in template expressions', async () => {
     const sharedScripts: ScriptAutocompleteSharedScript[] = [{
       id: 'phone-expression',
+      scopeType: 'workspace',
+      scopeId: null,
       name: 'Phone expressions',
       kind: 'expression',
-      code: 'export function randomPhone(input: { country: string }) { return input.country }',
+      code: "export const phonePrefix = '+1'\nexport function randomPhone(input: { country: string }) { return input.country }",
       targets: [],
       isActive: true,
     }]
@@ -175,6 +177,21 @@ describe('script runtime DOM completions', () => {
     expect(normalScriptState.service.getSemanticDiagnostics(normalScriptState.userFileName)
       .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')))
       .toContain("Cannot find name 'randomPhone'.")
+
+    expect(templateState.expressionExportSources.get('randomPhone')).toEqual({
+      id: 'phone-expression',
+      scopeType: 'workspace',
+      scopeId: null,
+      name: 'Phone expressions',
+      code: 'export function randomPhone(input: { country: string }) { return input.country }',
+    })
+    expect(templateState.expressionExportSources.get('phonePrefix')).toEqual({
+      id: 'phone-expression',
+      scopeType: 'workspace',
+      scopeId: null,
+      name: 'Phone expressions',
+      code: "export const phonePrefix = '+1'",
+    })
   })
 })
 

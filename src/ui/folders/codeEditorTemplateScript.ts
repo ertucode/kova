@@ -9,13 +9,19 @@ import {
 import { highlightTree, tagHighlighter, tags } from '@lezer/highlight'
 import { parser as javaScriptParser } from '@lezer/javascript'
 import { RangeSetBuilder, type Extension } from '@codemirror/state'
-import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { Decoration, EditorView, hoverTooltip, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { formatScriptPackageSpecifier } from '@common/ScriptPackages'
 import { POSTMAN_DYNAMIC_VARIABLE_NAMES } from '@common/PostmanDynamicVariables'
-import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
+import type {
+  ScriptAutocompletePackage,
+  ScriptAutocompleteSharedScript,
+  ScriptHoverInfo,
+} from './scriptAutocompleteTypes'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
-import { requestScriptAutocomplete } from './scriptAutocompleteClient'
+import { createScriptHoverTooltip } from './codeEditorScriptHover'
+import { requestScriptAutocomplete, requestScriptHover } from './scriptAutocompleteClient'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
+import { SharedScriptCoordinator } from './sharedScriptCoordinator'
 
 type TemplateScriptOptions = {
   phase?: ScriptAutocompletePhase
@@ -71,6 +77,36 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
       }
     ),
     codeEditorTabBehaviorExtension(options),
+    hoverTooltip(
+      async (view, position) => {
+        const hover = await loadTemplateScriptHover(view, position, options)
+        return hover ? createScriptHoverTooltip(hover) : null
+      },
+      {
+        hideOnChange: true,
+        hoverTime: 200,
+      }
+    ),
+    EditorView.domEventHandlers({
+      click(event, view) {
+        if (!isTemplateSourceNavigationClick(event)) {
+          return false
+        }
+
+        const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+        if (position === null) {
+          return false
+        }
+
+        event.preventDefault()
+        void loadTemplateScriptHover(view, position, options).then(hover => {
+          if (hover?.source) {
+            void SharedScriptCoordinator.openScript(hover.source)
+          }
+        })
+        return true
+      },
+    }),
     EditorView.updateListener.of(update => {
       if (!update.docChanged) {
         return
@@ -98,6 +134,45 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
       startCompletion(update.view)
     }),
   ]
+}
+
+async function loadTemplateScriptHover(view: EditorView, position: number, options: TemplateScriptOptions) {
+  const expression = findTemplateScriptExpressionAtPosition(view.state.doc.toString(), position)
+  if (!expression) {
+    return null
+  }
+
+  try {
+    const result = await requestScriptHover({
+      runtimeContext:
+        options.phase === undefined || options.phase === 'pre-request'
+          ? { templatePhase: 'pre-request' }
+          : { phase: options.phase },
+      code: expression.code,
+      position: position - expression.contentFrom,
+      sharedScripts: options.getSharedScripts?.(),
+      packages: options.getPackages?.(),
+    })
+
+    return result?.hover ? offsetTemplateScriptHover(result.hover, expression.contentFrom) : null
+  } catch {
+    return null
+  }
+}
+
+export function isTemplateSourceNavigationClick(
+  event: Pick<MouseEvent, 'altKey' | 'metaKey'>,
+  platform = navigator.platform
+) {
+  return /^Mac/.test(platform) ? event.metaKey : event.altKey
+}
+
+export function offsetTemplateScriptHover(hover: ScriptHoverInfo, offset: number): ScriptHoverInfo {
+  return {
+    ...hover,
+    from: hover.from + offset,
+    to: hover.to + offset,
+  }
 }
 
 export function createTemplateCompletionSource(
@@ -187,8 +262,8 @@ function buildTemplateScriptDecorations(view: EditorView) {
         continue
       }
 
-        builder.add(tokenFrom, tokenTo, Decoration.mark({ class: token.className }))
-      }
+      builder.add(tokenFrom, tokenTo, Decoration.mark({ class: token.className }))
+    }
 
     builder.add(contentTo, contentTo + 2, templateClosingDelimiterDecoration)
   }

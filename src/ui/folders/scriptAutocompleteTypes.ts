@@ -4,7 +4,10 @@ import type { ScriptRuntimeDiagnostic } from '@common/ScriptAi'
 import type { ScriptRuntimeContext } from './scriptRuntimeDeclarations'
 import type { ScriptRuntimePackage } from './scriptRuntimeDiagnostics'
 
-export type ScriptAutocompleteSharedScript = Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>
+export type ScriptAutocompleteSharedScript = Pick<
+  SharedScriptRecord,
+  'id' | 'scopeType' | 'scopeId' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'
+>
 
 export type ScriptAutocompletePackage = ScriptRuntimePackage
 
@@ -88,6 +91,13 @@ export type ScriptHoverInfo = {
   detailParts: ScriptHoverPart[]
   documentationParts: ScriptHoverPart[]
   tags: ScriptHoverTag[]
+  source?: {
+    id: string
+    scopeType: SharedScriptRecord['scopeType']
+    scopeId: string | null
+    name: string
+    code: string
+  }
 }
 
 export type ScriptHoverSuccess = {
