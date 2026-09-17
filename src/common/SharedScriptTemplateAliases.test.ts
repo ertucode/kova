@@ -1,21 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { getSharedScriptTemplateAliasNames } from './SharedScriptTemplateAliases.js'
+import { getSharedScriptCodeExportNames } from './SharedScriptTemplateAliases.js'
 
-describe('getSharedScriptTemplateAliasNames', () => {
-  it('returns exports from active pre-request modules', () => {
-    expect(getSharedScriptTemplateAliasNames([{
-      kind: 'module',
-      targets: ['pre-request'],
-      isActive: true,
-      code: 'export function randomPhone() { return "1" }\nexport const orderPrefix = "ORD"',
-    }])).toEqual(['randomPhone', 'orderPrefix'])
+describe('getSharedScriptCodeExportNames', () => {
+  it('returns exported functions, variables, destructured bindings, and export lists', () => {
+    expect(getSharedScriptCodeExportNames(`
+      export function randomPhone() { return '1' }
+      export const orderPrefix = 'ORD'
+      export const { nested } = { nested: true }
+      const later = 1
+      export { later as renamed }
+    `)).toEqual(['randomPhone', 'orderPrefix', 'nested', 'renamed'])
   })
 
-  it('ignores inactive modules and modules for other targets', () => {
-    expect(getSharedScriptTemplateAliasNames([
-      { kind: 'module', targets: ['pre-request'], isActive: false, code: 'export function inactive() {}' },
-      { kind: 'module', targets: ['test'], isActive: true, code: 'export function testOnly() {}' },
-      { kind: 'global', targets: ['pre-request'], isActive: true, code: 'export function globalValue() {}' },
-    ])).toEqual([])
+  it('ignores type-only, default, and non-exported declarations', () => {
+    expect(getSharedScriptCodeExportNames(`
+      function local() {}
+      export type Value = string
+      export default function ignored() {}
+      type Other = number
+      export type { Other }
+    `)).toEqual([])
   })
 })

@@ -135,7 +135,7 @@ export const sharedScripts = sqliteTable(
     index('shared_scripts_deleted_at_idx').on(table.deletedAt),
     index('shared_scripts_scope_idx').on(table.scopeType, table.scopeId, table.position),
     check('shared_scripts_scope_type_check', sql`${table.scopeType} in ('workspace', 'folder')`),
-    check('shared_scripts_kind_check', sql`${table.kind} in ('global', 'module')`),
+    check('shared_scripts_kind_check', sql`${table.kind} in ('global', 'module', 'expression')`),
     check(
       'shared_scripts_workspace_scope_id_check',
       sql`(${table.scopeType} = 'workspace' and ${table.scopeId} is null) or (${table.scopeType} = 'folder' and ${table.scopeId} is not null)`

@@ -11,6 +11,7 @@ import { parser as javaScriptParser } from '@lezer/javascript'
 import { RangeSetBuilder, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { formatScriptPackageSpecifier } from '@common/ScriptPackages'
+import { POSTMAN_DYNAMIC_VARIABLE_NAMES } from '@common/PostmanDynamicVariables'
 import type { ScriptAutocompletePackage, ScriptAutocompleteSharedScript } from './scriptAutocompleteTypes'
 import { codeEditorTabBehaviorExtension } from './codeEditorTabBehavior'
 import { requestScriptAutocomplete } from './scriptAutocompleteClient'
@@ -145,12 +146,13 @@ export function findTemplateScriptExpressions(source: string): TemplateExpressio
 
     const from = match.index
     const to = from + match[0].length
+    const content = getTemplateExpressionContent(match)
     expressions.push({
       from,
       to,
-      contentFrom: from + 3,
+      contentFrom: from + content.offset,
       contentTo: to - 2,
-      code: match[1] ?? '',
+      code: content.code,
     })
   }
 
@@ -170,14 +172,15 @@ function buildTemplateScriptDecorations(view: EditorView) {
 
     const matchFrom = match.index
     const matchTo = matchFrom + match[0].length
-    const contentFrom = matchFrom + 3
+    const content = getTemplateExpressionContent(match)
+    const contentFrom = matchFrom + content.offset
     const contentTo = matchTo - 2
 
     builder.add(matchFrom, matchTo, templateExpressionDecoration)
     builder.add(matchFrom, contentFrom, templateOpeningDelimiterDecoration)
     builder.add(contentFrom, contentTo, templateContentDecoration)
 
-    for (const token of scanTemplateScriptTokens(match[1] ?? '')) {
+    for (const token of scanTemplateScriptTokens(content.code)) {
       const tokenFrom = contentFrom + token.from
       const tokenTo = contentFrom + token.to
       if (tokenFrom >= tokenTo) {
@@ -191,6 +194,15 @@ function buildTemplateScriptDecorations(view: EditorView) {
   }
 
   return builder.finish()
+}
+
+function getTemplateExpressionContent(match: RegExpExecArray) {
+  const code = match[1] ?? ''
+  if (code === code.trim() && POSTMAN_DYNAMIC_VARIABLE_NAMES.has(`$${code}`)) {
+    return { code: `$${code}`, offset: 2 }
+  }
+
+  return { code, offset: 3 }
 }
 
 function scanTemplateScriptTokens(source: string) {

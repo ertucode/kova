@@ -3,7 +3,7 @@ import type { OperationRecord } from './Operations.js'
 export const SHARED_SCRIPT_SCOPE_TYPES = ['workspace', 'folder'] as const
 export type SharedScriptScopeType = (typeof SHARED_SCRIPT_SCOPE_TYPES)[number]
 
-export const SHARED_SCRIPT_KINDS = ['global', 'module'] as const
+export const SHARED_SCRIPT_KINDS = ['global', 'module', 'expression'] as const
 export type SharedScriptKind = (typeof SHARED_SCRIPT_KINDS)[number]
 
 export const SHARED_SCRIPT_TARGETS = ['pre-request', 'post-request', 'test', 'response-visualizer', 'view-runtime'] as const

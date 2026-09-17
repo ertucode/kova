@@ -88,7 +88,11 @@ export async function updateSharedScript(input: UpdateSharedScriptInput): Promis
   }
 
   const targets = normalizeTargets(input.targets)
-  if (targets.length === 0) {
+  if (input.kind === 'expression' && targets.length > 0) {
+    return GenericError.Message('Expression shared scripts cannot have targets')
+  }
+
+  if (input.kind !== 'expression' && targets.length === 0) {
     return GenericError.Message('Select at least one shared script target')
   }
 
@@ -294,7 +298,12 @@ function validateSharedScriptInput(input: CreateSharedScriptInput) {
     return 'Module shared scripts require a name'
   }
 
-  if (normalizeTargets(input.targets).length === 0) {
+  const targets = normalizeTargets(input.targets)
+  if (input.kind === 'expression' && targets.length > 0) {
+    return 'Expression shared scripts cannot have targets'
+  }
+
+  if (input.kind !== 'expression' && targets.length === 0) {
     return 'Select at least one shared script target'
   }
 
@@ -360,7 +369,7 @@ function toSharedScriptRecord(script: SharedScriptRow): SharedScriptRecord {
     scopeId: script.scopeId,
     name: script.name,
     kind: script.kind as SharedScriptKind,
-    targets: parseTargets(script.targetsJson),
+    targets: parseTargets(script.targetsJson, script.kind as SharedScriptKind),
     isActive: script.isActive,
     code: script.code,
     position: script.position,
@@ -370,7 +379,11 @@ function toSharedScriptRecord(script: SharedScriptRow): SharedScriptRecord {
   }
 }
 
-function parseTargets(value: string): SharedScriptTarget[] {
+function parseTargets(value: string, kind: SharedScriptKind): SharedScriptTarget[] {
+  if (kind === 'expression') {
+    return []
+  }
+
   try {
     const parsed = JSON.parse(value) as unknown
     if (!Array.isArray(parsed)) {

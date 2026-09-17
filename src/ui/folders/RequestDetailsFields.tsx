@@ -16,7 +16,6 @@ import {
 import { parseCurlRequest } from '@common/curl'
 import { extractTemplateVariables } from '@common/RequestVariables'
 import { POSTMAN_DYNAMIC_VARIABLES } from '@common/PostmanDynamicVariables'
-import { getSharedScriptTemplateAliasNames } from '@common/SharedScriptTemplateAliases'
 import {
   syncPathParamsWithUrl,
   syncSearchParamsWithUrl,
@@ -159,17 +158,12 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
   const activeEnvironmentNames = scopedEnvironments.activeEnvironmentNames
   const activeEnvironmentVariableNames = scopedEnvironments.activeEnvironmentVariableNames
-  const templateAliasNames = useMemo(
-    () => getSharedScriptTemplateAliasNames(visibleSharedScripts),
-    [visibleSharedScripts]
-  )
   const highlightedVariableNames = useMemo(
     () => Array.from(new Set([
       ...activeEnvironmentVariableNames,
       ...POSTMAN_DYNAMIC_VARIABLES.flatMap(variable => [...variable.aliases]),
-      ...templateAliasNames,
     ])),
-    [activeEnvironmentVariableNames, templateAliasNames]
+    [activeEnvironmentVariableNames]
   )
 
   const variableTooltipRows = useMemo(
@@ -192,8 +186,8 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   )
 
   const variableAutocompleteItems = useMemo(
-    () => buildVariableAutocompleteItems(variableTooltipRows, templateAliasNames),
-    [templateAliasNames, variableTooltipRows]
+    () => buildVariableAutocompleteItems(variableTooltipRows),
+    [variableTooltipRows]
   )
   const variableHighlightRefreshKey = useMemo(
     () => buildVariableHighlightRefreshKey(activeEnvironmentIds, highlightedVariableNames),
@@ -2381,8 +2375,7 @@ function buildVariableAutocompleteItems(
     priority: number
     createdAt: number
     valueByVariableName: Map<string, string>
-  }>,
-  templateAliasNames: string[] = []
+  }>
 ): VariableAutocompleteItem[] {
   const items = new Map<
     string,
@@ -2401,15 +2394,6 @@ function buildVariableAutocompleteItems(
       (left, right) =>
         right.resolutionRank - left.resolutionRank || right.priority - left.priority || right.createdAt - left.createdAt
     )
-
-  for (const aliasName of templateAliasNames) {
-    items.set(aliasName, {
-      name: aliasName,
-      effectiveEnvironmentName: null,
-      activeEnvironmentNames: [],
-      inactiveEnvironmentNames: [],
-    })
-  }
 
   for (const row of rows) {
     for (const variableName of row.valueByVariableName.keys()) {

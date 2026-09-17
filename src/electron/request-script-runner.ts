@@ -17,9 +17,8 @@ import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathPara
 import {
   resolveTemplateExpressions as resolveTemplateExpressionTokens,
   resolveTemplateVariables,
-  TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX,
 } from '../common/RequestVariables.js'
-import { getSharedScriptCodeTemplateAliasNames } from '../common/SharedScriptTemplateAliases.js'
+import { getSharedScriptCodeExportNames } from '../common/SharedScriptTemplateAliases.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type {
   RequestScriptError,
@@ -2738,50 +2737,27 @@ async function evaluateTemplateExpression(input: {
 
   try {
     input.runtimeRequestMetadata.currentRuntime = 'template-expression'
-    if (input.expressionSource.startsWith(TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX)) {
-      const alias = input.expressionSource.slice(TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX.length)
-      const scopedValues = {
-        ...input.environmentContext.getValues(),
-        ...Object.fromEntries(input.requestScope.entries()),
-      }
-      if (alias in scopedValues) {
-        return `{{${alias}}}`
-      }
-
-      const matchingExports = (getTemplateAliasModules(input.sharedScripts).get(alias) ?? [])
-        .map(script => {
-          const moduleExports = requireScript(script.name)
-          return { moduleName: script.name, value: moduleExports[alias] }
-        })
-
-      if (matchingExports.length === 0) {
-        return `{{${alias}}}`
-      }
-      if (matchingExports.length > 1) {
-        throw new Error(
-          `Template alias ${alias} is exported by multiple modules: ${matchingExports.map(item => item.moduleName).join(', ')}`
-        )
-      }
-
-      const matchingExport = matchingExports[0]
-      const result = typeof matchingExport.value === 'function'
-        ? await Promise.resolve(matchingExport.value())
-        : matchingExport.value
-      return stringifyTemplateExpressionResult(result)
-    }
-
     compiledScript = compileTemplateExpressionScript(input.expressionSource)
+    const executionGlobals: Record<string, unknown> = {
+      module: runtimeModule,
+      exports: runtimeModule.exports,
+      ...sandbox,
+      requireScript,
+      require: requirePackage,
+      loadPackage: requirePackage,
+    }
+    installExpressionExportGlobals({
+      globals: executionGlobals,
+      sharedScripts: input.sharedScripts,
+      consoleEntries: input.consoleEntries,
+      baseGlobals: sandbox,
+      requireScript,
+      loadPackage: requirePackage,
+    })
     const result = await resolveTemplateExpressionResult(
       await executeScript(
         compiledScript.code,
-        {
-          module: runtimeModule,
-          exports: runtimeModule.exports,
-          ...sandbox,
-          requireScript,
-          require: requirePackage,
-          loadPackage: requirePackage,
-        },
+        executionGlobals,
         executionController
       )
     )
@@ -2797,6 +2773,8 @@ async function evaluateTemplateExpression(input: {
     })
 
     throw new Error(`Template expression failed in ${input.sourceName}: ${details.message}`)
+  } finally {
+    executionController.cancel()
   }
 }
 
@@ -2979,34 +2957,66 @@ function createSharedModuleLoader(input: {
   return loadModule
 }
 
-const templateAliasModulesCache = new WeakMap<SharedScriptRecord[], ReadonlyMap<string, SharedScriptRecord[]>>()
+function installExpressionExportGlobals(input: {
+  globals: Record<string, unknown>
+  sharedScripts: SharedScriptRecord[]
+  consoleEntries: RequestConsoleEntry[]
+  baseGlobals: Record<string, unknown>
+  requireScript: (name: string) => Record<string, unknown>
+  loadPackage: (specifier: string) => unknown
+}) {
+  const scriptsByExport = new Map<string, SharedScriptRecord>()
+  const activeScripts = input.sharedScripts.filter(script => script.isActive && script.kind === 'expression' && script.code.trim())
 
-function getTemplateAliasModules(sharedScripts: SharedScriptRecord[]) {
-  const cached = templateAliasModulesCache.get(sharedScripts)
-  if (cached) {
-    return cached
+  for (const script of activeScripts) {
+    for (const exportName of getSharedScriptCodeExportNames(script.code)) {
+      if (exportName in input.globals) {
+        throw new Error(`Expression export ${exportName} conflicts with a template expression global`)
+      }
+
+      const existing = scriptsByExport.get(exportName)
+      if (existing) {
+        throw new Error(
+          `Expression export ${exportName} is defined by multiple scripts: ${getSharedScriptDisplayName(existing)}, ${getSharedScriptDisplayName(script)}`
+        )
+      }
+
+      scriptsByExport.set(exportName, script)
+    }
   }
 
-  const modulesByAlias = new Map<string, SharedScriptRecord[]>()
-  for (const script of sharedScripts) {
-    if (
-      !script.isActive ||
-      script.kind !== 'module' ||
-      !script.targets.includes('pre-request') ||
-      script.name.trim() === ''
-    ) {
-      continue
+  const exportCache = new Map<string, Record<string, unknown>>()
+  const loadExpressionScript = (script: SharedScriptRecord) => {
+    const cached = exportCache.get(script.id)
+    if (cached) {
+      return cached
     }
 
-    for (const alias of getSharedScriptCodeTemplateAliasNames(script.code)) {
-      const modules = modulesByAlias.get(alias) ?? []
-      modules.push(script)
-      modulesByAlias.set(alias, modules)
-    }
+    const module = { exports: {} as Record<string, unknown> }
+    const context = vm.createContext(
+      {
+        module,
+        exports: module.exports,
+        require: input.loadPackage,
+        requireScript: input.requireScript,
+        loadPackage: input.loadPackage,
+        console: createScriptConsole(getSharedScriptDisplayName(script), input.consoleEntries),
+        ...input.baseGlobals,
+      },
+      { codeGeneration: { strings: false, wasm: false } }
+    )
+    executeModuleScript(compileRequestScript(script.code).code, context)
+    exportCache.set(script.id, module.exports)
+    return module.exports
   }
 
-  templateAliasModulesCache.set(sharedScripts, modulesByAlias)
-  return modulesByAlias
+  for (const [exportName, script] of scriptsByExport) {
+    Object.defineProperty(input.globals, exportName, {
+      enumerable: true,
+      configurable: false,
+      get: () => loadExpressionScript(script)[exportName],
+    })
+  }
 }
 
 function createInstalledPackageLoader(scriptPackages: ScriptRuntimePackage[]) {

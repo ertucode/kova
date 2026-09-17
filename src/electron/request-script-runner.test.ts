@@ -482,7 +482,7 @@ describe('createRequestScriptRuntime', () => {
       .resolves.toMatch(/^ORD-\d{8}$/)
   })
 
-  it('resolves exported module functions as direct template aliases', async () => {
+  it('exposes expression script functions and variables only in explicit template expressions', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
         method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
@@ -490,15 +490,51 @@ describe('createRequestScriptRuntime', () => {
       },
       environments: [],
       sharedScripts: [{
-        id: 'custom-phone-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'module',
-        targets: ['pre-request'], isActive: true,
-        code: "export function randomPhone() { return '555-123-4567' }",
+        id: 'custom-phone-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'expression',
+        targets: [], isActive: true,
+        code: "export function randomPhone() { return '555-123-4567' }\nexport const prefix = 'phone'",
         position: 0, createdAt: 1, updatedAt: 1, deletedAt: null,
       }],
     })
 
-    await expect(runtime.resolveTemplateExpressions('{{randomPhone}}', 'Request Body'))
+    await expect(runtime.resolveTemplateExpressions('{{$randomPhone}}', 'Request Body'))
       .resolves.toBe('555-123-4567')
+    await expect(runtime.resolveTemplateExpressions('{{$prefix}}', 'Request Body'))
+      .resolves.toBe('phone')
+    await expect(runtime.resolveTemplateExpressions('{{randomPhone}}', 'Request Body'))
+      .resolves.toBe('{{randomPhone}}')
+  })
+
+  it('rejects duplicate and reserved expression exports', async () => {
+    const createRuntime = (codes: string[]) => createRequestScriptRuntime({
+      request: {
+        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
+        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: codes.map((code, index) => ({
+        id: `expression-${index}`,
+        scopeType: 'workspace' as const,
+        scopeId: null,
+        name: `Expression ${index}`,
+        kind: 'expression' as const,
+        targets: [],
+        isActive: true,
+        code,
+        position: index,
+        createdAt: 1,
+        updatedAt: 1,
+        deletedAt: null,
+      })),
+    })
+
+    await expect(createRuntime([
+      'export const generated = 1',
+      'export function generated() { return 2 }',
+    ]).resolveTemplateExpressions('{{$generated}}', 'Request Body'))
+      .rejects.toThrow('Expression export generated is defined by multiple scripts')
+    await expect(createRuntime(['export const request = 1']).resolveTemplateExpressions('{{$request}}', 'Request Body'))
+      .rejects.toThrow('Expression export request conflicts with a template expression global')
   })
 
   it('does not execute unrelated modules while resolving ordinary template variables', async () => {

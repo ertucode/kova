@@ -26,4 +26,17 @@ describe('findTemplateScriptExpressionAtPosition', () => {
 
     expect(expression?.code).toBe("loadPackage('lodash').isArray([])")
   })
+
+  it('keeps the shorthand dollar as part of Postman dynamic variable expressions', () => {
+    expect(findTemplateScriptExpressions('{{$guid}}')[0]).toMatchObject({
+      contentFrom: 2,
+      contentTo: 7,
+      code: '$guid',
+    })
+    expect(findTemplateScriptExpressions('{{$$guid}}')[0]).toMatchObject({
+      contentFrom: 3,
+      contentTo: 8,
+      code: '$guid',
+    })
+  })
 })
