@@ -40,6 +40,11 @@ const builtInGlobalsSection: ScriptDocumentationSection = {
     { label: 'Math.random()', detail: 'Returns a random number between 0 and 1.' },
     { label: 'JSON.parse(text)', detail: 'Parses JSON text.' },
     { label: 'crypto.randomUUID()', detail: 'Returns a UUID string.' },
+    { label: 'faker.person.fullName()', detail: 'Generates realistic test data with Faker.' },
+    { label: '{{$guid}}', detail: 'Postman-compatible dynamic UUID inside request fields.' },
+    { label: '{{$randomPhoneNumber}}', detail: 'Postman-compatible random phone number inside request fields.' },
+    { label: '{{$ JavaScript }}', detail: 'Evaluates JavaScript in URL, headers, parameters, auth, or body before sending.' },
+    { label: "{{$requireScript('generators').value()}}", detail: 'Calls reusable custom JavaScript from an active pre-request shared module.' },
   ],
 }
 

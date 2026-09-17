@@ -1,5 +1,6 @@
 import '@tailwindcss/browser'
 import '../App.css'
+import '../global/theme'
 import './responseVisualizer.css'
 import React, { type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'

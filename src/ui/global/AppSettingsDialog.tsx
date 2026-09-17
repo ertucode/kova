@@ -29,6 +29,7 @@ import { toast } from '@/lib/components/toast'
 import { dialogActions } from './dialogStore'
 import { AppSettingsCoordinator, appSettingsStore } from './appSettingsStore'
 import { useOpenCodeModels } from './useOpenCodeModels'
+import { getAppTheme, setAppTheme, type AppTheme } from './theme'
 import {
   SettingsCheckboxFieldRow,
   SettingsControlLabel,
@@ -40,6 +41,7 @@ import {
 } from '@/components/settings'
 
 export function AppSettingsDialog() {
+  const [theme, setTheme] = useState<AppTheme>(getAppTheme)
   const settings = useSelector(appSettingsStore, state => state.context.settings)
   const saving = useSelector(appSettingsStore, state => state.context.saving)
   const [warnBeforeRequestAfterSeconds, setWarnBeforeRequestAfterSeconds] = useState('10')
@@ -141,6 +143,7 @@ export function AppSettingsDialog() {
     })
 
     if (success) {
+      setAppTheme(theme)
       dialogActions.close()
     }
   }
@@ -412,6 +415,13 @@ export function AppSettingsDialog() {
       }
     >
       <SettingsList>
+        <SettingsDropdownFieldRow
+          title="Appearance"
+          description="Choose a theme for this device. Dark is the default."
+          value={theme}
+          options={[{ label: 'Dark', value: 'dark' }, { label: 'Light', value: 'light' }]}
+          onChange={value => setTheme(value)}
+        />
         <SettingsFieldRow
           title="Application updates"
           description="Automatic updates are available in installed Windows builds."

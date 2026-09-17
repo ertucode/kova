@@ -169,6 +169,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   deleteDatabaseConfig: input => ipcInvoke('deleteDatabaseConfig', input),
   setActiveDatabaseConfig: input => ipcInvoke('setActiveDatabaseConfig', input),
   pickPostmanCollectionFile: () => ipcInvoke('pickPostmanCollectionFile', undefined),
+  exportPostmanArchive: input => ipcInvoke('exportPostmanArchive', input),
   analyzePostmanCollection: input => ipcInvoke('analyzePostmanCollection', input),
   importPostmanCollection: input => ipcInvoke('importPostmanCollection', input),
   pickPostmanCollectionExportFile: input => ipcInvoke('pickPostmanCollectionExportFile', input),

@@ -9,6 +9,7 @@ export function Dialog({
   style,
   footer,
   bodyClassName,
+  dismissible = true,
 }: {
   title?: ReactNode
   children: ReactNode
@@ -17,6 +18,7 @@ export function Dialog({
   style?: React.CSSProperties
   footer?: ReactNode
   bodyClassName?: string
+  dismissible?: boolean
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
 
@@ -29,7 +31,7 @@ export function Dialog({
   }, [children])
 
   return (
-    <dialog className="modal" ref={dialogRef} onClose={onClose}>
+    <dialog className="modal" ref={dialogRef} onClose={onClose} onCancel={event => { if (!dismissible) event.preventDefault() }}>
       <div className={cn('modal-box max-w-[80vw] max-h-[80vh] flex flex-col gap-3', className)} style={style}>
         {title && <h3 className="font-bold text-lg flex-shrink-0">{title}</h3>}
         <div className={cn('flex-1 min-h-0 overflow-y-auto', footer ? 'pb-8' : '', bodyClassName)}>{children}</div>
@@ -40,7 +42,7 @@ export function Dialog({
         ) : null}
       </div>
       <form method="dialog" className="modal-backdrop ">
-        <button className="cursor-default" onClick={onClose}>
+        <button className="cursor-default" onClick={onClose} disabled={!dismissible}>
           close
         </button>
       </form>

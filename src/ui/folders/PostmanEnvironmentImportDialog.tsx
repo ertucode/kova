@@ -7,6 +7,7 @@ import { dialogActions } from '@/global/dialogStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { toast } from '@/lib/components/toast'
+import { PostmanBatchImportDialog } from './PostmanBatchImportDialog'
 
 export function PostmanEnvironmentImportDialog() {
   const [analysis, setAnalysis] = useState<AnalyzePostmanEnvironmentResponse | null>(null)
@@ -29,6 +30,10 @@ export function PostmanEnvironmentImportDialog() {
       return
     }
 
+    if (picked.data.filePaths.length > 1) {
+      dialogActions.open({ component: PostmanBatchImportDialog, props: { kind: 'environment', filePaths: picked.data.filePaths } })
+      return
+    }
     setIsAnalyzing(true)
     setFilePath(picked.data.filePath)
     const analyzed = await getWindowElectron().analyzePostmanEnvironment({ filePath: picked.data.filePath })
@@ -82,10 +87,10 @@ export function PostmanEnvironmentImportDialog() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-sm font-semibold text-base-content">Source File</div>
-              <div className="mt-1 text-sm text-base-content/55">Import a Postman environment JSON file and review any duplicate-key overrides first.</div>
+              <div className="mt-1 text-sm text-base-content/55">Import one or more Postman environment JSON files and review any duplicate-key overrides first.</div>
               <div className="mt-3 flex items-center gap-2 text-sm text-base-content/72"><FileJsonIcon className="size-4 shrink-0" /><span className="truncate">{filePath || 'No file selected'}</span></div>
             </div>
-            <button type="button" className="btn btn-sm btn-outline" onClick={() => void pickFile()} disabled={isAnalyzing || isImporting}>{isAnalyzing ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}Choose File</button>
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => void pickFile()} disabled={isAnalyzing || isImporting}>{isAnalyzing ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}Choose Files</button>
           </div>
         </div>
 
@@ -99,7 +104,7 @@ export function PostmanEnvironmentImportDialog() {
                 <StatCard label="Variables" value={String(analysis.variableCount)} />
               </div>
               <div className="mt-4 space-y-3">
-                {analysis.warnings.length === 0 ? <div className="rounded-xl border border-success/25 bg-success/8 p-3 text-sm text-success-content/90">No import warnings detected.</div> : analysis.warnings.map(warning => <WarningCard key={warning.code} warning={warning} />)}
+                {analysis.warnings.length === 0 ? <div className="rounded-xl border border-success/25 bg-success/8 p-3 text-sm text-success">No import warnings detected.</div> : analysis.warnings.map(warning => <WarningCard key={warning.code} warning={warning} />)}
               </div>
             </div>
             <div className="rounded-2xl border border-base-content/10 bg-base-100/65 p-4">

@@ -326,6 +326,33 @@ declare const console: ScriptConsoleApi
 declare const env: ScriptEnvironmentApi
 declare const scope: ScriptRequestScopeApi
 declare const crypto: ScriptCryptoApi
+interface FakerApi {
+  string: { uuid(): string; alphanumeric(length?: number): string; numeric(length?: number): string }
+  number: { int(options?: { min?: number; max?: number }): number }
+  datatype: { boolean(): boolean }
+  person: { firstName(): string; lastName(): string; fullName(): string; jobTitle(): string }
+  phone: { number(): string }
+  internet: { username(): string; email(): string; password(): string; domainName(): string; domainWord(): string; url(): string; ipv4(): string; ipv6(): string; mac(): string }
+  location: { city(): string; street(): string; streetAddress(): string; country(): string; countryCode(): string; latitude(): number; longitude(): number; zipCode(): string }
+  company: { name(): string }
+  lorem: { word(): string; words(count?: number): string; sentence(): string; paragraph(): string }
+  color: { rgb(): string; human(): string }
+}
+declare const faker: FakerApi
+declare const $guid: () => string
+declare const $randomGuid: () => string
+declare const $randomUUID: () => string
+declare const $timestamp: () => number
+declare const $isoTimestamp: () => string
+declare const $randomInt: () => number
+declare const $randomBoolean: () => boolean
+declare const $randomPhoneNumber: () => string
+declare const $randomPhoneNumberExt: () => string
+declare const $randomFirstName: () => string
+declare const $randomLastName: () => string
+declare const $randomFullName: () => string
+declare const $randomUserName: () => string
+declare const $randomEmail: () => string
 declare const clipboard: ScriptClipboardApi
 declare const cookies: ScriptCookieApi
 declare const z: typeof import('./vendor/zod/index.cjs').z

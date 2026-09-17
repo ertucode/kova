@@ -17,7 +17,9 @@ import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathPara
 import {
   resolveTemplateExpressions as resolveTemplateExpressionTokens,
   resolveTemplateVariables,
+  TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX,
 } from '../common/RequestVariables.js'
+import { getSharedScriptCodeTemplateAliasNames } from '../common/SharedScriptTemplateAliases.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type {
   RequestScriptError,
@@ -46,6 +48,7 @@ import {
   type ScriptMakeRequestBridge,
 } from './script-make-request.js'
 import { createScriptPromptApi, type ScriptExecutionPauseController, type ScriptPromptBridge } from './script-prompt.js'
+import { createPostmanDynamicVariableGlobals, faker } from './postman-dynamic-variables.js'
 import { createScriptToastApi, type ScriptToastBridge } from './script-toast.js'
 import { updateEnvironmentVariables } from './db/environments.js'
 import { listRequestExamplesByRequestIds } from './db/request-examples.js'
@@ -876,6 +879,8 @@ async function runScriptPhase(input: {
       : {}),
     ...(input.phase === 'test' ? { kv: { test: kvTestRuntime.api } } : {}),
     z,
+    faker,
+    ...createPostmanDynamicVariableGlobals(),
   }
   const requirePackage = createInstalledPackageLoader(input.scriptPackages)
   const requireScript = createSharedModuleLoader({
@@ -2716,6 +2721,8 @@ async function evaluateTemplateExpression(input: {
     cookies: createCookiesApi(),
     prompt: createPromptProxy(() => createScriptPromptApi(input.promptBridge, executionController)),
     z,
+    faker,
+    ...createPostmanDynamicVariableGlobals(),
   }
   const requirePackage = createInstalledPackageLoader(input.scriptPackages)
   const requireScript = createSharedModuleLoader({
@@ -2731,6 +2738,38 @@ async function evaluateTemplateExpression(input: {
 
   try {
     input.runtimeRequestMetadata.currentRuntime = 'template-expression'
+    if (input.expressionSource.startsWith(TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX)) {
+      const alias = input.expressionSource.slice(TEMPLATE_MODULE_ALIAS_EXPRESSION_PREFIX.length)
+      const scopedValues = {
+        ...input.environmentContext.getValues(),
+        ...Object.fromEntries(input.requestScope.entries()),
+      }
+      if (alias in scopedValues) {
+        return `{{${alias}}}`
+      }
+
+      const matchingExports = (getTemplateAliasModules(input.sharedScripts).get(alias) ?? [])
+        .map(script => {
+          const moduleExports = requireScript(script.name)
+          return { moduleName: script.name, value: moduleExports[alias] }
+        })
+
+      if (matchingExports.length === 0) {
+        return `{{${alias}}}`
+      }
+      if (matchingExports.length > 1) {
+        throw new Error(
+          `Template alias ${alias} is exported by multiple modules: ${matchingExports.map(item => item.moduleName).join(', ')}`
+        )
+      }
+
+      const matchingExport = matchingExports[0]
+      const result = typeof matchingExport.value === 'function'
+        ? await Promise.resolve(matchingExport.value())
+        : matchingExport.value
+      return stringifyTemplateExpressionResult(result)
+    }
+
     compiledScript = compileTemplateExpressionScript(input.expressionSource)
     const result = await resolveTemplateExpressionResult(
       await executeScript(
@@ -2938,6 +2977,36 @@ function createSharedModuleLoader(input: {
   }
 
   return loadModule
+}
+
+const templateAliasModulesCache = new WeakMap<SharedScriptRecord[], ReadonlyMap<string, SharedScriptRecord[]>>()
+
+function getTemplateAliasModules(sharedScripts: SharedScriptRecord[]) {
+  const cached = templateAliasModulesCache.get(sharedScripts)
+  if (cached) {
+    return cached
+  }
+
+  const modulesByAlias = new Map<string, SharedScriptRecord[]>()
+  for (const script of sharedScripts) {
+    if (
+      !script.isActive ||
+      script.kind !== 'module' ||
+      !script.targets.includes('pre-request') ||
+      script.name.trim() === ''
+    ) {
+      continue
+    }
+
+    for (const alias of getSharedScriptCodeTemplateAliasNames(script.code)) {
+      const modules = modulesByAlias.get(alias) ?? []
+      modules.push(script)
+      modulesByAlias.set(alias, modules)
+    }
+  }
+
+  templateAliasModulesCache.set(sharedScripts, modulesByAlias)
+  return modulesByAlias
 }
 
 function createInstalledPackageLoader(scriptPackages: ScriptRuntimePackage[]) {

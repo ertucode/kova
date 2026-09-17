@@ -1443,7 +1443,7 @@ app.on('ready', async () => {
   ipcHandle('pickPostmanCollectionFile', async (_input, event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     const dialogOptions: Electron.OpenDialogOptions = {
-      properties: ['openFile'],
+      properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Postman Collections', extensions: ['json'] }],
     }
     const result = window
@@ -1454,7 +1454,19 @@ app.on('ready', async () => {
       return GenericError.Message('File selection was cancelled')
     }
 
-    return Result.Success({ filePath: result.filePaths[0] })
+    return Result.Success({ filePath: result.filePaths[0], filePaths: result.filePaths })
+  })
+
+  ipcHandle('exportPostmanArchive', async (input, event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.SaveDialogOptions = {
+      filters: [{ name: 'Postman JSON archive', extensions: ['zip'] }],
+      defaultPath: 'kova-postman-export.zip',
+    }
+    const picked = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
+    if (picked.canceled || !picked.filePath) return GenericError.Message('File selection was cancelled')
+    const { exportPostmanArchive } = await import('./postman-archive.js')
+    return exportPostmanArchive(input, picked.filePath)
   })
 
   ipcHandle('analyzePostmanCollection', async input => {
@@ -1497,7 +1509,7 @@ app.on('ready', async () => {
   ipcHandle('pickPostmanEnvironmentFile', async (_input, event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     const dialogOptions: Electron.OpenDialogOptions = {
-      properties: ['openFile'],
+      properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Postman Environments', extensions: ['json'] }],
     }
     const result = window
@@ -1508,7 +1520,7 @@ app.on('ready', async () => {
       return GenericError.Message('File selection was cancelled')
     }
 
-    return Result.Success({ filePath: result.filePaths[0] })
+    return Result.Success({ filePath: result.filePaths[0], filePaths: result.filePaths })
   })
 
   ipcHandle('analyzePostmanEnvironment', async input => {

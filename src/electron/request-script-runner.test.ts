@@ -441,6 +441,98 @@ describe('createRequestScriptRuntime', () => {
     expect(runtime.getRequestScopeValues().traceId).toBe(result)
   })
 
+  it('resolves Postman-compatible dynamic variables and friendly aliases', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
+        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+      },
+      environments: [],
+    })
+
+    const result = await runtime.resolveTemplateExpressions(
+      '{{$guid}}|{{randomGuid}}|{{$randomPhoneNumber}}|{{randomPhoneNumber}}',
+      'Request Body'
+    )
+    const [guid, guidAlias, phone, phoneAlias] = result.split('|')
+    expect(guid).toMatch(UUID_PATTERN)
+    expect(guidAlias).toMatch(UUID_PATTERN)
+    expect(phone).toMatch(/^\d{3}-\d{3}-\d{4}$/)
+    expect(phoneAlias).toMatch(/^\d{3}-\d{3}-\d{4}$/)
+  })
+
+  it('exposes Faker to inline and reusable custom template JavaScript', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
+        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [{
+        id: 'custom-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'module',
+        targets: ['pre-request'], isActive: true,
+        code: "export function orderNumber() { return `ORD-${faker.string.numeric(8)}` }",
+        position: 0, createdAt: 1, updatedAt: 1, deletedAt: null,
+      }],
+    })
+
+    await expect(runtime.resolveTemplateExpressions('{{$faker.person.fullName()}}', 'Request Body'))
+      .resolves.toMatch(/\S+\s+\S+/)
+    await expect(runtime.resolveTemplateExpressions("{{$requireScript('generators').orderNumber()}}", 'Request Body'))
+      .resolves.toMatch(/^ORD-\d{8}$/)
+  })
+
+  it('resolves exported module functions as direct template aliases', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
+        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [{
+        id: 'custom-phone-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'module',
+        targets: ['pre-request'], isActive: true,
+        code: "export function randomPhone() { return '555-123-4567' }",
+        position: 0, createdAt: 1, updatedAt: 1, deletedAt: null,
+      }],
+    })
+
+    await expect(runtime.resolveTemplateExpressions('{{randomPhone}}', 'Request Body'))
+      .resolves.toBe('555-123-4567')
+  })
+
+  it('does not execute unrelated modules while resolving ordinary template variables', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
+        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+      },
+      environments: [],
+      sharedScripts: [{
+        id: 'unrelated-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'module',
+        targets: ['pre-request'], isActive: true,
+        code: "throw new Error('must not run')\nexport function randomPhone() { return '555-123-4567' }",
+        position: 0, createdAt: 1, updatedAt: 1, deletedAt: null,
+      }],
+    })
+
+    await expect(runtime.resolveTemplateExpressions('{{ordinaryVariable}}', 'Request Body'))
+      .resolves.toBe('{{ordinaryVariable}}')
+  })
+
+  it('leaves escaped friendly dynamic aliases for the normal variable resolver', async () => {
+    const runtime = createRequestScriptRuntime({
+      request: {
+        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
+        headers: '', body: String.raw`\{{randomGuid}}`, bodyType: 'raw', rawType: 'text',
+      },
+      environments: [],
+    })
+
+    await runtime.resolveRequestTemplateExpressions()
+    expect(runtime.request.body).toBe(String.raw`\{{randomGuid}}`)
+  })
+
   it('loads installed packages inside template expressions', async () => {
     const runtime = createRequestScriptRuntime({
       request: {

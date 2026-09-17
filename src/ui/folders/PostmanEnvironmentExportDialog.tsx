@@ -6,6 +6,7 @@ import { Dialog } from '@/lib/components/dialog'
 import { dialogActions } from '@/global/dialogStore'
 import { getWindowElectron } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
+import { PostmanBatchExportDialog } from './PostmanBatchExportDialog'
 
 export function PostmanEnvironmentExportDialog({ environmentId }: { environmentId: string }) {
   const [analysis, setAnalysis] = useState<AnalyzePostmanEnvironmentExportResponse | null>(null)
@@ -106,6 +107,10 @@ export function PostmanEnvironmentExportDialog({ environmentId }: { environmentI
       }
     >
       <div className="flex min-h-0 h-full flex-col gap-4">
+        <button type="button" className="btn btn-outline self-start" disabled={isExporting}
+          onClick={() => dialogActions.open({ component: PostmanBatchExportDialog, props: { kind: 'environment' } })}>
+          Select multiple environments...
+        </button>
         {isAnalyzing ? (
           <div className="flex items-center gap-3 rounded-2xl border border-base-content/10 bg-base-100/65 p-4 text-sm text-base-content/70">
             <LoaderCircleIcon className="size-4 animate-spin" />
