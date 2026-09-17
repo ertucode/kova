@@ -2,7 +2,7 @@
   "name": "kova",
   "productName": "Kova",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A modern file browser for macOS",
   "author": "ertucode",
   "type": "module",
