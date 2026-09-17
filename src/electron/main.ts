@@ -207,7 +207,7 @@ async function createWindow(args?: WindowArgsWithoutStatic) {
   })
 
   if (isDev()) {
-    mainWindow.loadURL('http://localhost:5123')
+    mainWindow.loadURL('http://127.0.0.1:5123')
   } else {
     mainWindow.loadFile(getUIPath())
   }
