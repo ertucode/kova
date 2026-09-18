@@ -14,7 +14,7 @@ export function searchParamHighlightExtension(): Extension {
         color: 'var(--color-warning) !important',
       },
       '.cm-search-param-value': {
-        color: '#ffffff !important',
+        color: 'var(--color-base-content) !important',
       },
     }),
     ViewPlugin.fromClass(
