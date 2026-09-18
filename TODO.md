@@ -1,0 +1,1 @@
+- Fix url editor encoding search params while saving

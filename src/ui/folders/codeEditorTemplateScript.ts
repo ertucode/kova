@@ -88,8 +88,30 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
       }
     ),
     EditorView.domEventHandlers({
+      keydown(event, view) {
+        updateTemplateSourceNavigationCursor(view, event)
+        return false
+      },
+      keyup(event, view) {
+        updateTemplateSourceNavigationCursor(view, event)
+        return false
+      },
+      mousemove(event, view) {
+        updateTemplateSourceNavigationCursor(view, event)
+        return false
+      },
+      mouseleave(_event, view) {
+        view.dom.classList.remove('cm-template-source-navigation')
+      },
+      blur(_event, view) {
+        view.dom.classList.remove('cm-template-source-navigation')
+      },
       click(event, view) {
         if (!isTemplateSourceNavigationClick(event)) {
+          return false
+        }
+
+        if (!(event.target instanceof Element) || !event.target.closest('.cm-template-script-source')) {
           return false
         }
 
@@ -165,6 +187,13 @@ export function isTemplateSourceNavigationClick(
   platform = navigator.platform
 ) {
   return /^Mac/.test(platform) ? event.metaKey : event.altKey
+}
+
+function updateTemplateSourceNavigationCursor(
+  view: EditorView,
+  event: Pick<MouseEvent | KeyboardEvent, 'altKey' | 'metaKey'>
+) {
+  view.dom.classList.toggle('cm-template-source-navigation', isTemplateSourceNavigationClick(event))
 }
 
 export function offsetTemplateScriptHover(hover: ScriptHoverInfo, offset: number): ScriptHoverInfo {
@@ -283,16 +312,44 @@ function getTemplateExpressionContent(match: RegExpExecArray) {
 function scanTemplateScriptTokens(source: string) {
   const tokens: Array<{ from: number; to: number; className: string }> = []
   const tree = templateScriptParser.parse(source)
+  const sourceCandidate = findTemplateScriptSourceCandidateRange(source, tree)
 
   highlightTree(tree, templateScriptHighlighter, (from, to, className) => {
+    const sourceClassName = sourceCandidate?.from === from && sourceCandidate.to === to
+      ? ' cm-template-script-source'
+      : ''
     tokens.push({
       from,
       to,
-      className: getTemplateTokenClassName(className, source.slice(from, to)),
+      className: `${getTemplateTokenClassName(className, source.slice(from, to))}${sourceClassName}`,
     })
   })
 
   return tokens
+}
+
+export function findTemplateScriptSourceCandidateRange(
+  source: string,
+  tree = templateScriptParser.parse(source)
+) {
+  const expressionStatement = tree.topNode.firstChild
+  if (expressionStatement?.name !== 'ExpressionStatement' || expressionStatement.nextSibling) {
+    return null
+  }
+
+  const expression = expressionStatement.firstChild
+  if (expression?.name === 'VariableName') {
+    return { from: expression.from, to: expression.to }
+  }
+
+  if (expression?.name === 'CallExpression') {
+    const callee = expression.firstChild
+    if (callee?.name === 'VariableName') {
+      return { from: callee.from, to: callee.to }
+    }
+  }
+
+  return null
 }
 
 function getTemplateTokenClassName(className: string, tokenText: string) {
@@ -633,6 +690,12 @@ const templateExpressionDecoration = Decoration.mark({
 })
 
 const templateScriptTheme = EditorView.baseTheme({
+  '&.cm-template-source-navigation .cm-template-script-source:hover, &.cm-template-source-navigation .cm-template-script-source:hover *': {
+    cursor: 'pointer !important',
+    textDecoration: 'underline',
+    textDecorationColor: 'color-mix(in oklab, var(--color-secondary) 70%, transparent)',
+    textUnderlineOffset: '0.18rem',
+  },
   '.cm-template-script-expression': {
     background: 'transparent !important',
     borderRadius: '0',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   findTemplateScriptExpressionAtPosition,
   findTemplateScriptExpressions,
+  findTemplateScriptSourceCandidateRange,
   isTemplateSourceNavigationClick,
   offsetTemplateScriptHover,
 } from './codeEditorTemplateScript'
@@ -75,5 +76,18 @@ describe('isTemplateSourceNavigationClick', () => {
   it('uses Alt on Windows', () => {
     expect(isTemplateSourceNavigationClick({ metaKey: false, altKey: true }, 'Win32')).toBe(true)
     expect(isTemplateSourceNavigationClick({ metaKey: true, altKey: false }, 'Win32')).toBe(false)
+  })
+})
+
+describe('findTemplateScriptSourceCandidateRange', () => {
+  it('finds direct variable and function expressions', () => {
+    expect(findTemplateScriptSourceCandidateRange('myVariable')).toEqual({ from: 0, to: 10 })
+    expect(findTemplateScriptSourceCandidateRange('myFunction(1)')).toEqual({ from: 0, to: 10 })
+  })
+
+  it('excludes runtime APIs, member access, and compound scripts', () => {
+    expect(findTemplateScriptSourceCandidateRange("env.get('x-device-id', 'Temp')")).toBeNull()
+    expect(findTemplateScriptSourceCandidateRange('object.myVariable')).toBeNull()
+    expect(findTemplateScriptSourceCandidateRange('const myVariable = 2; myVariable')).toBeNull()
   })
 })

@@ -192,6 +192,11 @@ describe('script runtime DOM completions', () => {
       name: 'Phone expressions',
       code: "export const phonePrefix = '+1'",
     })
+    expect(
+      diagnosticsState.service
+        .getDefinitionAtPosition(diagnosticsState.userFileName, 2)
+        ?.map(definition => definition.fileName)
+    ).toContain(diagnosticsState.declarationFileName)
   })
 })
 

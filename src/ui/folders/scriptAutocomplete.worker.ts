@@ -120,6 +120,13 @@ async function getHover(request: ScriptHoverRequest): Promise<ScriptHoverRespons
       }
     }
 
+    const definitions = phaseState.service.getDefinitionAtPosition(phaseState.userFileName, request.position)
+    const source = definitions?.some(definition => definition.fileName === phaseState.declarationFileName)
+      ? phaseState.expressionExportSources.get(
+        request.code.slice(quickInfo.textSpan.start, quickInfo.textSpan.start + quickInfo.textSpan.length)
+      )
+      : undefined
+
     return {
       requestId: request.requestId,
       success: true,
@@ -132,9 +139,7 @@ async function getHover(request: ScriptHoverRequest): Promise<ScriptHoverRespons
           name: tag.name,
           textParts: toHoverParts(tag.text),
         })),
-        source: phaseState.expressionExportSources.get(
-          request.code.slice(quickInfo.textSpan.start, quickInfo.textSpan.start + quickInfo.textSpan.length)
-        ),
+        source,
       },
     }
   } catch (error) {
