@@ -32,6 +32,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   resolveScriptPrompt: input => ipcInvoke('resolveScriptPrompt', input),
   resolveScriptMakeRequest: input => ipcInvoke('resolveScriptMakeRequest', input),
   setAlwaysOnTop: (alwaysOnTop: boolean) => ipcInvoke('setAlwaysOnTop', alwaysOnTop),
+  setWindowTheme: theme => ipcInvoke('setWindowTheme', theme),
   getAlwaysOnTop: () => ipcInvoke('getAlwaysOnTop', undefined),
   setCompactWindowSize: () => ipcInvoke('setCompactWindowSize', undefined),
   restoreWindowSize: () => ipcInvoke('restoreWindowSize', undefined),
