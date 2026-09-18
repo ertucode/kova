@@ -9,7 +9,6 @@ function digits(count: number) {
 export function createPostmanDynamicVariableGlobals(): Record<string, DynamicVariableFactory> {
   return {
     $guid: () => faker.string.uuid(),
-    $randomGuid: () => faker.string.uuid(),
     $randomUUID: () => faker.string.uuid(),
     $timestamp: () => Math.floor(Date.now() / 1000),
     $isoTimestamp: () => new Date().toISOString(),

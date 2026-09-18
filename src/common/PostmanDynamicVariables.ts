@@ -1,5 +1,5 @@
 export const POSTMAN_DYNAMIC_VARIABLES = [
-  { name: '$guid', aliases: ['randomGuid'], description: 'Random UUID v4' },
+  { name: '$guid', aliases: [], description: 'Random UUID v4 (Postman compatible)' },
   { name: '$randomUUID', aliases: [], description: 'Random UUID v4' },
   { name: '$timestamp', aliases: [], description: 'Current Unix timestamp in seconds' },
   { name: '$isoTimestamp', aliases: [], description: 'Current ISO timestamp' },
@@ -8,7 +8,7 @@ export const POSTMAN_DYNAMIC_VARIABLES = [
   { name: '$randomAlphaNumeric', aliases: [], description: 'Random alphanumeric character' },
   { name: '$randomHexColor', aliases: [], description: 'Random hexadecimal color' },
   { name: '$randomColor', aliases: [], description: 'Random color name' },
-  { name: '$randomPhoneNumber', aliases: ['randomPhoneNumber'], description: 'Random ten-digit phone number' },
+  { name: '$randomPhoneNumber', aliases: [], description: 'Random ten-digit phone number' },
   { name: '$randomPhoneNumberExt', aliases: [], description: 'Random phone number with extension' },
   { name: '$randomFirstName', aliases: [], description: 'Random first name' },
   { name: '$randomLastName', aliases: [], description: 'Random last name' },

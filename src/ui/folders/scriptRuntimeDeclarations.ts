@@ -340,12 +340,14 @@ interface FakerApi {
 }
 declare const faker: FakerApi
 declare const $guid: () => string
-declare const $randomGuid: () => string
 declare const $randomUUID: () => string
 declare const $timestamp: () => number
 declare const $isoTimestamp: () => string
 declare const $randomInt: () => number
 declare const $randomBoolean: () => boolean
+declare const $randomAlphaNumeric: () => string
+declare const $randomHexColor: () => string
+declare const $randomColor: () => string
 declare const $randomPhoneNumber: () => string
 declare const $randomPhoneNumberExt: () => string
 declare const $randomFirstName: () => string
@@ -353,6 +355,27 @@ declare const $randomLastName: () => string
 declare const $randomFullName: () => string
 declare const $randomUserName: () => string
 declare const $randomEmail: () => string
+declare const $randomPassword: () => string
+declare const $randomDomainName: () => string
+declare const $randomDomainWord: () => string
+declare const $randomUrl: () => string
+declare const $randomIP: () => string
+declare const $randomIPV6: () => string
+declare const $randomMACAddress: () => string
+declare const $randomCity: () => string
+declare const $randomStreetName: () => string
+declare const $randomStreetAddress: () => string
+declare const $randomCountry: () => string
+declare const $randomCountryCode: () => string
+declare const $randomLatitude: () => number
+declare const $randomLongitude: () => number
+declare const $randomZipCode: () => string
+declare const $randomCompanyName: () => string
+declare const $randomJobTitle: () => string
+declare const $randomLoremWord: () => string
+declare const $randomLoremWords: () => string
+declare const $randomLoremSentence: () => string
+declare const $randomLoremParagraph: () => string
 declare const clipboard: ScriptClipboardApi
 declare const cookies: ScriptCookieApi
 declare const z: typeof import('./vendor/zod/index.cjs').z

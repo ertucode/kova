@@ -123,6 +123,15 @@ describe('script runtime DOM completions', () => {
     expect(completionLabels).not.toContain('HTMLInputElement')
   })
 
+  it('accepts Postman dynamic variables in template diagnostics', async () => {
+    const diagnostics = await getDiagnostics(
+      { templatePhase: 'pre-request' },
+      '[$randomAlphaNumeric, $randomDomainName, $randomMACAddress, $randomLoremParagraph]'
+    )
+
+    expect(diagnostics).toEqual([])
+  })
+
   it('accepts useMemo for shared scripts checked against both visual runtimes', async () => {
     const diagnostics = await getDiagnostics(
       { targets: ['response-visualizer', 'view-runtime'] },
