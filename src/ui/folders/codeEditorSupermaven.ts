@@ -5,7 +5,6 @@ import type { SharedScriptTarget } from '@common/SharedScripts'
 import { getWindowElectron } from '@/getWindowElectron'
 import { getSupermavenEnabled } from '@/global/appSettingsStore'
 import type { ScriptAutocompletePhase } from './scriptRuntimeDeclarations'
-import { defaultSettingsTokyoNight } from '@uiw/codemirror-theme-tokyo-night'
 
 type SupermavenGhostSuggestion = {
   text: string
@@ -24,7 +23,7 @@ const setGhostSuggestionEffect = StateEffect.define<SupermavenGhostSuggestion | 
 const ghostTheme = EditorView.theme({
   '.cm-supermaven-ghost': {
     color: 'color-mix(in oklab, var(--color-base-content) 38%, transparent)',
-    backgroundColor: defaultSettingsTokyoNight.background!,
+    backgroundColor: 'var(--color-base-100)',
     whiteSpace: 'pre',
     pointerEvents: 'none',
     fontStyle: 'italic',

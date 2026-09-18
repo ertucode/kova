@@ -12,7 +12,7 @@ import { css } from '@codemirror/lang-css'
 import { xml } from '@codemirror/lang-xml'
 import { graphqlLanguageSupport } from 'cm6-graphql'
 import { EditorView, keymap, lineNumbers, placeholder as placeholderExtension } from '@codemirror/view'
-import { defaultSettingsTokyoNight, tokyoNightInit, tokyoNightStyle } from '@uiw/codemirror-theme-tokyo-night'
+import { tokyoNightInit, tokyoNightStyle } from '@uiw/codemirror-theme-tokyo-night'
 import CodeMirror, { basicSetup as codeMirrorBasicSetup } from '@uiw/react-codemirror'
 import type { SyntaxNode } from '@lezer/common'
 import { tags as highlightTags } from '@lezer/highlight'
@@ -179,7 +179,7 @@ const editorTheme = EditorView.theme({
   },
   '.cm-gutters': {
     backgroundColor: `${tokyoNightColors.gutterBackground} !important`,
-    borderRight: `1px solid ${defaultSettingsTokyoNight.gutterBorder ?? 'transparent'}`,
+    borderRight: '1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent)',
     paddingRight: '0',
   },
   '.cm-gutter-lint': {
