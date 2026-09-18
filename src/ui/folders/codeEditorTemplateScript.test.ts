@@ -3,6 +3,7 @@ import {
   findTemplateScriptExpressionAtPosition,
   findTemplateScriptExpressions,
   findTemplateScriptSourceCandidateRange,
+  getTemplateScriptSourceCandidateAtPosition,
   isTemplateSourceNavigationClick,
   offsetTemplateScriptHover,
 } from './codeEditorTemplateScript'
@@ -89,5 +90,23 @@ describe('findTemplateScriptSourceCandidateRange', () => {
     expect(findTemplateScriptSourceCandidateRange("env.get('x-device-id', 'Temp')")).toBeNull()
     expect(findTemplateScriptSourceCandidateRange('object.myVariable')).toBeNull()
     expect(findTemplateScriptSourceCandidateRange('const myVariable = 2; myVariable')).toBeNull()
+  })
+})
+
+describe('getTemplateScriptSourceCandidateAtPosition', () => {
+  it('maps a URL expression candidate to document offsets', () => {
+    const source = 'https://example.com?device={{$myVariable}}'
+    const position = source.indexOf('myVariable') + 2
+
+    expect(getTemplateScriptSourceCandidateAtPosition(source, position)).toEqual({
+      from: source.indexOf('myVariable'),
+      to: source.indexOf('myVariable') + 'myVariable'.length,
+    })
+  })
+
+  it('excludes runtime API calls in URLs', () => {
+    const source = "https://example.com?device={{$env.get('x-device-id', 'Temp')}}"
+
+    expect(getTemplateScriptSourceCandidateAtPosition(source, source.indexOf('env'))).toBeNull()
   })
 })

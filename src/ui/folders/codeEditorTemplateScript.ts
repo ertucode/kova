@@ -67,7 +67,7 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
         }
 
         update(update: ViewUpdate) {
-          if (update.docChanged || update.viewportChanged || update.transactions.length > 0) {
+          if (update.docChanged || update.viewportChanged) {
             this.decorations = buildTemplateScriptDecorations(update.view)
           }
         }
@@ -100,23 +100,14 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
         updateTemplateSourceNavigationCursor(view, event)
         return false
       },
-      mouseleave(_event, view) {
-        view.dom.classList.remove('cm-template-source-navigation')
-      },
-      blur(_event, view) {
-        view.dom.classList.remove('cm-template-source-navigation')
-      },
-      click(event, view) {
+      mousedown(event, view) {
+        updateTemplateSourceNavigationCursor(view, event)
         if (!isTemplateSourceNavigationClick(event)) {
           return false
         }
 
-        if (!(event.target instanceof Element) || !event.target.closest('.cm-template-script-source')) {
-          return false
-        }
-
         const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
-        if (position === null) {
+        if (position === null || !getTemplateScriptSourceCandidateAtPosition(view.state.doc.toString(), position)) {
           return false
         }
 
@@ -127,6 +118,12 @@ export function templateScriptExtension(options: TemplateScriptOptions): Extensi
           }
         })
         return true
+      },
+      mouseleave(_event, view) {
+        view.dom.classList.remove('cm-template-source-navigation')
+      },
+      blur(_event, view) {
+        view.dom.classList.remove('cm-template-source-navigation')
       },
     }),
     EditorView.updateListener.of(update => {
@@ -350,6 +347,22 @@ export function findTemplateScriptSourceCandidateRange(
   }
 
   return null
+}
+
+export function getTemplateScriptSourceCandidateAtPosition(source: string, position: number) {
+  const expression = findTemplateScriptExpressionAtPosition(source, position)
+  if (!expression) {
+    return null
+  }
+
+  const candidate = findTemplateScriptSourceCandidateRange(expression.code)
+  if (!candidate) {
+    return null
+  }
+
+  const from = expression.contentFrom + candidate.from
+  const to = expression.contentFrom + candidate.to
+  return position >= from && position <= to ? { from, to } : null
 }
 
 function getTemplateTokenClassName(className: string, tokenText: string) {
