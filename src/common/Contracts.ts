@@ -254,6 +254,8 @@ import { type ScriptRequestBridgeResponse } from './ScriptMakeRequest.js'
 import type { SupermavenInlineSuggestion, SupermavenInlineSuggestionRequest, SupermavenStatus } from './Supermaven.js'
 import type { AppUpdateCheckResult } from './AppUpdate.js'
 
+export type WindowTheme = 'dark' | 'light'
+
 export type EventResponseMapping = {
   'task:event': TaskEvents
   'generic:event': GenericEvent
@@ -269,6 +271,7 @@ export type EventResponseMapping = {
   resolveScriptMakeRequest: Promise<void>
   getParallelPreloadPath: string
   setAlwaysOnTop: Promise<void>
+  setWindowTheme: Promise<void>
   getAlwaysOnTop: Promise<boolean>
   setCompactWindowSize: Promise<void>
   restoreWindowSize: Promise<void>
@@ -438,6 +441,7 @@ export type EventRequestMapping = {
   resolveScriptPrompt: ScriptPromptResponse
   resolveScriptMakeRequest: ScriptRequestBridgeResponse
   setAlwaysOnTop: boolean
+  setWindowTheme: WindowTheme
   getAlwaysOnTop: void
   setCompactWindowSize: void
   restoreWindowSize: void
@@ -618,6 +622,7 @@ export type WindowElectron = {
   resolveScriptPrompt: (input: ScriptPromptResponse) => Promise<void>
   resolveScriptMakeRequest: (input: ScriptRequestBridgeResponse) => Promise<void>
   setAlwaysOnTop: (alwaysOnTop: boolean) => Promise<void>
+  setWindowTheme: (theme: WindowTheme) => Promise<void>
   getAlwaysOnTop: () => Promise<boolean>
   setCompactWindowSize: () => Promise<void>
   restoreWindowSize: () => Promise<void>

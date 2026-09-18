@@ -26,6 +26,7 @@ import { configureScriptPackageRegistry } from './script-package-registry.js'
 import { configureManagementAgentBaseDirectory, shutdownManagementAgentServer } from './management-agent.js'
 import type { SaveTextToFileInput } from '../common/TextFileSave.js'
 import { checkForAppUpdates, startAutoUpdater } from './auto-updater.js'
+import type { WindowTheme } from '../common/Contracts.js'
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -399,6 +400,25 @@ app.on('ready', async () => {
     if (window) {
       window.setAlwaysOnTop(alwaysOnTop)
     }
+  })
+
+  ipcHandle('setWindowTheme', async (theme: WindowTheme, event) => {
+    if (process.platform !== 'win32') {
+      return
+    }
+
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) {
+      return
+    }
+
+    const isLight = theme === 'light'
+    window.setBackgroundColor(isLight ? '#ffffff' : '#282a36')
+    window.setTitleBarOverlay({
+      color: isLight ? '#ffffff' : '#1a1b26',
+      symbolColor: isLight ? '#24283b' : '#e1e3ec',
+      height: 48,
+    })
   })
 
   ipcHandle('getAlwaysOnTop', async (_: void, event) => {

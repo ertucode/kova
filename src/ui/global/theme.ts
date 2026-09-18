@@ -1,4 +1,6 @@
-export type AppTheme = 'dark' | 'light'
+import type { WindowElectron, WindowTheme } from '@common/Contracts'
+
+export type AppTheme = WindowTheme
 
 const storageKey = 'kova.appearance.theme'
 
@@ -13,6 +15,14 @@ export function getAppTheme(): AppTheme {
 function applyTheme(theme: AppTheme) {
   document.documentElement.dataset.theme = theme
   document.documentElement.style.colorScheme = theme
+  syncWindowTheme(theme)
+}
+
+function syncWindowTheme(theme: AppTheme) {
+  const electron = (window as Window & { electron?: Pick<WindowElectron, 'setWindowTheme'> }).electron
+  if (electron) {
+    void electron.setWindowTheme(theme)
+  }
 }
 
 export function setAppTheme(theme: AppTheme) {
