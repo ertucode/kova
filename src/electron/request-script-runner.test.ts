@@ -441,7 +441,7 @@ describe('createRequestScriptRuntime', () => {
     expect(runtime.getRequestScopeValues().traceId).toBe(result)
   })
 
-  it('resolves Postman-compatible dynamic variables and friendly aliases', async () => {
+  it('resolves dollar-prefixed dynamic variables', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
         method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
@@ -451,14 +451,13 @@ describe('createRequestScriptRuntime', () => {
     })
 
     const result = await runtime.resolveTemplateExpressions(
-      '{{$guid}}|{{randomGuid}}|{{$randomPhoneNumber}}|{{randomPhoneNumber}}',
+      '{{$guid}}|{{$randomUUID}}|{{$randomPhoneNumber}}',
       'Request Body'
     )
-    const [guid, guidAlias, phone, phoneAlias] = result.split('|')
+    const [guid, randomUuid, phone] = result.split('|')
     expect(guid).toMatch(UUID_PATTERN)
-    expect(guidAlias).toMatch(UUID_PATTERN)
+    expect(randomUuid).toMatch(UUID_PATTERN)
     expect(phone).toMatch(/^\d{3}-\d{3}-\d{4}$/)
-    expect(phoneAlias).toMatch(/^\d{3}-\d{3}-\d{4}$/)
   })
 
   it('exposes Faker to inline and reusable custom template JavaScript', async () => {
@@ -556,17 +555,17 @@ describe('createRequestScriptRuntime', () => {
       .resolves.toBe('{{ordinaryVariable}}')
   })
 
-  it('leaves escaped friendly dynamic aliases for the normal variable resolver', async () => {
+  it('leaves escaped ordinary variables for the normal variable resolver', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
         method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
-        headers: '', body: String.raw`\{{randomGuid}}`, bodyType: 'raw', rawType: 'text',
+        headers: '', body: String.raw`\{{baseUrl}}`, bodyType: 'raw', rawType: 'text',
       },
       environments: [],
     })
 
     await runtime.resolveRequestTemplateExpressions()
-    expect(runtime.request.body).toBe(String.raw`\{{randomGuid}}`)
+    expect(runtime.request.body).toBe(String.raw`\{{baseUrl}}`)
   })
 
   it('loads installed packages inside template expressions', async () => {
