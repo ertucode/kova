@@ -37,6 +37,8 @@ export function CommandPalette() {
   const [optionLoadErrors, setOptionLoadErrors] = useState<Record<string, string>>({})
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
+  const rootNavigationStateRef = useRef({ query: '', selectedIndex: 0, scrollTop: 0 })
+  const scrollTopToRestoreRef = useRef<number | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
   const activeConfig = commandPaletteConfigs.find(
     (config): config is CommandPaletteNestedConfig => config.type !== 'trigger' && config.id === activeConfigId
@@ -85,6 +87,15 @@ export function CommandPalette() {
     const currentValueIndex = filteredOptions.findIndex(option => option.value === activeSelectionConfig.getValue())
     setSelectedIndex(currentValueIndex >= 0 ? currentValueIndex : 0)
   }, [activeSelectionConfig, normalizedQuery, optionsByConfigId])
+
+  useLayoutEffect(() => {
+    if (activeConfigId !== null || scrollTopToRestoreRef.current === null || !resultsRef.current) {
+      return
+    }
+
+    resultsRef.current.scrollTop = scrollTopToRestoreRef.current
+    scrollTopToRestoreRef.current = null
+  }, [activeConfigId])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -135,11 +146,13 @@ export function CommandPalette() {
   }, [activeInputConfig])
 
   const showCommands = () => {
+    const rootNavigationState = rootNavigationStateRef.current
+    scrollTopToRestoreRef.current = rootNavigationState.scrollTop
     setActiveConfigId(null)
     setInputValue('')
     setInputError(null)
-    setQuery('')
-    setSelectedIndex(0)
+    setQuery(rootNavigationState.query)
+    setSelectedIndex(rootNavigationState.selectedIndex)
     inputRef.current?.focus()
   }
 
@@ -169,6 +182,11 @@ export function CommandPalette() {
     switch (config.type) {
       case 'options':
       case 'boolean':
+        rootNavigationStateRef.current = {
+          query,
+          selectedIndex: index,
+          scrollTop: resultsRef.current?.scrollTop ?? 0,
+        }
         setActiveConfigId(config.id)
         if (
           normalizedQuery &&
@@ -183,6 +201,11 @@ export function CommandPalette() {
         setSelectedIndex(0)
         return
       case 'input':
+        rootNavigationStateRef.current = {
+          query,
+          selectedIndex: index,
+          scrollTop: resultsRef.current?.scrollTop ?? 0,
+        }
         setActiveConfigId(config.id)
         setInputValue(config.getValue())
         setInputError(null)
