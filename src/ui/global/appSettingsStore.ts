@@ -137,6 +137,10 @@ export function getScriptAiModel() {
   return appSettingsStore.getSnapshot().context.settings?.scriptAiModel ?? DEFAULT_SCRIPT_AI_MODEL
 }
 
+export function getScriptAiServerPort() {
+  return appSettingsStore.getSnapshot().context.settings?.scriptAiServerPort ?? null
+}
+
 export function getRequestCodeCopyBehavior(): AppSettingsRequestCodeCopyBehavior {
   return appSettingsStore.getSnapshot().context.settings?.requestCodeCopyBehavior ?? DEFAULT_REQUEST_CODE_COPY_BEHAVIOR
 }

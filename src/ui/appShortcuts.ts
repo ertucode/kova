@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { GlobalShortcuts } from './lib/hooks/globalShortcuts'
 import { dialogActions } from './global/dialogStore'
 import { CommandPalette } from './components/CommandPalette'
+import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog'
 
 const SHORTCUTS_KEY = 'appShortcuts'
 
@@ -20,12 +21,24 @@ export const AppShortcuts = {
           label: 'Focus search',
         },
         {
+          command: 'show-command-palette',
+          code: { code: 'F1' },
+          handler: e => {
+            e?.preventDefault()
+            dialogActions.open({
+              component: CommandPalette,
+              props: {},
+            })
+          },
+          label: 'Show command palette',
+        },
+        {
           command: 'file_browser_show_shortcuts',
           code: { code: 'KeyK', ctrlKey: true, metaKey: true },
           handler: e => {
             e?.preventDefault()
             dialogActions.open({
-              component: CommandPalette,
+              component: KeyboardShortcutsDialog,
               props: {},
             })
           },

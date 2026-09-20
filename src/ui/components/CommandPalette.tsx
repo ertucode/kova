@@ -1,449 +1,423 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Dialog } from '@/lib/components/dialog'
-import { shortcutRegistryAPI } from '@/lib/hooks/shortcutRegistry'
-import { KeyboardIcon, Edit2Icon, XIcon, RotateCcwIcon, AlertTriangleIcon } from 'lucide-react'
-import { Button } from '@/lib/components/button'
-import { isSequenceShortcut, useShortcuts } from '@/lib/hooks/useShortcuts'
-import { clsx } from '@/lib/functions/clsx'
+import { useEffect, useRef, useState } from 'react'
+import { Typescript } from '@common/Typescript'
 import Fuse from 'fuse.js'
-import { shortcutCustomizationHelpers, shortcutCustomizationStore } from '@/lib/hooks/shortcutCustomization'
-import { useSelector } from '@xstate/store/react'
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
+import {
+  changeCommandPaletteOption,
+  commandPaletteConfigs,
+  executeCommandPaletteTrigger,
+  getCommandPaletteOptions,
+  type CommandPaletteInputConfig,
+  type CommandPaletteNestedConfig,
+  type CommandPaletteOption,
+  type CommandPaletteSelectionConfig,
+} from '@/global/appSettingsConfig'
 import { dialogActions } from '@/global/dialogStore'
-import { Tooltip } from './Tooltip'
-import { ShortcutDisplay } from './ShortcutDisplay'
-import { useShortcutRecorder } from '@/lib/hooks/useShortcutRecorder'
-import { shortcutDisplayValueToString, shortcutKeyString } from '@/lib/hooks/shortcutUtils'
+import { Dialog } from '@/lib/components/dialog'
+import { toast } from '@/lib/components/toast'
+import { clsx } from '@/lib/functions/clsx'
 
-export const CommandPalette = function CommandPalette(_props: {}) {
+export function CommandPalette() {
+  const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [editingCommand, setEditingCommand] = useState<string | null>(null)
-  const [savingCommand, setSavingCommand] = useState<string | null>(null)
-  const [isSearchingByKeymap, setIsSearchingByKeymap] = useState(false)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const customShortcuts = useSelector(shortcutCustomizationStore, state => state.context.customShortcuts)
-  const { recordedShortcut, resetRecordedShortcut } = useShortcutRecorder(editingCommand !== null)
+  const [activeConfigId, setActiveConfigId] = useState<string | null>(null)
+  const [inputValue, setInputValue] = useState('')
+  const [inputError, setInputError] = useState<string | null>(null)
+  const [optionsByConfigId, setOptionsByConfigId] = useState<
+    Record<string, readonly CommandPaletteOption<string | boolean>[]>
+  >(() =>
+    Object.fromEntries(
+      commandPaletteConfigs
+        .filter(
+          (config): config is CommandPaletteSelectionConfig => config.type === 'options' || config.type === 'boolean'
+        )
+        .map(config => [config.id, getCommandPaletteOptions(config)])
+    )
+  )
+  const [optionLoadErrors, setOptionLoadErrors] = useState<Record<string, string>>({})
+  const inputRef = useRef<HTMLInputElement>(null)
+  const resultsRef = useRef<HTMLDivElement>(null)
+  const normalizedQuery = query.trim().toLowerCase()
+  const activeConfig = commandPaletteConfigs.find(
+    (config): config is CommandPaletteNestedConfig => config.type !== 'trigger' && config.id === activeConfigId
+  )
+  const activeSelectionConfig = commandPaletteConfigs.find(
+    (config): config is CommandPaletteSelectionConfig =>
+      (config.type === 'options' || config.type === 'boolean') && config.id === activeConfigId
+  )
+  const activeInputConfig: CommandPaletteInputConfig | undefined =
+    activeConfig?.type === 'input' ? activeConfig : undefined
+  const searchableConfigs = commandPaletteConfigs.map(config => ({
+    config,
+    optionLabels:
+      config.type === 'options' || config.type === 'boolean'
+        ? optionsByConfigId[config.id]?.map(option => option.label)
+        : [],
+  }))
+  const configSearch = new Fuse(searchableConfigs, {
+    keys: ['config.label', 'config.description', 'optionLabels'],
+    threshold: 0.4,
+    ignoreLocation: true,
+  })
+  const filteredConfigs = normalizedQuery
+    ? configSearch.search(normalizedQuery).map(result => result.item.config)
+    : commandPaletteConfigs
+  const activeOptions = activeSelectionConfig
+    ? (optionsByConfigId[activeSelectionConfig.id] ?? getCommandPaletteOptions(activeSelectionConfig))
+    : []
+  const optionSearch = new Fuse(activeOptions, {
+    keys: ['label'],
+    threshold: 0.4,
+    ignoreLocation: true,
+  })
+  const filteredOptions = activeSelectionConfig
+    ? normalizedQuery
+      ? optionSearch.search(normalizedQuery).map(result => result.item)
+      : activeOptions
+    : []
+  const resultCount = activeSelectionConfig ? filteredOptions.length : filteredConfigs.length
 
-  const shortcuts = shortcutRegistryAPI.getAll()
+  useEffect(() => {
+    inputRef.current?.focus()
 
-  // Detect duplicate keymaps in O(N) time
-  const duplicateCommands = useMemo(() => {
-    const codeMap = new Map<string, string[]>() // code -> commands[]
-
-    for (const shortcut of shortcuts) {
-      const code = isSequenceShortcut(shortcut.shortcut)
-        ? `seq:${shortcut.shortcut.sequence.join(',')}`
-        : Array.isArray(shortcut.shortcut.code)
-          ? shortcut.shortcut.code
-              .map(c =>
-                typeof c === 'string'
-                  ? c
-                  : `${c.code}:${c.metaKey ? 'M' : ''}${c.ctrlKey ? 'C' : ''}${c.altKey ? 'A' : ''}${c.shiftKey ? 'S' : ''}`
-              )
-              .sort()
-              .join('|')
-          : typeof shortcut.shortcut.code === 'string'
-            ? shortcut.shortcut.code
-            : `${shortcut.shortcut.code.code}:${shortcut.shortcut.code.metaKey ? 'M' : ''}${shortcut.shortcut.code.ctrlKey ? 'C' : ''}${shortcut.shortcut.code.altKey ? 'A' : ''}${shortcut.shortcut.code.shiftKey ? 'S' : ''}`
-
-      const existing = codeMap.get(code) || []
-      existing.push(shortcut.command)
-      codeMap.set(code, existing)
-    }
-
-    // Find all commands that share codes with others
-    const duplicates = new Set<string>()
-    for (const [_, commands] of codeMap) {
-      if (commands.length > 1) {
-        for (const cmd of commands) {
-          duplicates.add(cmd)
-        }
+    let cancelled = false
+    for (const config of commandPaletteConfigs) {
+      if (config.type !== 'options' || !config.loadOptions) {
+        continue
       }
-    }
 
-    return duplicates
-  }, [shortcuts])
-
-  const fuse = useMemo(() => {
-    return new Fuse(shortcuts, {
-      keys: ['label'],
-      threshold: 0.4,
-      ignoreLocation: true,
-    })
-  }, [shortcuts])
-
-  const filteredShortcuts = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return shortcuts
-    }
-    if (isSearchingByKeymap) {
-      // Search by keymap - match against shortcut key combinations
-      const searchLower = searchQuery.toLowerCase()
-      return shortcuts.filter(shortcut => {
-        const hasCustom = shortcutCustomizationHelpers.hasCustomShortcut(shortcut.command)
-        const displayShortcut = hasCustom
-          ? customShortcuts[shortcut.command]
-          : isSequenceShortcut(shortcut.shortcut)
-            ? { sequence: shortcut.shortcut.sequence }
-            : shortcut.shortcut.code
-
-        const keymapStr = shortcutDisplayValueToString(displayShortcut)
-
-        return keymapStr.toLowerCase().includes(searchLower)
+      void config.loadOptions().then(options => {
+        if (!cancelled) {
+          setOptionsByConfigId(current => ({ ...current, [config.id]: options }))
+        }
+      }).catch(error => {
+        if (!cancelled) {
+          setOptionLoadErrors(current => ({
+            ...current,
+            [config.id]: error instanceof Error ? error.message : String(error),
+          }))
+        }
       })
     }
-    return fuse.search(searchQuery).map(result => result.item)
-  }, [searchQuery, shortcuts, fuse, isSearchingByKeymap, customShortcuts])
 
-  useShortcuts(
-    [
-      {
-        code: [{ code: 'ArrowDown' }, { code: 'KeyJ', ctrlKey: true }],
-        handler: e => {
-          e?.preventDefault()
-          setSelectedIndex(prev => (prev + 1 === filteredShortcuts.length ? 0 : prev + 1))
-        },
-        label: '',
-        enabledIn: () => true,
-      },
-      {
-        code: [{ code: 'ArrowUp' }, { code: 'KeyK', ctrlKey: true }],
-        handler: e => {
-          e?.preventDefault()
-          setSelectedIndex(prev => {
-            return prev - 1 === -1 ? filteredShortcuts.length - 1 : prev - 1
-          })
-        },
-        label: '',
-        enabledIn: () => true,
-      },
-      {
-        code: { code: 'Enter' },
-        handler: e => {
-          e?.preventDefault()
-          if (filteredShortcuts[selectedIndex]) {
-            dialogActions.close()
-            filteredShortcuts[selectedIndex].shortcut.handler(undefined)
-          }
-        },
-        label: '',
-        enabledIn: () => true,
-      },
-      {
-        code: { code: 'Escape', metaKey: true },
-        handler: e => {
-          e?.preventDefault()
-          setIsSearchingByKeymap(true)
-          setSearchQuery('')
-        },
-        label: '',
-        enabledIn: () => true,
-      },
-    ],
-    { hideInPalette: true }
-  )
-
-  const containerRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const c = containerRef.current
-    if (!c) return
-
-    const item = c.querySelector(`.command-palette-item:nth-child(${selectedIndex + 1})`) as HTMLElement | null
-    if (!item) return
-
-    const containerRect = c.getBoundingClientRect()
-    const rowRect = item.getBoundingClientRect()
-    const isInView = rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom
-
-    if (!isInView) {
-      item.scrollIntoView({ block: 'nearest' })
+    return () => {
+      cancelled = true
     }
-  }, [selectedIndex])
-
-  useEffect(() => {
-    setSearchQuery('')
-    setSelectedIndex(0)
-    setEditingCommand(null)
-    resetRecordedShortcut()
-    // Focus the search input when dialog opens
-    setTimeout(() => {
-      searchInputRef.current?.focus()
-    }, 0)
   }, [])
 
   useEffect(() => {
-    // Reset selected index when search results change
-    setSelectedIndex(0)
-  }, [searchQuery])
+    const container = resultsRef.current
+    const selectedOption = container?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')
+    if (!container || !selectedOption) {
+      return
+    }
 
-  // Keyboard capture for keymap search mode
+    const containerRect = container.getBoundingClientRect()
+    const optionRect = selectedOption.getBoundingClientRect()
+    if (optionRect.top < containerRect.top || optionRect.bottom > containerRect.bottom) {
+      selectedOption.scrollIntoView({ block: 'nearest' })
+    }
+  }, [activeConfigId, normalizedQuery, selectedIndex])
+
   useEffect(() => {
-    if (!isSearchingByKeymap) return
+    if (!activeInputConfig) {
+      inputRef.current?.focus()
+    }
+  }, [activeInputConfig])
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't capture if editing a shortcut
-      if (editingCommand) return
+  const showCommands = () => {
+    setActiveConfigId(null)
+    setInputValue('')
+    setInputError(null)
+    setQuery('')
+    setSelectedIndex(0)
+    inputRef.current?.focus()
+  }
 
-      e.preventDefault()
-      e.stopPropagation()
-
-      if (e.metaKey && e.key === 'Escape') {
-        setIsSearchingByKeymap(false)
-        setSearchQuery('')
+  const selectResult = (index: number) => {
+    if (activeSelectionConfig) {
+      const option = filteredOptions[index]
+      if (!option) {
         return
       }
 
-      const isModifierKey = ['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)
-
-      // Build keymap string
-      const parts: string[] = []
-      if (e.metaKey) parts.push('⌘')
-      if (e.ctrlKey) parts.push('Ctrl')
-      if (e.altKey) parts.push('Alt')
-      if (e.shiftKey) parts.push('Shift')
-      if (!isModifierKey) parts.push(shortcutKeyString(e.code))
-
-      const keymapStr = parts.join('+')
-      setSearchQuery(keymapStr)
-
-      // Keep focus on the search input
-      searchInputRef.current?.focus()
+      void Promise.resolve(changeCommandPaletteOption(activeSelectionConfig, option.value)).catch(error => {
+        toast.show({
+          severity: 'error',
+          title: `${activeSelectionConfig.label} failed`,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
+      dialogActions.close()
+      return
     }
 
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [isSearchingByKeymap, editingCommand])
+    const config = filteredConfigs[index]
+    if (!config) {
+      return
+    }
 
-  const handleSaveShortcut = async (command: string) => {
-    if (!recordedShortcut) return
-
-    const shortcutChangeHandler = shortcutRegistryAPI.getShortcutChangeHandler(command)
-
-    setSavingCommand(command)
-    try {
-      if (shortcutChangeHandler) {
-        await shortcutChangeHandler(command, recordedShortcut)
-      } else {
-        shortcutCustomizationHelpers.setCustomShortcut(command, recordedShortcut)
-      }
-
-      setEditingCommand(null)
-      resetRecordedShortcut()
-    } finally {
-      setSavingCommand(null)
+    switch (config.type) {
+      case 'options':
+      case 'boolean':
+        setActiveConfigId(config.id)
+        if (
+          normalizedQuery &&
+          new Fuse(optionsByConfigId[config.id] ?? getCommandPaletteOptions(config), {
+            keys: ['label'],
+            threshold: 0.4,
+            ignoreLocation: true,
+          }).search(normalizedQuery).length === 0
+        ) {
+          setQuery('')
+        }
+        setSelectedIndex(0)
+        return
+      case 'input':
+        setActiveConfigId(config.id)
+        setInputValue(config.getValue())
+        setInputError(null)
+        setQuery('')
+        return
+      case 'trigger':
+        dialogActions.close()
+        void executeCommandPaletteTrigger(config).catch(error => {
+          toast.show({
+            severity: 'error',
+            title: `${config.label} failed`,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        })
+        return
+      default:
+        return Typescript.assertUnreachable(config)
     }
   }
 
-  const handleResetShortcut = async (command: string) => {
-    const shortcutChangeHandler = shortcutRegistryAPI.getShortcutChangeHandler(command)
-
-    setSavingCommand(command)
-    try {
-      if (shortcutChangeHandler) {
-        await shortcutChangeHandler(command, null)
-      } else {
-        shortcutCustomizationHelpers.removeCustomShortcut(command)
-      }
-    } finally {
-      setSavingCommand(null)
+  const submitInput = () => {
+    if (!activeInputConfig) {
+      return
     }
+
+    const validationError = activeInputConfig.validate?.(inputValue) ?? null
+    if (validationError) {
+      setInputError(validationError)
+      return
+    }
+
+    void Promise.resolve(activeInputConfig.onChange(inputValue)).catch(error => {
+      toast.show({
+        severity: 'error',
+        title: `${activeInputConfig.label} failed`,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
+    dialogActions.close()
   }
 
   return (
     <Dialog
-      title={
-        <div className="flex items-center gap-2">
-          <KeyboardIcon className="w-5 h-5" />
-          Keyboard Shortcuts
-        </div>
-      }
       onClose={dialogActions.close}
-      footer={<Button onClick={dialogActions.close}>Close</Button>}
-      className="max-w-2xl"
+      className="absolute top-[12vh] w-[calc(100vw-2rem)] max-w-2xl gap-0 overflow-hidden border border-base-content/15 bg-base-100 p-0 shadow-2xl"
+      bodyClassName="overflow-hidden"
     >
-      {duplicateCommands.size > 0 && (
-        <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 rounded dark:bg-yellow-900/40 dark:border-yellow-600 flex items-start gap-2">
-          <AlertTriangleIcon className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <span className="text-xs text-yellow-800 dark:text-yellow-200">
-            {duplicateCommands.size} shortcut{duplicateCommands.size > 1 ? 's have' : ' has'} conflicting keymaps.
-            Multiple commands share the same keyboard shortcut, which may cause unexpected behavior.
-          </span>
+      <div className="flex items-center gap-3 border-b border-base-content/10 px-4">
+        {activeConfig ? (
+          <button
+            type="button"
+            onClick={showCommands}
+            className="-ml-2 p-2 text-base-content/50 hover:bg-base-content/10 hover:text-base-content"
+            aria-label="Back to commands"
+          >
+            <ChevronLeftIcon className="size-4" />
+          </button>
+        ) : (
+          <SearchIcon className="size-4 shrink-0 text-base-content/45" aria-hidden="true" />
+        )}
+        {activeInputConfig ? (
+          <div className="flex h-12 min-w-0 flex-1 items-center text-sm font-medium">{activeInputConfig.label}</div>
+        ) : (
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={event => {
+              setQuery(event.target.value)
+              setSelectedIndex(0)
+            }}
+            onKeyDown={event => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setSelectedIndex(index => (resultCount === 0 ? 0 : (index + 1) % resultCount))
+                return
+              }
+
+              if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setSelectedIndex(index => (resultCount === 0 ? 0 : (index - 1 + resultCount) % resultCount))
+                return
+              }
+
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                selectResult(selectedIndex)
+                return
+              }
+
+              if (event.key === 'Escape' && activeSelectionConfig) {
+                event.preventDefault()
+                event.stopPropagation()
+                showCommands()
+                return
+              }
+
+              if (event.key === 'Backspace' && activeSelectionConfig && query === '') {
+                event.preventDefault()
+                showCommands()
+              }
+            }}
+            placeholder={
+              activeSelectionConfig ? `Search ${activeSelectionConfig.label.toLowerCase()} options` : 'Type a command'
+            }
+            aria-label="Search commands"
+            className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/35"
+          />
+        )}
+        <kbd className="border border-base-content/15 bg-base-content/5 px-1.5 py-0.5 text-[10px] text-base-content/45">
+          esc
+        </kbd>
+      </div>
+
+      {activeInputConfig ? (
+        <form
+          className="space-y-3 p-4"
+          onSubmit={event => {
+            event.preventDefault()
+            submitInput()
+          }}
+        >
+          <p className="text-xs text-base-content/60">{activeInputConfig.description}</p>
+          {activeInputConfig.textArea ? (
+            <textarea
+              autoFocus
+              value={inputValue}
+              onChange={event => {
+                setInputValue(event.target.value)
+                setInputError(null)
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  showCommands()
+                  return
+                }
+
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault()
+                  submitInput()
+                }
+              }}
+              placeholder={activeInputConfig.placeholder}
+              spellCheck={false}
+              className="textarea min-h-36 w-full rounded-lg border-base-content/15 bg-base-content/5 font-mono text-sm leading-6"
+              aria-label={activeInputConfig.label}
+            />
+          ) : (
+            <input
+              autoFocus
+              type={activeInputConfig.inputType ?? 'text'}
+              value={inputValue}
+              onChange={event => {
+                setInputValue(event.target.value)
+                setInputError(null)
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  showCommands()
+                }
+              }}
+              placeholder={activeInputConfig.placeholder}
+              min={activeInputConfig.min}
+              max={activeInputConfig.max}
+              step={activeInputConfig.step}
+              className="input h-11 w-full rounded-lg border-base-content/15 bg-base-content/5"
+              aria-label={activeInputConfig.label}
+            />
+          )}
+          {inputError ? <p className="text-xs text-error">{inputError}</p> : null}
+          <div className="flex justify-end">
+            <button type="submit" className="btn btn-primary btn-sm rounded-lg">
+              Apply
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div
+          ref={resultsRef}
+          className="max-h-[min(420px,60vh)] overflow-y-auto px-2 py-3"
+          role="listbox"
+          aria-label="Commands"
+        >
+        {resultCount === 0 ? (
+          <div className="px-3 py-8 text-center text-sm text-base-content/45">No matching commands</div>
+        ) : activeSelectionConfig ? (
+          <>
+            {filteredOptions.map((option, index) => (
+              <button
+                key={String(option.value)}
+                type="button"
+                role="option"
+                aria-selected={index === selectedIndex}
+                className={clsx(
+                  'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm',
+                  index === selectedIndex ? 'bg-primary text-primary-content' : 'hover:bg-base-content/10'
+                )}
+                onMouseMove={() => setSelectedIndex(index)}
+                onClick={() => selectResult(index)}
+              >
+                <span className="flex-1">{option.label}</span>
+                {option.value === activeSelectionConfig.getValue() ? (
+                  <CheckIcon className="size-4" aria-label="Current value" />
+                ) : null}
+              </button>
+            ))}
+            {optionLoadErrors[activeSelectionConfig.id] ? (
+              <div className="px-3 py-2 text-xs text-error">
+                Failed to load options: {optionLoadErrors[activeSelectionConfig.id]}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          filteredConfigs.map((config, index) => (
+            <button
+              key={config.id}
+              type="button"
+              role="option"
+              aria-selected={index === selectedIndex}
+              className={clsx(
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left',
+                index === selectedIndex ? 'bg-primary text-primary-content' : 'hover:bg-base-content/10'
+              )}
+              onMouseMove={() => setSelectedIndex(index)}
+              onClick={() => selectResult(index)}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">{config.label}</span>
+                <span className={clsx('mt-0.5 block text-xs', index === selectedIndex ? 'opacity-70' : 'text-base-content/50')}>
+                  {config.description}
+                </span>
+              </span>
+              {config.type !== 'trigger' ? (
+                <ChevronRightIcon className="size-4 shrink-0 opacity-60" aria-hidden="true" />
+              ) : null}
+            </button>
+          ))
+        )}
         </div>
       )}
-      <div className="mb-4 flex items-center gap-2">
-        <input
-          ref={searchInputRef}
-          type="text"
-          placeholder={isSearchingByKeymap ? 'Press keys to search...' : 'Search shortcuts...'}
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className={clsx(
-            'flex-1 px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2',
-            isSearchingByKeymap
-              ? 'border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-900/20 focus:ring-blue-500'
-              : 'border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 focus:ring-blue-500'
-          )}
-        />
-
-        <Tooltip content="Search by keymap (⌘+Esc)" placement="left">
-          <button
-            onClick={() => {
-              setIsSearchingByKeymap(!isSearchingByKeymap)
-              setSearchQuery('')
-            }}
-            className={clsx(
-              'p-2 rounded border transition-colors h-[34px] w-[34px] flex items-center justify-center',
-              isSearchingByKeymap
-                ? 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/40 dark:border-blue-600 dark:text-blue-300'
-                : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'
-            )}
-          >
-            <KeyboardIcon className="w-4 h-4" />
-          </button>
-        </Tooltip>
-      </div>
-      <div className="overflow-y-auto max-h-[50vh] h-[50vh]" ref={containerRef}>
-        <div className="space-y-1 min-h-full">
-          {filteredShortcuts.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              {searchQuery.trim() ? 'No shortcuts match your search' : 'No shortcuts registered'}
-            </div>
-          ) : (
-            filteredShortcuts.map((shortcut, index) => {
-              const isEditing = editingCommand === shortcut.command
-              const hasShortcutChangeHandler = shortcutRegistryAPI.getShortcutChangeHandler(shortcut.command) !== null
-              const hasCustom = !hasShortcutChangeHandler && shortcutCustomizationHelpers.hasCustomShortcut(shortcut.command)
-              const isDuplicate = duplicateCommands.has(shortcut.command)
-              const canEditShortcut = !isSequenceShortcut(shortcut.shortcut)
-              const canResetShortcut = hasShortcutChangeHandler || hasCustom
-              const displayShortcut = hasCustom
-                ? customShortcuts[shortcut.command]
-                : isSequenceShortcut(shortcut.shortcut)
-                  ? { sequence: shortcut.shortcut.sequence }
-                  : shortcut.shortcut.code
-
-              return (
-                <div
-                  key={shortcut.command}
-                  className={clsx(
-                    'flex items-center justify-between py-2 px-3 rounded hover:bg-gray-100 dark:hover:bg-gray-800 command-palette-item group',
-                    index === selectedIndex ? 'bg-base-content/10' : '',
-                    !isEditing && 'cursor-pointer',
-                    isDuplicate && 'bg-yellow-100 dark:bg-yellow-900/30'
-                  )}
-                  onClick={() => {
-                    if (!isEditing) {
-                      dialogActions.close()
-                      shortcut.shortcut.handler(undefined)
-                    }
-                  }}
-                >
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-sm">{shortcut.label}</span>
-                    {isDuplicate && (
-                      <span title="Conflicting keymap">
-                        <AlertTriangleIcon className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400" />
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isEditing ? (
-                      <div className="flex items-center gap-1 h-6">
-                        <kbd className="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 border border-blue-200 rounded dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700 whitespace-nowrap leading-none">
-                          {recordedShortcut ? shortcutDisplayValueToString(recordedShortcut) : 'Press a key...'}
-                        </kbd>
-                        <button
-                          onClick={() => void handleSaveShortcut(shortcut.command)}
-                          disabled={!recordedShortcut || savingCommand === shortcut.command}
-                          className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors h-6 w-6 flex items-center justify-center"
-                          title="Save"
-                        >
-                          <svg
-                            className="w-3.5 h-3.5 text-green-600 dark:text-green-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            setEditingCommand(null)
-                            resetRecordedShortcut()
-                          }}
-                          className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 transition-colors h-6 w-6 flex items-center justify-center"
-                          title="Cancel"
-                        >
-                          <XIcon className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="relative flex items-center gap-2 group h-6">
-                        {canResetShortcut && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation()
-                              void handleResetShortcut(shortcut.command)
-                            }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded h-6 w-6 flex items-center justify-center"
-                            title="Reset to default"
-                            disabled={savingCommand === shortcut.command}
-                          >
-                            <RotateCcwIcon className="w-3.5 h-3.5 text-gray-500" />
-                          </button>
-                        )}
-                        <div
-                          className={clsx('flex items-center gap-2 h-6', canEditShortcut && 'cursor-pointer')}
-                          onClick={e => {
-                            if (!canEditShortcut) {
-                              return
-                            }
-
-                            e.stopPropagation()
-                            setEditingCommand(shortcut.command)
-                            resetRecordedShortcut()
-                          }}
-                        >
-                          {canEditShortcut ? (
-                            <Edit2Icon className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500" />
-                          ) : null}
-                          <div className="flex items-center gap-1 h-6">
-                            {/* Show custom shortcut if defined */}
-                            {hasCustom && (
-                              <>
-                                <kbd
-                                  className={clsx(
-                                    'px-2 py-1 text-xs font-semibold border rounded hover:opacity-80',
-                                    'text-blue-800 bg-blue-100 border-blue-200 dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700'
-                                  )}
-                                >
-                                  {shortcutDisplayValueToString(displayShortcut)}
-                                </kbd>
-                                <span className="text-xs text-gray-400">→</span>
-                              </>
-                            )}
-                            {/* Show original shortcut */}
-                            <ShortcutDisplay
-                              shortcut={
-                                isSequenceShortcut(shortcut.defaultShortcut)
-                                  ? { sequence: shortcut.defaultShortcut.sequence }
-                                  : shortcut.defaultShortcut.code
-                              }
-                              className={clsx(hasCustom && 'text-gray-500 bg-gray-50 border-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:border-gray-700 line-through')}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-      </div>
     </Dialog>
   )
 }

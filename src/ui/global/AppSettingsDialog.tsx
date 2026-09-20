@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GenericResult } from '@common/GenericError'
 import { errorResponseToMessage } from '@common/GenericError'
-import { Typescript } from '@common/Typescript'
 import type { SupermavenStatus } from '@common/Supermaven'
 import { useSelector } from '@xstate/store/react'
 import {
@@ -14,7 +13,6 @@ import {
   DEFAULT_FORMAT_SCRIPT_BLOCKS_ON_SAVE,
   DEFAULT_REQUEST_CODE_COPY_BEHAVIOR,
   DEFAULT_SCRIPT_AI_MODEL,
-  DEFAULT_SCRIPT_AI_SERVER_PORT,
   DEFAULT_SCRIPT_BLOCK_PRETTIER_CONFIG,
   DEFAULT_SUPERMAVEN_ENABLED,
   DEFAULT_VIM_MODE,
@@ -22,14 +20,29 @@ import {
 import type { DatabaseConfigState } from '@common/DatabaseConfigs'
 import type { AppUpdateCheckResult } from '@common/AppUpdate'
 import { getWindowElectron } from '@/getWindowElectron'
-import { formatTlsVerificationModeLabel } from '@/components/tlsVerificationMode'
 import { Dialog } from '@/lib/components/dialog'
 import { confirmation } from '@/lib/components/confirmation'
 import { toast } from '@/lib/components/toast'
 import { dialogActions } from './dialogStore'
 import { AppSettingsCoordinator, appSettingsStore } from './appSettingsStore'
 import { useOpenCodeModels } from './useOpenCodeModels'
-import { getAppTheme, setAppTheme, type AppTheme } from './theme'
+import {
+  appearanceSetting,
+  checkForUpdatesTrigger,
+  compactRequestViewSetting,
+  cookiesSetting,
+  formatScriptBlocksOnSaveSetting,
+  formatUpdateCheckResult,
+  requestCodeCopySetting,
+  responseBodyDisplaySetting,
+  scriptAiServerPortSetting,
+  scriptAiModelSetting,
+  scriptBlockPrettierConfigSetting,
+  supermavenSetting,
+  tlsVerificationSetting,
+  vimModeSetting,
+  warnBeforeRequestSetting,
+} from './appSettingsConfig'
 import {
   SettingsCheckboxFieldRow,
   SettingsControlLabel,
@@ -41,7 +54,7 @@ import {
 } from '@/components/settings'
 
 export function AppSettingsDialog() {
-  const [theme, setTheme] = useState<AppTheme>(getAppTheme)
+  const [theme, setTheme] = useState(appearanceSetting.getValue)
   const settings = useSelector(appSettingsStore, state => state.context.settings)
   const saving = useSelector(appSettingsStore, state => state.context.saving)
   const [warnBeforeRequestAfterSeconds, setWarnBeforeRequestAfterSeconds] = useState('10')
@@ -143,7 +156,7 @@ export function AppSettingsDialog() {
     })
 
     if (success) {
-      setAppTheme(theme)
+      appearanceSetting.onChange(theme)
       dialogActions.close()
     }
   }
@@ -390,7 +403,7 @@ export function AppSettingsDialog() {
     setUpdateCheckError(null)
 
     try {
-      setUpdateCheckResult(await getWindowElectron().checkForAppUpdates())
+      setUpdateCheckResult(await checkForUpdatesTrigger.trigger())
     } catch (error) {
       setUpdateCheckError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -416,15 +429,15 @@ export function AppSettingsDialog() {
     >
       <SettingsList>
         <SettingsDropdownFieldRow
-          title="Appearance"
-          description="Choose a theme for this device. Dark is the default."
+          title={appearanceSetting.label}
+          description={appearanceSetting.description}
           value={theme}
-          options={[{ label: 'Dark', value: 'dark' }, { label: 'Light', value: 'light' }]}
+          options={appearanceSetting.options.map(option => ({ ...option }))}
           onChange={value => setTheme(value)}
         />
         <SettingsFieldRow
-          title="Application updates"
-          description="Automatic updates are available in installed Windows builds."
+          title={checkForUpdatesTrigger.label}
+          description={checkForUpdatesTrigger.description}
           control={
             <button
               type="button"
@@ -445,46 +458,46 @@ export function AppSettingsDialog() {
           }
         />
         <SettingsInputFieldRow
-          title="Warn before request"
-          description="When an active environment has request warnings enabled, show a confirmation dialog if the last request is older than this threshold."
+          title={warnBeforeRequestSetting.label}
+          description={warnBeforeRequestSetting.description}
           value={warnBeforeRequestAfterSeconds}
           onChange={value => setWarnBeforeRequestAfterSeconds(value)}
+          type={warnBeforeRequestSetting.inputType}
+          min={warnBeforeRequestSetting.min}
+          step={warnBeforeRequestSetting.step}
         />
         <SettingsDropdownFieldRow
-          title="Response body display"
-          description="Choose whether the Raw response view should default to the original payload or a formatted preview when formatting is available."
+          title={responseBodyDisplaySetting.label}
+          description={responseBodyDisplaySetting.description}
           value={responseBodyDisplayMode}
-          options={APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES.map(v => ({
-            label: <span className="capitalize">{v}</span>,
-            value: v,
-          }))}
+          options={responseBodyDisplaySetting.options.map(option => ({ ...option }))}
           onChange={value => setResponseBodyDisplayMode(value)}
         />
 
         <SettingsCheckboxFieldRow
-          title="Request details layout"
-          description="Keep request details compact by showing auth, headers, and path params beside the body. Turn it off to split them into separate tabs."
+          title={compactRequestViewSetting.label}
+          description={compactRequestViewSetting.description}
           value={compactRequestView}
           onChange={value => setCompactRequestView(value)}
         />
 
         <SettingsCheckboxFieldRow
-          title="Format script blocks on save"
-          description="Format request and script editor blocks with Prettier when they are saved."
+          title={formatScriptBlocksOnSaveSetting.label}
+          description={formatScriptBlocksOnSaveSetting.description}
           value={formatScriptBlocksOnSave}
           onChange={setFormatScriptBlocksOnSave}
         />
         <SettingsCheckboxFieldRow
-          title="Vim mode"
-          description="Enable Vim keybindings in request and script editors."
+          title={vimModeSetting.label}
+          description={vimModeSetting.description}
           value={vimMode}
           onChange={setVimMode}
         />
         <SettingsTextareaFieldRow
-          title="Prettier config JSON"
+          title={scriptBlockPrettierConfigSetting.label}
           description={
             <>
-              Applies to script block format-on-save. Use a JSON object such as{' '}
+              {scriptBlockPrettierConfigSetting.description} Use a JSON object such as{' '}
               <code>{'{"semi":false,"singleQuote":true}'}</code>.
             </>
           }
@@ -493,48 +506,33 @@ export function AppSettingsDialog() {
           spellCheck={false}
         />
         <SettingsCheckboxFieldRow
-          title="Cookies"
-          description="Store and send cookies returned by requests."
+          title={cookiesSetting.label}
+          description={cookiesSetting.description}
           value={cookiesEnabled}
           onChange={setCookiesEnabled}
         />
         <SettingsDropdownFieldRow
-          title="TLS verification"
+          title={tlsVerificationSetting.label}
           description={
             <>
-              Choose how request runtimes verify HTTPS and WSS certificates by default. Request-level overrides can make
-              this stricter or looser. <code>disable-for-localhost</code> only affects loopback hosts.
+              {tlsVerificationSetting.description} <code>disable-for-localhost</code> only affects loopback hosts.
             </>
           }
           value={tlsVerificationMode}
-          options={APP_SETTINGS_TLS_VERIFICATION_MODES.map(mode => ({
-            label: formatTlsVerificationModeLabel(mode),
-            value: mode,
-          }))}
+          options={tlsVerificationSetting.options.map(option => ({ ...option }))}
           onChange={setTlsVerificationMode}
         />
         <SettingsDropdownFieldRow
-          title="Request code copy"
-          description={
-            <>
-              Choose the default behavior for <code>Copy as cURL</code> and <code>Copy as fetch</code>.
-            </>
-          }
+          title={requestCodeCopySetting.label}
+          description={requestCodeCopySetting.description}
           value={requestCodeCopyBehavior}
-          options={APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS.map(mode => ({
-            label: formatRequestCodeCopyBehaviorLabel(mode),
-            value: mode,
-          }))}
+          options={requestCodeCopySetting.options.map(option => ({ ...option }))}
           onChange={setRequestCodeCopyBehavior}
         />
 
         <SettingsCheckboxFieldRow
-          title="Supermaven"
-          description={
-            <>
-              Enable ghost completions for script editors. Suggestions are requested with <code>Option+L</code>.
-            </>
-          }
+          title={supermavenSetting.label}
+          description={supermavenSetting.description}
           value={supermavenEnabled}
           onChange={setSupermavenEnabled}
           detail={
@@ -551,11 +549,11 @@ export function AppSettingsDialog() {
           }
         />
         <SettingsDropdownFieldRow
-          title="AI script model"
-          description="Choose which OpenCode model should be used by default for script generation and refinement."
+          title={scriptAiModelSetting.label}
+          description={scriptAiModelSetting.description}
           value={scriptAiModel ?? ''}
           options={[
-            { label: 'OpenCode default', value: '' },
+            ...scriptAiModelSetting.options.map(option => ({ ...option })),
             ...openCodeModels.map(model => ({ label: model, value: model })),
           ]}
           onChange={value => setScriptAiModel(value || null)}
@@ -570,17 +568,13 @@ export function AppSettingsDialog() {
           }
         />
         <SettingsInputFieldRow
-          title="AI server port"
-          description={
-            <>
-              Leave empty to use Kova&apos;s default OpenCode server port: <code>{DEFAULT_SCRIPT_AI_SERVER_PORT}</code>.
-            </>
-          }
-          type="number"
-          min={1024}
-          max={65535}
-          step={1}
-          placeholder={String(DEFAULT_SCRIPT_AI_SERVER_PORT)}
+          title={scriptAiServerPortSetting.label}
+          description={scriptAiServerPortSetting.description}
+          type={scriptAiServerPortSetting.inputType}
+          min={scriptAiServerPortSetting.min}
+          max={scriptAiServerPortSetting.max}
+          step={scriptAiServerPortSetting.step}
+          placeholder={scriptAiServerPortSetting.placeholder}
           value={scriptAiServerPort}
           onChange={setScriptAiServerPort}
         />
@@ -797,19 +791,6 @@ export function AppSettingsDialog() {
   )
 }
 
-function formatUpdateCheckResult(result: AppUpdateCheckResult) {
-  switch (result.status) {
-    case 'unsupported':
-      return `Kova ${result.currentVersion}. Update checks are only available in installed Windows builds.`
-    case 'up-to-date':
-      return `Kova ${result.currentVersion} is up to date.`
-    case 'update-available':
-      return `Kova ${result.availableVersion} is available.`
-    default:
-      return Typescript.assertUnreachable(result)
-  }
-}
-
 function formatSupermavenStatus(status: SupermavenStatus | null) {
   if (!status) {
     return 'Unknown'
@@ -868,17 +849,4 @@ function formatFileSize(sizeBytes: number | null) {
 
   const digits = unitIndex === 0 ? 0 : value >= 10 ? 1 : 2
   return `${value.toFixed(digits)} ${units[unitIndex]}`
-}
-
-function formatRequestCodeCopyBehaviorLabel(mode: (typeof APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS)[number]) {
-  switch (mode) {
-    case 'resolved':
-      return 'Resolved'
-    case 'mask-auth':
-      return 'Mask Auth'
-    case 'mask-variables':
-      return 'Mask Variables'
-    default:
-      return Typescript.assertUnreachable(mode)
-  }
 }

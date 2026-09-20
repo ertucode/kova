@@ -40,7 +40,7 @@ export function useOpenCodeModels() {
   }
 }
 
-async function loadOpenCodeModels() {
+export async function loadOpenCodeModels() {
   if (cachedModels !== null) {
     return cachedModels
   }
