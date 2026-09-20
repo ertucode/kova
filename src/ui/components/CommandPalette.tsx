@@ -143,7 +143,7 @@ export function CommandPalette() {
     if (!activeInputConfig) {
       inputRef.current?.focus()
     }
-  }, [activeInputConfig])
+  }, [activeConfigId, activeInputConfig])
 
   const showCommands = () => {
     const rootNavigationState = rootNavigationStateRef.current
