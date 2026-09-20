@@ -106,18 +106,21 @@ export function CommandPalette() {
         continue
       }
 
-      void config.loadOptions().then(options => {
-        if (!cancelled) {
-          setOptionsByConfigId(current => ({ ...current, [config.id]: options }))
-        }
-      }).catch(error => {
-        if (!cancelled) {
-          setOptionLoadErrors(current => ({
-            ...current,
-            [config.id]: error instanceof Error ? error.message : String(error),
-          }))
-        }
-      })
+      void config
+        .loadOptions()
+        .then(options => {
+          if (!cancelled) {
+            setOptionsByConfigId(current => ({ ...current, [config.id]: options }))
+          }
+        })
+        .catch(error => {
+          if (!cancelled) {
+            setOptionLoadErrors(current => ({
+              ...current,
+              [config.id]: error instanceof Error ? error.message : String(error),
+            }))
+          }
+        })
     }
 
     return () => {
@@ -389,65 +392,70 @@ export function CommandPalette() {
       ) : (
         <div
           ref={resultsRef}
-          className="max-h-[min(420px,60vh)] overflow-y-auto px-2 py-3"
+          className="max-h-[min(420px,60vh)] overflow-y-auto px-2 py-2"
           role="listbox"
           aria-label="Commands"
         >
-        {resultCount === 0 ? (
-          <div className="px-3 py-8 text-center text-sm text-base-content/45">No matching commands</div>
-        ) : activeSelectionConfig ? (
-          <>
-            {filteredOptions.map((option, index) => (
+          {resultCount === 0 ? (
+            <div className="px-3 py-8 text-center text-sm text-base-content/45">No matching commands</div>
+          ) : activeSelectionConfig ? (
+            <>
+              {filteredOptions.map((option, index) => (
+                <button
+                  key={String(option.value)}
+                  type="button"
+                  role="option"
+                  aria-selected={index === selectedIndex}
+                  className={clsx(
+                    'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm',
+                    index === selectedIndex ? 'bg-primary text-primary-content' : 'hover:bg-base-content/10'
+                  )}
+                  onMouseMove={() => setSelectedIndex(index)}
+                  onClick={() => selectResult(index)}
+                >
+                  <span className="flex-1">{option.label}</span>
+                  {option.value === activeSelectionConfig.getValue() ? (
+                    <CheckIcon className="size-4" aria-label="Current value" />
+                  ) : null}
+                </button>
+              ))}
+              {optionLoadErrors[activeSelectionConfig.id] ? (
+                <div className="px-3 py-2 text-xs text-error">
+                  Failed to load options: {optionLoadErrors[activeSelectionConfig.id]}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            filteredConfigs.map((config, index) => (
               <button
-                key={String(option.value)}
+                key={config.id}
                 type="button"
                 role="option"
                 aria-selected={index === selectedIndex}
                 className={clsx(
-                  'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm',
+                  'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left',
                   index === selectedIndex ? 'bg-primary text-primary-content' : 'hover:bg-base-content/10'
                 )}
                 onMouseMove={() => setSelectedIndex(index)}
                 onClick={() => selectResult(index)}
               >
-                <span className="flex-1">{option.label}</span>
-                {option.value === activeSelectionConfig.getValue() ? (
-                  <CheckIcon className="size-4" aria-label="Current value" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{config.label}</span>
+                  <span
+                    className={clsx(
+                      'mt-0.5 block text-xs',
+                      index === selectedIndex ? 'opacity-70' : 'text-base-content/50'
+                    )}
+                  >
+                    {config.description}
+                  </span>
+                </span>
+                {config.type !== 'trigger' ? (
+                  <ChevronRightIcon className="size-4 shrink-0 opacity-60" aria-hidden="true" />
                 ) : null}
               </button>
-            ))}
-            {optionLoadErrors[activeSelectionConfig.id] ? (
-              <div className="px-3 py-2 text-xs text-error">
-                Failed to load options: {optionLoadErrors[activeSelectionConfig.id]}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          filteredConfigs.map((config, index) => (
-            <button
-              key={config.id}
-              type="button"
-              role="option"
-              aria-selected={index === selectedIndex}
-              className={clsx(
-                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left',
-                index === selectedIndex ? 'bg-primary text-primary-content' : 'hover:bg-base-content/10'
-              )}
-              onMouseMove={() => setSelectedIndex(index)}
-              onClick={() => selectResult(index)}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">{config.label}</span>
-                <span className={clsx('mt-0.5 block text-xs', index === selectedIndex ? 'opacity-70' : 'text-base-content/50')}>
-                  {config.description}
-                </span>
-              </span>
-              {config.type !== 'trigger' ? (
-                <ChevronRightIcon className="size-4 shrink-0 opacity-60" aria-hidden="true" />
-              ) : null}
-            </button>
-          ))
-        )}
+            ))
+          )}
         </div>
       )}
     </Dialog>
