@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Typescript } from '@common/Typescript'
 import Fuse from 'fuse.js'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
@@ -76,6 +76,15 @@ export function CommandPalette() {
       : activeOptions
     : []
   const resultCount = activeSelectionConfig ? filteredOptions.length : filteredConfigs.length
+
+  useLayoutEffect(() => {
+    if (!activeSelectionConfig) {
+      return
+    }
+
+    const currentValueIndex = filteredOptions.findIndex(option => option.value === activeSelectionConfig.getValue())
+    setSelectedIndex(currentValueIndex >= 0 ? currentValueIndex : 0)
+  }, [activeSelectionConfig, normalizedQuery, optionsByConfigId])
 
   useEffect(() => {
     inputRef.current?.focus()
