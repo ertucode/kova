@@ -75,7 +75,9 @@ type VisualizerPayload = {
   }
   scope: Record<string, string>
   sharedScripts: Array<Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>>
-  scriptPackages: Array<Pick<ScriptPackageArtifact, 'cacheKey' | 'packageName' | 'packageVersion' | 'browserBundleCode'>>
+  scriptPackages: Array<
+    Pick<ScriptPackageArtifact, 'cacheKey' | 'packageName' | 'packageVersion' | 'browserBundleCode'>
+  >
 }
 
 type VisualizerErrorDetails = {
@@ -439,9 +441,7 @@ function createSharedScriptModuleLoader(
   return loadModule
 }
 
-function createInstalledBrowserPackageLoader(
-  scriptPackages: VisualizerPayload['scriptPackages']
-) {
+function createInstalledBrowserPackageLoader(scriptPackages: VisualizerPayload['scriptPackages']) {
   const moduleCache = new Map<string, Record<string, unknown>>()
   const loadPackage = (specifier: string) => {
     const parsedSpecifier = parseScriptPackageSpecifier(specifier)
@@ -483,11 +483,12 @@ function createInstalledBrowserPackageLoader(
 
     const module = { exports: {} as Record<string, unknown> }
     const exports = module.exports
-    new Function('module', 'exports', 'require', `${selectedPackage.browserBundleCode}\n//# sourceURL=${selectedPackage.packageName}.bundle.js`)(
-      module,
-      exports,
-      createVisualizerExternalRequire(loadPackage)
-    )
+    new Function(
+      'module',
+      'exports',
+      'require',
+      `${selectedPackage.browserBundleCode}\n//# sourceURL=${selectedPackage.packageName}.bundle.js`
+    )(module, exports, createVisualizerExternalRequire(loadPackage))
     moduleCache.set(selectedPackage.cacheKey, module.exports)
     return module.exports
   }
@@ -502,8 +503,10 @@ function createVisualizerExternalRequire(loadPackage: (specifier: string) => unk
   }
   const jsxRuntimeModule = {
     Fragment: React.Fragment,
-    jsx: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
-    jsxs: (type: React.ElementType, props: Record<string, unknown>, key?: string) => React.createElement(type, { ...props, key }),
+    jsx: (type: React.ElementType, props: Record<string, unknown>, key?: string) =>
+      React.createElement(type, { ...props, key }),
+    jsxs: (type: React.ElementType, props: Record<string, unknown>, key?: string) =>
+      React.createElement(type, { ...props, key }),
   }
 
   return (specifier: string) => {
@@ -785,7 +788,9 @@ function parseSetCookieForScript(value: string) {
 
   for (const attribute of segments.slice(1)) {
     const attributeSeparatorIndex = attribute.indexOf('=')
-    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex)).trim().toLowerCase()
+    const attributeName = (attributeSeparatorIndex === -1 ? attribute : attribute.slice(0, attributeSeparatorIndex))
+      .trim()
+      .toLowerCase()
     const attributeValue = attributeSeparatorIndex === -1 ? '' : attribute.slice(attributeSeparatorIndex + 1).trim()
 
     if (attributeName === 'domain') {
@@ -1160,7 +1165,18 @@ function createTableComponent() {
 
 function createVisualizerCodeEditor(): VisualizerCodeEditorComponent {
   return function VisualizerCodeEditor({ onChange, ...props }: React.ComponentProps<typeof CodeEditor>) {
-    return <CodeEditor {...props} onChange={onChange ?? noopCodeEditorOnChange} />
+    return (
+      <CodeEditor
+        showFoldGutter
+        vimMode
+        size="small"
+        compact
+        hideFocusOutline
+        readOnly
+        {...props}
+        onChange={onChange ?? noopCodeEditorOnChange}
+      />
+    )
   }
 }
 

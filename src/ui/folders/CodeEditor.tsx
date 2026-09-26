@@ -148,7 +148,10 @@ const syntaxColors: Record<string, string> = {
 }
 const adaptiveSyntaxTheme = tokyoNightInit({
   settings: tokyoNightColors,
-  styles: tokyoNightStyle.map(style => ({ ...style, color: style.color ? syntaxColors[style.color] ?? style.color : undefined })),
+  styles: tokyoNightStyle.map(style => ({
+    ...style,
+    color: style.color ? (syntaxColors[style.color] ?? style.color) : undefined,
+  })),
 })
 const jsxHighlightExtension = syntaxHighlighting(
   HighlightStyle.define([
@@ -1126,7 +1129,13 @@ export const CodeEditor = memo(function CodeEditor({
       nextExtensions.push(foldGutterExtension)
     }
 
-    if (language === 'javascript' || language === 'jsx' || language === 'json' || language === 'json5' || language === 'graphql') {
+    if (
+      language === 'javascript' ||
+      language === 'jsx' ||
+      language === 'json' ||
+      language === 'json5' ||
+      language === 'graphql'
+    ) {
       nextExtensions.push(lintGutterExtension)
     }
 
@@ -1168,7 +1177,7 @@ export const CodeEditor = memo(function CodeEditor({
     <div
       data-testid={testId}
       className={twMerge(
-        'flex w-full min-h-0 flex-1 overflow-visible rounded-none border border-base-content/10 bg-base-100/70 text-base-content',
+        'flex w-full min-h-0 flex-1 overflow-visible rounded-none bg-base-100/70 text-base-content',
         readOnly ? 'overflow-auto' : '',
         minHeightClassName,
         className

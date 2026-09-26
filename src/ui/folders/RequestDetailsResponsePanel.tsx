@@ -104,7 +104,9 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
   const liveSelectedRequestId = useSelector(folderExplorerEditorStore, state =>
     state.context.selected?.itemType === 'request' ? state.context.selected.id : null
   )
-  const responsePaneHeight = useSelector(folderExplorerEditorStore, state => embedded ? 384 : state.context.responsePaneHeight)
+  const responsePaneHeight = useSelector(folderExplorerEditorStore, state =>
+    embedded ? 384 : state.context.responsePaneHeight
+  )
   const responseBodyDisplayMode = useSelector(
     appSettingsStore,
     state => state.context.settings?.responseBodyDisplayMode ?? 'raw'
@@ -379,15 +381,17 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
 
   return (
     <section className="relative shrink-0 overflow-hidden bg-base-100/95" style={{ height: `${responsePaneHeight}px` }}>
-      {!embedded ? <button
-        type="button"
-        className={`block h-[3px] w-full cursor-ns-resize border-0 transition-colors ${
-          isResizingResponsePane ? 'bg-base-content/35' : 'bg-base-content/10 hover:bg-base-content/25'
-        } `}
-        onPointerDown={startResize}
-        aria-label="Resize response panel"
-        title="Resize response panel"
-      /> : null}
+      {!embedded ? (
+        <button
+          type="button"
+          className={`block h-[3px] w-full cursor-ns-resize border-0 transition-colors ${
+            isResizingResponsePane ? 'bg-base-content/35' : 'bg-base-content/10 hover:bg-base-content/25'
+          } `}
+          onPointerDown={startResize}
+          aria-label="Resize response panel"
+          title="Resize response panel"
+        />
+      ) : null}
 
       <div className={`relative flex min-h-0 flex-col overflow-hidden ${embedded ? 'h-full' : 'h-[calc(100%-3px)]'}`}>
         {sending ? (
@@ -414,7 +418,9 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
               onSaveAsExample={
                 response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseAsExample() : undefined
               }
-              onSaveToFile={response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseToFile() : undefined}
+              onSaveToFile={
+                response || (sseStream && sseStream.body.trim()) ? () => void saveCurrentResponseToFile() : undefined
+              }
             />
           ) : (
             <>
@@ -425,7 +431,11 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
                 requestId={selectedRequestId}
                 requestName={displayedRequestName}
                 requestHistoryCount={requestHistoryCount}
-                description={execution?.response?.bodyOmitted ? 'Body omitted from history (over 500 KB).' : 'Response body will appear here.'}
+                description={
+                  execution?.response?.bodyOmitted
+                    ? 'Body omitted from history (over 500 KB).'
+                    : 'Response body will appear here.'
+                }
                 headersDescription="Response headers will appear here."
                 contentType={responseContentType}
                 responseVisualizer={responseVisualizer}
@@ -1028,7 +1038,7 @@ function renderResponseBodyContent(
 
   if (state.kind === 'pdf') {
     return (
-      <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
+      <div className="h-full min-h-0 flex-1 overflow-hidden">
         <iframe
           src={state.source}
           title={state.title}
@@ -1040,7 +1050,7 @@ function renderResponseBodyContent(
 
   if (state.kind === 'html') {
     return (
-      <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
+      <div className="h-full min-h-0 flex-1 overflow-hidden">
         <iframe
           srcDoc={state.source}
           title={state.title}
@@ -1053,7 +1063,7 @@ function renderResponseBodyContent(
 
   if (state.kind === 'visualizer') {
     return (
-      <div className="h-full min-h-0 flex-1 overflow-hidden pt-3">
+      <div className="h-full min-h-0 flex-1 overflow-hidden">
         <ResponseVisualizerPreview
           source={state.source}
           response={state.response}
@@ -1069,7 +1079,7 @@ function renderResponseBodyContent(
 
   if (state.kind === 'table') {
     return (
-      <div className="min-h-0 flex-1 overflow-hidden pt-3">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full min-h-0 flex-col gap-3">
           <label className="flex shrink-0 flex-col gap-1.5">
             <div className="flex items-center justify-between gap-3">

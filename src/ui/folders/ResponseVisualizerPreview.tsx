@@ -73,7 +73,10 @@ export function ResponseVisualizerPreview({
   source: string
   response: SendRequestResponse | null
   contentType: string | null
-  requestDraft: Pick<RequestDetailsDraft, 'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'>
+  requestDraft: Pick<
+    RequestDetailsDraft,
+    'method' | 'url' | 'pathParams' | 'searchParams' | 'auth' | 'headers' | 'body' | 'bodyType' | 'rawType'
+  >
   environments: VisualizerEnvironmentSnapshot[]
   sharedScripts: SharedScriptRecord[]
   scriptPackages: ScriptPackageArtifact[]
@@ -84,15 +87,15 @@ export function ResponseVisualizerPreview({
   const payload = useMemo<VisualizerPayload>(() => {
     const activeEnvironments = environments
       .filter(environment => environment.isActive)
-        .map(environment => ({
-          id: environment.id,
-          name: environment.name,
-          folderId: null,
-          color: null,
-          warnOnRequest: false,
-          position: 0,
-          priority: environment.priority,
-          createdAt: environment.createdAt,
+      .map(environment => ({
+        id: environment.id,
+        name: environment.name,
+        folderId: null,
+        color: null,
+        warnOnRequest: false,
+        position: 0,
+        priority: environment.priority,
+        createdAt: environment.createdAt,
         deletedAt: null,
         variables: serializeEnvironmentValues(environment.values),
       }))
@@ -172,7 +175,7 @@ export function ResponseVisualizerPreview({
       title="Response visualizer preview"
       sandbox="allow-scripts"
       src="./generated/response-visualizer/response-visualizer.html"
-      className="h-full w-full rounded-xl border border-base-content/10 bg-base-100"
+      className="h-full w-full bg-base-100"
     />
   )
 }
