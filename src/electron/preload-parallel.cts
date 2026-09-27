@@ -54,6 +54,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   deleteRequestExample: input => ipcInvoke('deleteRequestExample', input),
   moveRequestExample: input => ipcInvoke('moveRequestExample', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
+  resolveRequestFinalValue: input => ipcInvoke('resolveRequestFinalValue', input),
   pickPostmanCollectionFile: () => ipcInvoke('pickPostmanCollectionFile', undefined),
   analyzePostmanCollection: input => ipcInvoke('analyzePostmanCollection', input),
   importPostmanCollection: input => ipcInvoke('importPostmanCollection', input),

@@ -10,12 +10,13 @@ import {
 } from '../common/Auth.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { normalizeJson5ToJson } from '../common/Json5.js'
-import { parseKeyValueRows } from '../common/KeyValueRows.js'
+import { parseKeyValueRows, stringifyKeyValueRows } from '../common/KeyValueRows.js'
 import { applyPathParamsToUrl, applySearchParamsToUrl } from '../common/PathParams.js'
 import { formatRequestScriptErrorSummaries } from '../common/RequestScriptErrors.js'
 import { findMissingTemplateVariables, resolveTemplateVariables } from '../common/RequestVariables.js'
-import type { RequestMethod, RequestRawType, SendRequestInput } from '../common/Requests.js'
+import type { RequestFinalValueTarget, RequestMethod, RequestRawType, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
+import { Typescript } from '../common/Typescript.js'
 import type { ScriptToastOptions } from '../common/ScriptToast.js'
 import type { ScriptClipboardBridge } from './script-clipboard.js'
 import { getCookieHeaderForUrl } from './db/cookies.js'
@@ -124,6 +125,209 @@ export async function prepareHttpRequest(
     resolvedBody,
     requestBody: buildRuntimeRequestBody(resolvedBody),
   })
+}
+
+export async function resolveRequestFinalValue(
+  input: SendRequestInput,
+  target: RequestFinalValueTarget,
+  template: string | undefined,
+  options?: Parameters<typeof prepareHttpRequest>[1]
+): Promise<GenericResult<string>> {
+  if (template !== undefined) {
+    const templateInput = replaceRequestTargetValue(input, target, template)
+    if (!templateInput) {
+      return GenericError.Message('The selected request field no longer exists')
+    }
+
+    const preparedTemplateResult = await prepareHttpRequestBase(templateInput, options)
+    if (!preparedTemplateResult.success) {
+      return preparedTemplateResult
+    }
+
+    return getPreparedTemplateValue(preparedTemplateResult.data, templateInput, target)
+  }
+
+  const preparedResult = await prepareHttpRequest(input, options)
+  if (!preparedResult.success) {
+    return preparedResult
+  }
+
+  const prepared = preparedResult.data
+  const request = prepared.runtime.request
+
+  switch (target.field) {
+    case 'url':
+      return Result.Success(prepared.url)
+    case 'body':
+      return prepared.resolvedBody.kind === 'raw'
+        ? Result.Success(prepared.resolvedBody.value)
+        : GenericError.Message('This request body does not have a raw final value')
+    case 'graphql-query':
+      return Result.Success(resolveTemplateVariables(request.graphqlQuery ?? '', prepared.variables).trim())
+    case 'graphql-variables':
+      return Result.Success(resolveTemplateVariables(request.graphqlVariables ?? '', prepared.variables).trim())
+    case 'header': {
+      const sourceRow = parseKeyValueRows(input.headers)[target.rowIndex]
+      if (!sourceRow) {
+        return GenericError.Message('The selected request field no longer exists')
+      }
+
+      const headerName = resolveTemplateVariables(sourceRow.key, prepared.variables).trim()
+      const finalValue = prepared.headers.get(headerName)
+      return finalValue === null
+        ? GenericError.Message(`The ${headerName || 'selected'} header is not present in the final request`)
+        : Result.Success(finalValue)
+    }
+    case 'path-param':
+      return resolveKeyValueRowFinalValue(request.pathParams, target.rowIndex, prepared.variables)
+    case 'search-param':
+      return resolveKeyValueRowFinalValue(request.searchParams, target.rowIndex, prepared.variables)
+    case 'body-param':
+      return resolveKeyValueRowFinalValue(request.body, target.rowIndex, prepared.variables)
+    case 'auth-token':
+      return prepared.resolvedAuth.type === 'bearer'
+        ? Result.Success(prepared.resolvedAuth.token)
+        : GenericError.Message('Bearer authorization is no longer active')
+    case 'auth-username':
+      return prepared.resolvedAuth.type === 'basic'
+        ? Result.Success(prepared.resolvedAuth.username)
+        : GenericError.Message('Basic authorization is no longer active')
+    case 'auth-password':
+      return prepared.resolvedAuth.type === 'basic'
+        ? Result.Success(prepared.resolvedAuth.password)
+        : GenericError.Message('Basic authorization is no longer active')
+    case 'auth-key':
+      return prepared.resolvedAuth.type === 'apikey'
+        ? Result.Success(prepared.resolvedAuth.key)
+        : GenericError.Message('API key authorization is no longer active')
+    case 'auth-value':
+      return prepared.resolvedAuth.type === 'apikey'
+        ? Result.Success(prepared.resolvedAuth.value)
+        : GenericError.Message('API key authorization is no longer active')
+    default:
+      return Typescript.assertUnreachable(target)
+  }
+}
+
+function replaceRequestTargetValue(
+  input: SendRequestInput,
+  target: RequestFinalValueTarget,
+  template: string
+): SendRequestInput | null {
+  switch (target.field) {
+    case 'url':
+      return { ...input, url: template, pathParams: '', searchParams: '', auth: { type: 'noauth' } }
+    case 'body':
+      return { ...input, body: template }
+    case 'graphql-query':
+      return { ...input, graphqlQuery: template }
+    case 'graphql-variables':
+      return { ...input, graphqlVariables: template }
+    case 'header': {
+      const headers = replaceKeyValueRowValue(input.headers, target.rowIndex, template)
+      return headers === null ? null : { ...input, headers }
+    }
+    case 'path-param': {
+      const pathParams = replaceKeyValueRowValue(input.pathParams, target.rowIndex, template)
+      return pathParams === null ? null : { ...input, pathParams }
+    }
+    case 'search-param': {
+      const searchParams = replaceKeyValueRowValue(input.searchParams, target.rowIndex, template)
+      return searchParams === null ? null : { ...input, searchParams }
+    }
+    case 'body-param': {
+      const body = replaceKeyValueRowValue(input.body, target.rowIndex, template)
+      return body === null ? null : { ...input, body }
+    }
+    case 'auth-token':
+      return input.auth.type === 'bearer' ? { ...input, auth: { ...input.auth, token: template } } : null
+    case 'auth-username':
+      return input.auth.type === 'basic' ? { ...input, auth: { ...input.auth, username: template } } : null
+    case 'auth-password':
+      return input.auth.type === 'basic' ? { ...input, auth: { ...input.auth, password: template } } : null
+    case 'auth-key':
+      return input.auth.type === 'apikey' ? { ...input, auth: { ...input.auth, key: template } } : null
+    case 'auth-value':
+      return input.auth.type === 'apikey' ? { ...input, auth: { ...input.auth, value: template } } : null
+    default:
+      return Typescript.assertUnreachable(target)
+  }
+}
+
+function replaceKeyValueRowValue(value: string, rowIndex: number, template: string) {
+  const rows = parseKeyValueRows(value)
+  const row = rows[rowIndex]
+  if (!row) {
+    return null
+  }
+
+  rows[rowIndex] = { ...row, value: template }
+  return stringifyKeyValueRows(rows)
+}
+
+function getPreparedTemplateValue(
+  prepared: PreparedHttpRequestBase,
+  input: SendRequestInput,
+  target: RequestFinalValueTarget
+): GenericResult<string> {
+  const request = prepared.runtime.request
+
+  switch (target.field) {
+    case 'url':
+      return Result.Success(resolveTemplateVariables(request.url, prepared.variables))
+    case 'body':
+      return Result.Success(resolveTemplateVariables(request.body, prepared.variables))
+    case 'graphql-query':
+      return Result.Success(resolveTemplateVariables(request.graphqlQuery ?? '', prepared.variables))
+    case 'graphql-variables':
+      return Result.Success(resolveTemplateVariables(request.graphqlVariables ?? '', prepared.variables))
+    case 'header': {
+      const sourceRow = parseKeyValueRows(input.headers)[target.rowIndex]
+      if (!sourceRow) return GenericError.Message('The selected request field no longer exists')
+      const headerName = resolveTemplateVariables(sourceRow.key, prepared.variables).trim()
+      const finalValue = prepared.headers.get(headerName)
+      return finalValue === null
+        ? GenericError.Message(`The ${headerName || 'selected'} header is not present in the final request`)
+        : Result.Success(finalValue)
+    }
+    case 'path-param':
+      return resolveKeyValueRowFinalValue(request.pathParams, target.rowIndex, prepared.variables)
+    case 'search-param':
+      return resolveKeyValueRowFinalValue(request.searchParams, target.rowIndex, prepared.variables)
+    case 'body-param':
+      return resolveKeyValueRowFinalValue(request.body, target.rowIndex, prepared.variables)
+    case 'auth-token':
+      return prepared.resolvedAuth.type === 'bearer'
+        ? Result.Success(prepared.resolvedAuth.token)
+        : GenericError.Message('Bearer authorization is no longer active')
+    case 'auth-username':
+      return prepared.resolvedAuth.type === 'basic'
+        ? Result.Success(prepared.resolvedAuth.username)
+        : GenericError.Message('Basic authorization is no longer active')
+    case 'auth-password':
+      return prepared.resolvedAuth.type === 'basic'
+        ? Result.Success(prepared.resolvedAuth.password)
+        : GenericError.Message('Basic authorization is no longer active')
+    case 'auth-key':
+      return prepared.resolvedAuth.type === 'apikey'
+        ? Result.Success(prepared.resolvedAuth.key)
+        : GenericError.Message('API key authorization is no longer active')
+    case 'auth-value':
+      return prepared.resolvedAuth.type === 'apikey'
+        ? Result.Success(prepared.resolvedAuth.value)
+        : GenericError.Message('API key authorization is no longer active')
+    default:
+      return Typescript.assertUnreachable(target)
+  }
+}
+
+function resolveKeyValueRowFinalValue(value: string, rowIndex: number, variables: Record<string, string>) {
+  const row = parseKeyValueRows(value)[rowIndex]
+  if (!row) {
+    return GenericError.Message('The selected request field no longer exists')
+  }
+
+  return Result.Success(resolveTemplateVariables(row.value, variables))
 }
 
 export async function prepareHttpRequestBase(

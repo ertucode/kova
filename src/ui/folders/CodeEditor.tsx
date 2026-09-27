@@ -25,6 +25,8 @@ import { DEFAULT_VIM_MODE } from '@common/AppSettings'
 import { appSettingsStore } from '@/global/appSettingsStore'
 import { useCodeEditorFontSize } from '@/global/useCodeEditorFontSize'
 import type { CodeEditorZoomScope } from '@/global/codeEditorFontSize'
+import type { RequestFinalValueTarget } from '@common/Requests'
+import { findTemplateTokenAt } from '@common/RequestVariables'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml' | 'graphql'
 
@@ -794,6 +796,7 @@ export const CodeEditor = memo(function CodeEditor({
   vimMode,
   refreshKey,
   zoomScope = 'general',
+  requestFinalValueField,
 }: {
   ref?: Ref<CodeEditorHandle>
   testId?: string
@@ -821,6 +824,7 @@ export const CodeEditor = memo(function CodeEditor({
   vimMode?: boolean
   refreshKey?: string
   zoomScope?: CodeEditorZoomScope
+  requestFinalValueField?: RequestFinalValueTarget['field']
 }) {
   const initialValueRef = useRef(value)
   const editorViewRef = useRef<EditorView | null>(null)
@@ -1244,6 +1248,17 @@ export const CodeEditor = memo(function CodeEditor({
   return (
     <div
       data-testid={testId}
+      data-request-final-value-field={requestFinalValueField}
+      onContextMenu={event => {
+        if (!requestFinalValueField) return
+        const position = editorViewRef.current?.posAtCoords({ x: event.clientX, y: event.clientY })
+        const template = position === null || position === undefined ? null : findTemplateTokenAt(value, position)
+        if (template) {
+          event.currentTarget.dataset.requestFinalValueTemplate = template
+        } else {
+          delete event.currentTarget.dataset.requestFinalValueTemplate
+        }
+      }}
       className={twMerge(
         'relative flex w-full min-h-0 flex-1 overflow-visible rounded-none bg-base-100/70 text-base-content',
         readOnly ? 'overflow-auto' : '',

@@ -18,6 +18,7 @@ export function AuthorizationEditor({
   valueEditorRefreshKey,
   explorerItems,
   showTokenRefreshRequestSelector = false,
+  enableCopyFinalValue = false,
 }: {
   value: HttpAuth
   onChange: (value: HttpAuth) => void
@@ -27,6 +28,7 @@ export function AuthorizationEditor({
   valueEditorRefreshKey?: string
   explorerItems?: ExplorerItem[]
   showTokenRefreshRequestSelector?: boolean
+  enableCopyFinalValue?: boolean
 }) {
   const typeOptions = (allowInherit ? AUTH_TYPES : AUTH_TYPES_WITHOUT_INHERIT).map(type => ({
     value: type,
@@ -64,6 +66,7 @@ export function AuthorizationEditor({
                 placeholder="{{IdToken}}"
                 extensions={valueEditorExtensions}
                 refreshKey={valueEditorRefreshKey}
+                requestFinalValueField={enableCopyFinalValue ? 'auth-token' : undefined}
                 onChange={nextValue => onChange({ ...value, token: nextValue })}
               />
             </Field>
@@ -83,6 +86,7 @@ export function AuthorizationEditor({
                    placeholder="username"
                    extensions={valueEditorExtensions}
                    refreshKey={valueEditorRefreshKey}
+                   requestFinalValueField={enableCopyFinalValue ? 'auth-username' : undefined}
                    onChange={nextValue => onChange({ ...value, username: nextValue })}
                  />
               </Field>
@@ -99,6 +103,7 @@ export function AuthorizationEditor({
                    placeholder="password"
                    extensions={valueEditorExtensions}
                    refreshKey={valueEditorRefreshKey}
+                   requestFinalValueField={enableCopyFinalValue ? 'auth-password' : undefined}
                    onChange={nextValue => onChange({ ...value, password: nextValue })}
                  />
               </Field>
@@ -119,6 +124,7 @@ export function AuthorizationEditor({
                    placeholder="Authorization"
                    extensions={valueEditorExtensions}
                    refreshKey={valueEditorRefreshKey}
+                   requestFinalValueField={enableCopyFinalValue ? 'auth-key' : undefined}
                    onChange={nextValue => onChange({ ...value, key: nextValue })}
                  />
               </Field>
@@ -135,6 +141,7 @@ export function AuthorizationEditor({
                    placeholder="{{apiKey}}"
                    extensions={valueEditorExtensions}
                    refreshKey={valueEditorRefreshKey}
+                   requestFinalValueField={enableCopyFinalValue ? 'auth-value' : undefined}
                    onChange={nextValue => onChange({ ...value, value: nextValue })}
                  />
               </Field>

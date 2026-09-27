@@ -99,6 +99,7 @@ import {
   type ListRequestHistoryResponse,
   type ListWebSocketSavedMessagesInput,
   type RequestExecutionRecord,
+  type ResolveRequestFinalValueInput,
   type SendRequestInput,
   type SendRequestResponse,
   type TrimRequestHistoryInput,
@@ -341,6 +342,7 @@ export type EventResponseMapping = {
   moveEnvironment: Promise<GenericResult<void>>
   moveExplorerItem: Promise<GenericResult<void>>
   sendRequest: Promise<GenericResult<SendRequestResponse>>
+  resolveRequestFinalValue: Promise<GenericResult<string>>
   fetchGraphqlSchema: Promise<GenericResult<FetchGraphqlSchemaResponse>>
   invokeMcpRequest: Promise<GenericResult<SendRequestResponse>>
   fetchMcpIntrospection: Promise<GenericResult<FetchMcpIntrospectionResponse>>
@@ -511,6 +513,7 @@ export type EventRequestMapping = {
   moveEnvironment: MoveEnvironmentInput
   moveExplorerItem: MoveExplorerItemInput
   sendRequest: SendRequestInput
+  resolveRequestFinalValue: ResolveRequestFinalValueInput
   fetchGraphqlSchema: FetchGraphqlSchemaInput
   invokeMcpRequest: InvokeMcpRequestInput
   fetchMcpIntrospection: FetchMcpIntrospectionInput
@@ -695,6 +698,7 @@ export type WindowElectron = {
   moveEnvironment: (input: MoveEnvironmentInput) => Promise<GenericResult<void>>
   moveExplorerItem: (input: MoveExplorerItemInput) => Promise<GenericResult<void>>
   sendRequest: (input: SendRequestInput) => Promise<GenericResult<SendRequestResponse>>
+  resolveRequestFinalValue: (input: ResolveRequestFinalValueInput) => Promise<GenericResult<string>>
   fetchGraphqlSchema: (input: FetchGraphqlSchemaInput) => Promise<GenericResult<FetchGraphqlSchemaResponse>>
   invokeMcpRequest: (input: InvokeMcpRequestInput) => Promise<GenericResult<SendRequestResponse>>
   fetchMcpIntrospection: (input: FetchMcpIntrospectionInput) => Promise<GenericResult<FetchMcpIntrospectionResponse>>

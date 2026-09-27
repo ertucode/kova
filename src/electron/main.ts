@@ -1100,6 +1100,22 @@ app.on('ready', async () => {
     })
   })
 
+  ipcHandle('resolveRequestFinalValue', async (input, event) => {
+    const [{ resolveRequestFinalValue }, { createScriptToastBridge }] = await Promise.all([
+      loadHttpRequestRuntime(),
+      loadScriptUiBridges(),
+    ])
+    const makeRequestBridge = createScriptRequestBridge(event.sender)
+    return resolveRequestFinalValue(input.request, input.target, input.template, {
+      toast: createScriptToastBridge(event.sender),
+      prompt: scriptPromptRegistry.createBridge(event.sender),
+      clipboard: {
+        writeText: value => clipboard.writeText(value),
+      },
+      makeRequest: makeRequestBridge,
+    })
+  })
+
   ipcHandle('fetchGraphqlSchema', async (input, event) => {
     const [{ fetchGraphqlSchema }, { createScriptToastBridge }] = await Promise.all([
       loadSendRequestRuntime(),
@@ -1649,7 +1665,34 @@ async function buildContextMenuTemplate(
   params: Electron.ContextMenuParams
 ): Promise<Electron.MenuItemConstructorOptions[]> {
   const template: Electron.MenuItemConstructorOptions[] = []
-  const searchParamContextTarget = params.isEditable ? await getSearchParamContextTarget(contents, params) : null
+  const [searchParamContextTarget, finalValueContextTarget] = params.isEditable
+    ? await Promise.all([getSearchParamContextTarget(contents, params), getFinalValueContextTarget(contents, params)])
+    : [null, null]
+
+  if (finalValueContextTarget) {
+    if (finalValueContextTarget.template) {
+      template.push({
+        label: 'Copy Template Final Value',
+        click: () => {
+          contents.send('generic:event', {
+            type: 'copy-request-final-value',
+            target: finalValueContextTarget.target,
+            template: finalValueContextTarget.template,
+          })
+        },
+      })
+    }
+
+    template.push({
+      label: 'Copy Whole Final Value',
+      click: () => {
+        contents.send('generic:event', {
+          type: 'copy-request-final-value',
+          target: finalValueContextTarget.target,
+        })
+      },
+    })
+  }
 
   if (searchParamContextTarget) {
     template.push({
@@ -1715,6 +1758,34 @@ async function buildContextMenuTemplate(
   }
 
   return template
+}
+
+async function getFinalValueContextTarget(contents: Electron.WebContents, params: Electron.ContextMenuParams) {
+  try {
+    return (await contents.executeJavaScript(
+      `(() => {
+        const target = document.elementFromPoint(${JSON.stringify(params.x)}, ${JSON.stringify(params.y)})
+        if (!(target instanceof HTMLElement)) return null
+
+        const fieldTarget = target.closest('[data-request-final-value-field]')
+        const field = fieldTarget?.getAttribute('data-request-final-value-field')
+        if (!field) return null
+
+        const template = fieldTarget?.getAttribute('data-request-final-value-template') || undefined
+
+        const row = target.closest('[data-key-value-row-index]')
+        if (!row) return { target: { field }, template }
+
+        const rowIndex = Number(row.getAttribute('data-key-value-row-index'))
+        return Number.isInteger(rowIndex) && rowIndex >= 0 ? { target: { field, rowIndex }, template } : null
+      })()`
+    )) as {
+      target: import('../common/Requests.js').RequestFinalValueTarget
+      template?: string
+    } | null
+  } catch {
+    return null
+  }
 }
 
 async function getSearchParamContextTarget(contents: Electron.WebContents, params: Electron.ContextMenuParams) {

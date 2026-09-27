@@ -16,6 +16,8 @@ export function subscribeToGenericEvents() {
       return
     } else if (e.type === 'fix-request-search-param-value') {
       return
+    } else if (e.type === 'copy-request-final-value') {
+      return
     } else if (e.type === 'cookies-updated') {
       void CookiesCoordinator.loadCookies()
     } else if (e.type === 'environments-updated') {

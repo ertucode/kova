@@ -84,6 +84,7 @@ import { buildEnvironmentScope, createVariableValueMap } from './environmentScop
 import { DropdownSelect } from '@/lib/components/dropdown-select'
 import { RequestBatchTab } from './RequestBatchTab'
 import { requestExecutionStore } from './requestExecutionStore'
+import { buildSendRequestInput } from './requestSendInput'
 
 export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isSending, setIsSending] = useState(false)
@@ -762,6 +763,43 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
 
   useEffect(() => {
     return getWindowElectron().onGenericEvent(event => {
+      if (event.type === 'copy-request-final-value') {
+        const requestId = selectedRequestIdRef.current
+        if (!requestId) {
+          return
+        }
+
+        void getWindowElectron()
+          .resolveRequestFinalValue({
+            request: buildSendRequestInput({
+              requestId,
+              draft: draftRef.current,
+              activeEnvironmentIds,
+              historyKeepLast,
+              requestMetadata: {
+                sourceRuntime: 'request-editor',
+                isRetry: false,
+                retryCount: 0,
+              },
+            }),
+            target: event.target,
+            template: event.template,
+          })
+          .then(async result => {
+            if (!result.success) {
+              toast.show(result)
+              return
+            }
+
+            await navigator.clipboard.writeText(result.data)
+            toast.show({ severity: 'success', message: 'Final value copied.' })
+          })
+          .catch(error => {
+            toast.show({ severity: 'error', message: error instanceof Error ? error.message : String(error) })
+          })
+        return
+      }
+
       if (event.type !== 'fix-request-search-param-value') {
         return
       }
@@ -783,7 +821,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
         )
       )
     })
-  }, [updateSearchParams])
+  }, [activeEnvironmentIds, historyKeepLast, updateSearchParams])
 
   const formatBody = async () => {
     const latestDraft = draftRef.current
@@ -1008,6 +1046,7 @@ export default function View() {
             refreshKey={variableHighlightRefreshKey}
             onPasteText={handleUrlPaste}
             onChange={updateUrl}
+            requestFinalValueField="url"
           />
 
           <button
@@ -1072,6 +1111,7 @@ export default function View() {
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
             onChange={value => updateRequestDraft({ ...draft, headers: value }, 'request-headers-tab')}
+            enableCopyFinalValue
           />
         </section>
       ) : null}
@@ -1087,6 +1127,7 @@ export default function View() {
             valueEditorRefreshKey={variableHighlightRefreshKey}
             explorerItems={explorerItems}
             showTokenRefreshRequestSelector
+            enableCopyFinalValue
           />
         </section>
       ) : null}
@@ -1105,6 +1146,7 @@ export default function View() {
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
             zoomScope="none"
+            requestFinalValueField="path-param"
           />
         </section>
       ) : null}
@@ -1729,6 +1771,7 @@ function RequestOverviewTab({
           valueEditorRefreshKey={variableHighlightRefreshKey}
           explorerItems={explorerItems}
           showTokenRefreshRequestSelector
+          enableCopyFinalValue
         />
 
         <HeadersEditor
@@ -1736,6 +1779,7 @@ function RequestOverviewTab({
           valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
           valueEditorRefreshKey={variableHighlightRefreshKey}
           onChange={value => updateRequestDraft({ ...draft, headers: value }, 'request-headers-overview')}
+          enableCopyFinalValue
         />
 
         <KeyValueEditor
@@ -1748,6 +1792,7 @@ function RequestOverviewTab({
           valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
           valueEditorRefreshKey={variableHighlightRefreshKey}
           zoomScope="none"
+          requestFinalValueField="path-param"
         />
       </div>
     </section>
@@ -1837,6 +1882,7 @@ function RequestBodyTab({
             extensions={jsonBodyExtensions}
             refreshKey={variableHighlightRefreshKey}
             onChange={value => updateRequestDraft({ ...draft, body: value }, 'request-body-raw')}
+            requestFinalValueField="body"
           />
         ) : null}
 
@@ -1857,6 +1903,7 @@ function RequestBodyTab({
                 extensions={graphqlQueryExtensions}
                 refreshKey={variableHighlightRefreshKey}
                 onChange={value => updateRequestDraft({ ...draft, graphqlQuery: value }, 'request-body-graphql-query')}
+                requestFinalValueField="graphql-query"
               />
             </div>
             <div className="min-h-[180px] flex-1">
@@ -1876,6 +1923,7 @@ function RequestBodyTab({
                 onChange={value =>
                   updateRequestDraft({ ...draft, graphqlVariables: value }, 'request-body-graphql-variables')
                 }
+                requestFinalValueField="graphql-variables"
               />
             </div>
           </div>
@@ -1899,6 +1947,7 @@ function RequestBodyTab({
               valuePlaceholder={draft.bodyType === 'form-data' ? 'value or local file path' : 'value'}
               rowTypes={draft.bodyType === 'form-data' ? FORM_DATA_ROW_TYPES : undefined}
               onPickRowValue={draft.bodyType === 'form-data' ? pickFormDataFilePath : undefined}
+              requestFinalValueField="body-param"
             />
           </div>
         ) : null}
@@ -2187,6 +2236,7 @@ const SearchParamsTab = memo(function SearchParamsTab({
         valueEditorExtensions={valueEditorExtensions}
         valueEditorRefreshKey={valueEditorRefreshKey}
         zoomScope="none"
+        requestFinalValueField="search-param"
       />
     </div>
   )

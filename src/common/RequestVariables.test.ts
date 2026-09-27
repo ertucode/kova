@@ -1,5 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveTemplateExpressions } from './RequestVariables.js'
+import { findTemplateTokenAt, resolveTemplateExpressions } from './RequestVariables.js'
+
+describe('findTemplateTokenAt', () => {
+  it('finds variable and script tokens at the pointer position', () => {
+    const value = 'prefix {{baseUrl}}/{{$crypto.randomUUID()}} suffix'
+
+    expect(findTemplateTokenAt(value, value.indexOf('baseUrl'))).toBe('{{baseUrl}}')
+    expect(findTemplateTokenAt(value, value.indexOf('crypto'))).toBe('{{$crypto.randomUUID()}}')
+    expect(findTemplateTokenAt(value, 0)).toBeNull()
+  })
+
+  it('ignores escaped template tokens', () => {
+    expect(findTemplateTokenAt(String.raw`\{{baseUrl}}`, 4)).toBeNull()
+  })
+})
 
 describe('resolveTemplateExpressions', () => {
   it('keeps supported dollar-prefixed dynamic variable names intact', async () => {

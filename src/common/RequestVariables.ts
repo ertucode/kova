@@ -21,6 +21,22 @@ export function extractTemplateVariables(value: string) {
   return Array.from(variableNames)
 }
 
+export function findTemplateTokenAt(value: string, position: number) {
+  for (const match of value.matchAll(EXPRESSION_TOKEN_REGEX)) {
+    const start = match.index
+    if (start === undefined || match[0].startsWith('\\')) {
+      continue
+    }
+
+    const end = start + match[0].length
+    if (position >= start && position <= end) {
+      return match[0]
+    }
+  }
+
+  return null
+}
+
 export function resolveTemplateVariables(value: string, variables: Record<string, string>) {
   return value.replace(VARIABLE_TOKEN_REGEX, (match, variableName: string) => {
     if (match.startsWith('\\')) {

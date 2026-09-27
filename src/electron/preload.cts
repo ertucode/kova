@@ -133,6 +133,7 @@ electron.contextBridge.exposeInMainWorld('electron', {
   getScriptPackageArtifacts: () => ipcInvoke('getScriptPackageArtifacts', undefined),
   moveExplorerItem: input => ipcInvoke('moveExplorerItem', input),
   sendRequest: input => ipcInvoke('sendRequest', input),
+  resolveRequestFinalValue: input => ipcInvoke('resolveRequestFinalValue', input),
   fetchGraphqlSchema: input => ipcInvoke('fetchGraphqlSchema', input),
   invokeMcpRequest: input => ipcInvoke('invokeMcpRequest', input),
   fetchMcpIntrospection: input => ipcInvoke('fetchMcpIntrospection', input),

@@ -7,6 +7,7 @@ import type { ScriptPromptRequest } from './ScriptPrompt.js'
 import type { ScriptToastOptions } from './ScriptToast.js'
 import type { SendRequestMetadata } from './Requests.js'
 import type { RequestBatchRowStatus, RequestBatchStatus, RequestBatchSummary } from './RequestBatches.js'
+import type { RequestFinalValueTarget } from './Requests.js'
 
 export type GenericEvent =
   | {
@@ -17,6 +18,11 @@ export type GenericEvent =
   | {
       type: 'fix-request-search-param-value'
       rowId: string
+    }
+  | {
+      type: 'copy-request-final-value'
+      target: RequestFinalValueTarget
+      template?: string
     }
   | {
       type: 'cookies-updated'

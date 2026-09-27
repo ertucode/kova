@@ -197,6 +197,17 @@ export type SendRequestInput = {
   suppressSseEvents?: boolean
 }
 
+export type RequestFinalValueTarget =
+  | { field: 'url' | 'body' | 'graphql-query' | 'graphql-variables' }
+  | { field: 'header' | 'path-param' | 'search-param' | 'body-param'; rowIndex: number }
+  | { field: 'auth-token' | 'auth-username' | 'auth-password' | 'auth-key' | 'auth-value' }
+
+export type ResolveRequestFinalValueInput = {
+  request: SendRequestInput
+  target: RequestFinalValueTarget
+  template?: string
+}
+
 export type FetchGraphqlSchemaInput = {
   requestId: string
   method: RequestMethod

@@ -18,6 +18,8 @@ import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from
 import { CodeEditor } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
 import type { CodeEditorZoomScope } from '@/global/codeEditorFontSize'
+import type { RequestFinalValueTarget } from '@common/Requests'
+import { findTemplateTokenAt } from '@common/RequestVariables'
 
 type KeyValueEditorProps = {
   label: string | null
@@ -34,6 +36,7 @@ type KeyValueEditorProps = {
   rowTypes?: Array<{ value: KeyValueRowType; label: string }>
   onPickRowValue?: (row: KeyValueRow) => Promise<string | null>
   zoomScope?: CodeEditorZoomScope
+  requestFinalValueField?: Extract<RequestFinalValueTarget, { rowIndex: number }>['field']
 }
 
 type KeyValueField = 'enabled' | 'key' | 'value' | 'description'
@@ -58,6 +61,7 @@ export function KeyValueEditor({
   rowTypes,
   onPickRowValue,
   zoomScope = 'general',
+  requestFinalValueField,
 }: KeyValueEditorProps) {
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
   const [isBulkEditMode, setIsBulkEditMode] = useState(false)
@@ -573,6 +577,7 @@ export function KeyValueEditor({
                       setDraggedRowId={setDraggedRowId}
                       setDropInsertIndex={setDropInsertIndex}
                       removeRow={removeRow}
+                      requestFinalValueField={requestFinalValueField}
                     />
                   </Fragment>
                 )
@@ -608,6 +613,7 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
   setDraggedRowId,
   setDropInsertIndex,
   removeRow,
+  requestFinalValueField,
 }: {
   row: KeyValueRow
   index: number
@@ -631,6 +637,7 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
   setDraggedRowId: (rowId: string | null) => void
   setDropInsertIndex: (index: number | null) => void
   removeRow: (id: string, focusField?: KeyValueField) => void
+  requestFinalValueField?: Extract<RequestFinalValueTarget, { rowIndex: number }>['field']
 }) {
   const showFilePicker = Boolean(rowTypes) && row.type === 'file' && Boolean(onPickRowValue)
 
@@ -638,6 +645,7 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
     <tr
       className={['border-b border-base-content/10 last:border-b-0', isDragged ? 'opacity-45' : ''].join(' ')}
       data-key-value-row-id={row.id}
+      data-key-value-row-index={index}
       onDragOver={event => {
         if (isCreateRow) {
           return
@@ -757,6 +765,7 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
             {valueEditorAsCode ? (
               <div
                 data-key-value-field="value"
+                data-request-final-value-field={requestFinalValueField}
                 data-key-value-row-id={row.id}
                 data-key-value-current-value={row.value}
                 onFocusCapture={() => setFocusedRowId(row.id)}
@@ -779,6 +788,15 @@ const KeyValueEditorRow = memo(function KeyValueEditorRow({
               <input
                 className="input h-9 w-full rounded-none border-base-content/10 bg-base-100/70 px-0 text-[0.78rem] border-none outline-none"
                 data-key-value-field="value"
+                data-request-final-value-field={requestFinalValueField}
+                onContextMenu={event => {
+                  const template = findTemplateTokenAt(row.value, event.currentTarget.selectionStart ?? 0)
+                  if (template) {
+                    event.currentTarget.dataset.requestFinalValueTemplate = template
+                  } else {
+                    delete event.currentTarget.dataset.requestFinalValueTemplate
+                  }
+                }}
                 data-key-value-focus-target="true"
                 value={row.value}
                 placeholder={valuePlaceholder}

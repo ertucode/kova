@@ -7,12 +7,14 @@ export function HeadersEditor({
   showHeader = true,
   valueEditorExtensions,
   valueEditorRefreshKey,
+  enableCopyFinalValue = false,
 }: {
   value: string
   onChange: (value: string) => void
   showHeader?: boolean
   valueEditorExtensions?: Extension[]
   valueEditorRefreshKey?: string
+  enableCopyFinalValue?: boolean
 }) {
   return (
     <KeyValueEditor
@@ -25,6 +27,7 @@ export function HeadersEditor({
       valueEditorExtensions={valueEditorExtensions}
       valueEditorRefreshKey={valueEditorRefreshKey}
       zoomScope="none"
+      requestFinalValueField={enableCopyFinalValue ? 'header' : undefined}
     />
   )
 }
