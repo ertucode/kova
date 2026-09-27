@@ -3,6 +3,7 @@ import { GlobalShortcuts } from './lib/hooks/globalShortcuts'
 import { dialogActions } from './global/dialogStore'
 import { CommandPalette } from './components/CommandPalette'
 import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog'
+import { folderExplorerEditorStore } from './folders/folderExplorerEditorStore'
 
 const SHORTCUTS_KEY = 'appShortcuts'
 
@@ -16,7 +17,12 @@ export const AppShortcuts = {
           code: { code: 'KeyP', ctrlKey: true },
           handler: e => {
             e?.preventDefault()
-            document.getElementById('folder-explorer-search-input')?.focus()
+            const { autoHideFolderExplorer } = folderExplorerEditorStore.getSnapshot().context
+            if (autoHideFolderExplorer) {
+              folderExplorerEditorStore.trigger.sidebarTabChanged({ sidebarTab: 'requests' })
+              folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: true })
+            }
+            window.requestAnimationFrame(() => document.getElementById('folder-explorer-search-input')?.focus())
           },
           label: 'Focus search',
         },

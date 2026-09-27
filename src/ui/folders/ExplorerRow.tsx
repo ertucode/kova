@@ -165,6 +165,7 @@ export function ExplorerRow({
           draggable={false}
           className="flex size-7 shrink-0 items-center justify-center text-base-content/45 transition hover:bg-base-200/80 hover:text-base-content disabled:cursor-default disabled:hover:bg-transparent"
           onPointerDown={event => {
+            event.preventDefault()
             event.stopPropagation()
             if ((node.itemType === 'folder' || node.itemType === 'request') && hasChildren) {
               onToggleExpanded(node.id)

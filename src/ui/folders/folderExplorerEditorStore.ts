@@ -47,6 +47,7 @@ const persistedUiStateSchema = z.object({
     z.literal('console'),
   ]),
   sidebarWidth: z.number().default(DEFAULT_SIDEBAR_WIDTH),
+  autoHideFolderExplorer: z.boolean().default(false),
   responsePaneHeight: z.number(),
 })
 
@@ -181,6 +182,8 @@ type FolderExplorerEditorContext = {
   inactiveFolderEnvironmentIds: string[]
   sidebarTab: SidebarTab
   sidebarWidth: number
+  autoHideFolderExplorer: boolean
+  folderExplorerOverlayOpen: boolean
   responsePaneHeight: number
   entries: Record<string, EditorEntry>
 }
@@ -218,6 +221,8 @@ export const folderExplorerEditorStore = createStore({
     inactiveFolderEnvironmentIds: persistedUiState.inactiveFolderEnvironmentIds,
     sidebarTab: persistedUiState.sidebarTab,
     sidebarWidth: persistedUiState.sidebarWidth,
+    autoHideFolderExplorer: persistedUiState.autoHideFolderExplorer,
+    folderExplorerOverlayOpen: false,
     responsePaneHeight: persistedUiState.responsePaneHeight,
     entries: initialEntries,
   } as FolderExplorerEditorContext,
@@ -262,6 +267,15 @@ export const folderExplorerEditorStore = createStore({
     sidebarWidthChanged: (context, event: { width: number }) => ({
       ...context,
       sidebarWidth: event.width,
+    }),
+    autoHideFolderExplorerChanged: (context, event: { enabled: boolean }) => ({
+      ...context,
+      autoHideFolderExplorer: event.enabled,
+      folderExplorerOverlayOpen: false,
+    }),
+    folderExplorerOverlayVisibilityChanged: (context, event: { open: boolean }) => ({
+      ...context,
+      folderExplorerOverlayOpen: event.open,
     }),
     responsePaneHeightChanged: (context, event: { height: number }) => ({
       ...context,
@@ -502,8 +516,14 @@ export function getSelectionFromTabs(tabs: FolderExplorerTabRecord[], activeTabI
 }
 
 export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {
-  const { activeEnvironmentIds, inactiveFolderEnvironmentIds, sidebarTab, sidebarWidth, responsePaneHeight } =
-    folderExplorerEditorStore.getSnapshot().context
+  const {
+    activeEnvironmentIds,
+    inactiveFolderEnvironmentIds,
+    sidebarTab,
+    sidebarWidth,
+    autoHideFolderExplorer,
+    responsePaneHeight,
+  } = folderExplorerEditorStore.getSnapshot().context
   try {
     localStorage.setItem(
       PERSISTED_UI_STATE_KEY,
@@ -514,6 +534,7 @@ export function saveFolderExplorerUiState(selection: Selection | null, expandedI
         inactiveFolderEnvironmentIds,
         sidebarTab,
         sidebarWidth,
+        autoHideFolderExplorer,
         responsePaneHeight,
       })
     )
@@ -529,6 +550,7 @@ function loadFolderExplorerUiState(): {
   inactiveFolderEnvironmentIds: string[]
   sidebarTab: SidebarTab
   sidebarWidth: number
+  autoHideFolderExplorer: boolean
   responsePaneHeight: number
 } {
   try {
@@ -541,6 +563,7 @@ function loadFolderExplorerUiState(): {
         inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
         sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+        autoHideFolderExplorer: false,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
       }
     }
@@ -553,6 +576,7 @@ function loadFolderExplorerUiState(): {
         inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
         sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+        autoHideFolderExplorer: false,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
       }
     }
@@ -569,9 +593,20 @@ function loadFolderExplorerUiState(): {
         inactiveFolderEnvironmentIds: [],
         sidebarTab: 'requests',
         sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+        autoHideFolderExplorer: false,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
     }
   }
+}
+
+export function getAutoHideFolderExplorer() {
+  return folderExplorerEditorStore.getSnapshot().context.autoHideFolderExplorer
+}
+
+export function setAutoHideFolderExplorer(enabled: boolean) {
+  folderExplorerEditorStore.trigger.autoHideFolderExplorerChanged({ enabled })
+  const { selected, expandedIds } = folderExplorerEditorStore.getSnapshot().context
+  saveFolderExplorerUiState(selected, expandedIds)
 }
 
 function getNextExpandedIds(previousExpandedIds: string[], items: ExplorerItem[]) {

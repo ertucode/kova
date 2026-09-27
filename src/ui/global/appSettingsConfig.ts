@@ -38,6 +38,7 @@ import {
   resetCodeEditorFontScale,
   type CodeEditorFontSizeScope,
 } from './codeEditorFontSize'
+import { getAutoHideFolderExplorer, setAutoHideFolderExplorer } from '@/folders/folderExplorerEditorStore'
 
 export interface CommandPaletteOption<Value extends string | boolean = string> {
   label: string
@@ -106,6 +107,17 @@ export const appearanceSetting: CommandPaletteOptionConfig<AppTheme> = {
     { label: 'Dark', value: 'dark' },
     { label: 'Light', value: 'light' },
   ],
+}
+
+export const autoHideFolderExplorerSetting: CommandPaletteBooleanConfig = {
+  type: 'boolean',
+  id: 'auto-hide-folder-explorer',
+  label: 'Auto-hide folder explorer',
+  description: 'Hide the folder explorer from the layout and show it as an overlay while it has focus after pressing Ctrl+P.',
+  getValue: getAutoHideFolderExplorer,
+  onChange: setAutoHideFolderExplorer,
+  yesLabel: 'Hide until Ctrl+P',
+  noLabel: 'Keep visible',
 }
 
 export const warnBeforeRequestSetting: CommandPaletteInputConfig = {
@@ -356,6 +368,7 @@ export const resetResponseCodeEditorFontSizeTrigger = {
 
 export const commandPaletteConfigs: readonly CommandPaletteConfig[] = [
   appearanceSetting,
+  autoHideFolderExplorerSetting,
   warnBeforeRequestSetting,
   responseBodyDisplaySetting,
   compactRequestViewSetting,

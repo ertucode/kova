@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckIcon, CogIcon, SearchIcon, SparklesIcon, XIcon } from 'lucide-react'
+import { CheckIcon, CogIcon, PanelLeftIcon, SearchIcon, SparklesIcon, XIcon } from 'lucide-react'
 import { useSelector } from '@xstate/store/react'
 import { environmentEditorStore } from '@/folders/environmentEditorStore'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
@@ -19,6 +19,11 @@ export function CustomTitleBar() {
     state => state.context.inactiveFolderEnvironmentIds
   )
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const autoHideFolderExplorer = useSelector(folderExplorerEditorStore, state => state.context.autoHideFolderExplorer)
+  const folderExplorerOverlayOpen = useSelector(
+    folderExplorerEditorStore,
+    state => state.context.folderExplorerOverlayOpen
+  )
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const [isEnvMenuOpen, setIsEnvMenuOpen] = useState(false)
   const [environmentSearchQuery, setEnvironmentSearchQuery] = useState('')
@@ -70,7 +75,37 @@ export function CustomTitleBar() {
     >
       {/* On macOS the fallback reserves traffic-light space; Windows reports a zero-width left inset. */}
       <div className="flex-shrink-0" style={{ width: 'env(titlebar-area-x, 5rem)' }} />
-      {import.meta.env.DEV && <div>DEVELOPMENT</div>}
+      {autoHideFolderExplorer ? (
+        <div
+          className="ml-2 flex items-center"
+          style={
+            {
+              WebkitAppRegion: 'no-drag',
+            } as React.CSSProperties
+          }
+        >
+          <button
+            type="button"
+            className="flex size-7 items-center justify-center rounded-lg border border-base-content/10 text-base-content/55 transition hover:border-base-content/20 hover:bg-base-200 hover:text-base-content"
+            aria-label={folderExplorerOverlayOpen ? 'Hide folder explorer' : 'Show folder explorer'}
+            aria-pressed={folderExplorerOverlayOpen}
+            title={folderExplorerOverlayOpen ? 'Hide folder explorer' : 'Show folder explorer'}
+            onClick={() => {
+              if (folderExplorerOverlayOpen) {
+                folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: false })
+                return
+              }
+
+              folderExplorerEditorStore.trigger.sidebarTabChanged({ sidebarTab: 'requests' })
+              folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: true })
+              window.requestAnimationFrame(() => document.getElementById('folder-explorer-search-input')?.focus())
+            }}
+          >
+            <PanelLeftIcon className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+      {import.meta.env.DEV && <div className="pl-2">DEVELOPMENT</div>}
 
       {/* Navigation buttons */}
       <div

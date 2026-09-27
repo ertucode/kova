@@ -74,11 +74,18 @@ export function FolderExplorer() {
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
   const selectionScrollTarget = useSelector(folderExplorerEditorStore, state => state.context.selectionScrollTarget)
   const sidebarWidth = useSelector(folderExplorerEditorStore, state => state.context.sidebarWidth)
+  const autoHideFolderExplorer = useSelector(folderExplorerEditorStore, state => state.context.autoHideFolderExplorer)
+  const folderExplorerOverlayOpen = useSelector(
+    folderExplorerEditorStore,
+    state => state.context.folderExplorerOverlayOpen
+  )
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
   const [searchCollapsedIds, setSearchCollapsedIds] = useState<string[]>([])
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const folderExplorerContainerRef = useRef<HTMLDivElement | null>(null)
+  const hasPointerEnteredFolderExplorerRef = useRef(false)
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const pendingSearchQueryRef = useRef(searchQuery)
@@ -179,6 +186,18 @@ export function FolderExplorer() {
   }, [sidebarWidth])
 
   useEffect(() => {
+    if (sidebarTab !== 'requests' && folderExplorerOverlayOpen) {
+      folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: false })
+    }
+  }, [folderExplorerOverlayOpen, sidebarTab])
+
+  useEffect(() => {
+    if (folderExplorerOverlayOpen) {
+      hasPointerEnteredFolderExplorerRef.current = false
+    }
+  }, [folderExplorerOverlayOpen])
+
+  useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
       const resizeState = resizeStateRef.current
       if (!resizeState) {
@@ -266,6 +285,9 @@ export function FolderExplorer() {
       event.preventDefault()
       if (sidebarTab !== 'requests') {
         EnvironmentCoordinator.setSidebarTab('requests')
+      }
+      if (autoHideFolderExplorer) {
+        folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: true })
       }
       FolderExplorerCoordinator.updateTreeSearchQuery('')
       window.requestAnimationFrame(() => searchInputRef.current?.focus())
@@ -485,11 +507,63 @@ export function FolderExplorer() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 bg-base-100">
+    <div className="relative flex min-h-0 flex-1 bg-base-100">
       <SidebarTabs sidebarTab={sidebarTab} />
 
-      {sidebarTab === 'requests' ? (
-        <div className="relative h-full shrink-0" style={{ width: `${sidebarWidth}px` }}>
+      {sidebarTab === 'requests' && (!autoHideFolderExplorer || folderExplorerOverlayOpen) ? (
+        <div
+          ref={folderExplorerContainerRef}
+          className={
+            autoHideFolderExplorer
+              ? 'absolute inset-y-0 left-[84px] z-30 shadow-2xl'
+              : 'relative h-full shrink-0'
+          }
+          style={{ width: `${sidebarWidth}px` }}
+          tabIndex={autoHideFolderExplorer ? -1 : undefined}
+          onKeyDown={event => {
+            if (autoHideFolderExplorer && event.key === 'Escape') {
+              event.preventDefault()
+              folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: false })
+            }
+          }}
+          onPointerEnter={() => {
+            if (autoHideFolderExplorer) {
+              hasPointerEnteredFolderExplorerRef.current = true
+            }
+          }}
+          onPointerLeave={() => {
+            if (autoHideFolderExplorer && hasPointerEnteredFolderExplorerRef.current) {
+              folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: false })
+            }
+          }}
+          onBlur={() => {
+            if (!autoHideFolderExplorer) {
+              return
+            }
+
+            window.requestAnimationFrame(() => {
+              const container = folderExplorerContainerRef.current
+              const activeElement = document.activeElement
+              const focusRemainsInside = container?.contains(activeElement) ?? false
+
+              if (focusRemainsInside) {
+                return
+              }
+
+              folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: false })
+            })
+          }}
+          onPointerDownCapture={event => {
+            if (!autoHideFolderExplorer) {
+              return
+            }
+
+            const targetIsFocusableControl = event.target instanceof HTMLElement && event.target.matches('button, input')
+            if (!targetIsFocusableControl) {
+              event.currentTarget.focus({ preventScroll: true })
+            }
+          }}
+        >
           <aside className="flex h-full min-w-0 w-full flex-col border-r border-base-content/10 bg-base-100">
             <div className="h-11 border-b border-base-content/10 px-2 py-1.5">
               <div className="flex h-full items-center gap-2">
