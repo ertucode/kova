@@ -8,7 +8,7 @@
 Windows releases use the NSIS setup executable from GitHub Releases and update automatically. Users of the previous MSI package should uninstall the MSI version before running the NSIS setup executable. Uninstalling the application does not remove Kova's user data.
 
 ![Kova example](./example.png)
-![Kova pane example](./example-pane.png)
+![Kova pane example](./example_pane.png)
 
 # Features
 
