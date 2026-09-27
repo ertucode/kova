@@ -159,10 +159,6 @@ export async function sendRequest(
       return preparedRequest
     }
 
-    if (!input.suppressSseEvents) {
-      emitGenericEvent({ type: 'http-sse-stream-cleared', requestId: input.requestId })
-    }
-
     const overrideResult = applyScriptCallRequestOverrides({
       preparedRequest: preparedRequest.data,
       overrides: input.callRequestOverrides,
@@ -313,7 +309,7 @@ export async function sendRequest(
     }
 
     if (shouldRetryRequest) {
-      emitRetryRequestEvent(input.requestId, input.requestMetadata)
+      emitRetryRequestEvent(input.requestId, input.requestMetadata, input.tabId)
     }
 
     return Result.Success({
@@ -449,7 +445,7 @@ async function consumeSseResponse(input: {
     events: [],
   }
 
-  emitHttpSseStreamUpdated(streamState, input.input.suppressSseEvents)
+  emitHttpSseStreamUpdated(streamState, input.input.tabId, input.input.suppressSseEvents)
 
   try {
     if (reader) {
@@ -468,6 +464,7 @@ async function consumeSseResponse(input: {
           streamState,
           startedAt: input.startedAt,
           suppressSseEvents: input.input.suppressSseEvents,
+          tabId: input.input.tabId,
         }))
       }
 
@@ -480,6 +477,7 @@ async function consumeSseResponse(input: {
       streamState,
       startedAt: input.startedAt,
       suppressSseEvents: input.input.suppressSseEvents,
+      tabId: input.input.tabId,
       flush: true,
     }))
 
@@ -559,7 +557,7 @@ async function consumeSseResponse(input: {
     }
 
     if (shouldRetryRequest) {
-      emitRetryRequestEvent(input.input.requestId, input.input.requestMetadata)
+      emitRetryRequestEvent(input.input.requestId, input.input.requestMetadata, input.input.tabId)
     }
 
     streamState = {
@@ -569,7 +567,7 @@ async function consumeSseResponse(input: {
       durationMs,
       state: 'completed',
     }
-    emitHttpSseStreamUpdated(streamState, input.input.suppressSseEvents)
+    emitHttpSseStreamUpdated(streamState, input.input.tabId, input.input.suppressSseEvents)
 
     return Result.Success({
       status: response.status,
@@ -594,6 +592,7 @@ async function consumeSseResponse(input: {
           state: 'cancelled',
           responseError: 'Request cancelled',
         },
+        input.input.tabId,
         input.input.suppressSseEvents
       )
       return GenericError.Message('Request cancelled')
@@ -608,6 +607,7 @@ async function consumeSseResponse(input: {
         state: 'failed',
         responseError: errorMessage,
       },
+      input.input.tabId,
       input.input.suppressSseEvents
     )
     return GenericError.Message(errorMessage)
@@ -620,6 +620,7 @@ function appendBufferedSseEvents(input: {
   streamState: HttpSseStreamState
   startedAt: number
   suppressSseEvents?: boolean
+  tabId?: string
   flush?: boolean
 }) {
   let buffer = normalizeSseText(input.buffer)
@@ -640,6 +641,7 @@ function appendBufferedSseEvents(input: {
       streamState,
       startedAt: input.startedAt,
       suppressSseEvents: input.suppressSseEvents,
+      tabId: input.tabId,
     }))
   }
 
@@ -650,6 +652,7 @@ function appendBufferedSseEvents(input: {
       streamState,
       startedAt: input.startedAt,
       suppressSseEvents: input.suppressSseEvents,
+      tabId: input.tabId,
     }))
     buffer = ''
   }
@@ -663,6 +666,7 @@ function appendSseBlock(input: {
   streamState: HttpSseStreamState
   startedAt: number
   suppressSseEvents?: boolean
+  tabId?: string
 }) {
   const parsedEvent = parseSseBlock(input.block)
   if (!parsedEvent) {
@@ -681,7 +685,7 @@ function appendSseBlock(input: {
     events: [...input.streamState.events, nextEvent],
   }
 
-  emitHttpSseStreamUpdated(nextStreamState, input.suppressSseEvents)
+  emitHttpSseStreamUpdated(nextStreamState, input.tabId, input.suppressSseEvents)
 
   return {
     bodyText: nextBodyText,
@@ -689,11 +693,11 @@ function appendSseBlock(input: {
   }
 }
 
-function emitHttpSseStreamUpdated(stream: HttpSseStreamState, suppressSseEvents = false) {
-  if (suppressSseEvents) {
+function emitHttpSseStreamUpdated(stream: HttpSseStreamState, tabId?: string, suppressSseEvents = false) {
+  if (suppressSseEvents || !tabId) {
     return
   }
-  emitGenericEvent({ type: 'http-sse-stream-updated', stream })
+  emitGenericEvent({ type: 'http-sse-stream-updated', tabId, stream })
 }
 
 function normalizeSseText(value: string) {
@@ -1023,9 +1027,14 @@ async function maybeRetryWithTokenRefresh(input: {
   return true
 }
 
-function emitRetryRequestEvent(requestId: string, requestMetadata: SendRequestInput['requestMetadata']) {
+function emitRetryRequestEvent(
+  requestId: string,
+  requestMetadata: SendRequestInput['requestMetadata'],
+  tabId?: string
+) {
   emitGenericEvent({
     type: 'retry-request',
+    tabId,
     requestId,
     requestMetadata: buildRetriedRequestMetadata(requestMetadata),
   })

@@ -51,6 +51,7 @@ import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
+import { useFolderExplorerPaneId, useFolderExplorerPaneSelection, useFolderExplorerPaneTab } from './folderExplorerPane'
 import { RequestSendCoordinator } from './requestSendCoordinator'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES, type RequestDetailsDraft } from './folderExplorerTypes'
 import { variableAutocompleteExtension, type VariableAutocompleteItem } from './codeEditorVariableAutocomplete'
@@ -86,16 +87,21 @@ import { RequestBatchTab } from './RequestBatchTab'
 import { requestExecutionStore } from './requestExecutionStore'
 import { buildSendRequestInput } from './requestSendInput'
 
-export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
-  const [isSending, setIsSending] = useState(false)
+export function RequestDetailsFields({
+  draft,
+  forceSeparateTabs = false,
+}: {
+  draft: RequestDetailsDraft
+  forceSeparateTabs?: boolean
+}) {
   const [isFetchingGraphqlSchema, setIsFetchingGraphqlSchema] = useState(false)
-  const compactRequestView = useSelector(
+  const configuredCompactRequestView = useSelector(
     appSettingsStore,
     state => state.context.settings?.compactRequestView ?? DEFAULT_COMPACT_REQUEST_VIEW
   )
+  const compactRequestView = forceSeparateTabs ? false : configuredCompactRequestView
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const draftRef = useRef(draft)
-  const activeExecutionIdRef = useRef<string | null>(null)
   const preRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const postRequestEditorRef = useRef<CodeEditorHandle | null>(null)
   const testEditorRef = useRef<CodeEditorHandle | null>(null)
@@ -108,14 +114,16 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
   const pendingPostRequestSelectionRef = useRef<PendingScriptSelection | null>(null)
   const pendingTestSelectionRef = useRef<PendingScriptSelection | null>(null)
   const pendingResponseVisualizerSelectionRef = useRef<PendingScriptSelection | null>(null)
-  const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'request' ? state.context.selected.id : null
+  const paneId = useFolderExplorerPaneId()
+  const activePaneId = useSelector(folderExplorerEditorStore, state => state.context.activePaneId)
+  const paneSelection = useFolderExplorerPaneSelection()
+  const paneTab = useFolderExplorerPaneTab()
+  const tabExecution = useSelector(requestExecutionStore, state =>
+    paneTab ? (state.context.httpExecutionByTabId[paneTab.id] ?? null) : null
   )
-  const selectedRequestMetaTab = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'request'
-      ? (state.context.tabs.find(tab => tab.id === state.context.activeTabId)?.requestMetaTab ?? null)
-      : null
-  )
+  const isSending = tabExecution?.isSending ?? false
+  const selectedRequestId = paneSelection?.itemType === 'request' ? paneSelection.id : null
+  const selectedRequestMetaTab = paneSelection?.itemType === 'request' ? paneTab?.requestMetaTab ?? null : null
   const currentRequestSelection = selectedRequestId ? { itemType: 'request' as const, id: selectedRequestId } : null
   const selectedRequestIdRef = useRef<string | null>(selectedRequestId)
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
@@ -505,23 +513,23 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       return
     }
 
-    void FolderExplorerCoordinator.updateSelectedRequestMetaTab(metaTab)
-  }, [metaTab, selectedRequestId, selectedRequestMetaTab])
+    void FolderExplorerCoordinator.updateSelectedRequestMetaTab(metaTab, paneId)
+  }, [metaTab, paneId, selectedRequestId, selectedRequestMetaTab])
 
   const updateMetaTab = useCallback(
     (nextMetaTab: RequestMetaTab) => {
       const normalizedMetaTab = normalizeMetaTabForLayout(nextMetaTab, compactRequestView)
 
       if (selectedRequestId) {
-        void FolderExplorerCoordinator.updateSelectedRequestMetaTab(normalizedMetaTab)
+        void FolderExplorerCoordinator.updateSelectedRequestMetaTab(normalizedMetaTab, paneId)
       }
     },
-    [compactRequestView, selectedRequestId]
+    [compactRequestView, paneId, selectedRequestId]
   )
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      if (activePaneId === paneId && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         event.preventDefault()
         event.stopPropagation()
         if (!isSending) {
@@ -535,25 +543,25 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true)
     }
-  }, [isSending])
+  }, [activePaneId, isSending, paneId])
 
   useEffect(() => {
-    return FolderExplorerCoordinator.registerSelectedSaveHandler(handleSaveWithFormatting)
-  }, [handleSaveWithFormatting])
+    return FolderExplorerCoordinator.registerSelectedSaveHandler(paneId, handleSaveWithFormatting)
+  }, [handleSaveWithFormatting, paneId])
 
   const sendRequest = async () => {
+    if (!paneTab || !selectedRequestId) {
+      return
+    }
     const executionId = crypto.randomUUID()
-    activeExecutionIdRef.current = executionId
-    setIsSending(true)
     try {
-      await RequestSendCoordinator.sendSelectedRequest(undefined, executionId)
+      await RequestSendCoordinator.sendRequestForTab({
+        tabId: paneTab.id,
+        requestId: selectedRequestId,
+        executionId,
+      })
     } catch {
       return
-    } finally {
-      if (activeExecutionIdRef.current === executionId) {
-        activeExecutionIdRef.current = null
-      }
-      setIsSending(false)
     }
   }
 
@@ -581,7 +589,7 @@ export function RequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) 
       }
     }
 
-    await FolderExplorerCoordinator.saveSelectedItemDirect({ skipFormatting: true })
+    await FolderExplorerCoordinator.saveItemDirect(currentRequestSelection, { skipFormatting: true })
   }
 
   const updateUrl = useCallback(
@@ -1054,7 +1062,7 @@ export default function View() {
             className="shrink-0 border-0 border-l border-base-content/10 bg-base-200 px-4 py-2 text-sm font-medium text-base-content transition hover:bg-base-300"
             onClick={() => {
               if (isSending && selectedRequestId) {
-                const executionId = activeExecutionIdRef.current
+                const executionId = tabExecution?.activeExecutionId
                 if (executionId) {
                   void getWindowElectron().cancelHttpRequest({ executionId, requestId: selectedRequestId })
                 }
@@ -1306,6 +1314,7 @@ export default function View() {
 
       {metaTab !== 'batch' ? (
         <RequestDetailsResponsePanel
+          responseTabId={paneTab?.id ?? null}
           isSending={isSending}
           requestName={draft.name}
           requestHeaders={draft.headers}
@@ -1506,8 +1515,8 @@ function VariableUsageBanner({
   hasPostRequestScript: boolean
 }) {
   return (
-    <div className="flex min-h-10 items-center border-b border-base-content/10 text-xs text-base-content/50">
-      <div className="flex min-w-0 items-center">
+    <div className="flex min-h-10 min-w-0 items-center overflow-hidden border-b border-base-content/10 text-xs text-base-content/50">
+      <div className="flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:thin] [&>button]:shrink-0 [&>button]:whitespace-nowrap">
         <button
           type="button"
           className={[
@@ -1640,7 +1649,7 @@ function VariableUsageBanner({
         </button>
       </div>
 
-      <div className="ml-auto max-w-[60%] overflow-auto px-3 text-right whitespace-nowrap [scrollbar-width:thin]">
+      <div className="ml-auto max-w-[60%] shrink-0 overflow-auto px-3 text-right whitespace-nowrap [scrollbar-width:thin]">
         {usedVariableNames.length > 0 ? `Vars: ${usedVariableNames.join(', ')}` : 'No vars used'}
       </div>
     </div>
@@ -1975,9 +1984,8 @@ function RequestBodyTabActions({
   onFetchGraphqlSchema: () => Promise<void>
   updateRequestDraft: (nextDraft: RequestDetailsDraft, debugLabel?: string) => boolean
 }) {
-  const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'request' ? state.context.selected.id : null
-  )
+  const paneSelection = useFolderExplorerPaneSelection()
+  const selectedRequestId = paneSelection?.itemType === 'request' ? paneSelection.id : null
   const [bodyPreviewByExampleId, setBodyPreviewByExampleId] = useState<Record<string, string>>({})
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const requestBodyExamples = useMemo(

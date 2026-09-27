@@ -167,6 +167,7 @@ export type DuplicateRequestInput = {
 
 export type SendRequestInput = {
   executionId?: string
+  tabId?: string
   requestId: string
   method: RequestMethod
   url: string
@@ -262,6 +263,7 @@ export type CancelHttpRequestInput =
   | { executionId: string; requestId?: string }
 
 export type WebSocketConnectInput = {
+  tabId: string
   requestId: string
   url: string
   searchParams: string
@@ -281,12 +283,14 @@ export type WebSocketConnectInput = {
 }
 
 export type WebSocketSendMessageInput = {
+  tabId: string
   requestId: string
   body: string
   activeEnvironmentIds: string[]
 }
 
 export type WebSocketDisconnectInput = {
+  tabId: string
   requestId: string
 }
 

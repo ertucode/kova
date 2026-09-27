@@ -35,6 +35,7 @@ import { SseTranscript } from './SseTranscript'
 import { RequestHistoryDialog } from './RequestHistoryDialog'
 import { ResponseVisualizerPreview } from './ResponseVisualizerPreview'
 import { folderExplorerEditorStore, saveFolderExplorerUiState } from './folderExplorerEditorStore'
+import { useFolderExplorerPaneSelection } from './folderExplorerPane'
 import { toSelectionKey } from './folderExplorerUtils'
 import { requestExecutionStore } from './requestExecutionStore'
 import { AppSettingsCoordinator, appSettingsStore } from '@/global/appSettingsStore'
@@ -52,6 +53,7 @@ const jsonResponsePathExtension = createJsonResponsePathExtension()
 
 export type RequestDetailsResponsePanelProps = {
   embedded?: boolean
+  responseTabId?: string | null
   isSending: boolean
   execution?: RequestExecutionRecord
   requestName: string
@@ -83,6 +85,7 @@ export type RequestDetailsResponsePanelProps = {
 
 export const RequestDetailsResponsePanel = memo(function RequestDetailsResponsePanel({
   embedded = false,
+  responseTabId = null,
   isSending,
   execution,
   requestName,
@@ -101,9 +104,8 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
   sharedScripts,
   scriptPackageArtifacts,
 }: RequestDetailsResponsePanelProps) {
-  const liveSelectedRequestId = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'request' ? state.context.selected.id : null
-  )
+  const paneSelection = useFolderExplorerPaneSelection()
+  const liveSelectedRequestId = paneSelection?.itemType === 'request' ? paneSelection.id : null
   const responsePaneHeight = useSelector(folderExplorerEditorStore, state =>
     embedded ? 384 : state.context.responsePaneHeight
   )
@@ -111,20 +113,13 @@ export const RequestDetailsResponsePanel = memo(function RequestDetailsResponseP
     appSettingsStore,
     state => state.context.settings?.responseBodyDisplayMode ?? 'raw'
   )
-  const liveResponse = useSelector(requestExecutionStore, state =>
-    liveSelectedRequestId ? (state.context.responseByRequestId[liveSelectedRequestId] ?? null) : null
+  const liveExecution = useSelector(requestExecutionStore, state =>
+    responseTabId ? (state.context.httpExecutionByTabId[responseTabId] ?? null) : null
   )
-  const liveResponseError = useSelector(requestExecutionStore, state =>
-    liveSelectedRequestId ? (state.context.errorByRequestId[liveSelectedRequestId] ?? null) : null
-  )
-  const liveScriptErrors = useSelector(requestExecutionStore, state =>
-    liveSelectedRequestId
-      ? (state.context.scriptErrorsByRequestId[liveSelectedRequestId] ?? EMPTY_SCRIPT_ERRORS)
-      : EMPTY_SCRIPT_ERRORS
-  )
-  const liveSseStream = useSelector(requestExecutionStore, state =>
-    liveSelectedRequestId ? (state.context.httpSseByRequestId[liveSelectedRequestId] ?? null) : null
-  )
+  const liveResponse = liveExecution?.response ?? null
+  const liveResponseError = liveExecution?.error ?? null
+  const liveScriptErrors = liveExecution?.scriptErrors ?? EMPTY_SCRIPT_ERRORS
+  const liveSseStream = liveExecution?.sseStream ?? null
   const historicalResponse = useMemo<SendRequestResponse | null>(() => {
     if (!execution?.response) return null
     return {
@@ -846,10 +841,9 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-2">
-        <div className="flex shrink-0 items-center justify-between gap-3 pb-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="mr-1 text-sm font-medium text-base-content">Response</div>
-            <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+        <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 overflow-hidden pb-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden whitespace-nowrap [scrollbar-width:thin]">
+            <div className="inline-flex shrink-0 overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
               {[
                 { value: 'body' as const, label: 'Body' },
                 { value: 'headers' as const, label: 'Headers' },
@@ -902,6 +896,8 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
                 }}
               />
             ) : null}
+            {contentType ? <span className="shrink-0 whitespace-nowrap text-xs text-base-content/45">{contentType}</span> : null}
+            {response ? <span className="shrink-0 whitespace-nowrap text-xs text-base-content/45">{responseBodySize}</span> : null}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -971,8 +967,6 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
             >
               {historyButtonLabel}
             </button>
-            {contentType ? <span className="truncate text-xs text-base-content/45">{contentType}</span> : null}
-            {response ? <span className="shrink-0 text-xs text-base-content/45">{responseBodySize}</span> : null}
             <ResponseStatusSummary response={response} />
           </div>
         </div>
@@ -1380,8 +1374,8 @@ function LabeledSelect<TValue extends string>({
   onChange: (value: TValue) => void
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-base-content/10 bg-base-100/70 px-2.5 py-0.5">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">{label}</span>
+    <div className="flex shrink-0 items-center gap-2 rounded-lg border border-base-content/10 bg-base-100/70 px-2.5 py-0.5">
+      <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/45">{label}</span>
       <DropdownSelect
         value={value}
         className={className}
@@ -1707,7 +1701,7 @@ function ResponseStatusSummary({ response }: { response: SendRequestResponse | n
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
       <div className="text-xs text-base-content/45">{response.durationMs} ms</div>
       <div className={`text-sm font-semibold ${statusTone.className}`}>
         {response.status} {response.statusText}

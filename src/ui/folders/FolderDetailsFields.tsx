@@ -28,6 +28,7 @@ import { scriptHoverExtension } from './codeEditorScriptHover'
 import { supermavenGhostCompletionExtension } from './codeEditorSupermaven'
 import { createTemplateCompletionSource, templateScriptExtension } from './codeEditorTemplateScript'
 import { folderExplorerEditorStore } from './folderExplorerEditorStore'
+import { useFolderExplorerPaneId, useFolderExplorerPaneSelection } from './folderExplorerPane'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { environmentEditorStore } from './environmentEditorStore'
 import { EnvironmentCoordinator } from './environmentCoordinator'
@@ -65,9 +66,9 @@ type FolderRunHistoryListItem = {
 export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
-  const selectedFolderId = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'folder' ? state.context.selected.id : null
-  )
+  const paneSelection = useFolderExplorerPaneSelection()
+  const paneId = useFolderExplorerPaneId()
+  const selectedFolderId = paneSelection?.itemType === 'folder' ? paneSelection.id : null
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const inactiveFolderEnvironmentIds = useSelector(
     folderExplorerEditorStore,
@@ -252,16 +253,20 @@ export function FolderDetailsFields({ draft }: { draft: FolderDetailsDraft }) {
         pendingPostRequestSelectionRef
       )
       if (nextDraft !== draft) {
-        FolderExplorerCoordinator.updateSelectedDraft(nextDraft)
+        if (paneSelection?.itemType === 'folder') {
+          FolderExplorerCoordinator.updateSelectedDraftIfMatching(paneSelection, nextDraft, 'folder-format-save')
+        }
       }
     }
 
-    await FolderExplorerCoordinator.saveSelectedItemDirect({ skipFormatting: true })
-  }, [draft])
+    if (paneSelection?.itemType === 'folder') {
+      await FolderExplorerCoordinator.saveItemDirect(paneSelection, { skipFormatting: true })
+    }
+  }, [draft, paneSelection])
 
   useEffect(() => {
-    return FolderExplorerCoordinator.registerSelectedSaveHandler(handleSaveWithFormatting)
-  }, [handleSaveWithFormatting])
+    return FolderExplorerCoordinator.registerSelectedSaveHandler(paneId, handleSaveWithFormatting)
+  }, [handleSaveWithFormatting, paneId])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">

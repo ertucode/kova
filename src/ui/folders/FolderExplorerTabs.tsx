@@ -9,14 +9,21 @@ import {
 } from '@/lib/components/context-menu'
 import { Tooltip } from '../components/Tooltip'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
-import { folderExplorerEditorStore, isEntryDirty } from './folderExplorerEditorStore'
+import {
+  folderExplorerEditorStore,
+  getActiveTabIdForPane,
+  getFolderExplorerPaneIds,
+  isEntryDirty,
+} from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import type { ExplorerItem } from '@common/Explorer'
+import type { FolderExplorerPaneId } from '@common/FolderExplorerTabs'
 
 type FolderExplorerTabViewModel = {
   id: string
   itemType: 'folder' | 'request' | 'example'
   itemId: string
+  paneId: FolderExplorerPaneId
   position: number
   isPinned: boolean
   isActive: boolean
@@ -33,10 +40,15 @@ type FolderExplorerTabViewModel = {
   exampleType: 'http' | 'websocket' | null
 }
 
-export function FolderExplorerTabs() {
-  const tabs = useSelector(folderExplorerEditorStore, state => state.context.tabs)
-  const activeTabId = useSelector(folderExplorerEditorStore, state => state.context.activeTabId)
-  const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
+export function FolderExplorerTabs({ paneId }: { paneId: FolderExplorerPaneId }) {
+  const allTabs = useSelector(folderExplorerEditorStore, state => state.context.tabs)
+  const tabs = useMemo(() => allTabs.filter(tab => tab.paneId === paneId), [allTabs, paneId])
+  const paneIds = useMemo(() => getFolderExplorerPaneIds(allTabs), [allTabs])
+  const activeTabId = getActiveTabIdForPane(allTabs, paneId)
+  const activePaneId = useSelector(folderExplorerEditorStore, state => state.context.activePaneId)
+  const pendingSelection = useSelector(folderExplorerEditorStore, state =>
+    state.context.activePaneId === paneId ? state.context.pendingSelection : null
+  )
   const entries = useSelector(folderExplorerEditorStore, state => state.context.entries)
   const items = useSelector(folderExplorerTreeStore, state => state.context.items)
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
@@ -82,13 +94,13 @@ export function FolderExplorerTabs() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (activeTabId && event.metaKey && event.key.toLowerCase() === 'w') {
+      if (activePaneId === paneId && activeTabId && event.metaKey && event.key.toLowerCase() === 'w') {
         event.preventDefault()
         void FolderExplorerCoordinator.closeActiveTab()
         return
       }
 
-      if (event.metaKey && !event.ctrlKey && !event.altKey && /^[1-9]$/.test(event.key)) {
+      if (activePaneId === paneId && event.metaKey && !event.ctrlKey && !event.altKey && /^[1-9]$/.test(event.key)) {
         const tabIndex = Number(event.key) - 1
         const tab = tabsWithState[tabIndex]
         if (!tab) {
@@ -102,7 +114,7 @@ export function FolderExplorerTabs() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTabId, tabsWithState])
+  }, [activePaneId, activeTabId, paneId, tabsWithState])
 
   useEffect(() => {
     if (!activeTabId) {
@@ -118,26 +130,23 @@ export function FolderExplorerTabs() {
     setDropIndex(null)
   }
 
-  const handleDrop = async (targetIndex: number) => {
-    if (!draggedTabId) {
+  const handleDrop = async (tabId: string, targetIndex: number) => {
+    if (!tabId) {
       clearDragState()
       return
     }
 
-    await FolderExplorerCoordinator.moveTab(draggedTabId, targetIndex)
+    const sourcePaneId = folderExplorerEditorStore.getSnapshot().context.tabs.find(tab => tab.id === tabId)?.paneId
+    if (sourcePaneId === paneId) {
+      await FolderExplorerCoordinator.moveTab(tabId, targetIndex)
+    } else {
+      await FolderExplorerCoordinator.moveTabToPane(tabId, paneId, targetIndex)
+    }
     clearDragState()
   }
 
   const revealTabInExplorer = async (tab: FolderExplorerTabViewModel) => {
     await revealSelectionInExplorer({ itemType: tab.itemType, id: tab.itemId })
-  }
-
-  if (tabsWithState.length === 0) {
-    return (
-      <div className="flex h-11 items-center border-b border-base-content/10 px-4 text-sm text-base-content/35">
-        No open tabs
-      </div>
-    )
   }
 
   return (
@@ -162,11 +171,26 @@ export function FolderExplorerTabs() {
           event.preventDefault()
           container.scrollLeft += event.deltaY
         }}
+        onDragOver={event => {
+          event.preventDefault()
+          if (tabsWithState.length === 0) {
+            setDropIndex(0)
+          }
+          event.dataTransfer.dropEffect = 'move'
+        }}
+        onDrop={event => {
+          event.preventDefault()
+          void handleDrop(event.dataTransfer.getData('text/plain'), dropIndex ?? tabsWithState.length)
+        }}
       >
+        {tabsWithState.length === 0 ? (
+          <div className="flex min-w-full items-center px-4 text-sm text-base-content/35">Drop a tab here</div>
+        ) : null}
         {tabsWithState.map((tab, index) => {
           const isPendingSelectionActive =
             pendingSelection?.itemType === tab.itemType && pendingSelection.id === tab.itemId
           const isActive = isPendingSelectionActive || tab.id === activeTabId
+          const isActiveInFocusedPane = isActive && activePaneId === paneId
           const showDropBefore = dropIndex === index
           const showDropAfter = dropIndex === tabsWithState.length && index === tabsWithState.length - 1
 
@@ -183,8 +207,10 @@ export function FolderExplorerTabs() {
                   draggable
                   className={[
                     'group flex h-full w-[220px] shrink-0 items-center gap-2 border px-3 text-sm transition',
-                    isActive
-                      ? 'border-base-content/12 bg-base-300/80 text-base-content shadow-[0_10px_24px_rgba(0,0,0,0.10)]'
+                    isActiveInFocusedPane
+                      ? 'border-info/40 bg-info/20 text-base-content shadow-[0_10px_24px_rgba(0,0,0,0.10)]'
+                      : isActive
+                        ? 'border-base-content/12 bg-base-300/80 text-base-content shadow-[0_10px_24px_rgba(0,0,0,0.10)]'
                       : 'border-transparent bg-base-200/40 text-base-content/70 hover:border-base-content/10 hover:bg-base-200/65',
                     draggedTabId === tab.id ? 'opacity-50' : '',
                   ].join(' ')}
@@ -211,7 +237,8 @@ export function FolderExplorerTabs() {
                   }}
                   onDrop={event => {
                     event.preventDefault()
-                    void handleDrop(dropIndex ?? index)
+                    event.stopPropagation()
+                    void handleDrop(event.dataTransfer.getData('text/plain'), dropIndex ?? index)
                   }}
                 >
                   <div className="flex shrink-0 items-center justify-center text-base-content/55">
@@ -258,7 +285,7 @@ export function FolderExplorerTabs() {
 
       {menu.isOpen && menu.item ? (
         <ContextMenu menu={menu}>
-          <ContextMenuList items={getTabMenuItems(menu.item, tabsWithState, revealTabInExplorer)} />
+          <ContextMenuList items={getTabMenuItems(menu.item, tabsWithState, paneIds, revealTabInExplorer)} />
         </ContextMenu>
       ) : null}
     </>
@@ -268,12 +295,34 @@ export function FolderExplorerTabs() {
 function getTabMenuItems(
   tab: FolderExplorerTabViewModel,
   tabs: FolderExplorerTabViewModel[],
+  paneIds: FolderExplorerPaneId[],
   revealTabInExplorer: (tab: FolderExplorerTabViewModel) => Promise<void>
 ): ForgivingContextMenuItem[] {
   const hasOtherTabs = tabs.some(currentTab => currentTab.id !== tab.id)
   const hasSavedTabs = tabs.some(currentTab => !currentTab.isDirty)
 
+  const paneItems: ForgivingContextMenuItem[] = paneIds.flatMap((paneId, paneIndex) =>
+    paneId === tab.paneId
+      ? []
+      : [
+          {
+            view: `Open In Pane #${paneIndex + 1}`,
+            onClick: () => {
+              void FolderExplorerCoordinator.moveTabToPane(tab.id, paneId)
+            },
+          },
+        ]
+  )
+  paneItems.push({
+    view: 'Open In New Pane',
+    onClick: () => {
+      void FolderExplorerCoordinator.moveTabToNewPane(tab.id)
+    },
+  })
+
   const items: ForgivingContextMenuItem[] = [
+    ...paneItems,
+    { isSeparator: true },
     {
       view: 'Close Tab',
       onClick: () => {

@@ -421,6 +421,13 @@
       "when": 1789676887122,
       "tag": "0059_brief_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1790526132794,
+      "tag": "0060_acoustic_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

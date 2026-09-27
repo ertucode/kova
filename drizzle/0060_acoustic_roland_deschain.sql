@@ -1,0 +1,1 @@
+ALTER TABLE `folder_explorer_tabs` ADD `pane_id` text DEFAULT 'first' NOT NULL;

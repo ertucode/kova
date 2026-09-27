@@ -47,6 +47,7 @@ import { getScriptPackageRegistryEntry } from './script-package-registry.js'
 import { getTlsDispatcher, resolveEffectiveTlsVerificationMode } from './tls-runtime.js'
 
 type ActiveWebSocketSession = {
+  tabId: string
   socket: UndiciWebSocket
   session: WebSocketSessionRecord
   activeEnvironmentIds: string[]
@@ -57,6 +58,7 @@ type ActiveWebSocketSession = {
 }
 
 const activeSessions = new Map<string, ActiveWebSocketSession>()
+const pendingConnectionTokens = new Map<string, string>()
 
 type ScriptToastBridge = {
   show: (options: ScriptToastOptions) => void
@@ -82,14 +84,20 @@ export async function connectWebSocket(
       return GenericError.Message('Request is not a websocket request')
     }
 
-    const existingSession = activeSessions.get(input.requestId)
+    const existingSession = activeSessions.get(input.tabId)
     if (existingSession && existingSession.session.connectionState !== 'closed') {
-      return Result.Success({
-        session: existingSession.session,
-        updatedEnvironments: [],
-        consoleEntries: [],
-      })
+      if (existingSession.session.requestId === input.requestId) {
+        return Result.Success({
+          session: existingSession.session,
+          updatedEnvironments: [],
+          consoleEntries: [],
+        })
+      }
+      activeSessions.delete(input.tabId)
+      existingSession.socket.close(1000, 'Tab reused')
     }
+    const connectionToken = crypto.randomUUID()
+    pendingConnectionTokens.set(input.tabId, connectionToken)
 
     const parentFolderId = await getRequestParentFolderId(input.requestId)
     const activeEnvironments = await listVisibleEnvironments({
@@ -230,6 +238,9 @@ export async function connectWebSocket(
     applyAuthHeaders(headers, resolvedAuth)
     applyResolvedHeaders(headers, parseKeyValueRows(runtime.request.headers), variables)
     const dispatcher = await resolveRequestTlsDispatcher(url, folders, input.tlsVerificationMode)
+    if (pendingConnectionTokens.get(input.tabId) !== connectionToken) {
+      return GenericError.Message('WebSocket connection cancelled')
+    }
 
     const connectedAt = Date.now()
     const session: WebSocketSessionRecord = {
@@ -258,6 +269,7 @@ export async function connectWebSocket(
       dispatcher,
     })
     const activeSession: ActiveWebSocketSession = {
+      tabId: input.tabId,
       socket,
       session,
       activeEnvironmentIds: input.activeEnvironmentIds,
@@ -266,8 +278,9 @@ export async function connectWebSocket(
       historyId: input.saveToHistory ? session.id : null,
       autoSendIntervalId: null,
     }
-    activeSessions.set(input.requestId, activeSession)
-    emitSessionUpdated(activeSession.session)
+    activeSessions.set(input.tabId, activeSession)
+    pendingConnectionTokens.delete(input.tabId)
+    emitSessionUpdated(activeSession)
 
     if (input.saveToHistory) {
       await createWebSocketHistory({
@@ -290,11 +303,14 @@ export async function connectWebSocket(
     bindSocketEvents(activeSession)
 
     await waitForOpenOrError(socket)
+    if (activeSessions.get(input.tabId) !== activeSession || socket.readyState !== WebSocket.OPEN) {
+      return GenericError.Message('WebSocket connection cancelled')
+    }
     activeSession.session = {
       ...activeSession.session,
       connectionState: 'open',
     }
-    emitSessionUpdated(activeSession.session)
+    emitSessionUpdated(activeSession)
 
     if (resolvedWebSocketOnOpenMessage.trim()) {
       await sendResolvedWebSocketMessage(activeSession, resolvedWebSocketOnOpenMessage)
@@ -346,8 +362,12 @@ async function resolveReadyWorkspaceScriptPackages() {
 }
 
 export async function sendWebSocketMessage(input: WebSocketSendMessageInput): Promise<GenericResult<void>> {
-  const activeSession = activeSessions.get(input.requestId)
-  if (!activeSession || activeSession.session.connectionState !== 'open') {
+  const activeSession = activeSessions.get(input.tabId)
+  if (
+    !activeSession ||
+    activeSession.session.requestId !== input.requestId ||
+    activeSession.session.connectionState !== 'open'
+  ) {
     return GenericError.Message('WebSocket is not connected')
   }
 
@@ -360,8 +380,9 @@ export async function sendWebSocketMessage(input: WebSocketSendMessageInput): Pr
 }
 
 export async function disconnectWebSocket(input: WebSocketDisconnectInput): Promise<GenericResult<void>> {
-  const activeSession = activeSessions.get(input.requestId)
-  if (!activeSession) {
+  pendingConnectionTokens.delete(input.tabId)
+  const activeSession = activeSessions.get(input.tabId)
+  if (!activeSession || activeSession.session.requestId !== input.requestId) {
     return Result.Success(undefined)
   }
 
@@ -403,7 +424,7 @@ function bindSocketEvents(activeSession: ActiveWebSocketSession) {
       ...activeSession.session,
       responseError: 'WebSocket connection error',
     }
-    emitSessionUpdated(activeSession.session)
+    emitSessionUpdated(activeSession)
   })
 }
 
@@ -422,7 +443,7 @@ async function appendMessage(activeSession: ActiveWebSocketSession, message: Web
     messages: [...activeSession.session.messages, message],
   }
 
-  emitSessionUpdated(activeSession.session)
+  emitSessionUpdated(activeSession)
   if (activeSession.historyEnabled && activeSession.historyId) {
     await appendWebSocketHistoryMessage({ historyId: activeSession.historyId, message })
   }
@@ -445,7 +466,7 @@ async function finalizeSession(
     closeReason: input.closeReason,
     responseError: input.responseError,
   }
-  emitSessionUpdated(activeSession.session)
+  emitSessionUpdated(activeSession)
 
   if (activeSession.historyEnabled && activeSession.historyId) {
     await finalizeWebSocketHistory({
@@ -457,13 +478,16 @@ async function finalizeSession(
     })
   }
 
-  activeSessions.delete(activeSession.session.requestId)
+  if (activeSessions.get(activeSession.tabId) === activeSession) {
+    activeSessions.delete(activeSession.tabId)
+  }
 }
 
-function emitSessionUpdated(session: WebSocketSessionRecord) {
+function emitSessionUpdated(activeSession: ActiveWebSocketSession) {
   emitGenericEvent({
     type: 'websocket-session-updated',
-    session,
+    tabId: activeSession.tabId,
+    session: activeSession.session,
   })
 }
 
@@ -477,12 +501,18 @@ function waitForOpenOrError(socket: UndiciWebSocket) {
       cleanup()
       reject(new Error('Unable to connect to websocket server'))
     }
+    const handleClose = () => {
+      cleanup()
+      reject(new Error('WebSocket connection closed before it opened'))
+    }
     const cleanup = () => {
       socket.removeEventListener('open', handleOpen)
       socket.removeEventListener('error', handleError)
+      socket.removeEventListener('close', handleClose)
     }
     socket.addEventListener('open', handleOpen, { once: true })
     socket.addEventListener('error', handleError, { once: true })
+    socket.addEventListener('close', handleClose, { once: true })
   })
 }
 

@@ -25,6 +25,7 @@ import { useScriptPackageArtifacts } from './useScriptPackages'
 import { useVisibleSharedScripts } from './useVisibleSharedScripts'
 import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
+import { useFolderExplorerPaneId, useFolderExplorerPaneSelection, useFolderExplorerPaneTab } from './folderExplorerPane'
 
 const MCP_META_TABS = ['explore', 'invoke', 'resources', 'prompts', 'scripts', 'tests', 'raw', 'settings'] as const
 
@@ -32,11 +33,16 @@ type McpMetaTab = (typeof MCP_META_TABS)[number]
 
 export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft }) {
   const [isFetchingIntrospection, setIsFetchingIntrospection] = useState(false)
-  const [isInvoking, setIsInvoking] = useState(false)
   const { artifacts: scriptPackageArtifacts } = useScriptPackageArtifacts()
-  const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'request' ? state.context.selected.id : null
+  const paneId = useFolderExplorerPaneId()
+  const activePaneId = useSelector(folderExplorerEditorStore, state => state.context.activePaneId)
+  const paneSelection = useFolderExplorerPaneSelection()
+  const paneTab = useFolderExplorerPaneTab()
+  const tabExecution = useSelector(requestExecutionStore, state =>
+    paneTab ? (state.context.httpExecutionByTabId[paneTab.id] ?? null) : null
   )
+  const isInvoking = tabExecution?.isSending ?? false
+  const selectedRequestId = paneSelection?.itemType === 'request' ? paneSelection.id : null
   const activeEnvironmentIds = useSelector(folderExplorerEditorStore, state => state.context.activeEnvironmentIds)
   const inactiveFolderEnvironmentIds = useSelector(
     folderExplorerEditorStore,
@@ -54,11 +60,7 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
     return request?.parentFolderId ?? null
   })
   const { scripts: visibleSharedScripts } = useVisibleSharedScripts(selectedRequestFolderId)
-  const selectedRequestMetaTab = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'request'
-      ? (state.context.tabs.find(tab => tab.id === state.context.activeTabId)?.requestMetaTab ?? null)
-      : null
-  )
+  const selectedRequestMetaTab = paneSelection?.itemType === 'request' ? paneTab?.requestMetaTab ?? null : null
   const scopedEnvironments = useMemo(
     () =>
       buildEnvironmentScope({
@@ -92,8 +94,8 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
       return
     }
 
-    void FolderExplorerCoordinator.updateSelectedRequestMetaTab('explore')
-  }, [selectedRequestId, selectedRequestMetaTab])
+    void FolderExplorerCoordinator.updateSelectedRequestMetaTab('explore', paneId)
+  }, [paneId, selectedRequestId, selectedRequestMetaTab])
 
   const updateRequestDraft = useCallback(
     (nextDraft: RequestDetailsDraft, debugLabel?: string) => {
@@ -116,9 +118,9 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
         return
       }
 
-      void FolderExplorerCoordinator.updateSelectedRequestMetaTab(nextMetaTab)
+      void FolderExplorerCoordinator.updateSelectedRequestMetaTab(nextMetaTab, paneId)
     },
-    [selectedRequestId]
+    [paneId, selectedRequestId]
   )
 
   const introspectionSnapshot = useMemo(
@@ -211,15 +213,19 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
   }, [draft, selectedRequestId, updateRequestDraft])
 
   const invokeRequest = useCallback(async () => {
-    if (!selectedRequestId) {
+    if (!selectedRequestId || !paneTab) {
       return
     }
 
-    setIsInvoking(true)
+    const executionId = crypto.randomUUID()
     try {
       const sentAt = Date.now()
-      requestExecutionStore.trigger.requestStarted({ requestId: selectedRequestId, sentAt })
-      requestExecutionStore.trigger.httpSseStreamCleared({ requestId: selectedRequestId })
+      requestExecutionStore.trigger.requestStarted({
+        tabId: paneTab.id,
+        requestId: selectedRequestId,
+        executionId,
+        sentAt,
+      })
 
       const result = await getWindowElectron().invokeMcpRequest({
         requestId: selectedRequestId,
@@ -233,23 +239,33 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
 
       if (!result.success) {
         const error = errorResponseToMessage(result.error)
-        requestExecutionStore.trigger.requestFailed({ requestId: selectedRequestId, error })
+        requestExecutionStore.trigger.requestFailed({
+          tabId: paneTab.id,
+          requestId: selectedRequestId,
+          executionId,
+          error,
+        })
         toast.show(result)
         return
       }
 
       requestExecutionStore.trigger.requestSucceeded({
+        tabId: paneTab.id,
         requestId: selectedRequestId,
+        executionId,
         requestName: draft.name,
         requestDraft: draft,
         response: result.data,
       })
-    } catch {
-      return
-    } finally {
-      setIsInvoking(false)
+    } catch (error) {
+      requestExecutionStore.trigger.requestFailed({
+        tabId: paneTab.id,
+        requestId: selectedRequestId,
+        executionId,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
-  }, [draft, selectedRequestId])
+  }, [draft, paneTab, selectedRequestId])
 
   useEffect(() => {
     if (metaTab !== 'invoke') {
@@ -257,7 +273,7 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      if (activePaneId === paneId && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         event.preventDefault()
         event.stopPropagation()
         if (!isInvoking) {
@@ -271,7 +287,7 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true)
     }
-  }, [invokeRequest, isInvoking, metaTab])
+  }, [activePaneId, invokeRequest, isInvoking, metaTab, paneId])
 
   const handleJumpToScriptError = useCallback(
     (error: { phase: 'pre-request' | 'post-request' | 'test'; line?: number | null; column?: number | null }) => {
@@ -616,6 +632,7 @@ export function McpRequestDetailsFields({ draft }: { draft: RequestDetailsDraft 
       ) : null}
 
       <RequestDetailsResponsePanel
+        responseTabId={paneTab?.id ?? null}
         isSending={isInvoking}
         requestName={draft.name}
         requestHeaders={responsePanelRequestDraft.headers}

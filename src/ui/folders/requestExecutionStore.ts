@@ -41,11 +41,18 @@ type RequestExecutionContext = {
   recentHttpRequestUsageLoaded: boolean
   recentHttpRequestUsageLoading: boolean
   recentHttpRequestUsageVersion: number
-  responseByRequestId: Record<string, SendRequestResponse | null>
-  errorByRequestId: Record<string, string | null>
-  scriptErrorsByRequestId: Record<string, RequestScriptError[]>
-  httpSseByRequestId: Record<string, HttpSseStreamState | null>
-  websocketSessionByRequestId: Record<string, WebSocketSessionRecord | null>
+  httpExecutionByTabId: Record<string, HttpTabExecutionState>
+  websocketSessionByTabId: Record<string, WebSocketSessionRecord>
+}
+
+export type HttpTabExecutionState = {
+  requestId: string
+  activeExecutionId: string | null
+  isSending: boolean
+  response: SendRequestResponse | null
+  error: string | null
+  scriptErrors: RequestScriptError[]
+  sseStream: HttpSseStreamState | null
 }
 
 const initialSettings = requestHistorySettingsPersistence.load({ keepLast: MAX_HISTORY_KEEP_LAST })
@@ -65,17 +72,16 @@ export const requestExecutionStore = createStore({
     recentHttpRequestUsageLoaded: false,
     recentHttpRequestUsageLoading: false,
     recentHttpRequestUsageVersion: 0,
-    responseByRequestId: {},
-    errorByRequestId: {},
-    scriptErrorsByRequestId: {},
-    httpSseByRequestId: {},
-    websocketSessionByRequestId: {},
+    httpExecutionByTabId: {},
+    websocketSessionByTabId: {},
   } as RequestExecutionContext,
   on: {
     requestSucceeded: (
       context,
       event: {
         requestId: string
+        tabId: string
+        executionId: string
         requestName: string
         requestDraft: RequestDetailsDraft
         response: SendRequestResponse
@@ -85,61 +91,88 @@ export const requestExecutionStore = createStore({
 
       return {
         ...context,
-        responseByRequestId: {
-          ...context.responseByRequestId,
-          [event.requestId]: normalizedResponse,
+        httpExecutionByTabId:
+          context.httpExecutionByTabId[event.tabId]?.activeExecutionId !== event.executionId
+            ? context.httpExecutionByTabId
+            : {
+                ...context.httpExecutionByTabId,
+                [event.tabId]: {
+                  ...context.httpExecutionByTabId[event.tabId],
+                  activeExecutionId: null,
+                  isSending: false,
+                  response: normalizedResponse,
+                  error: null,
+                  scriptErrors: normalizedResponse.scriptErrors ?? [],
+                  sseStream: context.httpExecutionByTabId[event.tabId]?.sseStream ?? null,
+                },
+              },
+      }
+    },
+    requestStarted: (
+      context,
+      event: { tabId: string; requestId: string; executionId: string; sentAt: number }
+    ) => ({
+      ...context,
+      lastRequestSentAt: event.sentAt,
+      httpExecutionByTabId: {
+        ...context.httpExecutionByTabId,
+        [event.tabId]: {
+          requestId: event.requestId,
+          activeExecutionId: event.executionId,
+          isSending: true,
+          response: context.httpExecutionByTabId[event.tabId]?.response ?? null,
+          error: null,
+          scriptErrors: [],
+          sseStream: null,
         },
-        errorByRequestId: {
-          ...context.errorByRequestId,
-          [event.requestId]: null,
-        },
-        scriptErrorsByRequestId: {
-          ...context.scriptErrorsByRequestId,
-          [event.requestId]: normalizedResponse.scriptErrors ?? [],
+      },
+    }),
+    requestFailed: (
+      context,
+      event: { tabId: string; requestId: string; executionId: string; error: string; scriptErrors?: RequestScriptError[] }
+    ) => {
+      const current = context.httpExecutionByTabId[event.tabId]
+      if (!current || current.activeExecutionId !== event.executionId) {
+        return context
+      }
+      return {
+        ...context,
+        httpExecutionByTabId: {
+          ...context.httpExecutionByTabId,
+          [event.tabId]: {
+            ...current,
+            activeExecutionId: null,
+            isSending: false,
+            error: event.error,
+            scriptErrors: normalizeScriptErrors(event.scriptErrors ?? []),
+          },
         },
       }
     },
-    requestStarted: (context, event: { requestId: string; sentAt: number }) => ({
-      ...context,
-      lastRequestSentAt: event.sentAt,
-      errorByRequestId: {
-        ...context.errorByRequestId,
-        [event.requestId]: null,
-      },
-      scriptErrorsByRequestId: {
-        ...context.scriptErrorsByRequestId,
-        [event.requestId]: [],
-      },
-    }),
-    requestFailed: (context, event: { requestId: string; error: string; scriptErrors?: RequestScriptError[] }) => ({
-      ...context,
-      errorByRequestId: {
-        ...context.errorByRequestId,
-        [event.requestId]: event.error,
-      },
-      scriptErrorsByRequestId: {
-        ...context.scriptErrorsByRequestId,
-        [event.requestId]: normalizeScriptErrors(event.scriptErrors ?? []),
-      },
-    }),
-    httpSseStreamUpdated: (context, event: { stream: HttpSseStreamState }) => ({
-      ...context,
-      httpSseByRequestId: {
-        ...context.httpSseByRequestId,
-        [event.stream.requestId]: event.stream,
-      },
-      errorByRequestId: {
-        ...context.errorByRequestId,
-        [event.stream.requestId]: event.stream.responseError,
-      },
-    }),
-    httpSseStreamCleared: (context, event: { requestId: string }) => ({
-      ...context,
-      httpSseByRequestId: {
-        ...context.httpSseByRequestId,
-        [event.requestId]: null,
-      },
-    }),
+    httpSseStreamUpdated: (context, event: { tabId: string; stream: HttpSseStreamState }) => {
+      const current = context.httpExecutionByTabId[event.tabId]
+      if (!current || current.activeExecutionId !== event.stream.executionId) {
+        return context
+      }
+      return {
+        ...context,
+        httpExecutionByTabId: {
+          ...context.httpExecutionByTabId,
+          [event.tabId]: { ...current, sseStream: event.stream, error: event.stream.responseError },
+        },
+      }
+    },
+    httpSseStreamCleared: (context, event: { tabId: string }) => {
+      const current = context.httpExecutionByTabId[event.tabId]
+      if (!current) return context
+      return {
+        ...context,
+        httpExecutionByTabId: {
+          ...context.httpExecutionByTabId,
+          [event.tabId]: { ...current, sseStream: null },
+        },
+      }
+    },
     historyLoadingStarted: (context, event: { append: boolean }) => ({
       ...context,
       historyLoading: event.append ? context.historyLoading : true,
@@ -243,24 +276,31 @@ export const requestExecutionStore = createStore({
             : context.recentHttpRequestUsageVersion + 1,
       }
     },
-    websocketSessionUpdated: (context, event: { session: WebSocketSessionRecord }) => ({
-      ...context,
-      websocketSessionByRequestId: {
-        ...context.websocketSessionByRequestId,
-        [event.session.requestId]: event.session,
-      },
-      errorByRequestId: {
-        ...context.errorByRequestId,
-        [event.session.requestId]: event.session.responseError,
-      },
-    }),
-    websocketSessionCleared: (context, event: { requestId: string }) => ({
-      ...context,
-      websocketSessionByRequestId: {
-        ...context.websocketSessionByRequestId,
-        [event.requestId]: null,
-      },
-    }),
+    websocketSessionUpdated: (context, event: { tabId: string; session: WebSocketSessionRecord }) => {
+      const current = context.websocketSessionByTabId[event.tabId]
+      if (
+        current &&
+        current.id !== event.session.id &&
+        event.session.connectionState !== 'connecting' &&
+        current.connectedAt >= event.session.connectedAt
+      ) {
+        return context
+      }
+      return {
+        ...context,
+        websocketSessionByTabId: {
+          ...context.websocketSessionByTabId,
+          [event.tabId]: event.session,
+        },
+      }
+    },
+    tabExecutionStateCleared: (context, event: { tabId: string }) => {
+      const httpExecutionByTabId = { ...context.httpExecutionByTabId }
+      const websocketSessionByTabId = { ...context.websocketSessionByTabId }
+      delete httpExecutionByTabId[event.tabId]
+      delete websocketSessionByTabId[event.tabId]
+      return { ...context, httpExecutionByTabId, websocketSessionByTabId }
+    },
   },
 })
 

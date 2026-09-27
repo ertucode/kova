@@ -332,6 +332,7 @@ export const folderExplorerTabs = sqliteTable(
     id: text('id').primaryKey(),
     itemType: text('item_type').notNull(),
     itemId: text('item_id').notNull(),
+    paneId: text('pane_id').notNull().default('first'),
     requestMetaTab: text('request_meta_tab'),
     position: integer('position').notNull().default(0),
     isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),

@@ -33,19 +33,21 @@ export type GenericEvent =
     }
   | {
       type: 'websocket-session-updated'
+      tabId: string
       session: WebSocketSessionRecord
     }
   | {
       type: 'websocket-session-cleared'
-      requestId: string
+      tabId: string
     }
   | {
       type: 'http-sse-stream-updated'
+      tabId: string
       stream: HttpSseStreamState
     }
   | {
       type: 'http-sse-stream-cleared'
-      requestId: string
+      tabId: string
     }
   | {
       type: 'script-toast-show'
@@ -69,6 +71,7 @@ export type GenericEvent =
     }
   | {
       type: 'retry-request'
+      tabId?: string
       requestId: string
       requestMetadata: SendRequestMetadata
     }

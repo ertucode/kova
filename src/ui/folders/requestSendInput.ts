@@ -10,6 +10,7 @@ export function buildSendRequestInput({
   requestMetadata,
   callRequestOverrides,
   executionId,
+  tabId,
 }: {
   requestId: string
   draft: RequestDetailsDraft
@@ -18,9 +19,11 @@ export function buildSendRequestInput({
   requestMetadata?: SendRequestMetadata
   callRequestOverrides?: ScriptCallRequestOverrides
   executionId?: string
+  tabId?: string
 }): SendRequestInput {
   return {
     executionId,
+    tabId,
     requestId,
     method: draft.method,
     url: draft.url,

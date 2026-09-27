@@ -12,13 +12,18 @@ import { McpRequestDetailsFields } from './McpRequestDetailsFields'
 import { FolderExplorerCoordinator } from './folderExplorerCoordinator'
 import { toSelectionKey } from './folderExplorerUtils'
 import { folderExplorerEditorStore, type EditorEntry } from './folderExplorerEditorStore'
+import type { FolderExplorerPaneId } from '@common/FolderExplorerTabs'
+import { useFolderExplorerPaneSelection, useFolderExplorerPaneTab } from './folderExplorerPane'
 
-export function DetailsPanel() {
-  const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
-  const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
+export function DetailsPanel({ paneId, separateRequestTabs }: { paneId: FolderExplorerPaneId; separateRequestTabs: boolean }) {
+  const selected = useFolderExplorerPaneSelection()
+  const activeTab = useFolderExplorerPaneTab()
+  const activePaneId = useSelector(folderExplorerEditorStore, state => state.context.activePaneId)
+  const pendingSelection = useSelector(folderExplorerEditorStore, state =>
+    state.context.activePaneId === paneId ? state.context.pendingSelection : null
+  )
   const entry = useSelector(folderExplorerEditorStore, state => {
-    const currentSelected = state.context.selected
-    return currentSelected ? (state.context.entries[toSelectionKey(currentSelected)] ?? null) : null
+    return selected ? (state.context.entries[toSelectionKey(selected)] ?? null) : null
   })
 
   const selectedKey = selected ? toSelectionKey(selected) : null
@@ -46,6 +51,10 @@ export function DetailsPanel() {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (activePaneId !== paneId) {
+        return
+      }
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         void FolderExplorerCoordinator.saveSelectedItem()
@@ -60,7 +69,7 @@ export function DetailsPanel() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selected])
+  }, [activePaneId, paneId, selected])
 
   if (!selected && !displayDraft) {
     return (
@@ -81,7 +90,7 @@ export function DetailsPanel() {
   }
 
   const renderSelected = selected ?? displayDraft!
-  const renderSelectionKey = selectedKey ?? lastDraftKeyRef.current ?? 'details-panel'
+  const renderSelectionKey = activeTab?.id ?? selectedKey ?? lastDraftKeyRef.current ?? 'details-panel'
 
   const updateDisplayedDraftName = (name: string) => {
     if (!selected) {
@@ -148,7 +157,7 @@ export function DetailsPanel() {
             ) : renderDraft.requestType === 'mcp' ? (
               <McpRequestDetailsFields draft={renderDraft} />
             ) : (
-              <RequestDetailsFields draft={renderDraft} />
+               <RequestDetailsFields draft={renderDraft} forceSeparateTabs={separateRequestTabs} />
             )
           ) : renderDraft.exampleType === 'websocket' ? (
             <WebSocketExampleDetailsFields draft={renderDraft} />

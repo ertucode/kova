@@ -1,5 +1,9 @@
 import type { ExplorerItemType } from './Explorer.js'
 
+export type FolderExplorerPaneId = string
+
+export const DEFAULT_FOLDER_EXPLORER_PANE_ID: FolderExplorerPaneId = 'pane:1'
+
 export type RequestMetaTab =
   | 'overview'
   | 'body'
@@ -22,6 +26,7 @@ export type FolderExplorerTabRecord = {
   id: string
   itemType: ExplorerItemType
   itemId: string
+  paneId: FolderExplorerPaneId
   requestMetaTab: RequestMetaTab | null
   position: number
   isPinned: boolean

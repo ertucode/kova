@@ -46,6 +46,7 @@ import { formatBytes } from '@common/formatBytes'
 import { useHoldAction } from '@/lib/hooks/useHoldAction'
 import { saveWebSocketTranscriptToFile } from './saveResponseToFile'
 import { DropdownSelect } from '@/lib/components/dropdown-select'
+import { useFolderExplorerPaneSelection, useFolderExplorerPaneTab } from './folderExplorerPane'
 
 type WebSocketMetaTab = 'overview' | 'search-params' | 'settings' | 'automation'
 type MessageFilter = 'all' | 'sent' | 'received'
@@ -60,9 +61,9 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [isResizingResponsePane, setIsResizingResponsePane] = useState(false)
   const resizeStateRef = useRef<{ startY: number; startHeight: number } | null>(null)
-  const selectedRequestId = useSelector(folderExplorerEditorStore, state =>
-    state.context.selected?.itemType === 'request' ? state.context.selected.id : null
-  )
+  const paneSelection = useFolderExplorerPaneSelection()
+  const paneTab = useFolderExplorerPaneTab()
+  const selectedRequestId = paneSelection?.itemType === 'request' ? paneSelection.id : null
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const selectedRequestFolderId = useSelector(folderExplorerTreeStore, state => {
     const request = state.context.items.find(
@@ -80,7 +81,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   const environments = useSelector(environmentEditorStore, state => state.context.items)
   const environmentEntries = useSelector(environmentEditorStore, state => state.context.entries)
   const session = useSelector(requestExecutionStore, state =>
-    selectedRequestId ? (state.context.websocketSessionByRequestId[selectedRequestId] ?? null) : null
+    paneTab ? (state.context.websocketSessionByTabId[paneTab.id] ?? null) : null
   )
   const { scripts: visibleSharedScripts } = useVisibleSharedScripts(selectedRequestFolderId)
   const scopedEnvironments = useMemo(
@@ -261,7 +262,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   }, [responsePaneHeight])
 
   useEffect(() => {
-    if (!selectedRequestId) {
+    if (!selectedRequestId || !paneTab) {
       setSavedMessages([])
       setSavedMessagesLoaded(false)
       return
@@ -295,12 +296,14 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   }
 
   async function handleConnect() {
-    if (!selectedRequestId) {
+    if (!selectedRequestId || !paneTab) {
       return
     }
+    const tabId = paneTab.id
 
     setIsConnecting(true)
     const result = await getWindowElectron().connectWebSocket({
+      tabId,
       requestId: selectedRequestId,
       url: draft.url,
       searchParams: draft.searchParams,
@@ -325,27 +328,27 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
       return
     }
 
-    requestExecutionStore.trigger.websocketSessionUpdated({ session: result.data.session })
   }
 
   async function handleDisconnect() {
-    if (!selectedRequestId) {
+    if (!selectedRequestId || !paneTab) {
       return
     }
 
-    const result = await getWindowElectron().disconnectWebSocket({ requestId: selectedRequestId })
+    const result = await getWindowElectron().disconnectWebSocket({ tabId: paneTab.id, requestId: selectedRequestId })
     if (!result.success) {
       toast.show(result)
     }
   }
 
   async function handleSendMessage(body: string) {
-    if (!selectedRequestId || !body.trim()) {
+    if (!selectedRequestId || !paneTab || !body.trim()) {
       return
     }
 
     setIsSendingMessage(true)
     const result = await getWindowElectron().sendWebSocketMessage({
+      tabId: paneTab.id,
       requestId: selectedRequestId,
       body,
       activeEnvironmentIds,
@@ -356,7 +359,11 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
       return
     }
 
-    FolderExplorerCoordinator.updateSelectedDraft({ ...draft, body })
+    const selection = { itemType: 'request' as const, id: selectedRequestId }
+    const latestDraft = folderExplorerEditorStore.getSnapshot().context.entries[`request:${selectedRequestId}`]?.current
+    if (latestDraft?.itemType === 'request') {
+      FolderExplorerCoordinator.updateSelectedDraftIfMatching(selection, { ...latestDraft, body }, 'websocket-send-message')
+    }
   }
 
   async function handleSaveCurrentMessage() {
@@ -388,11 +395,12 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
   }
 
   function clearMessages() {
-    if (!session) {
+    if (!session || !paneTab) {
       return
     }
 
     requestExecutionStore.trigger.websocketSessionUpdated({
+      tabId: paneTab.id,
       session: {
         ...session,
         historySizeBytes: 0,

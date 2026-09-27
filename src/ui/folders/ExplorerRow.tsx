@@ -3,6 +3,7 @@ import { useSelector } from '@xstate/store/react'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  Columns2Icon,
   CopyIcon,
   FileCode2Icon,
   FileJsonIcon,
@@ -714,8 +715,19 @@ function ExplorerMenu({
   }
 
   const items = useMemo(() => {
+    const paneEntries: ExplorerMenuEntry[] = [
+      {
+        type: 'item',
+        icon: <Columns2Icon className="size-4" />,
+        label: 'Open In New Pane',
+        action: () => FolderExplorerCoordinator.openItemInNewPane({ itemType, id: itemId }),
+      },
+      { type: 'divider' },
+    ]
+
     if (itemType === 'folder') {
       return compactExplorerMenuEntries([
+        ...paneEntries,
         onAddFolder
           ? { type: 'item', icon: <FolderIcon className="size-4" />, label: 'Add Folder', action: onAddFolder }
           : null,
@@ -790,6 +802,7 @@ function ExplorerMenu({
     }
 
     return compactExplorerMenuEntries([
+      ...paneEntries,
       onDuplicateRequest
         ? {
             type: 'item',
@@ -906,6 +919,7 @@ function ExplorerMenu({
             event.preventDefault()
             event.stopPropagation()
           }}
+          onPointerDown={event => event.stopPropagation()}
         >
           <ExplorerMenuItems items={items} onAction={runAction} />
         </ul>

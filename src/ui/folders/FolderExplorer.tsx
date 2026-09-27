@@ -44,7 +44,12 @@ import {
   type FolderTreeSearchSnapshot,
 } from './folderExplorerSearch'
 import { buildTree, toSelectionKey } from './folderExplorerUtils'
-import { folderExplorerEditorStore, saveFolderExplorerUiState, type SidebarTab } from './folderExplorerEditorStore'
+import {
+  folderExplorerEditorStore,
+  getFolderExplorerPaneIds,
+  saveFolderExplorerUiState,
+  type SidebarTab,
+} from './folderExplorerEditorStore'
 import { folderExplorerTreeStore } from './folderExplorerTreeStore'
 import { RequestExecutionCoordinator, requestExecutionStore } from './requestExecutionStore'
 import { dialogActions } from '@/global/dialogStore'
@@ -55,6 +60,8 @@ import { PostmanImportDialog } from './PostmanImportDialog'
 import { PostmanExportDialog } from './PostmanExportDialog'
 import { tagsStore } from './tagsStore'
 import { TagShortcutGuide } from './TagShortcutGuide'
+import { DEFAULT_FOLDER_EXPLORER_PANE_ID, type FolderExplorerPaneId } from '@common/FolderExplorerTabs'
+import { FolderExplorerPaneProvider } from './folderExplorerPane'
 
 type DropPlacement = ExplorerDropTarget['placement']
 const TREE_SEARCH_DEBOUNCE_MS = 5
@@ -79,6 +86,12 @@ export function FolderExplorer() {
     folderExplorerEditorStore,
     state => state.context.folderExplorerOverlayOpen
   )
+  const openTabs = useSelector(folderExplorerEditorStore, state => state.context.tabs)
+  const paneIds = useMemo(() => {
+    const openPaneIds = getFolderExplorerPaneIds(openTabs)
+    return openPaneIds.length > 0 ? openPaneIds : [DEFAULT_FOLDER_EXPLORER_PANE_ID]
+  }, [openTabs])
+  const hasMultiplePanes = paneIds.length > 1
   const [draggedItem, setDraggedItem] = useState<Selection | null>(null)
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
@@ -667,8 +680,18 @@ export function FolderExplorer() {
       ) : null}
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-base-100">
-        {sidebarTab === 'requests' ? <FolderExplorerTabs /> : null}
-        {sidebarTab === 'requests' ? <DetailsPanel /> : null}
+        {sidebarTab === 'requests' ? (
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-x-auto">
+            {paneIds.map((paneId, paneIndex) => (
+              <EditorPane
+                key={paneId}
+                paneId={paneId}
+                hasLeftBorder={paneIndex > 0}
+                separateRequestTabs={hasMultiplePanes}
+              />
+            ))}
+          </div>
+        ) : null}
         {sidebarTab === 'views' ? <ViewsPanel /> : null}
         {sidebarTab === 'scripts' ? <SharedScriptsPanel /> : null}
         {sidebarTab === 'environments' ? <EnvironmentsPanel /> : null}
@@ -681,6 +704,35 @@ export function FolderExplorer() {
 
       <TagShortcutGuide />
     </div>
+  )
+}
+
+function EditorPane({
+  paneId,
+  hasLeftBorder,
+  separateRequestTabs,
+}: {
+  paneId: FolderExplorerPaneId
+  hasLeftBorder: boolean
+  separateRequestTabs: boolean
+}) {
+  const activePaneId = useSelector(folderExplorerEditorStore, state => state.context.activePaneId)
+
+  return (
+    <FolderExplorerPaneProvider paneId={paneId}>
+      <section
+        className={[
+          'flex min-h-0 min-w-[420px] flex-1 flex-col bg-base-100',
+          hasLeftBorder ? 'border-l border-base-content/10' : '',
+          activePaneId === paneId ? 'ring-1 ring-inset ring-primary/15' : '',
+        ].join(' ')}
+        onPointerDownCapture={() => FolderExplorerCoordinator.activatePane(paneId)}
+        onFocusCapture={() => FolderExplorerCoordinator.activatePane(paneId)}
+      >
+        <FolderExplorerTabs paneId={paneId} />
+        <DetailsPanel paneId={paneId} separateRequestTabs={separateRequestTabs} />
+      </section>
+    </FolderExplorerPaneProvider>
   )
 }
 

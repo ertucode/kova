@@ -114,6 +114,33 @@ describe('sendRequest JSON body transport', () => {
 })
 
 describe('applyScriptCallRequestOverrides', () => {
+  it('routes SSE updates to the originating tab', async () => {
+    const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
+    vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(createPreparedRequest()))
+    vi.spyOn(cookieDb, 'storeResponseCookies').mockResolvedValue(undefined)
+    mockedUndiciFetch.mockResolvedValue(
+      new UndiciResponse('data: complete\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    )
+
+    const result = await sendRequest({
+      ...createSendRequestInput(),
+      tabId: 'tab-a',
+      executionId: 'execution-a',
+    })
+
+    expect(result.success).toBe(true)
+    expect(emitGenericEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'http-sse-stream-updated',
+        tabId: 'tab-a',
+        stream: expect.objectContaining({ executionId: 'execution-a' }),
+      })
+    )
+  })
+
   it('uses preassigned execution and batch IDs without publishing SSE editor events', async () => {
     const emitGenericEventSpy = vi.spyOn(genericEvents, 'emitGenericEvent').mockImplementation(() => undefined)
     vi.spyOn(httpRequestRuntime, 'prepareHttpRequest').mockResolvedValue(Result.Success(createPreparedRequest()))

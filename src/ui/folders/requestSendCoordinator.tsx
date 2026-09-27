@@ -16,15 +16,39 @@ export namespace RequestSendCoordinator {
   export async function sendSelectedRequest(requestMetadata?: SendRequestMetadata, executionId?: string) {
     const state = folderExplorerEditorStore.getSnapshot().context
     const selected = state.selected
-    if (!selected || selected.itemType !== 'request') {
-      requestExecutionStore.trigger.requestFailed({ requestId: 'unknown', error: 'Request selection is missing' })
+    const tab = state.tabs.find(currentTab => currentTab.id === state.activeTabId)
+    if (!selected || selected.itemType !== 'request' || !tab) {
       throw new Error('Request selection is missing')
     }
 
-    const entry = state.entries[`request:${selected.id}`]
+    await sendRequestForTab({
+      tabId: tab.id,
+      requestId: selected.id,
+      executionId: executionId ?? crypto.randomUUID(),
+      requestMetadata,
+    })
+  }
+
+  export async function sendRequestForTab({
+    tabId,
+    requestId,
+    executionId,
+    requestMetadata,
+  }: {
+    tabId: string
+    requestId: string
+    executionId: string
+    requestMetadata?: SendRequestMetadata
+  }) {
+    const state = folderExplorerEditorStore.getSnapshot().context
+    const tab = state.tabs.find(currentTab => currentTab.id === tabId)
+    if (!tab || tab.itemType !== 'request' || tab.itemId !== requestId) {
+      throw new Error('Request tab is missing')
+    }
+
+    const entry = state.entries[`request:${requestId}`]
     const latestDraft = entry?.current
     if (!latestDraft || latestDraft.itemType !== 'request') {
-      requestExecutionStore.trigger.requestFailed({ requestId: selected.id, error: 'Request draft is missing' })
       throw new Error('Request draft is missing')
     }
 
@@ -44,12 +68,12 @@ export namespace RequestSendCoordinator {
     }
 
     const sentAt = Date.now()
-    requestExecutionStore.trigger.requestStarted({ requestId: selected.id, sentAt })
-    requestExecutionStore.trigger.httpSseStreamCleared({ requestId: selected.id })
+    requestExecutionStore.trigger.requestStarted({ tabId, requestId, executionId, sentAt })
 
     const result = await getWindowElectron().sendRequest(
       buildSendRequestInput({
-        requestId: selected.id,
+        requestId,
+        tabId,
         draft: latestDraft,
         activeEnvironmentIds: state.activeEnvironmentIds,
         historyKeepLast: requestExecutionStore.getSnapshot().context.historyKeepLast,
@@ -65,7 +89,9 @@ export namespace RequestSendCoordinator {
     if (!result.success) {
       const error = errorResponseToMessage(result.error)
       requestExecutionStore.trigger.requestFailed({
-        requestId: selected.id,
+        tabId,
+        requestId,
+        executionId,
         error,
         scriptErrors: result.error.type === 'message' ? result.error.scriptErrors : undefined,
       })
@@ -73,18 +99,24 @@ export namespace RequestSendCoordinator {
     }
 
     requestExecutionStore.trigger.requestSucceeded({
-      requestId: selected.id,
+      tabId,
+      requestId,
+      executionId,
       requestName: latestDraft.name,
       requestDraft: latestDraft,
       response: result.data,
     })
     if (latestDraft.saveToHistory) {
-      RequestExecutionCoordinator.recordRecentHttpRequestUsage(selected.id)
+      RequestExecutionCoordinator.recordRecentHttpRequestUsage(requestId)
     }
     void RequestExecutionCoordinator.refreshHistory()
   }
 
-  export async function sendRequestById(requestId: string, requestMetadata?: SendRequestMetadata) {
+  export async function sendRequestById(requestId: string, requestMetadata?: SendRequestMetadata, tabId?: string) {
+    if (tabId) {
+      await sendRequestForTab({ tabId, requestId, executionId: crypto.randomUUID(), requestMetadata })
+      return
+    }
     await FolderExplorerCoordinator.selectItem({ itemType: 'request', id: requestId })
     await sendSelectedRequest(requestMetadata)
   }

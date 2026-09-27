@@ -9,6 +9,7 @@ import { RequestBatchCoordinator } from '@/folders/requestBatchStore'
 import { toast } from '@/lib/components/toast'
 import { Typescript } from '@common/Typescript'
 import { dialogActions } from './dialogStore'
+import { folderExplorerEditorStore } from '@/folders/folderExplorerEditorStore'
 
 export function subscribeToGenericEvents() {
   getWindowElectron().onGenericEvent(e => {
@@ -23,13 +24,16 @@ export function subscribeToGenericEvents() {
     } else if (e.type === 'environments-updated') {
       void EnvironmentCoordinator.loadEnvironments()
     } else if (e.type === 'http-sse-stream-updated') {
-      requestExecutionStore.trigger.httpSseStreamUpdated({ stream: e.stream })
+      if (!isRequestTabOpen(e.tabId, e.stream.requestId)) return
+      requestExecutionStore.trigger.httpSseStreamUpdated({ tabId: e.tabId, stream: e.stream })
     } else if (e.type === 'http-sse-stream-cleared') {
-      requestExecutionStore.trigger.httpSseStreamCleared({ requestId: e.requestId })
+      if (!isFolderExplorerTabOpen(e.tabId)) return
+      requestExecutionStore.trigger.httpSseStreamCleared({ tabId: e.tabId })
     } else if (e.type === 'websocket-session-updated') {
-      requestExecutionStore.trigger.websocketSessionUpdated({ session: e.session })
+      if (!isRequestTabOpen(e.tabId, e.session.requestId)) return
+      requestExecutionStore.trigger.websocketSessionUpdated({ tabId: e.tabId, session: e.session })
     } else if (e.type === 'websocket-session-cleared') {
-      requestExecutionStore.trigger.websocketSessionCleared({ requestId: e.requestId })
+      requestExecutionStore.trigger.tabExecutionStateCleared({ tabId: e.tabId })
     } else if (e.type === 'script-toast-show') {
       toast.show(e.toast)
     } else if (e.type === 'script-toast-hide') {
@@ -68,7 +72,7 @@ export function subscribeToGenericEvents() {
         }
       })()
     } else if (e.type === 'retry-request') {
-      void RequestSendCoordinator.sendRequestById(e.requestId, e.requestMetadata).catch(error => {
+      void RequestSendCoordinator.sendRequestById(e.requestId, e.requestMetadata, e.tabId).catch(error => {
         console.error('retry-request failed', error)
       })
     } else if (e.type === 'folder-run-started') {
@@ -116,4 +120,14 @@ export function subscribeToGenericEvents() {
       return Typescript.assertUnreachable(e)
     }
   })
+}
+
+function isFolderExplorerTabOpen(tabId: string) {
+  return folderExplorerEditorStore.getSnapshot().context.tabs.some(tab => tab.id === tabId)
+}
+
+function isRequestTabOpen(tabId: string, requestId: string) {
+  return folderExplorerEditorStore
+    .getSnapshot()
+    .context.tabs.some(tab => tab.id === tabId && tab.itemType === 'request' && tab.itemId === requestId)
 }

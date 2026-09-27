@@ -3,7 +3,11 @@ import { z } from 'zod'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import { AUTH_LOCATIONS } from '@common/Auth'
 import { FOLDER_REQUEST_EXECUTION_MODES, FOLDER_REQUEST_SELECTION_MODES } from '@common/FolderRuns'
-import type { FolderExplorerTabRecord } from '@common/FolderExplorerTabs'
+import {
+  DEFAULT_FOLDER_EXPLORER_PANE_ID,
+  type FolderExplorerPaneId,
+  type FolderExplorerTabRecord,
+} from '@common/FolderExplorerTabs'
 import type { ExplorerItem } from '@common/Explorer'
 import type { DetailsDraft, Selection } from './folderExplorerTypes'
 import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
@@ -49,6 +53,7 @@ const persistedUiStateSchema = z.object({
   sidebarWidth: z.number().default(DEFAULT_SIDEBAR_WIDTH),
   autoHideFolderExplorer: z.boolean().default(false),
   responsePaneHeight: z.number(),
+  activePaneId: z.string().default(DEFAULT_FOLDER_EXPLORER_PANE_ID),
 })
 
 const authSchema = z.discriminatedUnion('type', [
@@ -177,6 +182,7 @@ type FolderExplorerEditorContext = {
   selectionScrollTarget: Selection | null
   tabs: FolderExplorerTabRecord[]
   activeTabId: string | null
+  activePaneId: FolderExplorerPaneId
   expandedIds: string[]
   activeEnvironmentIds: string[]
   inactiveFolderEnvironmentIds: string[]
@@ -216,6 +222,7 @@ export const folderExplorerEditorStore = createStore({
     selectionScrollTarget: null,
     tabs: [],
     activeTabId: null,
+    activePaneId: persistedUiState.activePaneId,
     expandedIds: persistedUiState.expandedIds,
     activeEnvironmentIds: persistedUiState.activeEnvironmentIds,
     inactiveFolderEnvironmentIds: persistedUiState.inactiveFolderEnvironmentIds,
@@ -239,13 +246,26 @@ export const folderExplorerEditorStore = createStore({
       ...context,
       selectionScrollTarget: event.selection,
     }),
-    tabsStateReplaced: (context, event: { tabs: FolderExplorerTabRecord[]; activeTabId: string | null }) => ({
+    tabsStateReplaced: (
+      context,
+      event: { tabs: FolderExplorerTabRecord[]; activeTabId: string | null; activePaneId?: FolderExplorerPaneId }
+    ) => ({
       ...context,
       tabs: event.tabs,
       activeTabId: event.activeTabId,
+      activePaneId: event.activePaneId ?? context.activePaneId,
       pendingSelection: null,
       selected: getSelectionFromTabs(event.tabs, event.activeTabId),
     }),
+    activePaneChanged: (context, event: { paneId: FolderExplorerPaneId }) => {
+      const activeTabId = getActiveTabIdForPane(context.tabs, event.paneId)
+      return {
+        ...context,
+        activePaneId: event.paneId,
+        activeTabId,
+        selected: getSelectionFromTabs(context.tabs, activeTabId),
+      }
+    },
     expandedToggled: (context, event: { id: string }) => ({
       ...context,
       expandedIds: context.expandedIds.includes(event.id)
@@ -515,6 +535,41 @@ export function getSelectionFromTabs(tabs: FolderExplorerTabRecord[], activeTabI
   }
 }
 
+export function getActiveTabIdForPane(tabs: FolderExplorerTabRecord[], paneId: FolderExplorerPaneId) {
+  const paneTabs = tabs.filter(tab => tab.paneId === paneId)
+  return paneTabs.find(tab => tab.isActive)?.id ?? paneTabs[0]?.id ?? null
+}
+
+export function getFolderExplorerPaneIds(tabs: FolderExplorerTabRecord[]) {
+  return Array.from(new Set(tabs.map(tab => tab.paneId))).sort(comparePaneIds)
+}
+
+export function getNextFolderExplorerPaneId(tabs: FolderExplorerTabRecord[]): FolderExplorerPaneId {
+  const highestPaneNumber = getFolderExplorerPaneIds(tabs).reduce(
+    (highest, paneId) => Math.max(highest, getPaneNumber(paneId) ?? 0),
+    0
+  )
+  return `pane:${highestPaneNumber + 1}`
+}
+
+function comparePaneIds(left: FolderExplorerPaneId, right: FolderExplorerPaneId) {
+  const leftNumber = getPaneNumber(left)
+  const rightNumber = getPaneNumber(right)
+  if (leftNumber !== null && rightNumber !== null) {
+    return leftNumber - rightNumber
+  }
+  if (leftNumber !== null) return -1
+  if (rightNumber !== null) return 1
+  return left.localeCompare(right)
+}
+
+function getPaneNumber(paneId: FolderExplorerPaneId) {
+  if (paneId === 'first') return 1
+  if (paneId === 'second') return 2
+  const match = /^pane:(\d+)$/.exec(paneId)
+  return match ? Number(match[1]) : null
+}
+
 export function saveFolderExplorerUiState(selection: Selection | null, expandedIds: string[]) {
   const {
     activeEnvironmentIds,
@@ -523,6 +578,7 @@ export function saveFolderExplorerUiState(selection: Selection | null, expandedI
     sidebarWidth,
     autoHideFolderExplorer,
     responsePaneHeight,
+    activePaneId,
   } = folderExplorerEditorStore.getSnapshot().context
   try {
     localStorage.setItem(
@@ -536,6 +592,7 @@ export function saveFolderExplorerUiState(selection: Selection | null, expandedI
         sidebarWidth,
         autoHideFolderExplorer,
         responsePaneHeight,
+        activePaneId,
       })
     )
   } catch {
@@ -552,6 +609,7 @@ function loadFolderExplorerUiState(): {
   sidebarWidth: number
   autoHideFolderExplorer: boolean
   responsePaneHeight: number
+  activePaneId: FolderExplorerPaneId
 } {
   try {
     const value = localStorage.getItem(PERSISTED_UI_STATE_KEY)
@@ -565,6 +623,7 @@ function loadFolderExplorerUiState(): {
         sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
         autoHideFolderExplorer: false,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+        activePaneId: DEFAULT_FOLDER_EXPLORER_PANE_ID,
       }
     }
     const parsed = persistedUiStateSchema.safeParse(JSON.parse(value))
@@ -578,6 +637,7 @@ function loadFolderExplorerUiState(): {
         sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
         autoHideFolderExplorer: false,
         responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+        activePaneId: DEFAULT_FOLDER_EXPLORER_PANE_ID,
       }
     }
 
@@ -587,14 +647,15 @@ function loadFolderExplorerUiState(): {
     }
   } catch {
     return {
-        selected: null,
-        expandedIds: [],
-        activeEnvironmentIds: [],
-        inactiveFolderEnvironmentIds: [],
-        sidebarTab: 'requests',
-        sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
-        autoHideFolderExplorer: false,
-        responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+      selected: null,
+      expandedIds: [],
+      activeEnvironmentIds: [],
+      inactiveFolderEnvironmentIds: [],
+      sidebarTab: 'requests',
+      sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+      autoHideFolderExplorer: false,
+      responsePaneHeight: DEFAULT_RESPONSE_PANE_HEIGHT,
+      activePaneId: DEFAULT_FOLDER_EXPLORER_PANE_ID,
     }
   }
 }

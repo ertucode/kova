@@ -13,7 +13,7 @@ export async function listFolderExplorerTabs(): Promise<FolderExplorerTabRecord[
   return db
     .select()
     .from(folderExplorerTabs)
-    .orderBy(asc(folderExplorerTabs.position), asc(folderExplorerTabs.createdAt))
+    .orderBy(asc(folderExplorerTabs.paneId), asc(folderExplorerTabs.position), asc(folderExplorerTabs.createdAt))
     .all()
     .map(toFolderExplorerTabRecord)
 }
@@ -33,6 +33,7 @@ export async function saveFolderExplorerTabs(input: SaveFolderExplorerTabsInput)
         id: tab.id,
         itemType: tab.itemType,
         itemId: tab.itemId,
+        paneId: tab.paneId,
         requestMetaTab: tab.requestMetaTab,
         position: tab.position,
         isPinned: tab.isPinned,
@@ -76,6 +77,7 @@ function toFolderExplorerTabRecord(row: FolderExplorerTabRow): FolderExplorerTab
     id: row.id,
     itemType: row.itemType as FolderExplorerTabRecord['itemType'],
     itemId: row.itemId,
+    paneId: row.paneId as FolderExplorerTabRecord['paneId'],
     requestMetaTab: row.requestMetaTab as FolderExplorerTabRecord['requestMetaTab'],
     position: row.position,
     isPinned: row.isPinned,
