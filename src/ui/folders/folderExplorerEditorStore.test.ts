@@ -11,6 +11,8 @@ import type { FolderExplorerTabRecord } from '@common/FolderExplorerTabs'
 describe('folder explorer display preference', () => {
   beforeEach(() => {
     setAutoHideFolderExplorer(false)
+    folderExplorerEditorStore.trigger.tabsStateReplaced({ tabs: [], activeTabId: null })
+    folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: false })
     localStorage.clear()
   })
 
@@ -25,6 +27,25 @@ describe('folder explorer display preference', () => {
       autoHideFolderExplorer: true,
     })
   })
+
+  it('keeps the explorer open for a replaceable tab until it is dismissed or pinned', () => {
+    setAutoHideFolderExplorer(true)
+    const previewTab = createTab('preview-tab', 'pane:1', false)
+
+    folderExplorerEditorStore.trigger.tabsStateReplaced({ tabs: [previewTab], activeTabId: previewTab.id })
+    expect(folderExplorerEditorStore.getSnapshot().context.folderExplorerOverlayOpen).toBe(true)
+
+    folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: false })
+    folderExplorerEditorStore.trigger.tabsStateReplaced({ tabs: [previewTab], activeTabId: previewTab.id })
+    expect(folderExplorerEditorStore.getSnapshot().context.folderExplorerOverlayOpen).toBe(false)
+
+    folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: true })
+    folderExplorerEditorStore.trigger.tabsStateReplaced({
+      tabs: [{ ...previewTab, isPinned: true }],
+      activeTabId: previewTab.id,
+    })
+    expect(folderExplorerEditorStore.getSnapshot().context.folderExplorerOverlayOpen).toBe(false)
+  })
 })
 
 describe('folder explorer panes', () => {
@@ -36,7 +57,7 @@ describe('folder explorer panes', () => {
   })
 })
 
-function createTab(id: string, paneId: string): FolderExplorerTabRecord {
+function createTab(id: string, paneId: string, isPinned = true): FolderExplorerTabRecord {
   return {
     id,
     itemType: 'request',
@@ -44,7 +65,7 @@ function createTab(id: string, paneId: string): FolderExplorerTabRecord {
     paneId,
     requestMetaTab: null,
     position: 0,
-    isPinned: true,
+    isPinned,
     isActive: true,
     createdAt: 1,
     updatedAt: 1,

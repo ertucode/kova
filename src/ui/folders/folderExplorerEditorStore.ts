@@ -249,14 +249,28 @@ export const folderExplorerEditorStore = createStore({
     tabsStateReplaced: (
       context,
       event: { tabs: FolderExplorerTabRecord[]; activeTabId: string | null; activePaneId?: FolderExplorerPaneId }
-    ) => ({
-      ...context,
-      tabs: event.tabs,
-      activeTabId: event.activeTabId,
-      activePaneId: event.activePaneId ?? context.activePaneId,
-      pendingSelection: null,
-      selected: getSelectionFromTabs(event.tabs, event.activeTabId),
-    }),
+    ) => {
+      const previousActiveTab = context.tabs.find(tab => tab.id === context.activeTabId)
+      const nextActiveTab = event.tabs.find(tab => tab.id === event.activeTabId)
+      const activeTabStateChanged =
+        previousActiveTab?.id !== nextActiveTab?.id ||
+        previousActiveTab?.itemType !== nextActiveTab?.itemType ||
+        previousActiveTab?.itemId !== nextActiveTab?.itemId ||
+        previousActiveTab?.isPinned !== nextActiveTab?.isPinned
+
+      return {
+        ...context,
+        tabs: event.tabs,
+        activeTabId: event.activeTabId,
+        activePaneId: event.activePaneId ?? context.activePaneId,
+        pendingSelection: null,
+        selected: getSelectionFromTabs(event.tabs, event.activeTabId),
+        folderExplorerOverlayOpen:
+          context.autoHideFolderExplorer && activeTabStateChanged && nextActiveTab
+            ? !nextActiveTab.isPinned
+            : context.folderExplorerOverlayOpen,
+      }
+    },
     activePaneChanged: (context, event: { paneId: FolderExplorerPaneId }) => {
       const activeTabId = getActiveTabIdForPane(context.tabs, event.paneId)
       return {

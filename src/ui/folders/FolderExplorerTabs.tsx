@@ -395,7 +395,11 @@ function getTabMenuItems(
 }
 
 async function revealSelectionInExplorer(selection: { itemType: 'folder' | 'request' | 'example'; id: string }) {
+  folderExplorerEditorStore.trigger.sidebarTabChanged({ sidebarTab: 'requests' })
   await FolderExplorerCoordinator.selectItem(selection, { mode: 'preview' })
+  if (folderExplorerEditorStore.getSnapshot().context.autoHideFolderExplorer) {
+    folderExplorerEditorStore.trigger.folderExplorerOverlayVisibilityChanged({ open: true })
+  }
   folderExplorerEditorStore.trigger.selectionScrollRequested({ selection })
 }
 

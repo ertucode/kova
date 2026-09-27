@@ -87,6 +87,7 @@ export function FolderExplorer() {
     state => state.context.folderExplorerOverlayOpen
   )
   const openTabs = useSelector(folderExplorerEditorStore, state => state.context.tabs)
+  const shouldShowFolderExplorer = !autoHideFolderExplorer || folderExplorerOverlayOpen || openTabs.length === 0
   const paneIds = useMemo(() => {
     const openPaneIds = getFolderExplorerPaneIds(openTabs)
     return openPaneIds.length > 0 ? openPaneIds : [DEFAULT_FOLDER_EXPLORER_PANE_ID]
@@ -206,7 +207,7 @@ export function FolderExplorer() {
 
   useEffect(() => {
     if (folderExplorerOverlayOpen) {
-      hasPointerEnteredFolderExplorerRef.current = false
+      hasPointerEnteredFolderExplorerRef.current = folderExplorerContainerRef.current?.matches(':hover') ?? false
     }
   }, [folderExplorerOverlayOpen])
 
@@ -523,7 +524,7 @@ export function FolderExplorer() {
     <div className="relative flex min-h-0 flex-1 bg-base-100">
       <SidebarTabs sidebarTab={sidebarTab} />
 
-      {sidebarTab === 'requests' && (!autoHideFolderExplorer || folderExplorerOverlayOpen) ? (
+      {sidebarTab === 'requests' && shouldShowFolderExplorer ? (
         <div
           ref={folderExplorerContainerRef}
           className={

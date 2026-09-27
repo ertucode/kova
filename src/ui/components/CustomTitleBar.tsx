@@ -24,6 +24,7 @@ export function CustomTitleBar() {
     folderExplorerEditorStore,
     state => state.context.folderExplorerOverlayOpen
   )
+  const hasOpenTabs = useSelector(folderExplorerEditorStore, state => state.context.tabs.length > 0)
   const explorerItems = useSelector(folderExplorerTreeStore, state => state.context.items)
   const [isEnvMenuOpen, setIsEnvMenuOpen] = useState(false)
   const [environmentSearchQuery, setEnvironmentSearchQuery] = useState('')
@@ -75,7 +76,7 @@ export function CustomTitleBar() {
     >
       {/* On macOS the fallback reserves traffic-light space; Windows reports a zero-width left inset. */}
       <div className="flex-shrink-0" style={{ width: 'env(titlebar-area-x, 5rem)' }} />
-      {autoHideFolderExplorer ? (
+      {autoHideFolderExplorer && hasOpenTabs ? (
         <div
           className="ml-2 flex items-center"
           style={
