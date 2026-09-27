@@ -24,6 +24,7 @@ export function HeadersEditor({
       valueEditorAsCode
       valueEditorExtensions={valueEditorExtensions}
       valueEditorRefreshKey={valueEditorRefreshKey}
+      zoomScope="none"
     />
   )
 }

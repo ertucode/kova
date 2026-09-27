@@ -1104,6 +1104,7 @@ export default function View() {
             valueEditorAsCode
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
+            zoomScope="none"
           />
         </section>
       ) : null}
@@ -1746,6 +1747,7 @@ function RequestOverviewTab({
           valueEditorAsCode
           valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
           valueEditorRefreshKey={variableHighlightRefreshKey}
+          zoomScope="none"
         />
       </div>
     </section>
@@ -2184,6 +2186,7 @@ const SearchParamsTab = memo(function SearchParamsTab({
         valueEditorAsCode
         valueEditorExtensions={valueEditorExtensions}
         valueEditorRefreshKey={valueEditorRefreshKey}
+        zoomScope="none"
       />
     </div>
   )

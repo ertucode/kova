@@ -846,142 +846,142 @@ const ResponseBodyPanel = memo(function ResponseBodyPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100/35 p-2">
-      <div className="flex shrink-0 items-center justify-between gap-3 pb-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="mr-1 text-sm font-medium text-base-content">Response</div>
-          <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
-            {[
-              { value: 'body' as const, label: 'Body' },
-              { value: 'headers' as const, label: 'Headers' },
-              { value: 'tests' as const, label: 'Tests' },
-            ].map(option => (
-              <button
-                key={option.value}
-                type="button"
-                className={[
-                  'px-3 py-2 text-[11px] font-semibold transition',
-                  section === option.value
-                    ? 'bg-base-200/80 text-base-content'
-                    : 'text-base-content/60 hover:text-base-content',
-                  option.value !== 'body' ? 'border-l border-base-content/10' : '',
-                ].join(' ')}
-                onClick={() => setSection(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
+        <div className="flex shrink-0 items-center justify-between gap-3 pb-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="mr-1 text-sm font-medium text-base-content">Response</div>
+            <div className="inline-flex overflow-hidden rounded-lg border border-base-content/10 bg-base-100/70">
+              {[
+                { value: 'body' as const, label: 'Body' },
+                { value: 'headers' as const, label: 'Headers' },
+                { value: 'tests' as const, label: 'Tests' },
+              ].map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={[
+                    'px-3 py-2 text-[11px] font-semibold transition',
+                    section === option.value
+                      ? 'bg-base-200/80 text-base-content'
+                      : 'text-base-content/60 hover:text-base-content',
+                    option.value !== 'body' ? 'border-l border-base-content/10' : '',
+                  ].join(' ')}
+                  onClick={() => setSection(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {section === 'body' ? (
+              <LabeledSelect
+                label="View"
+                value={viewMode}
+                options={viewModeOptions}
+                className="w-[102px]"
+                onChange={nextView => {
+                  if (!isPersistedResponseBodyViewMode(nextView)) {
+                    setViewMode(nextView)
+                    return
+                  }
+
+                  void updatePreferredResponseBodyView(nextView).then(success => {
+                    if (success) {
+                      setViewMode(nextView)
+                    }
+                  })
+                }}
+              />
+            ) : null}
+            {section === 'body' && viewMode === 'raw' && hasFormattedBody ? (
+              <LabeledSelect
+                label="Format"
+                value={responseBodyDisplayMode}
+                options={displayModeOptions}
+                className="w-[102px]"
+                onChange={mode => {
+                  void onUpdateResponseBodyDisplayMode(mode)
+                }}
+              />
+            ) : null}
           </div>
-          {section === 'body' ? (
-            <LabeledSelect
-              label="View"
-              value={viewMode}
-              options={viewModeOptions}
-              className="w-[102px]"
-              onChange={nextView => {
-                if (!isPersistedResponseBodyViewMode(nextView)) {
-                  setViewMode(nextView)
+
+          <div className="flex shrink-0 items-center gap-2">
+            {canCopyResponseSection ? (
+              <Tooltip
+                content={
+                  section === 'body'
+                    ? 'Copy Response Body'
+                    : section === 'headers'
+                      ? 'Copy Response Headers'
+                      : 'Copy Test Results'
+                }
+                placement="top"
+                className="flex"
+              >
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
+                  onClick={() =>
+                    void copyTextToClipboard(
+                      section === 'body' ? displayedRawBody : section === 'headers' ? headers : testsText,
+                      section === 'body'
+                        ? 'Response body copied to clipboard.'
+                        : section === 'headers'
+                          ? 'Response headers copied to clipboard.'
+                          : 'Test results copied to clipboard.'
+                    )
+                  }
+                  aria-label={
+                    section === 'body'
+                      ? 'Copy response body'
+                      : section === 'headers'
+                        ? 'Copy response headers'
+                        : 'Copy test results'
+                  }
+                >
+                  <CopyIcon className="h-4 w-4" />
+                </button>
+              </Tooltip>
+            ) : null}
+            {section === 'body' && onSaveAsExample ? (
+              <Tooltip content="Save as Example (Hold to Save to File)" placement="top" className="flex">
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
+                  aria-label="Save as example. Hold to save to file"
+                  {...saveAsExampleButtonProps}
+                >
+                  <SaveIcon className="h-4 w-4" />
+                </button>
+              </Tooltip>
+            ) : null}
+            <button
+              type="button"
+              className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold text-base-content/70 transition hover:border-base-content/20 hover:text-base-content disabled:cursor-default disabled:opacity-45"
+              onClick={() => {
+                if (!requestId || !requestHistoryCount) {
                   return
                 }
 
-                void updatePreferredResponseBodyView(nextView).then(success => {
-                  if (success) {
-                    setViewMode(nextView)
-                  }
+                dialogActions.open({
+                  component: RequestHistoryDialog,
+                  props: { requestId, requestName },
                 })
               }}
-            />
-          ) : null}
-          {section === 'body' && viewMode === 'raw' && hasFormattedBody ? (
-            <LabeledSelect
-              label="Format"
-              value={responseBodyDisplayMode}
-              options={displayModeOptions}
-              className="w-[102px]"
-              onChange={mode => {
-                void onUpdateResponseBodyDisplayMode(mode)
-              }}
-            />
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          {canCopyResponseSection ? (
-            <Tooltip
-              content={
-                section === 'body'
-                  ? 'Copy Response Body'
-                  : section === 'headers'
-                    ? 'Copy Response Headers'
-                    : 'Copy Test Results'
-              }
-              placement="top"
-              className="flex"
+              disabled={!requestId || requestHistoryCount === null || requestHistoryCount === 0}
             >
-              <button
-                type="button"
-                className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
-                onClick={() =>
-                  void copyTextToClipboard(
-                    section === 'body' ? displayedRawBody : section === 'headers' ? headers : testsText,
-                    section === 'body'
-                      ? 'Response body copied to clipboard.'
-                      : section === 'headers'
-                        ? 'Response headers copied to clipboard.'
-                        : 'Test results copied to clipboard.'
-                  )
-                }
-                aria-label={
-                  section === 'body'
-                    ? 'Copy response body'
-                    : section === 'headers'
-                      ? 'Copy response headers'
-                      : 'Copy test results'
-                }
-              >
-                <CopyIcon className="h-4 w-4" />
-              </button>
-            </Tooltip>
-          ) : null}
-          {section === 'body' && onSaveAsExample ? (
-            <Tooltip content="Save as Example (Hold to Save to File)" placement="top" className="flex">
-              <button
-                type="button"
-                className="flex h-6 w-6 items-center justify-center rounded-lg bg-base-100/70 text-base-content/65 transition hover:text-base-content"
-                aria-label="Save as example. Hold to save to file"
-                {...saveAsExampleButtonProps}
-              >
-                <SaveIcon className="h-4 w-4" />
-              </button>
-            </Tooltip>
-          ) : null}
-          <button
-            type="button"
-            className="h-9 rounded-lg border border-base-content/10 bg-base-100/70 px-3 text-[11px] font-semibold text-base-content/70 transition hover:border-base-content/20 hover:text-base-content disabled:cursor-default disabled:opacity-45"
-            onClick={() => {
-              if (!requestId || !requestHistoryCount) {
-                return
-              }
-
-              dialogActions.open({
-                component: RequestHistoryDialog,
-                props: { requestId, requestName },
-              })
-            }}
-            disabled={!requestId || requestHistoryCount === null || requestHistoryCount === 0}
-          >
-            {historyButtonLabel}
-          </button>
-          {contentType ? <span className="truncate text-xs text-base-content/45">{contentType}</span> : null}
-          {response ? <span className="shrink-0 text-xs text-base-content/45">{responseBodySize}</span> : null}
-          <ResponseStatusSummary response={response} />
+              {historyButtonLabel}
+            </button>
+            {contentType ? <span className="truncate text-xs text-base-content/45">{contentType}</span> : null}
+            {response ? <span className="shrink-0 text-xs text-base-content/45">{responseBodySize}</span> : null}
+            <ResponseStatusSummary response={response} />
+          </div>
         </div>
-      </div>
 
-      {section === 'headers'
-        ? renderResponseHeaders(responseHeaderRows, headersDescription)
-        : section === 'tests'
-          ? renderResponseTests(testRun, onJumpToScriptError)
-          : renderResponseBodyContent(bodyContentState, onUpdateResponseTableAccessor, scriptPackageArtifacts)}
+        {section === 'headers'
+          ? renderResponseHeaders(responseHeaderRows, headersDescription)
+          : section === 'tests'
+            ? renderResponseTests(testRun, onJumpToScriptError)
+            : renderResponseBodyContent(bodyContentState, onUpdateResponseTableAccessor, scriptPackageArtifacts)}
     </div>
   )
 })
@@ -1115,6 +1115,7 @@ function renderResponseBodyContent(
                 hideFocusOutline
                 onChange={readOnlyCodeEditorOnChange}
                 compact
+                zoomScope="response"
               />
             </div>
           ) : (
@@ -1138,6 +1139,7 @@ function renderResponseBodyContent(
         hideFocusOutline
         onChange={readOnlyCodeEditorOnChange}
         compact
+        zoomScope="response"
       />
     </div>
   )
@@ -1687,6 +1689,7 @@ function SseResponsePanel({
             hideFocusOutline
             onChange={readOnlyCodeEditorOnChange}
             compact
+            zoomScope="response"
           />
         ) : (
           <div className="mt-2 text-sm text-base-content/50">Raw SSE body will appear here.</div>

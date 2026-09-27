@@ -726,6 +726,7 @@ export function WebSocketRequestDetailsFields({ draft }: { draft: RequestDetails
             valueEditorExtensions={variableEditorExtensionsWithBrowserTabFallback}
             valueEditorRefreshKey={variableHighlightRefreshKey}
             contentClassName="border-t-0"
+            zoomScope="none"
           />
         </section>
       ) : null}

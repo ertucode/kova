@@ -509,6 +509,7 @@ interface CodeEditorProps {
   linePaddingOverride?: string
   vimMode?: boolean
   refreshKey?: string
+  zoomScope?: 'general' | 'response' | 'none'
 }
 
 declare const React: ReactApi

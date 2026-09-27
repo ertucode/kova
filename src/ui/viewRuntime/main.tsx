@@ -12,6 +12,8 @@ import { parseScriptPackageSpecifier } from '@common/ScriptPackages'
 import { CodeEditor } from '../folders/CodeEditor'
 import {
   VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT,
+  VIEW_RUNTIME_FONT_SCALE_CHANGE_EVENT,
+  VIEW_RUNTIME_FONT_SCALE_SET_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_EVENT,
@@ -27,6 +29,12 @@ import {
 import { transformViewRuntimeSource } from './viewRuntimeRefresh'
 import { ensureTailwindRuntimeTheme } from '../tailwindRuntimeTheme'
 import { createViewRuntimeClipboardApi } from './viewRuntimeClipboard'
+import { CodeEditorFontSizeProvider } from '../global/codeEditorFontSizeContext'
+import {
+  DEFAULT_CODE_EDITOR_FONT_SCALE,
+  normalizeCodeEditorFontScale,
+  type CodeEditorFontSizeScope,
+} from '../global/codeEditorFontSize'
 
 type RuntimeErrorDetails = {
   compactMessage: string
@@ -73,6 +81,7 @@ const runtimeShellState: RuntimeShellState = {
   component: null,
   error: null,
 }
+let codeEditorFontScale = DEFAULT_CODE_EDITOR_FONT_SCALE
 const hotComponentRegistry = new Map<string, { wrapper: RuntimeComponent; current: RuntimeComponent }>()
 let hasPendingRunTrigger = false
 let pendingRunFrameId: number | null = null
@@ -103,6 +112,12 @@ window.addEventListener('message', event => {
       runtimeShellState.error = formatRuntimeError(error, code)
       renderRuntimeShell()
     }
+    return
+  }
+
+  if (event.data?.type === VIEW_RUNTIME_FONT_SCALE_SET_EVENT && typeof event.data.scale === 'number') {
+    codeEditorFontScale = normalizeCodeEditorFontScale(event.data.scale)
+    renderRuntimeShell()
     return
   }
 
@@ -620,7 +635,23 @@ function normalizeViewCacheKey(key: string) {
 }
 
 function renderRuntimeShell() {
-  root.render(<RuntimeShell state={runtimeShellState} />)
+  root.render(
+    <CodeEditorFontSizeProvider
+      fontScales={{
+        'code-editor': codeEditorFontScale,
+        'response-code-editor': DEFAULT_CODE_EDITOR_FONT_SCALE,
+      }}
+      onFontScaleChange={postFontScaleChange}
+    >
+      <RuntimeShell state={runtimeShellState} />
+    </CodeEditorFontSizeProvider>
+  )
+}
+
+function postFontScaleChange(scope: CodeEditorFontSizeScope, scale: number) {
+  if (scope === 'code-editor') {
+    window.parent.postMessage({ type: VIEW_RUNTIME_FONT_SCALE_CHANGE_EVENT, scale }, '*')
+  }
 }
 
 function formatRuntimeDiagnostic(diagnostic: ts.Diagnostic, source: string): RuntimeErrorDetails {

@@ -1,4 +1,4 @@
-import { createElement, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from 'react'
+import { createElement, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
 import { toggleBlockComment, toggleLineComment } from '@codemirror/commands'
 import { highlightSelectionMatches } from '@codemirror/search'
@@ -23,6 +23,8 @@ import { Vim, getCM, vim } from '@replit/codemirror-vim'
 import { useSelector } from '@xstate/store/react'
 import { DEFAULT_VIM_MODE } from '@common/AppSettings'
 import { appSettingsStore } from '@/global/appSettingsStore'
+import { useCodeEditorFontSize } from '@/global/useCodeEditorFontSize'
+import type { CodeEditorZoomScope } from '@/global/codeEditorFontSize'
 
 export type CodeEditorLanguage = 'plain' | 'json' | 'json5' | 'javascript' | 'jsx' | 'html' | 'css' | 'xml' | 'graphql'
 
@@ -791,6 +793,7 @@ export const CodeEditor = memo(function CodeEditor({
   linePaddingOverride,
   vimMode,
   refreshKey,
+  zoomScope = 'general',
 }: {
   ref?: Ref<CodeEditorHandle>
   testId?: string
@@ -817,16 +820,40 @@ export const CodeEditor = memo(function CodeEditor({
   linePaddingOverride?: string
   vimMode?: boolean
   refreshKey?: string
+  zoomScope?: CodeEditorZoomScope
 }) {
   const initialValueRef = useRef(value)
   const editorViewRef = useRef<EditorView | null>(null)
   const vimModeSetting = useSelector(appSettingsStore, state => state.context.settings?.vimMode ?? DEFAULT_VIM_MODE)
   const resolvedVimMode = vimMode ?? vimModeSetting
+  const { fontScale, zoomIn, zoomOut, zoomEnabled } = useCodeEditorFontSize(singleLine ? 'none' : zoomScope)
+  const resolvedScale = scale * fontScale
+  const [displayedZoomScale, setDisplayedZoomScale] = useState<number | null>(null)
+  const zoomIndicatorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onChangeRef = useRef(onChange)
   const onBlurRef = useRef(onBlur)
   const onPasteTextRef = useRef(onPasteText)
   const onSelectionChangeRef = useRef(onSelectionChange)
   const lastRefreshKeyRef = useRef(refreshKey)
+
+  useEffect(() => {
+    return () => {
+      if (zoomIndicatorTimeoutRef.current) {
+        clearTimeout(zoomIndicatorTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const showZoomScale = useCallback((nextScale: number | undefined) => {
+    if (nextScale === undefined) {
+      return
+    }
+    setDisplayedZoomScale(nextScale)
+    if (zoomIndicatorTimeoutRef.current) {
+      clearTimeout(zoomIndicatorTimeoutRef.current)
+    }
+    zoomIndicatorTimeoutRef.current = setTimeout(() => setDisplayedZoomScale(null), 900)
+  }, [])
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -1000,7 +1027,7 @@ export const CodeEditor = memo(function CodeEditor({
     }
   }, [language])
 
-  const scaledEditorTheme = useMemo(() => createScaledEditorTheme(size, scale), [scale, size])
+  const scaledEditorTheme = useMemo(() => createScaledEditorTheme(size, resolvedScale), [resolvedScale, size])
 
   const compactTheme = useMemo(() => {
     if (!compact) {
@@ -1014,13 +1041,52 @@ export const CodeEditor = memo(function CodeEditor({
     return EditorView.theme({
       '& .cm-content': {
         padding: '0.44rem 0 !important',
-        lineHeight: '1.25rem',
+        lineHeight: `${1.25 * resolvedScale}rem`,
       },
       '& .cm-line': {
         padding: linePaddingOverride ?? '0 !important',
       },
     })
-  }, [compact, linePaddingOverride])
+  }, [compact, linePaddingOverride, resolvedScale])
+
+  const zoomHandlerExtension = useMemo(
+    () => {
+      if (!zoomEnabled) {
+        return []
+      }
+      return EditorView.domEventHandlers({
+        keydown(event) {
+          if (!event.metaKey && !event.ctrlKey) {
+            return false
+          }
+          if (event.key === '+' || event.key === '=') {
+            event.preventDefault()
+            showZoomScale(zoomIn())
+            return true
+          }
+          if (event.key === '-' || event.key === '_') {
+            event.preventDefault()
+            showZoomScale(zoomOut())
+            return true
+          }
+          return false
+        },
+        wheel(event) {
+          if ((!event.metaKey && !event.ctrlKey) || event.deltaY === 0) {
+            return false
+          }
+          event.preventDefault()
+          if (event.deltaY < 0) {
+            showZoomScale(zoomIn())
+          } else {
+            showZoomScale(zoomOut())
+          }
+          return true
+        },
+      })
+    },
+    [showZoomScale, zoomEnabled, zoomIn, zoomOut]
+  )
 
   const placeholderValueExtension = useMemo(
     () => (placeholder ? placeholderExtension(placeholder) : null),
@@ -1090,6 +1156,7 @@ export const CodeEditor = memo(function CodeEditor({
       scaledEditorTheme,
       selectionMatchTheme,
       selectionListenerExtension,
+      zoomHandlerExtension,
     ]
     const canComment = !readOnly && supportsCommentCommands(language)
 
@@ -1171,13 +1238,14 @@ export const CodeEditor = memo(function CodeEditor({
     singleLine,
     resolvedVimMode,
     selectionListenerExtension,
+    zoomHandlerExtension,
   ])
 
   return (
     <div
       data-testid={testId}
       className={twMerge(
-        'flex w-full min-h-0 flex-1 overflow-visible rounded-none bg-base-100/70 text-base-content',
+        'relative flex w-full min-h-0 flex-1 overflow-visible rounded-none bg-base-100/70 text-base-content',
         readOnly ? 'overflow-auto' : '',
         minHeightClassName,
         className
@@ -1195,6 +1263,11 @@ export const CodeEditor = memo(function CodeEditor({
         onChange={handleEditorChange}
         onBlur={handleEditorBlur}
       />
+      {displayedZoomScale !== null ? (
+        <div className="pointer-events-none absolute right-2 top-2 z-50 rounded-md border border-base-content/10 bg-base-200/95 px-2 py-1 font-sans text-xs font-medium text-base-content shadow-sm">
+          {Math.round(displayedZoomScale * 100)}%
+        </div>
+      ) : null}
     </div>
   )
 })

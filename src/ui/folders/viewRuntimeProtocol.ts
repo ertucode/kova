@@ -10,6 +10,8 @@ export const VIEW_RUNTIME_CALL_REQUEST_RESULT_EVENT = 'kova-view-runtime-call-re
 export const VIEW_RUNTIME_CACHE_REQUEST_EVENT = 'kova-view-runtime-cache-request'
 export const VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT = 'kova-view-runtime-cache-request-result'
 export const VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT = 'kova-view-runtime-clipboard-write'
+export const VIEW_RUNTIME_FONT_SCALE_CHANGE_EVENT = 'kova-view-runtime-font-scale-change'
+export const VIEW_RUNTIME_FONT_SCALE_SET_EVENT = 'kova-view-runtime-font-scale-set'
 
 export type ViewRuntimeScriptResponse = {
   status: number
@@ -40,7 +42,9 @@ export type ViewRuntimePayload = {
   scope: Record<string, string>
   cache: Record<string, string>
   sharedScripts: Array<Pick<SharedScriptRecord, 'id' | 'name' | 'kind' | 'code' | 'targets' | 'isActive'>>
-  scriptPackages: Array<Pick<ScriptPackageArtifact, 'cacheKey' | 'packageName' | 'packageVersion' | 'browserBundleCode'>>
+  scriptPackages: Array<
+    Pick<ScriptPackageArtifact, 'cacheKey' | 'packageName' | 'packageVersion' | 'browserBundleCode'>
+  >
 }
 
 export type ViewRuntimeCallRequestMessage = {
@@ -81,4 +85,9 @@ export type ViewRuntimeCacheRequestResultMessage = {
 export type ViewRuntimeClipboardWriteMessage = {
   type: typeof VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT
   value: string
+}
+
+export type ViewRuntimeFontScaleChangeMessage = {
+  type: typeof VIEW_RUNTIME_FONT_SCALE_CHANGE_EVENT
+  scale: number
 }

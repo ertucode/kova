@@ -13,7 +13,10 @@ import { SseTranscript } from './SseTranscript'
 export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDetailsDraft }) {
   const responseContentType = useMemo(() => getResponseContentType(draft.responseHeaders), [draft.responseHeaders])
   const isSseResponse = useMemo(() => isSseContentType(responseContentType), [responseContentType])
-  const sseEvents = useMemo(() => (isSseResponse ? parseSseEvents(draft.responseBody) : []), [draft.responseBody, isSseResponse])
+  const sseEvents = useMemo(
+    () => (isSseResponse ? parseSseEvents(draft.responseBody) : []),
+    [draft.responseBody, isSseResponse]
+  )
   const parsedResponseJson = useMemo(() => parseJsonValue(draft.responseBody), [draft.responseBody])
   const canPrettyFormatResponse = responseContentType?.includes('json') || parsedResponseJson !== null
   const [formatResponseJson, setFormatResponseJson] = useState(canPrettyFormatResponse)
@@ -57,14 +60,21 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
             type="number"
             className="input h-10 w-full rounded-none border-base-content/10 bg-base-100/70"
             value={draft.responseStatus}
-            onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseStatus: Number(event.target.value) || 0 })}
+            onChange={event =>
+              FolderExplorerCoordinator.updateSelectedDraft({
+                ...draft,
+                responseStatus: Number(event.target.value) || 0,
+              })
+            }
           />
         </Field>
         <Field label="Response Status Text">
           <input
             className="input h-10 w-full rounded-none border-base-content/10 bg-base-100/70"
             value={draft.responseStatusText}
-            onChange={event => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseStatusText: event.target.value })}
+            onChange={event =>
+              FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseStatusText: event.target.value })
+            }
           />
         </Field>
       </section>
@@ -77,7 +87,12 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
             triggerClassName="h-10 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-sm"
             menuClassName="w-[220px]"
             options={REQUEST_BODY_TYPES.map(value => ({ value, label: <span>{value}</span> }))}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestBodyType: value as typeof draft.requestBodyType })}
+            onChange={value =>
+              FolderExplorerCoordinator.updateSelectedDraft({
+                ...draft,
+                requestBodyType: value as typeof draft.requestBodyType,
+              })
+            }
           />
         </Field>
         <Field label="Request Raw Type">
@@ -87,16 +102,26 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
             triggerClassName="h-10 rounded-none border border-base-content/10 bg-base-100/70 px-3 text-sm"
             menuClassName="w-[220px]"
             options={REQUEST_RAW_TYPES.map(value => ({ value, label: <span>{value}</span> }))}
-            onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestRawType: value as typeof draft.requestRawType })}
+            onChange={value =>
+              FolderExplorerCoordinator.updateSelectedDraft({
+                ...draft,
+                requestRawType: value as typeof draft.requestRawType,
+              })
+            }
           />
         </Field>
       </section>
 
-      <HeadersEditor value={draft.requestHeaders} onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestHeaders: value })} />
+      <HeadersEditor
+        value={draft.requestHeaders}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestHeaders: value })}
+      />
       {draft.requestBodyType === 'graphql' ? (
         <>
           <section className="border-b border-base-content/10">
-            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">Query</div>
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">
+              Query
+            </div>
           </section>
           <CodeEditor
             value={draft.graphqlQuery}
@@ -109,7 +134,9 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
             onBlur={() => undefined}
           />
           <section className="border-b border-base-content/10">
-            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">Variables</div>
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-base-content/55">
+              Variables
+            </div>
           </section>
           <CodeEditor
             value={draft.graphqlVariables}
@@ -123,9 +150,22 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
           />
         </>
       ) : (
-        <DetailsTextArea label="Request Body" value={draft.requestBody} minHeightClassName="min-h-32" onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestBody: value })} onBlur={() => undefined} />
+        <DetailsTextArea
+          label="Request Body"
+          value={draft.requestBody}
+          minHeightClassName="min-h-32"
+          onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, requestBody: value })}
+          onBlur={() => undefined}
+        />
       )}
-      <KeyValueEditor label="Response Headers" value={draft.responseHeaders} onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseHeaders: value })} keyPlaceholder="Content-Type" valuePlaceholder="application/json" valueEditorAsCode />
+      <KeyValueEditor
+        label="Response Headers"
+        value={draft.responseHeaders}
+        onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseHeaders: value })}
+        keyPlaceholder="Content-Type"
+        valuePlaceholder="application/json"
+        valueEditorAsCode
+      />
       <section className="w-full border-b border-base-content/10">
         <div className="flex items-center justify-between gap-3 p-2">
           <div className="text-sm font-semibold text-base-content">Response Body</div>
@@ -135,7 +175,9 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
                 type="button"
                 className={[
                   'px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                  sseViewMode === 'rows' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                  sseViewMode === 'rows'
+                    ? 'bg-base-200/80 text-base-content'
+                    : 'text-base-content/55 hover:text-base-content',
                 ].join(' ')}
                 onClick={() => setSseViewMode('rows')}
               >
@@ -145,7 +187,9 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
                 type="button"
                 className={[
                   'border-l border-base-content/10 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition',
-                  sseViewMode === 'raw' ? 'bg-base-200/80 text-base-content' : 'text-base-content/55 hover:text-base-content',
+                  sseViewMode === 'raw'
+                    ? 'bg-base-200/80 text-base-content'
+                    : 'text-base-content/55 hover:text-base-content',
                 ].join(' ')}
                 onClick={() => setSseViewMode('raw')}
               >
@@ -183,6 +227,7 @@ export function RequestExampleDetailsFields({ draft }: { draft: RequestExampleDe
             className="border-x-0 border-b-0"
             onChange={value => FolderExplorerCoordinator.updateSelectedDraft({ ...draft, responseBody: value })}
             onBlur={() => undefined}
+            zoomScope="response"
           />
         )}
       </section>
@@ -202,7 +247,10 @@ function getResponseContentType(headers: string) {
       continue
     }
 
-    return row.slice(separatorIndex + 1).trim().toLowerCase()
+    return row
+      .slice(separatorIndex + 1)
+      .trim()
+      .toLowerCase()
   }
 
   return null

@@ -12,6 +12,7 @@ import { CustomTitleBar } from './components/CustomTitleBar'
 import { FolderExplorer } from './folders/FolderExplorer'
 import { useAppShortcuts } from './appShortcuts'
 import { useViewRunShortcuts } from './folders/useViewRunShortcuts'
+import { CodeEditorFontSizeProvider } from './global/codeEditorFontSizeContext'
 
 subscribeToTasks()
 subscribeToGenericEvents()
@@ -25,7 +26,7 @@ function App() {
   useViewRunShortcuts()
 
   return (
-    <>
+    <CodeEditorFontSizeProvider>
       <ToastRenderer />
       <ConfirmationRenderer />
       <DialogStoreRenderer />
@@ -35,7 +36,7 @@ function App() {
         <FolderExplorer />
       </div>
       <TaskMonitor />
-    </>
+    </CodeEditorFontSizeProvider>
   )
 }
 

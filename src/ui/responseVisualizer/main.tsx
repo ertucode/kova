@@ -17,6 +17,12 @@ import { parseScriptPackageSpecifier, type ScriptPackageArtifact } from '@common
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import { CodeEditor } from '../folders/CodeEditor'
 import { ensureTailwindRuntimeTheme } from '../tailwindRuntimeTheme'
+import { CodeEditorFontSizeProvider } from '../global/codeEditorFontSizeContext'
+import {
+  DEFAULT_CODE_EDITOR_FONT_SCALE,
+  normalizeCodeEditorFontScale,
+  type CodeEditorFontSizeScope,
+} from '../global/codeEditorFontSize'
 
 type VisualizerResponsePayload = {
   status: number
@@ -91,6 +97,8 @@ const noopCodeEditorOnChange = () => undefined
 
 const READY_EVENT = 'kova-response-visualizer-ready'
 const RENDER_EVENT = 'kova-response-visualizer-render'
+const FONT_SCALE_CHANGE_EVENT = 'kova-response-visualizer-font-scale-change'
+const FONT_SCALE_SET_EVENT = 'kova-response-visualizer-font-scale-set'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {
@@ -100,8 +108,16 @@ if (!rootElement) {
 ensureTailwindRuntimeTheme()
 
 const root = createRoot(rootElement)
+let codeEditorFontScale = DEFAULT_CODE_EDITOR_FONT_SCALE
+let visualizerContent: ReactNode = null
 
 window.addEventListener('message', event => {
+  if (event.data?.type === FONT_SCALE_SET_EVENT && typeof event.data.scale === 'number') {
+    codeEditorFontScale = normalizeCodeEditorFontScale(event.data.scale)
+    renderVisualizerRoot()
+    return
+  }
+
   if (event.data?.type !== RENDER_EVENT) {
     return
   }
@@ -164,7 +180,28 @@ async function renderVisualizer(source: string, payload: VisualizerPayload) {
   const transpiled = compileVisualizer(combinedSource)
   const rendered = await runVisualizer(transpiled, payload)
 
-  root.render(<VisualizerErrorBoundary source={source}>{rendered}</VisualizerErrorBoundary>)
+  visualizerContent = <VisualizerErrorBoundary source={source}>{rendered}</VisualizerErrorBoundary>
+  renderVisualizerRoot()
+}
+
+function renderVisualizerRoot() {
+  root.render(
+    <CodeEditorFontSizeProvider
+      fontScales={{
+        'code-editor': DEFAULT_CODE_EDITOR_FONT_SCALE,
+        'response-code-editor': codeEditorFontScale,
+      }}
+      onFontScaleChange={postFontScaleChange}
+    >
+      {visualizerContent}
+    </CodeEditorFontSizeProvider>
+  )
+}
+
+function postFontScaleChange(scope: CodeEditorFontSizeScope, scale: number) {
+  if (scope === 'response-code-editor') {
+    window.parent.postMessage({ type: FONT_SCALE_CHANGE_EVENT, scale }, '*')
+  }
 }
 
 async function runVisualizer(code: string, payload: VisualizerPayload) {
@@ -525,7 +562,8 @@ function createVisualizerExternalRequire(loadPackage: (specifier: string) => unk
 }
 
 function renderError(error: VisualizerErrorDetails) {
-  root.render(<pre className="error">{`${error.compactMessage}\n\n${error.detailedMessage}`.trim()}</pre>)
+  visualizerContent = <pre className="error">{`${error.compactMessage}\n\n${error.detailedMessage}`.trim()}</pre>
+  renderVisualizerRoot()
 }
 
 function formatVisualizerDiagnostic(diagnostic: ts.Diagnostic, source: string): VisualizerErrorDetails {
@@ -615,7 +653,8 @@ function isVisualizerError(error: unknown): error is Error & { details: Visualiz
 }
 
 function renderEmptyState() {
-  root.render(<div className="empty">Add a response visualizer to render custom JSX.</div>)
+  visualizerContent = <div className="empty">Add a response visualizer to render custom JSX.</div>
+  renderVisualizerRoot()
 }
 
 type VisualizerErrorBoundaryProps = {
@@ -1173,6 +1212,7 @@ function createVisualizerCodeEditor(): VisualizerCodeEditorComponent {
         compact
         hideFocusOutline
         readOnly
+        zoomScope="response"
         {...props}
         onChange={onChange ?? noopCodeEditorOnChange}
       />

@@ -5,6 +5,7 @@ import type { SendRequestResponse } from '@common/Requests'
 import type { ScriptPackageArtifact } from '@common/ScriptPackages'
 import type { SharedScriptRecord } from '@common/SharedScripts'
 import type { RequestDetailsDraft } from './folderExplorerTypes'
+import { useCodeEditorFontSize } from '@/global/useCodeEditorFontSize'
 
 type VisualizerEnvironmentSnapshot = {
   id: string
@@ -60,6 +61,8 @@ type VisualizerPayload = {
 
 const READY_EVENT = 'kova-response-visualizer-ready'
 const RENDER_EVENT = 'kova-response-visualizer-render'
+const FONT_SCALE_CHANGE_EVENT = 'kova-response-visualizer-font-scale-change'
+const FONT_SCALE_SET_EVENT = 'kova-response-visualizer-font-scale-set'
 
 export function ResponseVisualizerPreview({
   source,
@@ -83,6 +86,7 @@ export function ResponseVisualizerPreview({
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [isIframeReady, setIsIframeReady] = useState(false)
+  const { fontScale, setFontScale } = useCodeEditorFontSize('response')
 
   const payload = useMemo<VisualizerPayload>(() => {
     const activeEnvironments = environments
@@ -147,12 +151,25 @@ export function ResponseVisualizerPreview({
 
       if (event.data?.type === READY_EVENT) {
         setIsIframeReady(true)
+        return
+      }
+
+      if (event.data?.type === FONT_SCALE_CHANGE_EVENT && typeof event.data.scale === 'number') {
+        setFontScale(event.data.scale)
       }
     }
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [setFontScale])
+
+  useEffect(() => {
+    if (!isIframeReady || !iframeRef.current?.contentWindow) {
+      return
+    }
+
+    iframeRef.current.contentWindow.postMessage({ type: FONT_SCALE_SET_EVENT, scale: fontScale }, '*')
+  }, [fontScale, isIframeReady])
 
   useEffect(() => {
     if (!isIframeReady || !iframeRef.current?.contentWindow) {

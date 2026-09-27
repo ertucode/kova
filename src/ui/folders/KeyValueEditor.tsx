@@ -17,6 +17,7 @@ import type { KeyValueRow, KeyValueRowType } from '@common/KeyValueRows'
 import { createEmptyKeyValueRow, parseKeyValueRows, stringifyKeyValueRows } from '@common/KeyValueRows'
 import { CodeEditor } from './CodeEditor'
 import { DetailsSectionHeader } from './DetailsSectionHeader'
+import type { CodeEditorZoomScope } from '@/global/codeEditorFontSize'
 
 type KeyValueEditorProps = {
   label: string | null
@@ -32,6 +33,7 @@ type KeyValueEditorProps = {
   valueEditorRefreshKey?: string
   rowTypes?: Array<{ value: KeyValueRowType; label: string }>
   onPickRowValue?: (row: KeyValueRow) => Promise<string | null>
+  zoomScope?: CodeEditorZoomScope
 }
 
 type KeyValueField = 'enabled' | 'key' | 'value' | 'description'
@@ -55,6 +57,7 @@ export function KeyValueEditor({
   valueEditorRefreshKey,
   rowTypes,
   onPickRowValue,
+  zoomScope = 'general',
 }: KeyValueEditorProps) {
   const [rows, setRows] = useState<KeyValueRow[]>(() => buildRows(value, []))
   const [isBulkEditMode, setIsBulkEditMode] = useState(false)
@@ -507,6 +510,7 @@ export function KeyValueEditor({
               extensions={valueEditorExtensions}
               refreshKey={valueEditorRefreshKey}
               onChange={setBulkEditValue}
+              zoomScope={zoomScope}
             />
 
             {bulkEditError ? (

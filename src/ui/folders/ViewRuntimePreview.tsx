@@ -10,6 +10,8 @@ import { RequestSendCoordinator } from './requestSendCoordinator'
 import { getCachedViewRuntimeRequest, setCachedViewRuntimeRequest } from './viewRuntimeRequestCacheStore'
 import {
   VIEW_RUNTIME_CLIPBOARD_WRITE_EVENT,
+  VIEW_RUNTIME_FONT_SCALE_CHANGE_EVENT,
+  VIEW_RUNTIME_FONT_SCALE_SET_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_EVENT,
   VIEW_RUNTIME_CACHE_REQUEST_RESULT_EVENT,
   VIEW_RUNTIME_CALL_REQUEST_EVENT,
@@ -18,10 +20,12 @@ import {
   VIEW_RUNTIME_RENDER_EVENT,
   type ViewRuntimeCacheRequestMessage,
   type ViewRuntimeClipboardWriteMessage,
+  type ViewRuntimeFontScaleChangeMessage,
   type ViewRuntimeCallRequestMessage,
   type ViewRuntimePayload,
   type ViewRuntimeScriptResponse,
 } from './viewRuntimeProtocol'
+import { useCodeEditorFontSize } from '@/global/useCodeEditorFontSize'
 
 type RuntimeEnvironmentSnapshot = {
   id: string
@@ -66,6 +70,7 @@ export function ViewRuntimePreview({
   const [cacheSnapshot, setCacheSnapshot] = useState<Record<string, string>>({})
   const lastHandledRunRequestIdRef = useRef<string | null>(null)
   const cacheLoadIdRef = useRef(0)
+  const { fontScale, setFontScale } = useCodeEditorFontSize()
 
   useEffect(() => {
     const cacheLoadId = cacheLoadIdRef.current + 1
@@ -148,6 +153,12 @@ export function ViewRuntimePreview({
         void navigator.clipboard.writeText(message.value).catch(error => {
           console.error('[view-runtime] failed to write clipboard text', error)
         })
+        return
+      }
+
+      if (event.data?.type === VIEW_RUNTIME_FONT_SCALE_CHANGE_EVENT) {
+        const message = event.data as ViewRuntimeFontScaleChangeMessage
+        setFontScale(message.scale)
         return
       }
 
@@ -265,7 +276,15 @@ export function ViewRuntimePreview({
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [onRememberRequestsActivity, rememberRequests, requestPathKeyToId, viewId])
+  }, [onRememberRequestsActivity, rememberRequests, requestPathKeyToId, setFontScale, viewId])
+
+  useEffect(() => {
+    if (!isIframeReady || !iframeRef.current?.contentWindow) {
+      return
+    }
+
+    iframeRef.current.contentWindow.postMessage({ type: VIEW_RUNTIME_FONT_SCALE_SET_EVENT, scale: fontScale }, '*')
+  }, [fontScale, isIframeReady])
 
   useEffect(() => {
     if (!isIframeReady || !isCacheReady || !iframeRef.current?.contentWindow) {

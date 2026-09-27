@@ -30,6 +30,14 @@ import {
 } from './appSettingsStore'
 import { getAppTheme, setAppTheme, type AppTheme } from './theme'
 import { loadOpenCodeModels } from './useOpenCodeModels'
+import {
+  MAX_CODE_EDITOR_FONT_SCALE,
+  MIN_CODE_EDITOR_FONT_SCALE,
+  persistCodeEditorFontScale,
+  readStoredCodeEditorFontScales,
+  resetCodeEditorFontScale,
+  type CodeEditorFontSizeScope,
+} from './codeEditorFontSize'
 
 export interface CommandPaletteOption<Value extends string | boolean = string> {
   label: string
@@ -316,6 +324,36 @@ export const checkForUpdatesTrigger = {
   },
 } satisfies CommandPaletteTrigger<AppUpdateCheckResult>
 
+export const resetCodeEditorFontSizeTrigger = {
+  type: 'trigger',
+  id: 'reset-code-editor-font-size',
+  label: 'Reset Code Editor Font Size',
+  description: 'Reset script, request body, and View runtime editors to their default font size.',
+  trigger: () => resetCodeEditorFontScale('code-editor'),
+} satisfies CommandPaletteTrigger
+
+export const codeEditorFontSizeSetting = createCodeEditorFontSizeSetting({
+  id: 'code-editor-font-size',
+  label: 'Code Editor Font Size',
+  description: 'Set the font size for script, request body, and View runtime editors. Default: 100%.',
+  scope: 'code-editor',
+})
+
+export const responseCodeEditorFontSizeSetting = createCodeEditorFontSizeSetting({
+  id: 'response-code-editor-font-size',
+  label: 'Response Code Editor Font Size',
+  description: 'Set the font size for response body and response visualizer runtime editors. Default: 100%.',
+  scope: 'response-code-editor',
+})
+
+export const resetResponseCodeEditorFontSizeTrigger = {
+  type: 'trigger',
+  id: 'reset-response-code-editor-font-size',
+  label: 'Reset Response Code Editor Font Size',
+  description: 'Reset response body and response visualizer runtime editors to their default font size.',
+  trigger: () => resetCodeEditorFontScale('response-code-editor'),
+} satisfies CommandPaletteTrigger
+
 export const commandPaletteConfigs: readonly CommandPaletteConfig[] = [
   appearanceSetting,
   warnBeforeRequestSetting,
@@ -330,8 +368,49 @@ export const commandPaletteConfigs: readonly CommandPaletteConfig[] = [
   supermavenSetting,
   scriptAiModelSetting,
   scriptAiServerPortSetting,
+  codeEditorFontSizeSetting,
+  responseCodeEditorFontSizeSetting,
+  resetCodeEditorFontSizeTrigger,
+  resetResponseCodeEditorFontSizeTrigger,
   checkForUpdatesTrigger,
 ]
+
+function createCodeEditorFontSizeSetting({
+  id,
+  label,
+  description,
+  scope,
+}: {
+  id: string
+  label: string
+  description: string
+  scope: CodeEditorFontSizeScope
+}): CommandPaletteInputConfig {
+  const minPercentage = MIN_CODE_EDITOR_FONT_SCALE * 100
+  const maxPercentage = MAX_CODE_EDITOR_FONT_SCALE * 100
+
+  return {
+    type: 'input',
+    id,
+    label,
+    description,
+    getValue: () => String(Math.round(readStoredCodeEditorFontScales()[scope] * 100)),
+    validate: value => {
+      const percentage = Number(value)
+      return Number.isInteger(percentage)
+        && percentage >= minPercentage
+        && percentage <= maxPercentage
+        ? null
+        : `Enter a whole percentage between ${minPercentage}% and ${maxPercentage}%.`
+    },
+    onChange: value => persistCodeEditorFontScale(scope, Number(value) / 100),
+    inputType: 'number',
+    min: minPercentage,
+    max: maxPercentage,
+    step: 1,
+    placeholder: '100',
+  }
+}
 
 export function getCommandPaletteOptions(
   config: CommandPaletteSelectionConfig
