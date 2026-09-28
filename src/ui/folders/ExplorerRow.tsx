@@ -40,6 +40,8 @@ import { errorToString } from '@common/errorToString'
 export function ExplorerRow({
   node,
   depth,
+  keyboardSelection,
+  onKeyboardSelectionChange,
   isExpanded,
   canDrag,
   draggedItem,
@@ -52,6 +54,8 @@ export function ExplorerRow({
 }: {
   node: TreeNode
   depth: number
+  keyboardSelection: Selection | null
+  onKeyboardSelectionChange: (selection: Selection) => void
   isExpanded: (nodeId: string) => boolean
   canDrag: boolean
   draggedItem: Selection | null
@@ -109,7 +113,7 @@ export function ExplorerRow({
 
   const hasChildren = (node.itemType === 'folder' || node.itemType === 'request') && node.children.length > 0
   const expanded = isExpanded(node.id)
-  const visibleSelection = pendingSelection ?? selected
+  const visibleSelection = keyboardSelection ?? pendingSelection ?? selected
   const isSelected = visibleSelection?.id === node.id && visibleSelection.itemType === node.itemType
   const isCreateOpen = createDraft?.parentFolderId === node.id
   const rowKey = toSelectionKey(node)
@@ -140,7 +144,9 @@ export function ExplorerRow({
             return
           }
 
-          void FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id }, { mode: 'preview' })
+          const selection = { itemType: node.itemType, id: node.id }
+          onKeyboardSelectionChange(selection)
+          void FolderExplorerCoordinator.selectItem(selection, { mode: 'preview' })
         }}
         onDoubleClick={() => {
           void FolderExplorerCoordinator.selectItem({ itemType: node.itemType, id: node.id }, { mode: 'pin' })
@@ -298,6 +304,8 @@ export function ExplorerRow({
               key={toSelectionKey(child)}
               node={child}
               depth={depth + 1}
+              keyboardSelection={keyboardSelection}
+              onKeyboardSelectionChange={onKeyboardSelectionChange}
               isExpanded={isExpanded}
               canDrag={canDrag}
               draggedItem={draggedItem}
@@ -585,6 +593,7 @@ function ExplorerMenu({
   onCloseContextMenu: () => void
 }) {
   const [isButtonOpen, setIsButtonOpen] = useState(false)
+  const [selectedItemIndex, setSelectedItemIndex] = useState(0)
   const [menuPlacement, setMenuPlacement] = useState<{ vertical: 'down' | 'up'; horizontal: 'right' | 'left' }>({
     vertical: 'down',
     horizontal: 'right',
@@ -595,6 +604,7 @@ function ExplorerMenu({
 
   const closeMenu = () => {
     setIsButtonOpen(false)
+    setSelectedItemIndex(0)
     onCloseContextMenu()
   }
 
@@ -604,23 +614,15 @@ function ExplorerMenu({
     const handlePointerDown = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
         setIsButtonOpen(false)
-        onCloseContextMenu()
-      }
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsButtonOpen(false)
+        setSelectedItemIndex(0)
         onCloseContextMenu()
       }
     }
 
     document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
 
     return () => {
       document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isOpen, onCloseContextMenu])
 
@@ -873,18 +875,83 @@ function ExplorerMenu({
     requestType,
   ])
 
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const actionItems = items.filter(
+      (item): item is Extract<ExplorerMenuEntry, { type: 'item' }> => item.type === 'item'
+    )
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        setIsButtonOpen(false)
+        setSelectedItemIndex(0)
+        onCloseContextMenu()
+        return
+      }
+
+      if (
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === 'j' || event.key === 'k')
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        const direction = event.key === 'j' ? 1 : -1
+        setSelectedItemIndex(current => Math.max(0, Math.min(actionItems.length - 1, current + direction)))
+        return
+      }
+
+      if (
+        (event.key === 'h' || event.key === 'l') &&
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
+      if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+        const selectedItem = actionItems[selectedItemIndex]
+        if (!selectedItem) {
+          return
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        setIsButtonOpen(false)
+        setSelectedItemIndex(0)
+        onCloseContextMenu()
+        void selectedItem.action()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
+  }, [isOpen, items, onCloseContextMenu, selectedItemIndex])
+
   return (
     <div ref={containerRef} className="relative flex shrink-0 items-center">
       <button
         type="button"
         title="Item actions"
         aria-label="Item actions"
+        data-explorer-menu-trigger
         draggable={false}
         className="flex size-7 items-center justify-center text-base-content/45 opacity-0 transition hover:bg-base-200/80 hover:text-base-content group-hover:opacity-100 focus:opacity-100"
         onPointerDown={event => event.stopPropagation()}
         onClick={event => {
           event.stopPropagation()
           onCloseContextMenu()
+          setSelectedItemIndex(0)
           setIsButtonOpen(prev => !prev)
         }}
       >
@@ -921,7 +988,12 @@ function ExplorerMenu({
           }}
           onPointerDown={event => event.stopPropagation()}
         >
-          <ExplorerMenuItems items={items} onAction={runAction} />
+          <ExplorerMenuItems
+            items={items}
+            selectedItemIndex={selectedItemIndex}
+            onSelectItem={setSelectedItemIndex}
+            onAction={runAction}
+          />
         </ul>
       ) : null}
     </div>
@@ -952,22 +1024,36 @@ function compactExplorerMenuEntries(entries: Array<ExplorerMenuEntry | null>): E
 
 function ExplorerMenuItems({
   items,
+  selectedItemIndex,
+  onSelectItem,
   onAction,
 }: {
   items: ExplorerMenuEntry[]
+  selectedItemIndex: number
+  onSelectItem: (index: number) => void
   onAction: (action: ExplorerMenuAction) => void
 }) {
+  let actionItemIndex = 0
+
   return items.map((item, index) => {
     if (item.type === 'divider') {
       return <li key={`divider-${index}`} className="my-1 border-t border-base-content/10" aria-hidden="true" />
     }
+
+    const currentItemIndex = actionItemIndex++
+    const isSelected = currentItemIndex === selectedItemIndex
 
     return (
       <li key={item.label}>
         <button
           type="button"
           onClick={() => onAction(item.action)}
-          className={['py-1.5', item.severity === 'danger' ? 'text-error hover:text-error' : ''].join(' ')}
+          onPointerEnter={() => onSelectItem(currentItemIndex)}
+          className={[
+            'py-1.5',
+            isSelected ? 'bg-base-200' : '',
+            item.severity === 'danger' ? 'text-error hover:text-error' : '',
+          ].join(' ')}
         >
           {item.icon}
           {item.label}

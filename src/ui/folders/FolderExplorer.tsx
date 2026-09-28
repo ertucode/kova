@@ -79,6 +79,7 @@ export function FolderExplorer() {
   const sidebarTab = useSelector(folderExplorerEditorStore, state => state.context.sidebarTab)
   const expandedIds = useSelector(folderExplorerEditorStore, state => state.context.expandedIds)
   const selected = useSelector(folderExplorerEditorStore, state => state.context.selected)
+  const pendingSelection = useSelector(folderExplorerEditorStore, state => state.context.pendingSelection)
   const selectionScrollTarget = useSelector(folderExplorerEditorStore, state => state.context.selectionScrollTarget)
   const sidebarWidth = useSelector(folderExplorerEditorStore, state => state.context.sidebarWidth)
   const autoHideFolderExplorer = useSelector(folderExplorerEditorStore, state => state.context.autoHideFolderExplorer)
@@ -97,6 +98,7 @@ export function FolderExplorer() {
   const [dropTarget, setDropTarget] = useState<ExplorerDropTarget | null>(null)
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
   const [searchCollapsedIds, setSearchCollapsedIds] = useState<string[]>([])
+  const [keyboardSelection, setKeyboardSelection] = useState<Selection | null>(null)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const folderExplorerContainerRef = useRef<HTMLDivElement | null>(null)
   const hasPointerEnteredFolderExplorerRef = useRef(false)
@@ -363,18 +365,60 @@ export function FolderExplorer() {
   }, [handleTagShortcut])
 
   const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      const firstRequestNode = visibleNodes.find(node => node.itemType === 'request')
-      if (!firstRequestNode) {
+    if (event.key === 'Enter' && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+      const visibleSelection = keyboardSelection ?? pendingSelection ?? selected
+      if (!visibleSelection) {
+        return
+      }
+
+      const selectionKey = toSelectionKey(visibleSelection)
+      const selectedRow = sidebarScrollContainerRef.current?.querySelector<HTMLElement>(
+        `[data-selection-key="${CSS.escape(selectionKey)}"]`
+      )
+      const menuTrigger = selectedRow?.querySelector<HTMLButtonElement>('[data-explorer-menu-trigger]')
+      if (!menuTrigger) {
         return
       }
 
       event.preventDefault()
-      void FolderExplorerCoordinator.selectItem({ itemType: 'request', id: firstRequestNode.id })
+      menuTrigger.click()
+      return
+    }
+
+    if (event.key === 'Enter') {
+      const visibleSelection = keyboardSelection ?? pendingSelection ?? selected
+      if (!visibleSelection) {
+        return
+      }
+
+      event.preventDefault()
+      setKeyboardSelection(null)
+      void FolderExplorerCoordinator.selectItem(visibleSelection)
       return
     }
 
     if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+      return
+    }
+
+    if (event.key === 'h' || event.key === 'l') {
+      const visibleSelection = keyboardSelection ?? pendingSelection ?? selected
+      if (!visibleSelection) {
+        return
+      }
+
+      const currentNode = itemMap.get(toSelectionKey(visibleSelection))
+      const expandableNode =
+        event.key === 'h'
+          ? getParentNodeForSelection(currentNode, itemMap)
+          : getExpandableNodeForSelection(currentNode, itemMap)
+      if (!expandableNode) {
+        return
+      }
+
+      event.preventDefault()
+      setKeyboardSelection({ itemType: expandableNode.itemType, id: expandableNode.id })
+      handleToggleExpanded(expandableNode.id)
       return
     }
 
@@ -385,8 +429,9 @@ export function FolderExplorer() {
 
     event.preventDefault()
 
-    const currentIndex = selected
-      ? visibleNodes.findIndex(node => node.itemType === selected.itemType && node.id === selected.id)
+    const visibleSelection = keyboardSelection ?? pendingSelection ?? selected
+    const currentIndex = visibleSelection
+      ? visibleNodes.findIndex(node => node.itemType === visibleSelection.itemType && node.id === visibleSelection.id)
       : -1
     const fallbackIndex = direction > 0 ? 0 : visibleNodes.length - 1
     const nextIndex =
@@ -396,7 +441,15 @@ export function FolderExplorer() {
       return
     }
 
-    void FolderExplorerCoordinator.selectItem({ itemType: nextNode.itemType, id: nextNode.id }, { mode: 'preview' })
+    const nextSelection = { itemType: nextNode.itemType, id: nextNode.id }
+    setKeyboardSelection(nextSelection)
+    window.requestAnimationFrame(() => {
+      const selectionKey = toSelectionKey(nextSelection)
+      const nextRow = sidebarScrollContainerRef.current?.querySelector<HTMLElement>(
+        `[data-selection-key="${CSS.escape(selectionKey)}"]`
+      )
+      nextRow?.scrollIntoView({ block: 'nearest' })
+    })
   }
 
   const clearDragState = () => {
@@ -632,6 +685,8 @@ export function FolderExplorer() {
                       key={`${node.itemType}:${node.id}`}
                       node={node}
                       depth={0}
+                      keyboardSelection={keyboardSelection}
+                      onKeyboardSelectionChange={setKeyboardSelection}
                       isExpanded={isNodeExpanded}
                       canDrag={canDrag}
                       draggedItem={draggedItem}
@@ -768,6 +823,38 @@ function flattenVisibleNodes(nodes: TreeNode[], isExpanded: (nodeId: string) => 
   nodes.forEach(visit)
 
   return flattened
+}
+
+function getExpandableNodeForSelection(currentNode: TreeNode | undefined, itemMap: Map<string, TreeNode>) {
+  if (!currentNode) {
+    return null
+  }
+
+  if (currentNode.itemType === 'folder') {
+    return currentNode
+  }
+
+  if (currentNode.itemType === 'request') {
+    if (currentNode.children.length > 0) {
+      return currentNode
+    }
+
+    return currentNode.parentFolderId ? (itemMap.get(`folder:${currentNode.parentFolderId}`) ?? null) : null
+  }
+
+  return itemMap.get(`request:${currentNode.requestId}`) ?? null
+}
+
+function getParentNodeForSelection(currentNode: TreeNode | undefined, itemMap: Map<string, TreeNode>) {
+  if (!currentNode) {
+    return null
+  }
+
+  if (currentNode.itemType === 'example') {
+    return itemMap.get(`request:${currentNode.requestId}`) ?? null
+  }
+
+  return currentNode.parentFolderId ? (itemMap.get(`folder:${currentNode.parentFolderId}`) ?? null) : null
 }
 
 function collectExpandableNodeIds(nodes: TreeNode[]) {
