@@ -30,8 +30,8 @@ export function parseCurlRequest(value: string): ParsedCurlRequest | null {
   const method = normalizeMethod(parsed.method)
   const headers = normalizeHeaders(parsed.header ?? {})
   const rawBody = parsed.body ?? ''
-  const { auth, headersWithoutAuth } = deriveAuth(headers)
-  const contentType = (parsed.header?.['Content-Type'] ?? parsed.header?.['content-type'] ?? '').toLowerCase()
+  const { auth, headersWithoutAuth } = deriveAuth(stringifyKeyValueRows(headers))
+  const contentType = (headers.find(row => row.key.toLowerCase() === 'content-type')?.value ?? '').toLowerCase()
   const bodyType = inferBodyType(rawBody, contentType)
   const rawType = inferRawType(rawBody, contentType)
   const body = normalizeBody(rawBody, bodyType)
@@ -56,16 +56,35 @@ function normalizeMethod(value: string | undefined): RequestMethod {
   return method && REQUEST_METHODS.has(method as RequestMethod) ? (method as RequestMethod) : 'GET'
 }
 
-function normalizeHeaders(headers: Record<string, string>) {
-  const rows = Object.entries(headers).map(([key, value], index) => ({
-    id: `curl-header-${index}`,
-    enabled: true,
-    key,
-    value,
-    description: '',
-  }) satisfies KeyValueRow)
+function normalizeHeaders(headers: Record<string, string | undefined>): KeyValueRow[] {
+  // parse-curl injects this default for --data unless it finds the exact key
+  // "Content-Type". Prefer explicit headers regardless of casing or spacing.
+  const entries = Object.entries(headers)
+  const hasExplicitContentType = entries.some(
+    ([key]) => key !== 'Content-Type' && key.split(':', 1)[0].trim().toLowerCase() === 'content-type'
+  )
 
-  return stringifyKeyValueRows(rows)
+  return entries
+    .filter(
+      ([key, value]) =>
+        !(hasExplicitContentType && key === 'Content-Type' && value === 'application/x-www-form-urlencoded')
+    )
+    .map(([key, value], index) => {
+      // parse-curl only splits headers at ": ", leaving compact and empty headers in the key.
+      const separatorIndex = key.indexOf(':')
+      if (value === undefined) {
+        value = separatorIndex >= 0 ? key.slice(separatorIndex + 1).trim() : ''
+        key = separatorIndex >= 0 ? key.slice(0, separatorIndex) : key.replace(/;$/, '')
+      }
+
+      return {
+        id: `curl-header-${index}`,
+        enabled: true,
+        key: key.trim(),
+        value,
+        description: '',
+      }
+    })
 }
 
 function deriveAuth(headersValue: string): { auth: HttpAuth; headersWithoutAuth: string } {
@@ -132,9 +151,7 @@ function inferRawType(body: string, contentType: string): RequestRawType {
   try {
     JSON.parse(body)
     return 'json'
-  }
-
-  catch {
+  } catch {
     return 'text'
   }
 }
