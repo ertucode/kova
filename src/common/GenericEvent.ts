@@ -1,5 +1,5 @@
 import type { HttpSseStreamState, WebSocketSessionRecord } from './Requests.js'
-import type { FolderRunRecord, FolderRunRequest, FolderRunSummary, FolderRunStatus } from './FolderRuns.js'
+import type { FolderRunCampaignSummary, FolderRunRecord, FolderRunStatus } from './FolderRuns.js'
 import type { ScriptAiWorkspaceState } from './ScriptAi.js'
 import type { ManagementAgentWorkspaceState } from './ManagementAgent.js'
 import type { ScriptCallRequestRequest, ScriptMakeRequestRequest } from './ScriptMakeRequest.js'
@@ -10,6 +10,13 @@ import type { RequestBatchRowStatus, RequestBatchStatus, RequestBatchSummary } f
 import type { RequestFinalValueTarget } from './Requests.js'
 
 export type GenericEvent =
+  | {
+      type: 'folder-run-progress'
+      runId: string
+      folderId: string
+      summary: FolderRunCampaignSummary
+      iterations: FolderRunRecord['iterations']
+    }
   | {
       type: 'reload-path'
       path: string
@@ -80,27 +87,12 @@ export type GenericEvent =
       run: FolderRunRecord
     }
   | {
-      type: 'folder-run-request-started'
-      runId: string
-      folderId: string
-      requestId: string
-      startedAt: number
-      summary: FolderRunSummary
-    }
-  | {
-      type: 'folder-run-request-completed'
-      runId: string
-      folderId: string
-      request: FolderRunRequest
-      summary: FolderRunSummary
-    }
-  | {
       type: 'folder-run-completed'
       runId: string
       folderId: string
       status: FolderRunStatus
       completedAt: number
-      summary: FolderRunSummary
+      summary: FolderRunCampaignSummary
     }
   | {
       type: 'request-batch-updated'

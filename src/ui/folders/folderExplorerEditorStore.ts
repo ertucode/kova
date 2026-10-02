@@ -2,7 +2,7 @@ import { createStore } from '@xstate/store'
 import { z } from 'zod'
 import { AsyncStorageKeys } from '@common/AsyncStorageKeys'
 import { AUTH_LOCATIONS } from '@common/Auth'
-import { FOLDER_REQUEST_EXECUTION_MODES, FOLDER_REQUEST_SELECTION_MODES } from '@common/FolderRuns'
+import { FOLDER_REQUEST_EXECUTION_MODES, FOLDER_REQUEST_SELECTION_MODES, FOLDER_RUN_MODES } from '@common/FolderRuns'
 import {
   DEFAULT_FOLDER_EXPLORER_PANE_ID,
   type FolderExplorerPaneId,
@@ -12,10 +12,7 @@ import type { ExplorerItem } from '@common/Explorer'
 import type { DetailsDraft, Selection } from './folderExplorerTypes'
 import { serializeDetails, toSelectionKey } from './folderExplorerUtils'
 import { loadFromAsyncStorage } from '@/utils/asyncStorage'
-import {
-  REQUEST_TLS_VERIFICATION_MODES,
-  type RequestType,
-} from '@common/Requests'
+import { REQUEST_TLS_VERIFICATION_MODES, type RequestType } from '@common/Requests'
 import { REQUEST_BODY_TYPES, REQUEST_METHODS, REQUEST_RAW_TYPES } from './folderExplorerTypes'
 
 const REQUEST_TYPES: RequestType[] = ['http', 'websocket', 'mcp']
@@ -26,7 +23,16 @@ const PERSISTED_UI_STATE_KEY = 'folderExplorer:uiState'
 const DEFAULT_SIDEBAR_WIDTH = 340
 const DEFAULT_RESPONSE_PANE_HEIGHT = 320
 
-export type SidebarTab = 'requests' | 'views' | 'scripts' | 'environments' | 'history' | 'changes' | 'tags' | 'cookies' | 'packages'
+export type SidebarTab =
+  | 'requests'
+  | 'views'
+  | 'scripts'
+  | 'environments'
+  | 'history'
+  | 'changes'
+  | 'tags'
+  | 'cookies'
+  | 'packages'
 
 const selectionSchema = z.object({
   itemType: z.union([z.literal('folder'), z.literal('request'), z.literal('example')]),
@@ -39,9 +45,9 @@ const persistedUiStateSchema = z.object({
   activeEnvironmentIds: z.array(z.string()),
   inactiveFolderEnvironmentIds: z.array(z.string()).default([]),
   sidebarTab: z.union([
-      z.literal('requests'),
-      z.literal('views'),
-      z.literal('scripts'),
+    z.literal('requests'),
+    z.literal('views'),
+    z.literal('scripts'),
     z.literal('environments'),
     z.literal('history'),
     z.literal('changes'),
@@ -73,17 +79,25 @@ const folderDetailsDraftSchema = z.object({
   tlsVerificationMode: z.enum(REQUEST_TLS_VERIFICATION_MODES).default('inherit'),
   preRequestScript: z.string(),
   postRequestScript: z.string(),
-  runConfig: z.object({
-    selectionMode: z.enum(FOLDER_REQUEST_SELECTION_MODES).default('tests-only'),
-    selectedRequestIds: z.array(z.string()).default([]),
-    executionMode: z.enum(FOLDER_REQUEST_EXECUTION_MODES).default('sequential'),
-    continueOnFailure: z.boolean().default(true),
-  }).default({
-    selectionMode: 'tests-only',
-    selectedRequestIds: [],
-    executionMode: 'sequential',
-    continueOnFailure: true,
-  }),
+  runConfig: z
+    .object({
+      selectionMode: z.enum(FOLDER_REQUEST_SELECTION_MODES).default('tests-only'),
+      selectedRequestIds: z.array(z.string()).default([]),
+      executionMode: z.enum(FOLDER_REQUEST_EXECUTION_MODES).default('sequential'),
+      continueOnFailure: z.boolean().default(true),
+      runMode: z.enum(FOLDER_RUN_MODES).default('once'),
+      iterationCount: z.number().int().positive().default(1),
+      concurrency: z.number().int().positive().default(1),
+    })
+    .default({
+      selectionMode: 'tests-only',
+      selectedRequestIds: [],
+      executionMode: 'sequential',
+      continueOnFailure: true,
+      runMode: 'once',
+      iterationCount: 1,
+      concurrency: 1,
+    }),
 })
 
 const requestDetailsDraftSchema = z.object({
@@ -147,21 +161,28 @@ const websocketExampleDetailsDraftSchema = z.object({
   name: z.string(),
   requestHeaders: z.string(),
   requestBody: z.string(),
-  messages: z.array(z.object({
-    id: z.string(),
-    exampleId: z.string(),
-    direction: z.union([z.literal('sent'), z.literal('received')]),
-    body: z.string(),
-    mimeType: z.string().nullable(),
-    sizeBytes: z.number(),
-    timestamp: z.number(),
-    createdAt: z.number(),
-  })),
+  messages: z.array(
+    z.object({
+      id: z.string(),
+      exampleId: z.string(),
+      direction: z.union([z.literal('sent'), z.literal('received')]),
+      body: z.string(),
+      mimeType: z.string().nullable(),
+      sizeBytes: z.number(),
+      timestamp: z.number(),
+      createdAt: z.number(),
+    })
+  ),
 })
 
 export const persistedDraftsSchema = z.record(
   z.string(),
-  z.union([folderDetailsDraftSchema, requestDetailsDraftSchema, requestExampleDetailsDraftSchema, websocketExampleDetailsDraftSchema])
+  z.union([
+    folderDetailsDraftSchema,
+    requestDetailsDraftSchema,
+    requestExampleDetailsDraftSchema,
+    websocketExampleDetailsDraftSchema,
+  ])
 )
 
 export type EditorEntry = {
@@ -686,9 +707,7 @@ export function setAutoHideFolderExplorer(enabled: boolean) {
 
 function getNextExpandedIds(previousExpandedIds: string[], items: ExplorerItem[]) {
   const expandableItemIds = new Set(
-    items
-      .filter(item => item.itemType === 'folder' || item.itemType === 'request')
-      .map(item => item.id)
+    items.filter(item => item.itemType === 'folder' || item.itemType === 'request').map(item => item.id)
   )
   return previousExpandedIds.filter(id => expandableItemIds.has(id))
 }

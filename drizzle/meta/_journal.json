@@ -428,6 +428,13 @@
       "when": 1790526132794,
       "tag": "0060_acoustic_roland_deschain",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "6",
+      "when": 1790981289494,
+      "tag": "0061_amused_vision",
+      "breakpoints": true
     }
   ]
 }

@@ -444,8 +444,15 @@ describe('createRequestScriptRuntime', () => {
   it('resolves dollar-prefixed dynamic variables', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
-        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
-        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'raw',
+        rawType: 'text',
       },
       environments: [],
     })
@@ -463,103 +470,171 @@ describe('createRequestScriptRuntime', () => {
   it('exposes Faker to inline and reusable custom template JavaScript', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
-        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
-        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'raw',
+        rawType: 'text',
       },
       environments: [],
-      sharedScripts: [{
-        id: 'custom-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'module',
-        targets: ['pre-request'], isActive: true,
-        code: "export function orderNumber() { return `ORD-${faker.string.numeric(8)}` }",
-        position: 0, createdAt: 1, updatedAt: 1, deletedAt: null,
-      }],
+      sharedScripts: [
+        {
+          id: 'custom-generator',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'generators',
+          kind: 'module',
+          targets: ['pre-request'],
+          isActive: true,
+          code: 'export function orderNumber() { return `ORD-${faker.string.numeric(8)}` }',
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
     })
 
-    await expect(runtime.resolveTemplateExpressions('{{$faker.person.fullName()}}', 'Request Body'))
-      .resolves.toMatch(/\S+\s+\S+/)
-    await expect(runtime.resolveTemplateExpressions("{{$requireScript('generators').orderNumber()}}", 'Request Body'))
-      .resolves.toMatch(/^ORD-\d{8}$/)
+    await expect(runtime.resolveTemplateExpressions('{{$faker.person.fullName()}}', 'Request Body')).resolves.toMatch(
+      /\S+\s+\S+/
+    )
+    await expect(
+      runtime.resolveTemplateExpressions("{{$requireScript('generators').orderNumber()}}", 'Request Body')
+    ).resolves.toMatch(/^ORD-\d{8}$/)
   })
 
   it('exposes expression script functions and variables only in explicit template expressions', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
-        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
-        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'raw',
+        rawType: 'text',
       },
       environments: [],
-      sharedScripts: [{
-        id: 'custom-phone-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'expression',
-        targets: [], isActive: true,
-        code: "export function randomPhone() { return '555-123-4567' }\nexport const prefix = 'phone'",
-        position: 0, createdAt: 1, updatedAt: 1, deletedAt: null,
-      }],
+      sharedScripts: [
+        {
+          id: 'custom-phone-generator',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'generators',
+          kind: 'expression',
+          targets: [],
+          isActive: true,
+          code: "export function randomPhone() { return '555-123-4567' }\nexport const prefix = 'phone'",
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
     })
 
-    await expect(runtime.resolveTemplateExpressions('{{$randomPhone}}', 'Request Body'))
-      .resolves.toBe('555-123-4567')
-    await expect(runtime.resolveTemplateExpressions('{{$prefix}}', 'Request Body'))
-      .resolves.toBe('phone')
-    await expect(runtime.resolveTemplateExpressions('{{randomPhone}}', 'Request Body'))
-      .resolves.toBe('{{randomPhone}}')
+    await expect(runtime.resolveTemplateExpressions('{{$randomPhone}}', 'Request Body')).resolves.toBe('555-123-4567')
+    await expect(runtime.resolveTemplateExpressions('{{$prefix}}', 'Request Body')).resolves.toBe('phone')
+    await expect(runtime.resolveTemplateExpressions('{{randomPhone}}', 'Request Body')).resolves.toBe('{{randomPhone}}')
   })
 
   it('rejects duplicate and reserved expression exports', async () => {
-    const createRuntime = (codes: string[]) => createRequestScriptRuntime({
-      request: {
-        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
-        headers: '', body: '', bodyType: 'raw', rawType: 'text',
-      },
-      environments: [],
-      sharedScripts: codes.map((code, index) => ({
-        id: `expression-${index}`,
-        scopeType: 'workspace' as const,
-        scopeId: null,
-        name: `Expression ${index}`,
-        kind: 'expression' as const,
-        targets: [],
-        isActive: true,
-        code,
-        position: index,
-        createdAt: 1,
-        updatedAt: 1,
-        deletedAt: null,
-      })),
-    })
+    const createRuntime = (codes: string[]) =>
+      createRequestScriptRuntime({
+        request: {
+          method: 'POST',
+          url: 'https://example.com',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'noauth' },
+          headers: '',
+          body: '',
+          bodyType: 'raw',
+          rawType: 'text',
+        },
+        environments: [],
+        sharedScripts: codes.map((code, index) => ({
+          id: `expression-${index}`,
+          scopeType: 'workspace' as const,
+          scopeId: null,
+          name: `Expression ${index}`,
+          kind: 'expression' as const,
+          targets: [],
+          isActive: true,
+          code,
+          position: index,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        })),
+      })
 
-    await expect(createRuntime([
-      'export const generated = 1',
-      'export function generated() { return 2 }',
-    ]).resolveTemplateExpressions('{{$generated}}', 'Request Body'))
-      .rejects.toThrow('Expression export generated is defined by multiple scripts')
-    await expect(createRuntime(['export const request = 1']).resolveTemplateExpressions('{{$request}}', 'Request Body'))
-      .rejects.toThrow('Expression export request conflicts with a template expression global')
+    await expect(
+      createRuntime([
+        'export const generated = 1',
+        'export function generated() { return 2 }',
+      ]).resolveTemplateExpressions('{{$generated}}', 'Request Body')
+    ).rejects.toThrow('Expression export generated is defined by multiple scripts')
+    await expect(
+      createRuntime(['export const request = 1']).resolveTemplateExpressions('{{$request}}', 'Request Body')
+    ).rejects.toThrow('Expression export request conflicts with a template expression global')
   })
 
   it('does not execute unrelated modules while resolving ordinary template variables', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
-        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
-        headers: '', body: '', bodyType: 'raw', rawType: 'text',
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: '',
+        bodyType: 'raw',
+        rawType: 'text',
       },
       environments: [],
-      sharedScripts: [{
-        id: 'unrelated-generator', scopeType: 'workspace', scopeId: null, name: 'generators', kind: 'module',
-        targets: ['pre-request'], isActive: true,
-        code: "throw new Error('must not run')\nexport function randomPhone() { return '555-123-4567' }",
-        position: 0, createdAt: 1, updatedAt: 1, deletedAt: null,
-      }],
+      sharedScripts: [
+        {
+          id: 'unrelated-generator',
+          scopeType: 'workspace',
+          scopeId: null,
+          name: 'generators',
+          kind: 'module',
+          targets: ['pre-request'],
+          isActive: true,
+          code: "throw new Error('must not run')\nexport function randomPhone() { return '555-123-4567' }",
+          position: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          deletedAt: null,
+        },
+      ],
     })
 
-    await expect(runtime.resolveTemplateExpressions('{{ordinaryVariable}}', 'Request Body'))
-      .resolves.toBe('{{ordinaryVariable}}')
+    await expect(runtime.resolveTemplateExpressions('{{ordinaryVariable}}', 'Request Body')).resolves.toBe(
+      '{{ordinaryVariable}}'
+    )
   })
 
   it('leaves escaped ordinary variables for the normal variable resolver', async () => {
     const runtime = createRequestScriptRuntime({
       request: {
-        method: 'POST', url: 'https://example.com', pathParams: '', searchParams: '', auth: { type: 'noauth' },
-        headers: '', body: String.raw`\{{baseUrl}}`, bodyType: 'raw', rawType: 'text',
+        method: 'POST',
+        url: 'https://example.com',
+        pathParams: '',
+        searchParams: '',
+        auth: { type: 'noauth' },
+        headers: '',
+        body: String.raw`\{{baseUrl}}`,
+        bodyType: 'raw',
+        rawType: 'text',
       },
       environments: [],
     })
@@ -999,6 +1074,48 @@ describe('createRequestScriptRuntime', () => {
         },
       ])
       expect(updateEnvironmentVariablesSpy).toHaveBeenCalledWith({ id: 'env-1', variables: 'token:abc' })
+    } finally {
+      updateEnvironmentVariablesSpy.mockRestore()
+    }
+  })
+
+  it('keeps environment mutations local when persistence is disabled', async () => {
+    const updateEnvironmentVariablesSpy = vi.spyOn(environmentDb, 'updateEnvironmentVariables')
+    try {
+      const runtime = createRequestScriptRuntime({
+        request: {
+          method: 'GET',
+          url: 'https://example.com',
+          pathParams: '',
+          searchParams: '',
+          auth: { type: 'noauth' },
+          headers: '',
+          body: '',
+          bodyType: 'none',
+          rawType: 'text',
+        },
+        environments: [
+          {
+            id: 'env-1',
+            name: 'Default',
+            variables: '',
+            color: null,
+            warnOnRequest: false,
+            position: 0,
+            priority: 0,
+            createdAt: 1,
+            deletedAt: null,
+          },
+        ],
+        persistEnvironmentMutations: false,
+      })
+
+      const errors = await runtime.runPreRequestScripts([{ name: 'Request', script: "env.set('token', 'abc')" }])
+
+      expect(errors).toEqual([])
+      expect(runtime.getResolvedVariables().token).toBe('abc')
+      expect(runtime.getUpdatedEnvironments()).toEqual([])
+      expect(updateEnvironmentVariablesSpy).not.toHaveBeenCalled()
     } finally {
       updateEnvironmentVariablesSpy.mockRestore()
     }

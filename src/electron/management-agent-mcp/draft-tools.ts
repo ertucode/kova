@@ -1,7 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { AUTH_LOCATIONS } from '../../common/Auth.js'
-import { FOLDER_REQUEST_EXECUTION_MODES, FOLDER_REQUEST_SELECTION_MODES } from '../../common/FolderRuns.js'
+import {
+  FOLDER_REQUEST_EXECUTION_MODES,
+  FOLDER_REQUEST_SELECTION_MODES,
+  FOLDER_RUN_MODES,
+} from '../../common/FolderRuns.js'
 import { Typescript } from '../../common/Typescript.js'
 import {
   type ManagementAgentFolderUpdatePlanItem,
@@ -65,6 +69,9 @@ const folderRunConfigSchema = z.object({
   selectedRequestIds: z.array(z.string().trim().min(1)),
   executionMode: z.enum(FOLDER_REQUEST_EXECUTION_MODES),
   continueOnFailure: z.boolean(),
+  runMode: z.enum(FOLDER_RUN_MODES).default('once'),
+  iterationCount: z.number().int().positive().default(1),
+  concurrency: z.number().int().min(1).max(100).default(1),
 })
 const folderUpdatePlanItemSchema = z.object({
   folderId: z.string().trim().min(1),
@@ -130,7 +137,10 @@ const requestFieldChangeSchema = z.discriminatedUnion('field', [
 ])
 const requestFieldChangeListSchema = z.object({
   requestId: z.string().trim().min(1),
-  changes: z.array(requestFieldChangeSchema).min(1).describe('Only include fields that should change. Do not include unchanged fields.'),
+  changes: z
+    .array(requestFieldChangeSchema)
+    .min(1)
+    .describe('Only include fields that should change. Do not include unchanged fields.'),
 })
 type RequestFieldChange = z.infer<typeof requestFieldChangeSchema>
 const requestDeletePlanItemSchema = z.object({
@@ -323,7 +333,8 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
   server.registerTool(
     'plan_update_request',
     {
-      description: 'Plan a full replacement update to an existing request. Send every editable request field. If only some fields should change, use plan_change_request_fields instead.',
+      description:
+        'Plan a full replacement update to an existing request. Send every editable request field. If only some fields should change, use plan_change_request_fields instead.',
       inputSchema: requestUpdatePlanItemSchema,
     },
     input => context.updateDraft(draft => planRequestUpdateOnDraft(draft, input))
@@ -332,7 +343,8 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
   server.registerTool(
     'plan_change_request_fields',
     {
-      description: 'Plan changes to specific request fields only. Do not send unchanged fields. Each change must name one field and its new value.',
+      description:
+        'Plan changes to specific request fields only. Do not send unchanged fields. Each change must name one field and its new value.',
       inputSchema: requestFieldChangeListSchema,
     },
     input => context.updateDraft(draft => planRequestUpdateOnDraft(draft, requestFieldChangesToUpdatePlanItem(input)))
@@ -421,8 +433,7 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
         'Remove a planned folder creation from the current draft and cascade to planned child folders and planned requests inside that folder subtree.',
       inputSchema: draftItemIdSchema,
     },
-    ({ id }) =>
-      context.updateDraft(draft => removeFolderCreationFromDraft(draft, id))
+    ({ id }) => context.updateDraft(draft => removeFolderCreationFromDraft(draft, id))
   )
 
   server.registerTool(
@@ -435,7 +446,12 @@ export function registerDraftTools(server: McpServer, context: ManagementAgentMc
       context.updateDraft(draft => ({
         draft: {
           ...draft,
-          requestsToCreate: removeOneByOrThrow(draft.requestsToCreate, id, request => request.id, 'Planned request creation not found.'),
+          requestsToCreate: removeOneByOrThrow(
+            draft.requestsToCreate,
+            id,
+            request => request.id,
+            'Planned request creation not found.'
+          ),
         },
         result: { removedRequestId: id },
       }))
@@ -582,7 +598,7 @@ export function planFolderDeletionOnDraft(draft: ManagementAgentPlan, folderId: 
   }
 }
 
-export function planRequestUpdateOnDraft(draft: ManagementAgentPlan, input: typeof draft.requestsToUpdate[number]) {
+export function planRequestUpdateOnDraft(draft: ManagementAgentPlan, input: (typeof draft.requestsToUpdate)[number]) {
   return {
     draft: {
       ...draft,

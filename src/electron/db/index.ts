@@ -83,3 +83,7 @@ export function getDb() {
 
   return db
 }
+
+export function getCurrentDatabasePath() {
+  return currentDbPath
+}

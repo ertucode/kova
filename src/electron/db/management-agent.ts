@@ -43,7 +43,9 @@ type ManagementAgentSessionRow = typeof managementAgentSessions.$inferSelect
 type ManagementAgentPlanRow = typeof managementAgentPlans.$inferSelect
 type RequestUpdateRow = Partial<typeof requests.$inferInsert>
 
-export async function createManagementAgentSessionRecord(input: ManagementAgentScope & { title: string; selectedModel: string | null }) {
+export async function createManagementAgentSessionRecord(
+  input: ManagementAgentScope & { title: string; selectedModel: string | null }
+) {
   const db = getDb()
   const now = Date.now()
   const session: ManagementAgentSessionRow = {
@@ -76,18 +78,25 @@ export async function loadManagementAgentWorkspaceState(
   }
 ): Promise<ManagementAgentWorkspaceState> {
   const db = getDb()
-  const scopeMatcher = scope.scopeType === 'request'
-    ? and(
-        eq(managementAgentSessions.scopeType, scope.scopeType),
-        scope.targetRequestId === null ? isNull(managementAgentSessions.targetRequestId) : eq(managementAgentSessions.targetRequestId, scope.targetRequestId),
-        isNull(managementAgentSessions.deletedAt)
-      )
-    : and(
-        eq(managementAgentSessions.scopeType, scope.scopeType),
-        scope.targetFolderId === null ? isNull(managementAgentSessions.targetFolderId) : eq(managementAgentSessions.targetFolderId, scope.targetFolderId),
-        scope.targetRequestId === null ? isNull(managementAgentSessions.targetRequestId) : eq(managementAgentSessions.targetRequestId, scope.targetRequestId),
-        isNull(managementAgentSessions.deletedAt)
-      )
+  const scopeMatcher =
+    scope.scopeType === 'request'
+      ? and(
+          eq(managementAgentSessions.scopeType, scope.scopeType),
+          scope.targetRequestId === null
+            ? isNull(managementAgentSessions.targetRequestId)
+            : eq(managementAgentSessions.targetRequestId, scope.targetRequestId),
+          isNull(managementAgentSessions.deletedAt)
+        )
+      : and(
+          eq(managementAgentSessions.scopeType, scope.scopeType),
+          scope.targetFolderId === null
+            ? isNull(managementAgentSessions.targetFolderId)
+            : eq(managementAgentSessions.targetFolderId, scope.targetFolderId),
+          scope.targetRequestId === null
+            ? isNull(managementAgentSessions.targetRequestId)
+            : eq(managementAgentSessions.targetRequestId, scope.targetRequestId),
+          isNull(managementAgentSessions.deletedAt)
+        )
   const sessionRows = db
     .select()
     .from(managementAgentSessions)
@@ -120,7 +129,9 @@ export async function loadManagementAgentWorkspaceState(
     const messages = messagesBySessionId.get(session.id) ?? []
     const sessionPlans = plansBySessionId.get(session.id) ?? []
     const activeDraft = sessionPlans.find(plan => plan.kind === 'draft' && plan.status === 'active') ?? null
-    const appliedPlans = sessionPlans.filter(plan => plan.kind === 'applied' && plan.status === 'applied').map(toManagementAgentPlanRecord)
+    const appliedPlans = sessionPlans
+      .filter(plan => plan.kind === 'applied' && plan.status === 'applied')
+      .map(toManagementAgentPlanRecord)
 
     return {
       session: {
@@ -154,20 +165,26 @@ export async function loadManagementAgentWorkspaceState(
 
 export function getManagementAgentSession(sessionId: string) {
   const db = getDb()
-  return db
-    .select()
-    .from(managementAgentSessions)
-    .where(and(eq(managementAgentSessions.id, sessionId), isNull(managementAgentSessions.deletedAt)))
-    .get() ?? null
+  return (
+    db
+      .select()
+      .from(managementAgentSessions)
+      .where(and(eq(managementAgentSessions.id, sessionId), isNull(managementAgentSessions.deletedAt)))
+      .get() ?? null
+  )
 }
 
 export function getManagementAgentSessionByOpenCodeSessionId(opencodeSessionId: string) {
   const db = getDb()
-  return db
-    .select()
-    .from(managementAgentSessions)
-    .where(and(eq(managementAgentSessions.opencodeSessionId, opencodeSessionId), isNull(managementAgentSessions.deletedAt)))
-    .get() ?? null
+  return (
+    db
+      .select()
+      .from(managementAgentSessions)
+      .where(
+        and(eq(managementAgentSessions.opencodeSessionId, opencodeSessionId), isNull(managementAgentSessions.deletedAt))
+      )
+      .get() ?? null
+  )
 }
 
 export function updateManagementAgentSession(sessionId: string, patch: Partial<ManagementAgentSessionRow>) {
@@ -183,7 +200,13 @@ export function getCurrentManagementAgentDraftPlan(sessionId: string): Managemen
   const row = db
     .select()
     .from(managementAgentPlans)
-    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
+    .where(
+      and(
+        eq(managementAgentPlans.sessionId, sessionId),
+        eq(managementAgentPlans.kind, 'draft'),
+        eq(managementAgentPlans.status, 'active')
+      )
+    )
     .orderBy(desc(managementAgentPlans.updatedAt), desc(managementAgentPlans.createdAt))
     .get()
 
@@ -195,7 +218,13 @@ export function listAppliedManagementAgentPlans(sessionId: string): ManagementAg
   return db
     .select()
     .from(managementAgentPlans)
-    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'applied'), eq(managementAgentPlans.status, 'applied')))
+    .where(
+      and(
+        eq(managementAgentPlans.sessionId, sessionId),
+        eq(managementAgentPlans.kind, 'applied'),
+        eq(managementAgentPlans.status, 'applied')
+      )
+    )
     .orderBy(desc(managementAgentPlans.updatedAt), desc(managementAgentPlans.createdAt))
     .all()
     .map(toManagementAgentPlanRecord)
@@ -207,7 +236,13 @@ export function setCurrentManagementAgentDraftPlan(sessionId: string, plan: Mana
   const existing = db
     .select()
     .from(managementAgentPlans)
-    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
+    .where(
+      and(
+        eq(managementAgentPlans.sessionId, sessionId),
+        eq(managementAgentPlans.kind, 'draft'),
+        eq(managementAgentPlans.status, 'active')
+      )
+    )
     .get()
 
   if (existing) {
@@ -235,7 +270,13 @@ export function clearCurrentManagementAgentDraftPlan(sessionId: string) {
   const db = getDb()
   db.update(managementAgentPlans)
     .set({ status: 'superseded', updatedAt: Date.now() })
-    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
+    .where(
+      and(
+        eq(managementAgentPlans.sessionId, sessionId),
+        eq(managementAgentPlans.kind, 'draft'),
+        eq(managementAgentPlans.status, 'active')
+      )
+    )
     .run()
 }
 
@@ -249,7 +290,13 @@ export async function applyManagementAgentDraftPlan(sessionId: string) {
   const activeDraftRow = db
     .select()
     .from(managementAgentPlans)
-    .where(and(eq(managementAgentPlans.sessionId, sessionId), eq(managementAgentPlans.kind, 'draft'), eq(managementAgentPlans.status, 'active')))
+    .where(
+      and(
+        eq(managementAgentPlans.sessionId, sessionId),
+        eq(managementAgentPlans.kind, 'draft'),
+        eq(managementAgentPlans.status, 'active')
+      )
+    )
     .get()
 
   if (!activeDraftRow) {
@@ -276,7 +323,12 @@ export async function applyManagementAgentDraftPlan(sessionId: string) {
     }
 
     for (const request of plan.requestsToCreate) {
-      const parentFolderId = resolvePlanParentFolderId(request.parentFolderId, request.parentScope, folderIdMap, session)
+      const parentFolderId = resolvePlanParentFolderId(
+        request.parentFolderId,
+        request.parentScope,
+        folderIdMap,
+        session
+      )
 
       insertRequestFromPlan(tx, parentFolderId, request)
     }
@@ -349,7 +401,8 @@ function insertFolderFromPlan(tx: Database, parentFolderId: string | null, name:
       authJson: serializeHttpAuth(createDefaultHttpAuth()),
       preRequestScript: '',
       postRequestScript: '',
-      runConfigJson: '{"selectionMode":"tests-only","selectedRequestIds":[],"executionMode":"sequential","continueOnFailure":true}',
+      runConfigJson:
+        '{"selectionMode":"tests-only","selectedRequestIds":[],"executionMode":"sequential","continueOnFailure":true,"runMode":"once","iterationCount":1,"concurrency":1}',
       position,
       createdAt: now,
       deletedAt: null,
@@ -384,7 +437,11 @@ function updateFolderFromPlan(tx: Database, folder: ManagementAgentFolderUpdateP
     .run()
 }
 
-function insertRequestFromPlan(tx: Database, parentFolderId: string | null, request: ManagementAgentRequestCreatePlanItem) {
+function insertRequestFromPlan(
+  tx: Database,
+  parentFolderId: string | null,
+  request: ManagementAgentRequestCreatePlanItem
+) {
   const now = Date.now()
   const requestId = crypto.randomUUID()
   const position = getNextTreePosition(tx, parentFolderId)
@@ -582,7 +639,11 @@ function updateTagFromPlan(tx: Database, tag: ManagementAgentTagUpdatePlanItem, 
     throw new Error('Tag name is required')
   }
 
-  const existing = tx.select().from(tags).where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt))).get()
+  const existing = tx
+    .select()
+    .from(tags)
+    .where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt)))
+    .get()
   if (!existing) {
     throw new Error('Tag not found')
   }
@@ -598,7 +659,11 @@ function updateTagFromPlan(tx: Database, tag: ManagementAgentTagUpdatePlanItem, 
     .run()
 }
 
-function applyItemTagUpdate(tx: Database, itemTagUpdate: ManagementAgentItemTagUpdatePlanItem, tagIdMap: Map<string, string>) {
+function applyItemTagUpdate(
+  tx: Database,
+  itemTagUpdate: ManagementAgentItemTagUpdatePlanItem,
+  tagIdMap: Map<string, string>
+) {
   ensureItemExists(tx, itemTagUpdate.itemType, itemTagUpdate.itemId)
   const resolvedTagIds = getValidatedPlanTagIds(tx, itemTagUpdate.tagIds, tagIdMap)
 
@@ -619,16 +684,24 @@ function applyItemTagUpdate(tx: Database, itemTagUpdate: ManagementAgentItemTagU
   })
 }
 
-function applyTagItemUpdate(tx: Database, tagItemUpdate: ManagementAgentTagItemUpdatePlanItem, tagIdMap: Map<string, string>) {
+function applyTagItemUpdate(
+  tx: Database,
+  tagItemUpdate: ManagementAgentTagItemUpdatePlanItem,
+  tagIdMap: Map<string, string>
+) {
   const resolvedTagId = resolvePlanTagId(tagItemUpdate.tagId, tagIdMap)
-  const tag = tx.select({ id: tags.id }).from(tags).where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt))).get()
+  const tag = tx
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.id, resolvedTagId), isNull(tags.deletedAt)))
+    .get()
   if (!tag) {
     throw new Error('Tag not found')
   }
 
-  const dedupedItems = Array.from(new Map(
-    tagItemUpdate.items.map(item => [`${item.itemType}:${item.itemId}`, item])
-  ).values())
+  const dedupedItems = Array.from(
+    new Map(tagItemUpdate.items.map(item => [`${item.itemType}:${item.itemId}`, item])).values()
+  )
 
   dedupedItems.forEach(item => ensureItemExists(tx, item.itemType, item.itemId))
 
@@ -660,7 +733,10 @@ function resolvePlanParentFolderId(
   return folderIdMap.get(parentFolderId) ?? parentFolderId
 }
 
-function resolvePlanRootFolderId(session: ManagementAgentSessionRow, parentScope: ManagementAgentParentScope | undefined) {
+function resolvePlanRootFolderId(
+  session: ManagementAgentSessionRow,
+  parentScope: ManagementAgentParentScope | undefined
+) {
   const resolvedParentScope = parentScope ?? (session.scopeType === 'folder' ? 'session-root' : 'workspace-root')
   if (resolvedParentScope === 'workspace-root') {
     return null
@@ -673,7 +749,11 @@ function getNextTreePosition(tx: Database, parentFolderId: string | null) {
   const siblings = tx
     .select({ position: treeItems.position })
     .from(treeItems)
-    .where(parentFolderId === null ? and(isNull(treeItems.parentFolderId), isNull(treeItems.deletedAt)) : and(eq(treeItems.parentFolderId, parentFolderId), isNull(treeItems.deletedAt)))
+    .where(
+      parentFolderId === null
+        ? and(isNull(treeItems.parentFolderId), isNull(treeItems.deletedAt))
+        : and(eq(treeItems.parentFolderId, parentFolderId), isNull(treeItems.deletedAt))
+    )
     .all()
 
   return siblings.length === 0 ? 0 : Math.max(...siblings.map(item => item.position)) + 1
@@ -720,8 +800,16 @@ function getValidatedPlanTagIds(tx: Database, tagIds: string[], tagIdMap: Map<st
 function ensureItemExists(tx: Database, itemType: TaggableItemType, itemId: string) {
   const exists =
     itemType === 'folder'
-      ? tx.select({ id: folders.id }).from(folders).where(and(eq(folders.id, itemId), isNull(folders.deletedAt))).get()
-      : tx.select({ id: requests.id }).from(requests).where(and(eq(requests.id, itemId), isNull(requests.deletedAt))).get()
+      ? tx
+          .select({ id: folders.id })
+          .from(folders)
+          .where(and(eq(folders.id, itemId), isNull(folders.deletedAt)))
+          .get()
+      : tx
+          .select({ id: requests.id })
+          .from(requests)
+          .where(and(eq(requests.id, itemId), isNull(requests.deletedAt)))
+          .get()
 
   if (!exists) {
     throw new Error(itemType === 'folder' ? 'Folder not found' : 'Request not found')
@@ -736,7 +824,9 @@ function ensureNoTagAssignmentConflicts(
   itemTagUpdates: ManagementAgentItemTagUpdatePlanItem[],
   tagItemUpdates: ManagementAgentTagItemUpdatePlanItem[]
 ) {
-  const directlyUpdatedItemKeys = new Set(itemTagUpdates.map(itemTagUpdate => `${itemTagUpdate.itemType}:${itemTagUpdate.itemId}`))
+  const directlyUpdatedItemKeys = new Set(
+    itemTagUpdates.map(itemTagUpdate => `${itemTagUpdate.itemType}:${itemTagUpdate.itemId}`)
+  )
   for (const tagItemUpdate of tagItemUpdates) {
     for (const item of tagItemUpdate.items) {
       const itemKey = `${item.itemType}:${item.itemId}`

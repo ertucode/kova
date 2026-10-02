@@ -86,6 +86,8 @@ type PrepareHttpRequestBaseInput = Pick<
   | 'graphqlVariables'
   | 'activeEnvironmentIds'
   | 'environmentSnapshot'
+  | 'preparationSnapshot'
+  | 'persistEnvironmentMutations'
   | 'immutableVariables'
 > &
   Partial<Pick<SendRequestInput, 'body' | 'postRequestScript' | 'testScript' | 'requestMetadata'>>
@@ -340,12 +342,13 @@ export async function prepareHttpRequestBase(
     beforePrepareHttpRequest?: (context: PrepareHttpRequestRuntimeContext) => PrepareHttpRequestRuntimeContext
   }
 ): Promise<GenericResult<PreparedHttpRequestBase>> {
-  const requestResult = await getRequest({ id: input.requestId })
-  if (!requestResult.success) {
-    return requestResult
+  const requestResult = input.preparationSnapshot ? null : await getRequest({ id: input.requestId })
+  if (requestResult && !requestResult.success) return requestResult
+  if (requestResult && requestResult.data.requestType !== 'http') {
+    return GenericError.Message('Use the WebSocket connect flow for websocket requests')
   }
 
-  const parentFolderId = await getRequestParentFolderId(input.requestId)
+  const parentFolderId = input.preparationSnapshot ? null : await getRequestParentFolderId(input.requestId)
   const activeEnvironments = input.environmentSnapshot
     ? input.environmentSnapshot
     : await listVisibleEnvironments({ folderId: parentFolderId, activeEnvironmentIds: input.activeEnvironmentIds })
@@ -354,13 +357,11 @@ export async function prepareHttpRequestBase(
     ? options.beforePrepareHttpRequest({ environments: activeEnvironments, folderEnvironments })
     : { environments: activeEnvironments, folderEnvironments }
 
-  if (requestResult.data.requestType !== 'http') {
-    return GenericError.Message('Use the WebSocket connect flow for websocket requests')
-  }
-
   const [folders, sharedScripts, workspacePackages] = await Promise.all([
-    getFolderAncestorChain(parentFolderId),
-    listVisibleSharedScripts({ folderId: parentFolderId, onlyActive: true }),
+    input.preparationSnapshot ? input.preparationSnapshot.folders : getFolderAncestorChain(parentFolderId),
+    input.preparationSnapshot
+      ? input.preparationSnapshot.sharedScripts
+      : listVisibleSharedScripts({ folderId: parentFolderId, onlyActive: true }),
     resolveReadyWorkspaceScriptPackages(),
   ])
   const runtime = createRequestScriptRuntime({
@@ -391,6 +392,7 @@ export async function prepareHttpRequestBase(
     prompt: options?.prompt,
     clipboard: options?.clipboard,
     makeRequest: options?.makeRequest,
+    persistEnvironmentMutations: input.persistEnvironmentMutations,
   })
 
   let resolvedFolderAuths: HttpAuth[]
@@ -405,7 +407,10 @@ export async function prepareHttpRequestBase(
 
   const preRequestScriptErrors = await runtime.runPreRequestScripts([
     ...folders.map(folder => ({ name: `Folder: ${folder.name}`, script: folder.preRequestScript })),
-    { name: `Request: ${requestResult.data.name}`, script: input.preRequestScript },
+    {
+      name: `Request: ${input.preparationSnapshot?.requestName ?? requestResult?.data.name ?? input.requestId}`,
+      script: input.preRequestScript,
+    },
   ])
   if (preRequestScriptErrors.length > 0) {
     return GenericError.Message(formatRequestScriptErrorSummaries(preRequestScriptErrors), {
@@ -475,7 +480,7 @@ export async function prepareHttpRequestBase(
 
   return Result.Success({
     requestId: input.requestId,
-    requestName: requestResult.data.name,
+    requestName: input.preparationSnapshot?.requestName ?? requestResult?.data.name ?? input.requestId,
     runtime,
     variables,
     method: runtime.request.method,
@@ -483,13 +488,21 @@ export async function prepareHttpRequestBase(
     resolvedAuth,
     headers,
     postRequestScriptSources: [
-      { name: `Request: ${requestResult.data.name}`, script: input.postRequestScript ?? '' },
+      {
+        name: `Request: ${input.preparationSnapshot?.requestName ?? requestResult?.data.name ?? input.requestId}`,
+        script: input.postRequestScript ?? '',
+      },
       ...folders
         .slice()
         .reverse()
         .map(folder => ({ name: `Folder: ${folder.name}`, script: folder.postRequestScript })),
     ],
-    testScriptSources: [{ name: `Request: ${requestResult.data.name}`, script: input.testScript ?? '' }],
+    testScriptSources: [
+      {
+        name: `Request: ${input.preparationSnapshot?.requestName ?? requestResult?.data.name ?? input.requestId}`,
+        script: input.testScript ?? '',
+      },
+    ],
   })
 }
 

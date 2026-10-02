@@ -7,7 +7,7 @@ import { copyFile, mkdir, rename, unlink, writeFile } from 'fs/promises'
 import { ipcHandle, isDev } from './util.js'
 import { getPreloadPath, getUIPath } from './pathResolver.js'
 import { TaskManager } from './TaskManager.js'
-import { closeDatabase, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
+import { closeDatabase, getCurrentDatabasePath, initializeDatabase, verifyDatabaseConnection } from './db/index.js'
 import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
 import type { EnvironmentRecord } from '../common/Environments.js'
 import type { PreparedHttpRequest } from './http-request-runtime.js'
@@ -98,6 +98,7 @@ const loadOpenCodeModels = () => import('./opencode-models.js')
 const loadSupermavenService = async () => (await import('./supermaven-service.js')).supermavenService
 const loadManagementAgent = () => import('./management-agent.js')
 let requestBatchRecoveryPromise: Promise<void> | null = null
+let folderRunRecoveryPromise: Promise<void> | null = null
 
 function ensureRequestBatchRecovery() {
   requestBatchRecoveryPromise ??= loadRequestBatchRunner()
@@ -114,6 +115,16 @@ function ensureRequestBatchRecovery() {
   return requestBatchRecoveryPromise
 }
 
+function ensureFolderRunRecovery() {
+  folderRunRecoveryPromise ??= loadFolderRequestRunner()
+    .then(({ recoverStaleFolderRunCampaigns }) => recoverStaleFolderRunCampaigns())
+    .catch(error => {
+      folderRunRecoveryPromise = null
+      throw error
+    })
+  return folderRunRecoveryPromise
+}
+
 function getDefaultDatabasePath() {
   return path.join(app.getPath('userData'), 'kova.sqlite')
 }
@@ -125,12 +136,23 @@ function getMigrationsPath() {
 async function syncConfiguredDatabase() {
   const databaseConfig = await getResolvedDatabaseConfig(getDefaultDatabasePath())
   const activeDatabase = databaseConfig.items.find(item => item.name === databaseConfig.activeName)
+  const nextDatabasePath = path.resolve(activeDatabase?.path ?? getDefaultDatabasePath())
+  const currentDatabasePath = getCurrentDatabasePath()
+  const databaseChanged = currentDatabasePath !== null && currentDatabasePath !== nextDatabasePath
+  const folderRunner = await loadFolderRequestRunner()
+  if (databaseChanged) {
+    await folderRunner.pauseAndShutdownFolderRuns()
+  }
 
   initializeDatabase({
-    dbPath: activeDatabase?.path ?? getDefaultDatabasePath(),
+    dbPath: nextDatabasePath,
     migrationsPath: getMigrationsPath(),
   })
-  requestBatchRecoveryPromise = null
+  if (databaseChanged) {
+    requestBatchRecoveryPromise = null
+    folderRunRecoveryPromise = null
+  }
+  folderRunner.resumeFolderRuns()
 
   return databaseConfig
 }
@@ -518,6 +540,7 @@ app.on('ready', async () => {
   })
 
   ipcHandle('runFolderRequests', async (input, event) => {
+    await ensureFolderRunRecovery()
     const [{ runFolderRequests }, { createScriptToastBridge }] = await Promise.all([
       loadFolderRequestRunner(),
       loadScriptUiBridges(),
@@ -533,21 +556,25 @@ app.on('ready', async () => {
   })
 
   ipcHandle('cancelFolderRun', async input => {
+    await ensureFolderRunRecovery()
     const { cancelFolderRun } = await loadFolderRequestRunner()
     return cancelFolderRun(input)
   })
 
   ipcHandle('deleteFolderRunHistory', async input => {
+    await ensureFolderRunRecovery()
     const { deleteFolderRunHistory } = await loadFolderRunHistoryDb()
     return deleteFolderRunHistory(input)
   })
 
   ipcHandle('listFolderRunHistory', async input => {
+    await ensureFolderRunRecovery()
     const { listFolderRunHistory } = await loadFolderRunHistoryDb()
     return listFolderRunHistory(input)
   })
 
   ipcHandle('getFolderRunHistory', async input => {
+    await ensureFolderRunRecovery()
     const { getFolderRunHistory } = await loadFolderRunHistoryDb()
     return getFolderRunHistory(input)
   })
@@ -626,7 +653,11 @@ app.on('ready', async () => {
       const data = getRequestBatchExportData(input.batchId)
       if (!data.success) return data
 
-      const name = data.data.batch.name.replace(/\.(csv|xlsx|json)$/i, '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').trim() || 'batch'
+      const name =
+        data.data.batch.name
+          .replace(/\.(csv|xlsx|json)$/i, '')
+          .replace(/[<>:"/\\|?*\x00-\x1f]/g, '-')
+          .trim() || 'batch'
       const window = BrowserWindow.fromWebContents(event.sender)
       const options: Electron.SaveDialogOptions = {
         defaultPath: `${name}-results.xlsx`,
@@ -1427,7 +1458,11 @@ app.on('ready', async () => {
 
       if (existingDatabase && path.resolve(existingDatabase.path) !== path.resolve(input.path)) {
         if (shouldReload) {
+          const { pauseAndShutdownFolderRuns } = await loadFolderRequestRunner()
+          await pauseAndShutdownFolderRuns()
           closeDatabase()
+          requestBatchRecoveryPromise = null
+          folderRunRecoveryPromise = null
         }
 
         await moveDatabaseFile(existingDatabase.path, input.path)

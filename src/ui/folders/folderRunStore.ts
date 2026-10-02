@@ -2,10 +2,9 @@ import { createStore } from '@xstate/store'
 import { errorResponseToMessage } from '@common/GenericError'
 import type {
   FolderRunHistoryRecord,
+  FolderRunCampaignSummary,
   FolderRunRecord,
-  FolderRunRequest,
   FolderRunStatus,
-  FolderRunSummary,
   RunFolderRequestsInput,
 } from '@common/FolderRuns'
 import { getWindowElectron } from '@/getWindowElectron'
@@ -27,7 +26,9 @@ function getLatestFolderRunId(context: FolderRunContext, folderId: string) {
   const latestHistoryRun = historyRuns
     .filter(run => !liveRunIds.has(run.id))
     .sort((left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id))[0]
-  const latestLiveRun = liveRuns.sort((left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id))[0]
+  const latestLiveRun = liveRuns.sort(
+    (left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id)
+  )[0]
   const latestRun = [latestLiveRun, latestHistoryRun]
     .filter((run): run is FolderRunRecord | FolderRunHistoryRecord => run !== undefined)
     .sort((left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id))[0]
@@ -50,45 +51,47 @@ export const folderRunStore = createStore({
       activeRunIdByFolderId: { ...context.activeRunIdByFolderId, [event.run.folderId]: event.run.id },
       latestRunIdByFolderId: { ...context.latestRunIdByFolderId, [event.run.folderId]: event.run.id },
     }),
-    requestStarted: (context, event: { runId: string; requestId: string; startedAt: number; summary: FolderRunSummary }) => {
+    runProgressed: (
+      context,
+      event: { runId: string; summary: FolderRunCampaignSummary; iterations: FolderRunRecord['iterations'] }
+    ) => {
       const run = context.runsById[event.runId]
       if (!run) return context
       return {
         ...context,
         runsById: {
           ...context.runsById,
-          [event.runId]: {
-            ...run,
-            summary: event.summary,
-            requests: run.requests.map(request =>
-              request.requestId === event.requestId
-                ? { ...request, status: 'running' as const, startedAt: event.startedAt }
-                : request
-            ),
-          },
+          [event.runId]: { ...run, summary: event.summary, iterations: event.iterations },
         },
       }
     },
-    requestCompleted: (context, event: { runId: string; request: FolderRunRequest; summary: FolderRunSummary }) => {
-      const run = context.runsById[event.runId]
-      if (!run) return context
-      return {
-        ...context,
-        runsById: {
-          ...context.runsById,
-          [event.runId]: {
-            ...run,
-            summary: event.summary,
-            requests: run.requests.map(request =>
-              request.requestId === event.request.requestId ? event.request : request
-            ),
-          },
+    runHydrated: (context, event: { history: FolderRunHistoryRecord; iterations: FolderRunRecord['iterations'] }) => ({
+      ...context,
+      runsById: {
+        ...context.runsById,
+        [event.history.id]: {
+          id: event.history.id,
+          folderId: event.history.folderId,
+          folderName: event.history.folderName,
+          config: event.history.config,
+          status: event.history.status,
+          summary: event.history.summary,
+          iterations: event.iterations,
+          overlappingFolderRunIds: context.runsById[event.history.id]?.overlappingFolderRunIds ?? [],
+          startedAt: event.history.startedAt,
+          completedAt: event.history.completedAt,
         },
-      }
-    },
+      },
+    }),
     runCompleted: (
       context,
-      event: { runId: string; folderId: string; status: FolderRunStatus; completedAt: number; summary: FolderRunSummary }
+      event: {
+        runId: string
+        folderId: string
+        status: FolderRunStatus
+        completedAt: number
+        summary: FolderRunCampaignSummary
+      }
     ) => {
       const run = context.runsById[event.runId]
       const nextActive = { ...context.activeRunIdByFolderId }
@@ -190,6 +193,12 @@ export namespace FolderRunCoordinator {
     } catch {
       folderRunStore.trigger.historyLoadFailed({ folderId })
     }
+  }
+
+  export async function loadRunDetails(runId: string) {
+    const result = await getWindowElectron().getFolderRunHistory({ id: runId })
+    if (!result.success) return
+    folderRunStore.trigger.runHydrated({ history: result.data.run, iterations: result.data.iterations })
   }
 
   export async function deleteHistoryEntry(folderId: string, runId: string) {

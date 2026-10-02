@@ -173,7 +173,11 @@ export async function sendManagementAgentMessage(
         status: 'error',
         latestErrorMessage: error instanceof Error ? error.message : String(error),
       })
-      emitManagementAgentState(await loadManagementAgentWorkspaceStateWithOpenCode(toScope(session)).catch(() => loadManagementAgentWorkspaceState(toScope(session))))
+      emitManagementAgentState(
+        await loadManagementAgentWorkspaceStateWithOpenCode(toScope(session)).catch(() =>
+          loadManagementAgentWorkspaceState(toScope(session))
+        )
+      )
     }
     return toGenericError(error)
   }
@@ -207,7 +211,10 @@ export async function applyManagementAgentPlan(
 ): Promise<GenericResult<ManagementAgentWorkspaceState>> {
   try {
     const state = await applyManagementAgentDraftPlan(input.sessionId)
-    emitGenericEvent({ type: 'environments-updated', environmentIds: (await listEnvironments()).map(environment => environment.id) })
+    emitGenericEvent({
+      type: 'environments-updated',
+      environmentIds: (await listEnvironments()).map(environment => environment.id),
+    })
     emitManagementAgentState(state)
     return Result.Success(state)
   } catch (error) {
@@ -284,8 +291,8 @@ async function buildSystemPrompt(sessionId: string) {
   const currentFolderPath = currentFolderId ? await getFolderPathById(currentFolderId) : []
 
   return [
-    'You are Kova\'s Manage with AI assistant.',
-    'Your job is to inspect the current Kova workspace, understand the user\'s management request, and keep the live draft plan up to date.',
+    "You are Kova's Manage with AI assistant.",
+    "Your job is to inspect the current Kova workspace, understand the user's management request, and keep the live draft plan up to date.",
     'The Kova draft plan is the only source of truth for pending changes. Do not return final JSON in chat as the source of truth.',
     'Never mutate Kova data directly. You may inspect workspace state and update, replace, or clear the current draft plan only through the available Kova management agent MCP tools.',
     'Do not edit files, create files, or use unrelated tools. Prefer the Kova management agent MCP tools over anything else.',
@@ -324,6 +331,9 @@ async function buildSystemPrompt(sessionId: string) {
               selectedRequestIds: [],
               executionMode: 'sequential',
               continueOnFailure: true,
+              runMode: 'once',
+              iterationCount: 1,
+              concurrency: 1,
             },
           },
         ],
@@ -356,7 +366,13 @@ async function buildSystemPrompt(sessionId: string) {
         requestsToUpdate: [],
         requestsToDelete: [{ requestId: 'request-id' }],
         foldersToDelete: [{ folderId: 'folder-id' }],
-        environmentUpdates: [{ environmentId: 'env-id', environmentName: 'Local', variables: [{ key: 'baseUrl', value: 'https://api.example.com' }] }],
+        environmentUpdates: [
+          {
+            environmentId: 'env-id',
+            environmentName: 'Local',
+            variables: [{ key: 'baseUrl', value: 'https://api.example.com' }],
+          },
+        ],
       },
       null,
       2
@@ -425,7 +441,7 @@ async function createServerRuntime(): Promise<ManagementAgentServerRuntime> {
   try {
     ownedServer = await createOpencodeServer({
       hostname: '127.0.0.1',
-        port: managementAgentServerPort,
+      port: managementAgentServerPort,
       timeout: 10_000,
       signal: startupAbortController.signal,
       config: {
@@ -506,7 +522,9 @@ async function ensureManagementAgentMcpRegistration(
     ...(directory ? { query: { directory } } : {}),
   })
 
-  const status = requireSdkData(result.data, 'OpenCode did not return the MCP server status.')[MANAGEMENT_AGENT_MCP_SERVER_NAME]
+  const status = requireSdkData(result.data, 'OpenCode did not return the MCP server status.')[
+    MANAGEMENT_AGENT_MCP_SERVER_NAME
+  ]
   if (status?.status === 'connected') {
     if (directory && runtime) {
       runtime.mcpRegisteredDirectories.add(directory)
@@ -636,7 +654,11 @@ function getManagementScopeLabel(
   }
 }
 
-async function getScopeFolderId(session: { scopeType: string; targetFolderId: string | null; targetRequestId: string | null }) {
+async function getScopeFolderId(session: {
+  scopeType: string
+  targetFolderId: string | null
+  targetRequestId: string | null
+}) {
   switch (session.scopeType) {
     case 'workspace':
       return null
@@ -801,13 +823,49 @@ function toManagementAgentMessagePart(part: Part): ManagementAgentMessage['parts
 function toManagementAgentToolPart(part: ToolPart): ManagementAgentMessage['parts'][number] {
   switch (part.state.status) {
     case 'pending':
-      return { id: part.id, type: 'tool', toolName: part.tool, status: 'pending', title: null, input: part.state.raw, output: null, errorMessage: null }
+      return {
+        id: part.id,
+        type: 'tool',
+        toolName: part.tool,
+        status: 'pending',
+        title: null,
+        input: part.state.raw,
+        output: null,
+        errorMessage: null,
+      }
     case 'running':
-      return { id: part.id, type: 'tool', toolName: part.tool, status: 'running', title: part.state.title ?? null, input: JSON.stringify(part.state.input, null, 2), output: null, errorMessage: null }
+      return {
+        id: part.id,
+        type: 'tool',
+        toolName: part.tool,
+        status: 'running',
+        title: part.state.title ?? null,
+        input: JSON.stringify(part.state.input, null, 2),
+        output: null,
+        errorMessage: null,
+      }
     case 'completed':
-      return { id: part.id, type: 'tool', toolName: part.tool, status: 'completed', title: part.state.title, input: JSON.stringify(part.state.input, null, 2), output: part.state.output, errorMessage: null }
+      return {
+        id: part.id,
+        type: 'tool',
+        toolName: part.tool,
+        status: 'completed',
+        title: part.state.title,
+        input: JSON.stringify(part.state.input, null, 2),
+        output: part.state.output,
+        errorMessage: null,
+      }
     case 'error':
-      return { id: part.id, type: 'tool', toolName: part.tool, status: 'error', title: null, input: JSON.stringify(part.state.input, null, 2), output: null, errorMessage: part.state.error }
+      return {
+        id: part.id,
+        type: 'tool',
+        toolName: part.tool,
+        status: 'error',
+        title: null,
+        input: JSON.stringify(part.state.input, null, 2),
+        output: null,
+        errorMessage: part.state.error,
+      }
   }
 }
 
@@ -831,7 +889,11 @@ function getSdkErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : null
 }
 
-function toScope(session: { scopeType: string; targetFolderId: string | null; targetRequestId: string | null }): ManagementAgentScope {
+function toScope(session: {
+  scopeType: string
+  targetFolderId: string | null
+  targetRequestId: string | null
+}): ManagementAgentScope {
   return {
     scopeType: session.scopeType as ManagementAgentScope['scopeType'],
     targetFolderId: session.targetFolderId,
@@ -908,7 +970,9 @@ async function emitLiveSessionState(sessionId: string) {
     return null
   }
 
-  const messagesBySessionId = await syncManagementAgentSessionFromOpenCode(session.id).catch(() => ({} as Record<string, ManagementAgentMessage[]>))
+  const messagesBySessionId = await syncManagementAgentSessionFromOpenCode(session.id).catch(
+    () => ({}) as Record<string, ManagementAgentMessage[]>
+  )
   const state = await loadManagementAgentWorkspaceStateWithOpenCode(toScope(session), { messagesBySessionId })
   emitManagementAgentState(state)
   return state
@@ -951,7 +1015,11 @@ async function handleGlobalEvent(event: GlobalEvent) {
     )
     updateLiveSessionSummary(session.id)
   } else if (payload.type === 'message.part.updated') {
-    upsertMessagePart(session.id, payload.properties.part.messageID, toManagementAgentMessagePart(payload.properties.part))
+    upsertMessagePart(
+      session.id,
+      payload.properties.part.messageID,
+      toManagementAgentMessagePart(payload.properties.part)
+    )
     updateLiveSessionSummary(session.id)
   } else if (payload.type === 'message.part.removed') {
     removeMessagePart(session.id, payload.properties.messageID, payload.properties.partID)

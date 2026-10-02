@@ -1,8 +1,10 @@
 import type { HttpAuth } from './Auth.js'
 import type { EnvironmentRecord } from './Environments.js'
+import type { FolderRecord } from './Folders.js'
 import type { OperationRecord } from './Operations.js'
 import type { ScriptCallRequestOverrides } from './ScriptMakeRequest.js'
 import type { RequestTlsVerificationMode } from './Tls.js'
+import type { SharedScriptRecord } from './SharedScripts.js'
 
 export {
   DEFAULT_REQUEST_TLS_VERIFICATION_MODE,
@@ -186,6 +188,12 @@ export type SendRequestInput = {
   activeEnvironmentIds: string[]
   tlsVerificationMode: RequestTlsVerificationMode
   environmentSnapshot?: EnvironmentRecord[]
+  preparationSnapshot?: {
+    requestName: string
+    folders: FolderRecord[]
+    sharedScripts: SharedScriptRecord[]
+  }
+  persistEnvironmentMutations?: boolean
   immutableVariables?: Record<string, string>
   saveToHistory: boolean
   historyKeepLast: number
@@ -193,6 +201,7 @@ export type SendRequestInput = {
   requestMetadata?: SendRequestMetadata
   folderRunId?: string
   folderRunFolderId?: string
+  folderRunIterationId?: string
   requestBatchId?: string
   requestBatchRowId?: string
   suppressSseEvents?: boolean
@@ -449,6 +458,7 @@ export type RequestExecutionRecord = {
   id: string
   folderRunId?: string | null
   folderRunFolderId?: string | null
+  folderRunIterationId?: string | null
   requestBatchId?: string | null
   requestBatchRowId?: string | null
   requestId: string

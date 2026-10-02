@@ -2,7 +2,7 @@ import { RequestSendCoordinator } from '@/folders/requestSendCoordinator'
 import { getWindowElectron } from '@/getWindowElectron'
 import { CookiesCoordinator } from '@/folders/cookiesCoordinator'
 import { EnvironmentCoordinator } from '@/folders/environmentCoordinator'
-import { folderRunStore } from '@/folders/folderRunStore'
+import { FolderRunCoordinator, folderRunStore } from '@/folders/folderRunStore'
 import { requestExecutionStore } from '@/folders/requestExecutionStore'
 import { ScriptAiReviewCoordinator } from '@/folders/scriptAiReviewStore'
 import { RequestBatchCoordinator } from '@/folders/requestBatchStore'
@@ -77,15 +77,8 @@ export function subscribeToGenericEvents() {
       })
     } else if (e.type === 'folder-run-started') {
       folderRunStore.trigger.runStarted({ run: e.run })
-    } else if (e.type === 'folder-run-request-started') {
-      folderRunStore.trigger.requestStarted({
-        runId: e.runId,
-        requestId: e.requestId,
-        startedAt: e.startedAt,
-        summary: e.summary,
-      })
-    } else if (e.type === 'folder-run-request-completed') {
-      folderRunStore.trigger.requestCompleted({ runId: e.runId, request: e.request, summary: e.summary })
+    } else if (e.type === 'folder-run-progress') {
+      folderRunStore.trigger.runProgressed({ runId: e.runId, summary: e.summary, iterations: e.iterations })
     } else if (e.type === 'folder-run-completed') {
       folderRunStore.trigger.runCompleted({
         runId: e.runId,
@@ -94,6 +87,8 @@ export function subscribeToGenericEvents() {
         completedAt: e.completedAt,
         summary: e.summary,
       })
+      void FolderRunCoordinator.loadRunDetails(e.runId)
+      void FolderRunCoordinator.loadHistory(e.folderId)
     } else if (e.type === 'request-batch-updated') {
       RequestBatchCoordinator.queueBatchUpdate({
         batchId: e.batchId,

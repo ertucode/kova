@@ -332,6 +332,7 @@ export function createRequestScriptRuntime(input: {
   prompt?: ScriptPromptBridge
   clipboard?: ScriptClipboardBridge
   makeRequest?: ScriptMakeRequestBridge
+  persistEnvironmentMutations?: boolean
 }): ScriptRuntime {
   const requestScope = new Map<string, string>()
   const immutableVariables = { ...input.immutableVariables }
@@ -352,6 +353,16 @@ export function createRequestScriptRuntime(input: {
   let pendingEnvironmentIds = new Set<string>()
   const updatedEnvironmentIds = new Set<string>()
   const consoleEntries: RequestConsoleEntry[] = []
+  const commitEnvironmentUpdates = async () => {
+    if (pendingEnvironmentIds.size === 0) return
+    if (input.persistEnvironmentMutations !== false) {
+      environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
+      pendingEnvironmentIds.forEach(id => updatedEnvironmentIds.add(id))
+    }
+    environmentValues = buildEnvironmentVariableMap(environments)
+    environmentOwners = buildEffectiveEnvironmentOwners(environments)
+    pendingEnvironmentIds = new Set<string>()
+  }
   const runtimeRequestMetadata: RuntimeRequestMetadataState = {
     sourceRuntime: input.requestMetadata?.sourceRuntime ?? 'request-editor',
     isRetry: input.requestMetadata?.isRetry ?? false,
@@ -555,13 +566,7 @@ export function createRequestScriptRuntime(input: {
         return scriptErrors
       }
 
-      if (pendingEnvironmentIds.size > 0) {
-        environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
-        environmentValues = buildEnvironmentVariableMap(environments)
-        environmentOwners = buildEffectiveEnvironmentOwners(environments)
-        pendingEnvironmentIds.forEach(id => updatedEnvironmentIds.add(id))
-        pendingEnvironmentIds = new Set<string>()
-      }
+      await commitEnvironmentUpdates()
 
       return []
     },
@@ -609,13 +614,7 @@ export function createRequestScriptRuntime(input: {
           }
         }
 
-        if (pendingEnvironmentIds.size > 0) {
-          environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
-          environmentValues = buildEnvironmentVariableMap(environments)
-          environmentOwners = buildEffectiveEnvironmentOwners(environments)
-          pendingEnvironmentIds.forEach(id => updatedEnvironmentIds.add(id))
-          pendingEnvironmentIds = new Set<string>()
-        }
+        await commitEnvironmentUpdates()
 
         response.headers = responseHeaders.serialize()
 
@@ -674,12 +673,8 @@ export function createRequestScriptRuntime(input: {
             runtimeRequest,
             requestScope
           ))
-        } else if (pendingEnvironmentIds.size > 0) {
-          environments = await persistEnvironmentUpdates(environments, pendingEnvironmentIds)
-          environmentValues = buildEnvironmentVariableMap(environments)
-          environmentOwners = buildEffectiveEnvironmentOwners(environments)
-          pendingEnvironmentIds.forEach(id => updatedEnvironmentIds.add(id))
-          pendingEnvironmentIds = new Set<string>()
+        } else {
+          await commitEnvironmentUpdates()
         }
 
         return {
@@ -2755,11 +2750,7 @@ async function evaluateTemplateExpression(input: {
       loadPackage: requirePackage,
     })
     const result = await resolveTemplateExpressionResult(
-      await executeScript(
-        compiledScript.code,
-        executionGlobals,
-        executionController
-      )
+      await executeScript(compiledScript.code, executionGlobals, executionController)
     )
     input.runtimeRequest.headers = headerEditor.serialize()
     return stringifyTemplateExpressionResult(result)
@@ -2966,7 +2957,9 @@ function installExpressionExportGlobals(input: {
   loadPackage: (specifier: string) => unknown
 }) {
   const scriptsByExport = new Map<string, SharedScriptRecord>()
-  const activeScripts = input.sharedScripts.filter(script => script.isActive && script.kind === 'expression' && script.code.trim())
+  const activeScripts = input.sharedScripts.filter(
+    script => script.isActive && script.kind === 'expression' && script.code.trim()
+  )
 
   for (const script of activeScripts) {
     for (const exportName of getSharedScriptCodeExportNames(script.code)) {

@@ -1,6 +1,9 @@
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import {
+  createEmptyFolderRunCampaignSummary,
   createEmptyFolderRunSummary,
+  type FolderRunCampaignSummary,
+  type FolderRunIterationRecord,
   type FolderRunRecord,
   type FolderRunRequest,
   type FolderRunRequestStatus,
@@ -11,14 +14,22 @@ import {
 import type { ExplorerItem } from '../common/Explorer.js'
 import type { HttpRequestRecord, RequestExecutionRecord, SendRequestInput } from '../common/Requests.js'
 import { Result } from '../common/Result.js'
-import { getFolder } from './db/folders.js'
+import { Typescript } from '../common/Typescript.js'
+import { getFolder, getFolderAncestorChain } from './db/folders.js'
 import { listVisibleEnvironments } from './db/environments.js'
 import { listExplorerItems } from './db/explorer.js'
 import { getRequest } from './db/requests.js'
 import { listVisibleSharedScripts } from './db/shared-scripts.js'
-import { createFolderRunHistory, updateFolderRunHistory } from './db/folder-run-history.js'
+import {
+  completeFolderRunIteration,
+  createFolderRunHistory,
+  createFolderRunIteration,
+  recoverStaleFolderRuns,
+  updateFolderRunHistory,
+} from './db/folder-run-history.js'
 import { cancelHttpRequest, sendRequest } from './send-request.js'
 import { emitGenericEvent } from './generic-events.js'
+import { runFolderIterationScheduler } from './folder-run-scheduler.js'
 
 type SendRequestOptions = Parameters<typeof sendRequest>[1]
 
@@ -26,6 +37,8 @@ type ActiveRunState = {
   run: FolderRunRecord
   activeExecutions: Map<string, string>
   isCancelling: boolean
+  progressTimer: ReturnType<typeof setTimeout> | null
+  completion: Promise<void> | null
 }
 
 type ResolvedFolderRequest = {
@@ -33,177 +46,270 @@ type ResolvedFolderRequest = {
   request: HttpRequestRecord
   hasTests: boolean
   position: number
+  environmentSnapshot: NonNullable<SendRequestInput['environmentSnapshot']>
+  preparationSnapshot: NonNullable<SendRequestInput['preparationSnapshot']>
 }
 
 type OverlappingFolderRun = RunFolderRequestsResponse['overlappingRuns'][number]
 
 const activeRunsById = new Map<string, ActiveRunState>()
 const activeRunIdByFolderId = new Map<string, string>()
+const startingFolderIds = new Set<string>()
+let acceptingRuns = true
+const MAX_CONCURRENCY = 100
+const RETAINED_EDGE_ITERATION_COUNT = 20
+const PROGRESS_EVENT_INTERVAL_MS = 300
 
 export async function runFolderRequests(
   input: RunFolderRequestsInput,
   options?: SendRequestOptions
 ): Promise<GenericResult<RunFolderRequestsResponse>> {
-  if (activeRunIdByFolderId.has(input.folderId)) {
+  let startedState: ActiveRunState | null = null
+  const validationError = validateInput(input)
+  if (validationError) return GenericError.Message(validationError)
+  if (!acceptingRuns) return GenericError.Message('Folder runs are temporarily unavailable while switching databases')
+  if (activeRunIdByFolderId.has(input.folderId) || startingFolderIds.has(input.folderId)) {
     return GenericError.Message('This folder already has an active run')
   }
 
-  const folderResult = await getFolder({ id: input.folderId })
-  if (!folderResult.success) {
-    return folderResult
+  startingFolderIds.add(input.folderId)
+  try {
+    const folderResult = await getFolder({ id: input.folderId })
+    if (!folderResult.success) return folderResult
+
+    const items = await listExplorerItems()
+    const overlap = getOverlappingRuns(items, input.folderId)
+    const resolvedRequests = await resolveFolderRequests(items, input)
+    if (resolvedRequests.length === 0) {
+      return GenericError.Message('No requests match this folder run configuration')
+    }
+
+    const now = Date.now()
+    const targetIterationCount = getTargetIterationCount(input)
+    const run: FolderRunRecord = {
+      id: crypto.randomUUID(),
+      folderId: input.folderId,
+      folderName: folderResult.data.name,
+      config: {
+        ...input.config,
+        concurrency: input.config.runMode === 'once' ? 1 : input.config.concurrency,
+        selectedRequestIds: input.config.selectedRequestIds.slice(),
+      },
+      status: 'running',
+      summary: createEmptyFolderRunCampaignSummary(targetIterationCount),
+      iterations: [],
+      overlappingFolderRunIds: overlap.map(item => item.runId),
+      startedAt: now,
+      completedAt: null,
+    }
+    const state: ActiveRunState = {
+      run,
+      activeExecutions: new Map(),
+      isCancelling: false,
+      progressTimer: null,
+      completion: null,
+    }
+    startedState = state
+    activeRunsById.set(run.id, state)
+    activeRunIdByFolderId.set(run.folderId, run.id)
+    createFolderRunHistory(run)
+    emitGenericEvent({ type: 'folder-run-started', run: cloneRun(run) })
+
+    state.completion = executeCampaign(state, resolvedRequests, input, options).catch(error => {
+      console.error('folder run campaign failed', error)
+      finishCampaign(state, 'failed')
+    })
+    void state.completion
+    return Result.Success({ run: cloneRun(run), overlappingRuns: overlap })
+  } catch (error) {
+    if (startedState) {
+      activeRunsById.delete(startedState.run.id)
+      activeRunIdByFolderId.delete(startedState.run.folderId)
+    }
+    return GenericError.Unknown(error)
+  } finally {
+    startingFolderIds.delete(input.folderId)
   }
-
-  const items = await listExplorerItems()
-  const overlap = getOverlappingRuns(items, input.folderId)
-  const resolvedRequests = await resolveFolderRequests(items, input)
-  const now = Date.now()
-  const run: FolderRunRecord = {
-    id: crypto.randomUUID(),
-    folderId: input.folderId,
-    folderName: folderResult.data.name,
-    config: input.config,
-    status: 'running',
-    summary: createEmptyFolderRunSummary(resolvedRequests.length),
-    requests: resolvedRequests.map(toFolderRunRequest),
-    overlappingFolderRunIds: overlap.map(item => item.runId),
-    startedAt: now,
-    completedAt: null,
-  }
-  const state: ActiveRunState = { run, activeExecutions: new Map(), isCancelling: false }
-
-  activeRunsById.set(run.id, state)
-  activeRunIdByFolderId.set(run.folderId, run.id)
-  createFolderRunHistory(run)
-  emitGenericEvent({ type: 'folder-run-started', run: cloneRun(run) })
-
-  void executeRun(state, resolvedRequests, input, options).catch(error => {
-    console.error('folder run failed', error)
-    finishRun(state, 'failed')
-  })
-
-  return Result.Success({ run: cloneRun(run), overlappingRuns: overlap })
 }
 
 export async function cancelFolderRun(input: { runId: string }): Promise<GenericResult<void>> {
   const state = activeRunsById.get(input.runId)
-  if (!state) {
-    return GenericError.Message('Folder run is not active')
-  }
-
+  if (!state) return GenericError.Message('Folder run is not active')
   state.isCancelling = true
   await Promise.all(
-    Array.from(state.activeExecutions).map(([executionId, requestId]) => cancelHttpRequest({ requestId, executionId }))
+    Array.from(state.activeExecutions, ([executionId, requestId]) => cancelHttpRequest({ requestId, executionId }))
   )
   return Result.Success(undefined)
 }
 
 export function listActiveFolderRuns() {
-  return Array.from(activeRunsById.values()).map(state => cloneRun(state.run))
+  return Array.from(activeRunsById.values(), state => cloneRun(state.run))
 }
 
-async function executeRun(
+export function recoverStaleFolderRunCampaigns() {
+  recoverStaleFolderRuns()
+}
+
+export async function shutdownActiveFolderRuns() {
+  const states = Array.from(activeRunsById.values())
+  await Promise.all(
+    states.flatMap(state => {
+      state.isCancelling = true
+      return Array.from(state.activeExecutions, ([executionId, requestId]) =>
+        cancelHttpRequest({ requestId, executionId })
+      )
+    })
+  )
+  await Promise.all(states.map(state => state.completion))
+}
+
+export async function pauseAndShutdownFolderRuns() {
+  acceptingRuns = false
+  while (startingFolderIds.size > 0) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  await shutdownActiveFolderRuns()
+}
+
+export function resumeFolderRuns() {
+  acceptingRuns = true
+}
+
+async function executeCampaign(
   state: ActiveRunState,
   requests: ResolvedFolderRequest[],
   input: RunFolderRequestsInput,
   options: SendRequestOptions | undefined
 ) {
-  if (requests.length === 0) {
-    finishRun(state, 'completed')
-    return
+  const target = state.run.summary.targetIterationCount
+  const { workerFailed } = await runFolderIterationScheduler({
+    concurrency: input.config.concurrency,
+    targetIterationCount: target,
+    shouldStop: () => state.isCancelling,
+    runIteration: async iterationIndex => {
+      try {
+        await executeIteration(state, requests, input, iterationIndex, options)
+      } catch (error) {
+        console.error('folder run iteration failed', error)
+        failRunningIteration(state, iterationIndex)
+        throw error
+      }
+    },
+  })
+
+  finishCampaign(state, state.isCancelling ? 'cancelled' : workerFailed ? 'failed' : 'completed')
+}
+
+function failRunningIteration(state: ActiveRunState, iterationIndex: number) {
+  const iteration = state.run.iterations.find(item => item.index === iterationIndex && item.status === 'running')
+  if (!iteration) return
+  markRemainingRequests(iteration, 'skipped')
+  iteration.completedAt = Date.now()
+  iteration.status = 'failed'
+  iteration.summary = buildIterationSummary(iteration)
+  applyCompletedIteration(state.run.summary, iteration)
+  try {
+    completeFolderRunIteration(state.run, iteration)
+  } catch (error) {
+    console.error('failed to persist failed folder run iteration', error)
   }
+}
+
+async function executeIteration(
+  state: ActiveRunState,
+  requests: ResolvedFolderRequest[],
+  input: RunFolderRequestsInput,
+  index: number,
+  options: SendRequestOptions | undefined
+) {
+  const startedAt = Date.now()
+  const iteration: FolderRunIterationRecord = {
+    id: crypto.randomUUID(),
+    runId: state.run.id,
+    index,
+    status: 'running',
+    summary: createEmptyFolderRunSummary(requests.length),
+    requests: requests.map(toFolderRunRequest),
+    startedAt,
+    completedAt: null,
+  }
+  state.run.summary.runningIterationCount += 1
+  state.run.iterations.push(iteration)
+  state.run.iterations = retainEdgeIterations(state.run.iterations)
+  createFolderRunIteration(state.run, iteration)
+  queueProgressEvent(state)
 
   if (input.config.executionMode === 'parallel') {
-    await Promise.all(
-      requests.map(async request => {
-        const environmentSnapshot = await listVisibleEnvironments({
-          folderId: request.item.parentFolderId,
-          activeEnvironmentIds: input.activeEnvironmentIds,
-        })
-        await executeRequest(state, request, input, options, environmentSnapshot)
-      })
-    )
+    await Promise.all(requests.map(request => executeRequest(state, iteration, request, input, options)))
   } else {
     for (const request of requests) {
       if (state.isCancelling) {
-        markRemainingRequests(state, 'cancelled')
+        markRemainingRequests(iteration, 'cancelled')
         break
       }
-
-      await executeRequest(state, request, input, options)
-      if (!input.config.continueOnFailure && state.run.requests.some(item => item.status === 'failed')) {
-        markRemainingRequests(state, 'skipped')
+      await executeRequest(state, iteration, request, input, options)
+      if (!input.config.continueOnFailure && iteration.requests.some(item => item.status === 'failed')) {
+        markRemainingRequests(iteration, 'skipped')
         break
       }
     }
   }
 
-  finishRun(state, state.isCancelling ? 'cancelled' : 'completed')
+  iteration.completedAt = Date.now()
+  iteration.summary = buildIterationSummary(iteration)
+  iteration.status = state.isCancelling ? 'cancelled' : iteration.summary.failedRequestCount > 0 ? 'failed' : 'passed'
+  applyCompletedIteration(state.run.summary, iteration)
+  state.run.summary.durationMs = Date.now() - state.run.startedAt
+  state.run.iterations = retainEdgeIterations(state.run.iterations)
+  completeFolderRunIteration(state.run, iteration)
+  queueProgressEvent(state)
 }
 
 async function executeRequest(
   state: ActiveRunState,
+  iteration: FolderRunIterationRecord,
   resolved: ResolvedFolderRequest,
   input: RunFolderRequestsInput,
-  options: SendRequestOptions | undefined,
-  environmentSnapshot?: SendRequestInput['environmentSnapshot']
+  options: SendRequestOptions | undefined
 ) {
   if (state.isCancelling) {
-    updateRequestState(state, resolved.request.id, { status: 'cancelled', completedAt: Date.now() })
+    updateRequestState(iteration, resolved.request.id, { status: 'cancelled', completedAt: Date.now() })
     return
   }
-
   const startedAt = Date.now()
   const executionId = crypto.randomUUID()
   state.activeExecutions.set(executionId, resolved.request.id)
-  updateRequestState(state, resolved.request.id, { status: 'running', startedAt })
-  emitGenericEvent({
-    type: 'folder-run-request-started',
-    runId: state.run.id,
-    folderId: state.run.folderId,
-    requestId: resolved.request.id,
-    startedAt,
-    summary: state.run.summary,
-  })
-
+  updateRequestState(iteration, resolved.request.id, { status: 'running', startedAt })
+  queueProgressEvent(state)
   try {
     const result = await sendRequest(
-      toSendRequestInput(resolved.request, input, state.run.id, executionId, environmentSnapshot),
+      toSendRequestInput(resolved, input, state.run.id, iteration.id, executionId),
       options
     )
     if (!result.success) {
-      updateRequestState(state, resolved.request.id, {
+      updateRequestState(iteration, resolved.request.id, {
         status: state.isCancelling ? 'cancelled' : 'failed',
         error: result.error.type === 'message' ? result.error.message : 'Request failed',
         completedAt: Date.now(),
       })
       return
     }
-
     const execution = result.data.execution
-    updateRequestState(state, resolved.request.id, {
-      status: getRequestStatus(execution),
+    updateRequestState(iteration, resolved.request.id, {
+      status: state.isCancelling ? 'cancelled' : getRequestStatus(execution),
       execution,
       error: execution.responseError,
       completedAt: execution.response?.receivedAt ?? Date.now(),
     })
   } catch (error) {
-    updateRequestState(state, resolved.request.id, {
+    updateRequestState(iteration, resolved.request.id, {
       status: state.isCancelling ? 'cancelled' : 'failed',
       error: error instanceof Error ? error.message : String(error),
       completedAt: Date.now(),
     })
   } finally {
     state.activeExecutions.delete(executionId)
-    const request = state.run.requests.find(item => item.requestId === resolved.request.id)
-    if (request) {
-      emitGenericEvent({
-        type: 'folder-run-request-completed',
-        runId: state.run.id,
-        folderId: state.run.folderId,
-        request: { ...request },
-        summary: state.run.summary,
-      })
-    }
+    queueProgressEvent(state)
   }
 }
 
@@ -222,42 +328,55 @@ async function resolveFolderRequests(
     )
     .sort((left, right) => left.position - right.position || left.createdAt - right.createdAt)
 
-  const resolved = await Promise.all(
+  const candidates = await Promise.all(
     requestItems.map(async (item, position) => {
       const requestResult = await getRequest({ id: item.id })
-      if (!requestResult.success || requestResult.data.requestType !== 'http') {
-        return null
-      }
-
+      if (!requestResult.success || requestResult.data.requestType !== 'http') return null
+      const sharedScripts = await listVisibleSharedScripts({ folderId: item.parentFolderId, onlyActive: true })
       return {
         item,
         request: requestResult.data,
-        hasTests: await hasRunnableTests(item.parentFolderId, requestResult.data),
+        hasTests:
+          requestResult.data.testScript.trim().length > 0 ||
+          sharedScripts.some(script => script.targets.includes('test') && script.code.trim().length > 0),
         position,
-      } satisfies ResolvedFolderRequest
+        sharedScripts,
+      }
     })
   )
-
-  const valid = resolved.filter((item): item is ResolvedFolderRequest => item !== null)
-  switch (input.config.selectionMode) {
-    case 'all':
-      return valid
-    case 'tests-only':
-      return valid.filter(item => item.hasTests)
-    case 'custom': {
-      const selectedIds = new Set(input.config.selectedRequestIds)
-      return valid.filter(item => selectedIds.has(item.request.id))
+  const valid = candidates.filter((item): item is NonNullable<typeof item> => item !== null)
+  const selected = (() => {
+    switch (input.config.selectionMode) {
+      case 'all':
+        return valid
+      case 'tests-only':
+        return valid.filter(item => item.hasTests)
+      case 'custom': {
+        const selectedIds = new Set(input.config.selectedRequestIds)
+        return valid.filter(item => selectedIds.has(item.request.id))
+      }
+      default:
+        return Typescript.assertUnreachable(input.config.selectionMode)
     }
-  }
-}
+  })()
 
-async function hasRunnableTests(parentFolderId: string | null, request: HttpRequestRecord) {
-  if (request.testScript.trim()) {
-    return true
-  }
-
-  const sharedScripts = await listVisibleSharedScripts({ folderId: parentFolderId, target: 'test', onlyActive: true })
-  return sharedScripts.some(script => script.code.trim())
+  return Promise.all(
+    selected.map(async item => ({
+      item: item.item,
+      request: item.request,
+      hasTests: item.hasTests,
+      position: item.position,
+      environmentSnapshot: await listVisibleEnvironments({
+        folderId: item.item.parentFolderId,
+        activeEnvironmentIds: input.activeEnvironmentIds,
+      }),
+      preparationSnapshot: {
+        requestName: item.request.name,
+        folders: await getFolderAncestorChain(item.item.parentFolderId),
+        sharedScripts: item.sharedScripts,
+      },
+    }))
+  )
 }
 
 function toFolderRunRequest(resolved: ResolvedFolderRequest): FolderRunRequest {
@@ -277,12 +396,13 @@ function toFolderRunRequest(resolved: ResolvedFolderRequest): FolderRunRequest {
 }
 
 function toSendRequestInput(
-  request: HttpRequestRecord,
+  resolved: ResolvedFolderRequest,
   input: RunFolderRequestsInput,
   runId: string,
-  executionId: string,
-  environmentSnapshot: SendRequestInput['environmentSnapshot']
+  iterationId: string,
+  executionId: string
 ): SendRequestInput {
+  const request = resolved.request
   return {
     executionId,
     requestId: request.id,
@@ -302,70 +422,45 @@ function toSendRequestInput(
     graphqlVariables: request.graphqlVariables,
     tlsVerificationMode: request.tlsVerificationMode,
     activeEnvironmentIds: input.activeEnvironmentIds,
-    environmentSnapshot,
-    saveToHistory: request.saveToHistory,
+    environmentSnapshot: resolved.environmentSnapshot.map(environment => ({ ...environment })),
+    preparationSnapshot: resolved.preparationSnapshot,
+    persistEnvironmentMutations: false,
+    saveToHistory: true,
     historyKeepLast: input.historyKeepLast,
     folderRunId: runId,
     folderRunFolderId: input.folderId,
+    folderRunIterationId: iterationId,
     suppressSseEvents: true,
-    requestMetadata: {
-      sourceRuntime: 'folder-run',
-      isRetry: false,
-      retryCount: 0,
-    },
+    requestMetadata: { sourceRuntime: 'folder-run', isRetry: false, retryCount: 0 },
   }
 }
 
 function updateRequestState(
-  state: ActiveRunState,
+  iteration: FolderRunIterationRecord,
   requestId: string,
   patch: Partial<Omit<FolderRunRequest, 'requestId'>>
 ) {
-  state.run.requests = state.run.requests.map(request =>
+  iteration.requests = iteration.requests.map(request =>
     request.requestId === requestId ? { ...request, ...patch } : request
   )
-  state.run.summary = buildSummary(state.run)
+  iteration.summary = buildIterationSummary(iteration)
 }
 
 function markRemainingRequests(
-  state: ActiveRunState,
+  iteration: FolderRunIterationRecord,
   status: Extract<FolderRunRequestStatus, 'cancelled' | 'skipped'>
 ) {
   const now = Date.now()
-  state.run.requests = state.run.requests.map(request =>
-    request.status === 'pending'
-      ? {
-          ...request,
-          status,
-          completedAt: now,
-        }
-      : request
+  iteration.requests = iteration.requests.map(request =>
+    request.status === 'pending' ? { ...request, status, completedAt: now } : request
   )
-  state.run.summary = buildSummary(state.run)
+  iteration.summary = buildIterationSummary(iteration)
 }
 
-function finishRun(state: ActiveRunState, status: FolderRunRecord['status']) {
-  const completedAt = Date.now()
-  state.run.status = status
-  state.run.completedAt = completedAt
-  state.run.summary = buildSummary(state.run)
-  updateFolderRunHistory(state.run)
-  activeRunsById.delete(state.run.id)
-  activeRunIdByFolderId.delete(state.run.folderId)
-  emitGenericEvent({
-    type: 'folder-run-completed',
-    runId: state.run.id,
-    folderId: state.run.folderId,
-    status,
-    completedAt,
-    summary: state.run.summary,
-  })
-}
-
-function buildSummary(run: FolderRunRecord): FolderRunSummary {
-  const summary = createEmptyFolderRunSummary(run.requests.length)
+function buildIterationSummary(iteration: FolderRunIterationRecord): FolderRunSummary {
+  const summary = createEmptyFolderRunSummary(iteration.requests.length)
   summary.pendingRequestCount = 0
-  for (const request of run.requests) {
+  for (const request of iteration.requests) {
     switch (request.status) {
       case 'pending':
         summary.pendingRequestCount += 1
@@ -385,8 +480,9 @@ function buildSummary(run: FolderRunRecord): FolderRunSummary {
       case 'skipped':
         summary.skippedRequestCount += 1
         break
+      default:
+        Typescript.assertUnreachable(request.status)
     }
-
     const testRun = request.execution?.testRun
     if (testRun) {
       summary.totalTestCount += testRun.totalCount
@@ -395,17 +491,136 @@ function buildSummary(run: FolderRunRecord): FolderRunSummary {
       summary.skippedTestCount += testRun.skippedCount
     }
   }
-
-  summary.durationMs = run.completedAt ? run.completedAt - run.startedAt : Date.now() - run.startedAt
+  summary.durationMs = iteration.completedAt
+    ? iteration.completedAt - iteration.startedAt
+    : Date.now() - iteration.startedAt
   return summary
 }
 
-function getRequestStatus(execution: RequestExecutionRecord): FolderRunRequestStatus {
-  if (execution.responseError || execution.scriptErrors.length > 0 || (execution.testRun?.failedCount ?? 0) > 0) {
-    return 'failed'
+function applyCompletedIteration(summary: FolderRunCampaignSummary, iteration: FolderRunIterationRecord) {
+  summary.runningIterationCount = Math.max(0, summary.runningIterationCount - 1)
+  summary.completedIterationCount += 1
+  switch (iteration.status) {
+    case 'passed':
+      summary.passedIterationCount += 1
+      break
+    case 'failed':
+      summary.failedIterationCount += 1
+      break
+    case 'cancelled':
+      summary.cancelledIterationCount += 1
+      break
+    case 'running':
+      break
+    default:
+      Typescript.assertUnreachable(iteration.status)
   }
+  summary.requestCount += iteration.summary.requestCount
+  summary.passedRequestCount += iteration.summary.passedRequestCount
+  summary.failedRequestCount += iteration.summary.failedRequestCount
+  summary.cancelledRequestCount += iteration.summary.cancelledRequestCount
+  summary.skippedRequestCount += iteration.summary.skippedRequestCount
+  summary.totalTestCount += iteration.summary.totalTestCount
+  summary.passedTestCount += iteration.summary.passedTestCount
+  summary.failedTestCount += iteration.summary.failedTestCount
+  summary.skippedTestCount += iteration.summary.skippedTestCount
+  if (iteration.status !== 'cancelled') {
+    const duration = iteration.summary.durationMs ?? 0
+    summary.totalIterationDurationMs += duration
+    const measuredIterationCount = summary.passedIterationCount + summary.failedIterationCount
+    summary.averageIterationDurationMs = Math.round(summary.totalIterationDurationMs / measuredIterationCount)
+    summary.minIterationDurationMs = Math.min(summary.minIterationDurationMs ?? duration, duration)
+    summary.maxIterationDurationMs = Math.max(summary.maxIterationDurationMs ?? duration, duration)
+  }
+}
 
-  return 'passed'
+function finishCampaign(state: ActiveRunState, status: FolderRunRecord['status']) {
+  if (!activeRunsById.has(state.run.id)) return
+  if (state.progressTimer) clearTimeout(state.progressTimer)
+  const completedAt = Date.now()
+  state.run.status = status
+  state.run.completedAt = completedAt
+  state.run.summary.durationMs = completedAt - state.run.startedAt
+  updateFolderRunHistory(state.run)
+  activeRunsById.delete(state.run.id)
+  activeRunIdByFolderId.delete(state.run.folderId)
+  emitGenericEvent({
+    type: 'folder-run-completed',
+    runId: state.run.id,
+    folderId: state.run.folderId,
+    status,
+    completedAt,
+    summary: { ...state.run.summary },
+  })
+}
+
+function queueProgressEvent(state: ActiveRunState) {
+  if (state.progressTimer) return
+  state.progressTimer = setTimeout(() => {
+    state.progressTimer = null
+    state.run.summary.durationMs = Date.now() - state.run.startedAt
+    emitGenericEvent({
+      type: 'folder-run-progress',
+      runId: state.run.id,
+      folderId: state.run.folderId,
+      summary: { ...state.run.summary },
+      iterations: cloneProgressIterations(state.run.iterations),
+    })
+  }, PROGRESS_EVENT_INTERVAL_MS)
+}
+
+function cloneProgressIterations(iterations: FolderRunIterationRecord[]) {
+  return iterations.map(iteration => ({
+    ...iteration,
+    summary: { ...iteration.summary },
+    requests: iteration.requests.map(request => ({ ...request, execution: null })),
+  }))
+}
+
+function getRequestStatus(execution: RequestExecutionRecord): FolderRunRequestStatus {
+  return execution.responseError || execution.scriptErrors.length > 0 || (execution.testRun?.failedCount ?? 0) > 0
+    ? 'failed'
+    : 'passed'
+}
+
+function getTargetIterationCount(input: RunFolderRequestsInput) {
+  switch (input.config.runMode) {
+    case 'once':
+      return 1
+    case 'repeat':
+      return input.config.iterationCount
+    case 'continuous':
+      return null
+    default:
+      return Typescript.assertUnreachable(input.config.runMode)
+  }
+}
+
+function validateInput(input: RunFolderRequestsInput) {
+  if (
+    !Number.isSafeInteger(input.config.concurrency) ||
+    input.config.concurrency < 1 ||
+    input.config.concurrency > MAX_CONCURRENCY
+  ) {
+    return `Concurrent iterations must be between 1 and ${MAX_CONCURRENCY}`
+  }
+  if (
+    input.config.runMode === 'repeat' &&
+    (!Number.isSafeInteger(input.config.iterationCount) || input.config.iterationCount < 1)
+  ) {
+    return 'Iteration count must be a positive integer'
+  }
+  return null
+}
+
+function retainEdgeIterations(iterations: FolderRunIterationRecord[]) {
+  const completed = iterations.filter(iteration => iteration.status !== 'running').sort((a, b) => a.index - b.index)
+  const running = iterations.filter(iteration => iteration.status === 'running')
+  const first = completed.slice(0, RETAINED_EDGE_ITERATION_COUNT)
+  const last = completed.slice(-RETAINED_EDGE_ITERATION_COUNT)
+  return Array.from(new Map([...first, ...last, ...running].map(iteration => [iteration.id, iteration])).values()).sort(
+    (a, b) => a.index - b.index
+  )
 }
 
 function getDescendantFolderIds(items: ExplorerItem[], folderId: string) {
@@ -425,20 +640,15 @@ function getDescendantFolderIds(items: ExplorerItem[], folderId: string) {
       }
     }
   }
-
   return folderIds
 }
 
 function getOverlappingRuns(items: ExplorerItem[], folderId: string): OverlappingFolderRun[] {
   const currentAncestors = getAncestorFolderIds(items, folderId)
   const descendants = getDescendantFolderIds(items, folderId)
-
   const overlappingRuns: OverlappingFolderRun[] = []
   for (const state of activeRunsById.values()) {
-    if (state.run.folderId === folderId) {
-      continue
-    }
-
+    if (state.run.folderId === folderId) continue
     if (currentAncestors.has(state.run.folderId)) {
       overlappingRuns.push({
         runId: state.run.id,
@@ -446,10 +656,7 @@ function getOverlappingRuns(items: ExplorerItem[], folderId: string): Overlappin
         folderName: state.run.folderName,
         relationship: 'ancestor',
       })
-      continue
-    }
-
-    if (descendants.has(state.run.folderId)) {
+    } else if (descendants.has(state.run.folderId)) {
       overlappingRuns.push({
         runId: state.run.id,
         folderId: state.run.folderId,
@@ -458,7 +665,6 @@ function getOverlappingRuns(items: ExplorerItem[], folderId: string): Overlappin
       })
     }
   }
-
   return overlappingRuns
 }
 
@@ -482,7 +688,11 @@ function cloneRun(run: FolderRunRecord): FolderRunRecord {
     ...run,
     config: { ...run.config, selectedRequestIds: run.config.selectedRequestIds.slice() },
     summary: { ...run.summary },
-    requests: run.requests.map(request => ({ ...request })),
+    iterations: run.iterations.map(iteration => ({
+      ...iteration,
+      summary: { ...iteration.summary },
+      requests: iteration.requests.map(request => ({ ...request })),
+    })),
     overlappingFolderRunIds: run.overlappingFolderRunIds.slice(),
   }
 }

@@ -18,6 +18,7 @@ import type {
   ReceivedResponseSnapshot,
   RequestExecutionRecord,
   RequestMethod,
+  RequestTlsVerificationMode,
   ScriptResponseBody,
   SendRequestInput,
   SendRequestResponse,
@@ -194,7 +195,12 @@ export async function sendRequest(
       sentAt,
     })
     const startedAt = Date.now()
-    const dispatcher = await resolveRequestTlsDispatcher(url, input.requestId, input.tlsVerificationMode)
+    const dispatcher = await resolveRequestTlsDispatcher(
+      url,
+      input.requestId,
+      input.tlsVerificationMode,
+      input.preparationSnapshot?.folders.map(folder => folder.tlsVerificationMode ?? 'inherit')
+    )
     const response = await undiciFetch(url, {
       method,
       headers,
@@ -287,6 +293,7 @@ export async function sendRequest(
       id: executionId,
       folderRunId: input.folderRunId ?? null,
       folderRunFolderId: input.folderRunFolderId ?? null,
+      folderRunIterationId: input.folderRunIterationId ?? null,
       requestBatchId: input.requestBatchId ?? null,
       requestBatchRowId: input.requestBatchRowId ?? null,
       requestId: input.requestId,
@@ -535,6 +542,7 @@ async function consumeSseResponse(input: {
       id: executionId,
       folderRunId: input.input.folderRunId ?? null,
       folderRunFolderId: input.input.folderRunFolderId ?? null,
+      folderRunIterationId: input.input.folderRunIterationId ?? null,
       requestBatchId: input.input.requestBatchId ?? null,
       requestBatchRowId: input.input.requestBatchRowId ?? null,
       requestId: input.input.requestId,
@@ -1078,15 +1086,18 @@ function collectErrorMessages(error: Error, messages: Set<string>) {
 async function resolveRequestTlsDispatcher(
   url: string,
   requestId: string,
-  requestMode: SendRequestInput['tlsVerificationMode']
+  requestMode: SendRequestInput['tlsVerificationMode'],
+  folderModeSnapshot?: RequestTlsVerificationMode[]
 ) {
   const appSettingsMode: AppSettingsTlsVerificationMode = await getAppSettings()
     .then(settings => settings.tlsVerificationMode)
     .catch(() => DEFAULT_APP_SETTINGS_TLS_VERIFICATION_MODE)
-  const folderModes = await getRequestParentFolderId(requestId)
-    .then(folderId => getFolderAncestorChain(folderId))
-    .then(folders => folders.map(folder => folder.tlsVerificationMode ?? 'inherit'))
-    .catch(() => [])
+  const folderModes =
+    folderModeSnapshot ??
+    (await getRequestParentFolderId(requestId)
+      .then(folderId => getFolderAncestorChain(folderId))
+      .then(folders => folders.map(folder => folder.tlsVerificationMode ?? 'inherit'))
+      .catch(() => []))
 
   return getTlsDispatcher(
     url,

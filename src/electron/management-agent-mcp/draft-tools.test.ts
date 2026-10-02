@@ -129,6 +129,9 @@ describe('removeFolderCreationFromDraft', () => {
         selectedRequestIds: [],
         executionMode: 'sequential',
         continueOnFailure: true,
+        runMode: 'once',
+        iterationCount: 1,
+        concurrency: 1,
       },
     })
 
@@ -189,6 +192,9 @@ describe('removeFolderCreationFromDraft', () => {
             selectedRequestIds: [],
             executionMode: 'sequential' as const,
             continueOnFailure: true,
+            runMode: 'once' as const,
+            iterationCount: 1,
+            concurrency: 1,
           },
         },
       ],

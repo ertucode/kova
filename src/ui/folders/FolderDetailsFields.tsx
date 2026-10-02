@@ -46,9 +46,14 @@ import { getFormatScriptBlocksOnSave } from '@/global/appSettingsStore'
 import type { PendingScriptSelection } from './scriptFormatOnSave'
 import { formatScriptValueForSave } from './scriptFormatOnSave'
 import { ScriptAiIconButton } from './ScriptAiIconButton'
-import type { FolderRequestRunConfig, FolderRunHistoryRecord, FolderRunRecord } from '@common/FolderRuns'
+import type {
+  FolderRequestRunConfig,
+  FolderRunHistoryRecord,
+  FolderRunRecord,
+  FolderRunRequest,
+} from '@common/FolderRuns'
 import type { ExplorerItem } from '@common/Explorer'
-import type { RequestExecutionRecord, RequestScriptError } from '@common/Requests'
+import type { RequestScriptError } from '@common/Requests'
 import { RequestExecutionDetails } from './RequestExecutionPanels'
 import { FolderEnvironmentsSection } from './FolderEnvironmentsSection'
 import { buildEnvironmentScope, createVariableValueMap } from './environmentScope'
@@ -632,7 +637,7 @@ function FolderRunSection({
 
     if (
       !shouldExpand ||
-      item.run ||
+      item.run?.status === 'running' ||
       loadedHistoryRunsById[item.history.id] ||
       loadingHistoryRunIds.has(item.history.id)
     ) {
@@ -653,7 +658,7 @@ function FolderRunSection({
 
     setLoadedHistoryRunsById(current => ({
       ...current,
-      [result.data.run.id]: buildFolderRunRecordFromHistory(result.data.run, result.data.requests),
+      [result.data.run.id]: buildFolderRunRecordFromHistory(result.data.run, result.data.iterations),
     }))
   }
 
@@ -661,60 +666,143 @@ function FolderRunSection({
     <section className="border-y border-base-content/10 bg-base-100/55">
       <DetailsSectionHeader title="Folder Run" />
 
-      <div className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
-        <label className="grid gap-1 text-xs font-medium text-base-content/60">
-          Requests
+      <div className="grid gap-3 p-4 xl:grid-cols-[minmax(12rem,0.8fr)_minmax(25rem,1.6fr)_minmax(14rem,0.9fr)_auto]">
+        <div className="rounded-2xl border border-base-content/10 bg-base-100/70 p-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/40">
+            Request scope
+          </div>
           <select
-            className="rounded-xl border border-base-content/10 bg-base-100 px-3 py-2 text-sm text-base-content outline-none"
+            className="w-full rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5 text-sm font-medium text-base-content outline-none"
             value={config.selectionMode}
             onChange={event =>
               updateConfig({ selectionMode: event.target.value as FolderRequestRunConfig['selectionMode'] })
             }
           >
             <option value="all">All requests</option>
-            <option value="tests-only">Only with tests</option>
+            <option value="tests-only">Only requests with tests</option>
             <option value="custom">Custom selection</option>
           </select>
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-base-content/60">
-          Execution
+          <div className="mt-2 text-xs text-base-content/40">
+            {config.selectionMode === 'custom'
+              ? `${config.selectedRequestIds.length} selected`
+              : `${descendantRequests.length} requests available`}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-100/70 p-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/40">
+            Schedule
+          </div>
+          <div className="grid grid-cols-3 rounded-xl bg-base-200/65 p-1">
+            {(
+              [
+                ['once', 'Once'],
+                ['repeat', 'Repeat'],
+                ['continuous', 'Until stopped'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={config.runMode === mode}
+                className={`rounded-lg px-2 py-2 text-xs font-semibold transition ${
+                  config.runMode === mode
+                    ? 'bg-base-100 text-base-content shadow-sm ring-1 ring-base-content/8'
+                    : 'text-base-content/45 hover:text-base-content/70'
+                }`}
+                onClick={() => updateConfig({ runMode: mode })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="grid gap-1 text-[11px] font-medium text-base-content/50">
+              {config.runMode === 'repeat' ? 'Total iterations' : 'Run limit'}
+              {config.runMode === 'repeat' ? (
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className="min-w-0 rounded-xl border border-base-content/10 bg-base-100 px-3 py-2 text-sm font-semibold text-base-content outline-none"
+                  value={config.iterationCount}
+                  onChange={event =>
+                    updateConfig({ iterationCount: Math.max(1, Math.trunc(event.target.valueAsNumber || 1)) })
+                  }
+                />
+              ) : (
+                <div className="rounded-xl border border-base-content/8 bg-base-100/55 px-3 py-2 text-sm font-semibold text-base-content/65">
+                  {config.runMode === 'once' ? '1 iteration' : 'No limit'}
+                </div>
+              )}
+            </label>
+            <label className="grid gap-1 text-[11px] font-medium text-base-content/50">
+              Concurrent workers
+              <div className="flex overflow-hidden rounded-xl border border-base-content/10 bg-base-100 focus-within:border-info/35">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                  disabled={config.runMode === 'once'}
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-semibold text-base-content outline-none disabled:cursor-not-allowed disabled:opacity-45"
+                  value={config.runMode === 'once' ? 1 : config.concurrency}
+                  onChange={event =>
+                    updateConfig({
+                      concurrency: Math.max(1, Math.min(100, Math.trunc(event.target.valueAsNumber || 1))),
+                    })
+                  }
+                />
+                <span className="flex items-center border-l border-base-content/8 px-2 text-[10px] font-medium text-base-content/35">
+                  workers
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-base-content/10 bg-base-100/70 p-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/40">
+            Each iteration
+          </div>
           <select
-            className="rounded-xl border border-base-content/10 bg-base-100 px-3 py-2 text-sm text-base-content outline-none"
+            className="w-full rounded-xl border border-base-content/10 bg-base-100 px-3 py-2.5 text-sm font-medium text-base-content outline-none"
             value={config.executionMode}
             onChange={event =>
               updateConfig({ executionMode: event.target.value as FolderRequestRunConfig['executionMode'] })
             }
           >
-            <option value="sequential">Sequential</option>
-            <option value="parallel">Parallel</option>
+            <option value="sequential">Requests run sequentially</option>
+            <option value="parallel">Requests run in parallel</option>
           </select>
-        </label>
-        <label className="flex items-end gap-2 rounded-xl bg-base-100 px-3 py-2 text-sm text-base-content/70">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm rounded-none"
-            checked={config.continueOnFailure}
-            onChange={event => updateConfig({ continueOnFailure: event.target.checked })}
-          />
-          Continue on failure
-        </label>
-        <div className="flex items-end justify-end">
+          <label className="mt-3 flex items-center gap-2 text-xs font-medium text-base-content/60">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm rounded-none"
+              checked={config.continueOnFailure}
+              onChange={event => updateConfig({ continueOnFailure: event.target.checked })}
+            />
+            Continue after a failure
+          </label>
+        </div>
+
+        <div className="flex xl:min-w-24">
           {isRunning && activeRunId ? (
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-xl border border-error/25 bg-error/10 px-3 py-2 text-xs font-semibold text-error transition hover:bg-error/15"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-error/25 bg-error/10 px-4 py-3 text-xs font-semibold text-error transition hover:bg-error/15 xl:min-h-full xl:flex-col"
               onClick={() => void FolderRunCoordinator.cancelRun(activeRunId)}
             >
-              <SquareIcon className="size-3.5" />
-              Cancel
+              <SquareIcon className="size-4" />
+              Stop
             </button>
           ) : (
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-xl border border-success/25 bg-success/12 px-3 py-2 text-xs font-semibold text-success transition hover:bg-success/18"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-success/25 bg-success/12 px-4 py-3 text-xs font-semibold text-success transition hover:bg-success/18 xl:min-h-full xl:flex-col"
               onClick={() => void runFolder()}
             >
-              <PlayIcon className="size-3.5" />
+              <PlayIcon className="size-4" />
               Run
             </button>
           )}
@@ -875,7 +963,7 @@ function FolderRunHistoryItem({
   onDelete: () => void
   canDelete: boolean
 }) {
-  const run = item.run ?? loadedRun
+  const run = loadedRun ?? item.run
 
   return (
     <div className="overflow-hidden rounded-xl border border-base-content/8 bg-base-100 text-sm">
@@ -895,8 +983,9 @@ function FolderRunHistoryItem({
               <span className="text-xs text-base-content/45">{new Date(item.history.startedAt).toLocaleString()}</span>
             </div>
             <div className="mt-1 text-xs text-base-content/55">
-              {item.history.passedRequestCount}/{item.history.requestCount} requests passed,{' '}
-              {item.history.failedRequestCount} failed
+              {item.history.summary.completedIterationCount}/{item.history.summary.targetIterationCount ?? 'unlimited'}{' '}
+              iterations | {item.history.config.concurrency} concurrent |{' '}
+              {formatDuration(item.history.summary.durationMs)}
             </div>
           </div>
         </button>
@@ -927,27 +1016,74 @@ function FolderRunHistoryItem({
 }
 
 function FolderRunDetails({ run }: { run: FolderRunRecord }) {
+  const throughput =
+    run.summary.durationMs && run.summary.durationMs > 0
+      ? (run.summary.completedIterationCount / run.summary.durationMs) * 60_000
+      : 0
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm font-semibold text-base-content">Run Details</div>
-        <div className="text-xs text-base-content/45">{run.summary.durationMs ?? 0} ms</div>
+        <div className="text-sm font-semibold text-base-content">Campaign Details</div>
+        <div className="text-xs text-base-content/45">{formatDuration(run.summary.durationMs)}</div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <FolderRunMetric
+          label="Iterations"
+          value={`${run.summary.completedIterationCount}/${run.summary.targetIterationCount ?? 'unlimited'}`}
+        />
+        <FolderRunMetric label="Passed" value={run.summary.passedIterationCount} tone="text-success" />
+        <FolderRunMetric label="Failed" value={run.summary.failedIterationCount} tone="text-error" />
+        <FolderRunMetric label="Active" value={run.summary.runningIterationCount} tone="text-info" />
+        <FolderRunMetric label="Average" value={formatDuration(run.summary.averageIterationDurationMs)} />
+        <FolderRunMetric
+          label="Min / Max"
+          value={`${formatDuration(run.summary.minIterationDurationMs)} / ${formatDuration(run.summary.maxIterationDurationMs)}`}
+        />
+        <FolderRunMetric label="Throughput" value={`${throughput.toFixed(1)} runs/min`} />
         <FolderRunMetric label="Requests" value={`${run.summary.passedRequestCount}/${run.summary.requestCount}`} />
-        <FolderRunMetric label="Failed" value={run.summary.failedRequestCount} tone="text-error" />
         <FolderRunMetric
           label="Tests"
           value={`${run.summary.passedTestCount}/${run.summary.totalTestCount}`}
           tone="text-success"
         />
-        <FolderRunMetric label="Running" value={run.summary.runningRequestCount} tone="text-info" />
       </div>
       <div className="mt-3 grid gap-2">
-        {run.requests.map(request => (
-          <FolderRunRequestResult key={request.requestId} request={request} />
+        {run.iterations.map((iteration, index) => (
+          <div key={iteration.id}>
+            {index > 0 && iteration.index > run.iterations[index - 1]!.index + 1 ? (
+              <div className="py-2 text-center text-xs text-base-content/35">
+                {iteration.index - run.iterations[index - 1]!.index - 1} middle iterations omitted
+              </div>
+            ) : null}
+            <FolderRunIterationResult iteration={iteration} />
+          </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function FolderRunIterationResult({ iteration }: { iteration: FolderRunRecord['iterations'][number] }) {
+  const [expanded, setExpanded] = useState(iteration.status === 'failed')
+  return (
+    <div className="overflow-hidden rounded-xl border border-base-content/8 bg-base-100">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-base-200/35"
+        onClick={() => setExpanded(current => !current)}
+      >
+        {expanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
+        <span className="font-medium text-base-content">Iteration {iteration.index + 1}</span>
+        <span className="ml-auto text-xs text-base-content/45">{formatDuration(iteration.summary.durationMs)}</span>
+        <span className={getRunStatusClassName(iteration.status)}>{iteration.status}</span>
+      </button>
+      {expanded ? (
+        <div className="grid gap-2 border-t border-base-content/8 p-3">
+          {iteration.requests.map(request => (
+            <FolderRunRequestResult key={request.requestId} request={request} />
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -989,7 +1125,7 @@ function buildFolderRunHistoryRecord(run: FolderRunRecord): FolderRunHistoryReco
 
 function buildFolderRunRecordFromHistory(
   run: FolderRunHistoryRecord,
-  executions: RequestExecutionRecord[]
+  iterations: FolderRunRecord['iterations']
 ): FolderRunRecord {
   return {
     id: run.id,
@@ -998,29 +1134,14 @@ function buildFolderRunRecordFromHistory(
     config: run.config,
     status: run.status,
     summary: run.summary,
-    requests: executions.map((execution, index) => ({
-      requestId: execution.requestId,
-      requestName: execution.requestName,
-      method: execution.request.method,
-      url: execution.request.url,
-      position: index,
-      hasTests: execution.testRun !== null,
-      status:
-        execution.responseError || execution.scriptErrors.length > 0 || (execution.testRun?.failedCount ?? 0) > 0
-          ? 'failed'
-          : 'passed',
-      execution,
-      error: execution.responseError,
-      startedAt: execution.request.sentAt,
-      completedAt: execution.response?.receivedAt ?? null,
-    })),
+    iterations,
     overlappingFolderRunIds: [],
     startedAt: run.startedAt,
     completedAt: run.completedAt,
   }
 }
 
-function FolderRunRequestResult({ request }: { request: FolderRunRecord['requests'][number] }) {
+function FolderRunRequestResult({ request }: { request: FolderRunRequest }) {
   const [expanded, setExpanded] = useState(request.status === 'failed')
   const [responseBodyExpanded, setResponseBodyExpanded] = useState(true)
   const execution = request.execution
@@ -1055,6 +1176,7 @@ function FolderRunRequestResult({ request }: { request: FolderRunRecord['request
             {execution.testRun.passedCount}/{execution.testRun.totalCount} tests passed
           </span>
         ) : null}
+        {!execution && request.error ? <span className="text-xs text-error">{request.error}</span> : null}
         <span className={getRunStatusClassName(request.status)}>{request.status}</span>
       </button>
 
@@ -1119,13 +1241,24 @@ function useDescendantHttpRequests(folderId: string, items: ExplorerItem[]) {
   }, [folderId, items])
 }
 
-function getRunStatusClassName(status: FolderRunRecord['requests'][number]['status']) {
+function getRunStatusClassName(status: FolderRunRequest['status'] | FolderRunRecord['iterations'][number]['status']) {
   if (status === 'passed') return 'rounded-full bg-success/12 px-2 py-0.5 text-[11px] font-medium text-success'
   if (status === 'failed') return 'rounded-full bg-error/12 px-2 py-0.5 text-[11px] font-medium text-error'
   if (status === 'running') return 'rounded-full bg-info/12 px-2 py-0.5 text-[11px] font-medium text-info'
   if (status === 'cancelled' || status === 'skipped')
     return 'rounded-full bg-warning/12 px-2 py-0.5 text-[11px] font-medium text-warning'
   return 'rounded-full bg-base-content/8 px-2 py-0.5 text-[11px] font-medium text-base-content/50'
+}
+
+function formatDuration(durationMs: number | null) {
+  if (durationMs === null) return '-'
+  if (durationMs < 1_000) return `${durationMs} ms`
+  const totalSeconds = Math.round(durationMs / 1_000)
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const hours = Math.floor(totalSeconds / 3_600)
+  const minutes = Math.floor((totalSeconds % 3_600) / 60)
+  const seconds = totalSeconds % 60
+  return hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : `${minutes}m ${seconds}s`
 }
 
 function updateEnvironmentVariableDraft(environmentId: string, variableName: string, value: string) {

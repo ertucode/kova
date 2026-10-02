@@ -376,6 +376,7 @@ export const requestHistory = sqliteTable(
     id: text('id').primaryKey(),
     folderRunId: text('folder_run_id'),
     folderRunFolderId: text('folder_run_folder_id'),
+    folderRunIterationId: text('folder_run_iteration_id'),
     batchId: text('batch_id'),
     rowId: text('row_id'),
     requestId: text('request_id').notNull(),
@@ -408,6 +409,7 @@ export const requestHistory = sqliteTable(
     index('request_history_request_id_idx').on(table.requestId),
     index('request_history_folder_run_id_idx').on(table.folderRunId),
     index('request_history_folder_run_folder_id_idx').on(table.folderRunFolderId),
+    index('request_history_folder_run_iteration_id_idx').on(table.folderRunIterationId),
     index('request_history_batch_id_idx').on(table.batchId),
     index('request_history_row_id_idx').on(table.rowId),
     index('request_history_sent_at_idx').on(table.sentAt),
@@ -489,6 +491,24 @@ export const folderRunHistory = sqliteTable(
     index('folder_run_history_started_at_idx').on(table.startedAt),
     index('folder_run_history_status_idx').on(table.status),
     check('folder_run_history_status_check', sql`${table.status} in ('running', 'completed', 'failed', 'cancelled')`),
+  ]
+)
+
+export const folderRunIterations = sqliteTable(
+  'folder_run_iterations',
+  {
+    id: text('id').primaryKey(),
+    runId: text('run_id').notNull(),
+    iterationIndex: integer('iteration_index').notNull(),
+    status: text('status').notNull(),
+    summaryJson: text('summary_json').notNull(),
+    requestsJson: text('requests_json').notNull().default('[]'),
+    startedAt: integer('started_at').notNull(),
+    completedAt: integer('completed_at'),
+  },
+  table => [
+    index('folder_run_iterations_run_id_idx').on(table.runId),
+    uniqueIndex('folder_run_iterations_run_index_idx').on(table.runId, table.iterationIndex),
   ]
 )
 

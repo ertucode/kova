@@ -6,6 +6,9 @@ export type FolderRequestSelectionMode = (typeof FOLDER_REQUEST_SELECTION_MODES)
 export const FOLDER_REQUEST_EXECUTION_MODES = ['sequential', 'parallel'] as const
 export type FolderRequestExecutionMode = (typeof FOLDER_REQUEST_EXECUTION_MODES)[number]
 
+export const FOLDER_RUN_MODES = ['once', 'repeat', 'continuous'] as const
+export type FolderRunMode = (typeof FOLDER_RUN_MODES)[number]
+
 export const FOLDER_RUN_STATUSES = ['running', 'completed', 'failed', 'cancelled'] as const
 export type FolderRunStatus = (typeof FOLDER_RUN_STATUSES)[number]
 
@@ -17,7 +20,13 @@ export type FolderRequestRunConfig = {
   selectedRequestIds: string[]
   executionMode: FolderRequestExecutionMode
   continueOnFailure: boolean
+  runMode: FolderRunMode
+  iterationCount: number
+  concurrency: number
 }
+
+export const FOLDER_RUN_ITERATION_STATUSES = ['running', 'passed', 'failed', 'cancelled'] as const
+export type FolderRunIterationStatus = (typeof FOLDER_RUN_ITERATION_STATUSES)[number]
 
 export type FolderRunSummary = {
   requestCount: number
@@ -32,6 +41,19 @@ export type FolderRunSummary = {
   failedTestCount: number
   skippedTestCount: number
   durationMs: number | null
+}
+
+export type FolderRunCampaignSummary = FolderRunSummary & {
+  targetIterationCount: number | null
+  completedIterationCount: number
+  passedIterationCount: number
+  failedIterationCount: number
+  cancelledIterationCount: number
+  runningIterationCount: number
+  totalIterationDurationMs: number
+  averageIterationDurationMs: number | null
+  minIterationDurationMs: number | null
+  maxIterationDurationMs: number | null
 }
 
 export type FolderRunRequest = {
@@ -54,9 +76,20 @@ export type FolderRunRecord = {
   folderName: string
   config: FolderRequestRunConfig
   status: FolderRunStatus
+  summary: FolderRunCampaignSummary
+  iterations: FolderRunIterationRecord[]
+  overlappingFolderRunIds: string[]
+  startedAt: number
+  completedAt: number | null
+}
+
+export type FolderRunIterationRecord = {
+  id: string
+  runId: string
+  index: number
+  status: FolderRunIterationStatus
   summary: FolderRunSummary
   requests: FolderRunRequest[]
-  overlappingFolderRunIds: string[]
   startedAt: number
   completedAt: number | null
 }
@@ -67,7 +100,7 @@ export type FolderRunHistoryRecord = {
   folderName: string
   config: FolderRequestRunConfig
   status: FolderRunStatus
-  summary: FolderRunSummary
+  summary: FolderRunCampaignSummary
   requestCount: number
   passedRequestCount: number
   failedRequestCount: number
@@ -84,7 +117,12 @@ export type RunFolderRequestsInput = {
 
 export type RunFolderRequestsResponse = {
   run: FolderRunRecord
-  overlappingRuns: Array<{ runId: string; folderId: string; folderName: string; relationship: 'ancestor' | 'descendant' }>
+  overlappingRuns: Array<{
+    runId: string
+    folderId: string
+    folderName: string
+    relationship: 'ancestor' | 'descendant'
+  }>
 }
 
 export type CancelFolderRunInput = {
@@ -113,7 +151,7 @@ export type GetFolderRunHistoryInput = {
 
 export type GetFolderRunHistoryResponse = {
   run: FolderRunHistoryRecord
-  requests: RequestExecutionRecord[]
+  iterations: FolderRunIterationRecord[]
 }
 
 export function createDefaultFolderRequestRunConfig(): FolderRequestRunConfig {
@@ -122,6 +160,25 @@ export function createDefaultFolderRequestRunConfig(): FolderRequestRunConfig {
     selectedRequestIds: [],
     executionMode: 'sequential',
     continueOnFailure: true,
+    runMode: 'once',
+    iterationCount: 1,
+    concurrency: 1,
+  }
+}
+
+export function createEmptyFolderRunCampaignSummary(targetIterationCount: number | null): FolderRunCampaignSummary {
+  return {
+    ...createEmptyFolderRunSummary(),
+    targetIterationCount,
+    completedIterationCount: 0,
+    passedIterationCount: 0,
+    failedIterationCount: 0,
+    cancelledIterationCount: 0,
+    runningIterationCount: 0,
+    totalIterationDurationMs: 0,
+    averageIterationDurationMs: null,
+    minIterationDurationMs: null,
+    maxIterationDurationMs: null,
   }
 }
 

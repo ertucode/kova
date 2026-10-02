@@ -3,9 +3,11 @@ import {
   createDefaultFolderRequestRunConfig,
   FOLDER_REQUEST_EXECUTION_MODES,
   FOLDER_REQUEST_SELECTION_MODES,
+  FOLDER_RUN_MODES,
   type FolderRequestExecutionMode,
   type FolderRequestRunConfig,
   type FolderRequestSelectionMode,
+  type FolderRunMode,
 } from './FolderRuns.js'
 import {
   type RequestTlsVerificationMode,
@@ -238,9 +240,15 @@ export function normalizeManagementAgentPlan(value: unknown): ManagementAgentPla
 
   return {
     summary: toTrimmedString(candidate.summary),
-    questions: toArray(candidate.questions).map(normalizeQuestion).filter(question => question.label),
-    warnings: toArray(candidate.warnings).map(normalizeWarning).filter(warning => warning.message),
-    foldersToCreate: toArray(candidate.foldersToCreate).map(normalizeFolderPlanItem).filter(folder => folder.name),
+    questions: toArray(candidate.questions)
+      .map(normalizeQuestion)
+      .filter(question => question.label),
+    warnings: toArray(candidate.warnings)
+      .map(normalizeWarning)
+      .filter(warning => warning.message),
+    foldersToCreate: toArray(candidate.foldersToCreate)
+      .map(normalizeFolderPlanItem)
+      .filter(folder => folder.name),
     foldersToUpdate: toArray(candidate.foldersToUpdate)
       .map(normalizeFolderUpdatePlanItem)
       .filter(folder => folder.folderId),
@@ -421,7 +429,10 @@ function normalizeRequestPlanFields(candidate: Record<string, unknown>): Managem
       ? (preferredResponseBodyView as ResponseBodyView)
       : 'raw',
     tlsVerificationMode:
-      tlsVerificationMode === 'inherit' || tlsVerificationMode === 'strict' || tlsVerificationMode === 'disable-for-localhost' || tlsVerificationMode === 'disable'
+      tlsVerificationMode === 'inherit' ||
+      tlsVerificationMode === 'strict' ||
+      tlsVerificationMode === 'disable-for-localhost' ||
+      tlsVerificationMode === 'disable'
         ? (tlsVerificationMode as RequestTlsVerificationMode)
         : 'inherit',
     saveToHistory: typeof candidate.saveToHistory === 'boolean' ? candidate.saveToHistory : true,
@@ -464,7 +475,9 @@ function normalizeRequestUpdatePlanFields(candidate: Record<string, unknown>): M
   }
   if (hasOwn(candidate, 'rawType')) {
     const rawType = toTrimmedString(candidate.rawType)
-    normalizedFields.rawType = REQUEST_RAW_TYPES.includes(rawType as RequestRawType) ? (rawType as RequestRawType) : 'json'
+    normalizedFields.rawType = REQUEST_RAW_TYPES.includes(rawType as RequestRawType)
+      ? (rawType as RequestRawType)
+      : 'json'
   }
   if (hasOwn(candidate, 'graphqlQuery')) {
     normalizedFields.graphqlQuery = toStringValue(candidate.graphqlQuery)
@@ -489,14 +502,19 @@ function normalizeRequestUpdatePlanFields(candidate: Record<string, unknown>): M
   }
   if (hasOwn(candidate, 'preferredResponseBodyView')) {
     const preferredResponseBodyView = toTrimmedString(candidate.preferredResponseBodyView)
-    normalizedFields.preferredResponseBodyView = RESPONSE_BODY_VIEWS.includes(preferredResponseBodyView as ResponseBodyView)
+    normalizedFields.preferredResponseBodyView = RESPONSE_BODY_VIEWS.includes(
+      preferredResponseBodyView as ResponseBodyView
+    )
       ? (preferredResponseBodyView as ResponseBodyView)
       : 'raw'
   }
   if (hasOwn(candidate, 'tlsVerificationMode')) {
     const tlsVerificationMode = toTrimmedString(candidate.tlsVerificationMode)
     normalizedFields.tlsVerificationMode =
-      tlsVerificationMode === 'inherit' || tlsVerificationMode === 'strict' || tlsVerificationMode === 'disable-for-localhost' || tlsVerificationMode === 'disable'
+      tlsVerificationMode === 'inherit' ||
+      tlsVerificationMode === 'strict' ||
+      tlsVerificationMode === 'disable-for-localhost' ||
+      tlsVerificationMode === 'disable'
         ? (tlsVerificationMode as RequestTlsVerificationMode)
         : 'inherit'
   }
@@ -536,6 +554,7 @@ function normalizeFolderRunConfig(value: unknown): FolderRequestRunConfig {
   const candidate = toRecord(value)
   const selectionMode = toTrimmedString(candidate.selectionMode)
   const executionMode = toTrimmedString(candidate.executionMode)
+  const runMode = toTrimmedString(candidate.runMode)
   const defaults = createDefaultFolderRequestRunConfig()
 
   return {
@@ -548,6 +567,19 @@ function normalizeFolderRunConfig(value: unknown): FolderRequestRunConfig {
       : defaults.executionMode,
     continueOnFailure:
       typeof candidate.continueOnFailure === 'boolean' ? candidate.continueOnFailure : defaults.continueOnFailure,
+    runMode: FOLDER_RUN_MODES.includes(runMode as FolderRunMode) ? (runMode as FolderRunMode) : defaults.runMode,
+    iterationCount:
+      typeof candidate.iterationCount === 'number' &&
+      Number.isSafeInteger(candidate.iterationCount) &&
+      candidate.iterationCount > 0
+        ? candidate.iterationCount
+        : defaults.iterationCount,
+    concurrency:
+      typeof candidate.concurrency === 'number' &&
+      Number.isSafeInteger(candidate.concurrency) &&
+      candidate.concurrency > 0
+        ? candidate.concurrency
+        : defaults.concurrency,
   }
 }
 

@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createDefaultHttpAuth, parseHttpAuth, serializeHttpAuth } from '../../common/Auth.js'
 import {
+  FOLDER_RUN_MODES,
   FOLDER_REQUEST_EXECUTION_MODES,
   FOLDER_REQUEST_SELECTION_MODES,
   createDefaultFolderRequestRunConfig,
@@ -24,7 +25,12 @@ import { insertOperation } from './operations.js'
 import { ensureParentFolderExists, insertTreeItem } from './tree-items.js'
 
 type FolderRow = typeof folders.$inferSelect
-const FOLDER_TLS_VERIFICATION_MODES: RequestTlsVerificationMode[] = ['inherit', 'strict', 'disable-for-localhost', 'disable']
+const FOLDER_TLS_VERIFICATION_MODES: RequestTlsVerificationMode[] = [
+  'inherit',
+  'strict',
+  'disable-for-localhost',
+  'disable',
+]
 
 export async function createFolder(input: CreateFolderInput): Promise<GenericResult<FolderRecord>> {
   const db = getDb()
@@ -211,7 +217,9 @@ export function deleteFolderWithOperation(tx: ReturnType<typeof getDb>, rootFold
   const requestIds = tx
     .select({ itemId: treeItems.itemId })
     .from(treeItems)
-    .where(and(eq(treeItems.itemType, 'request'), inArray(treeItems.parentFolderId, folderIds), isNull(treeItems.deletedAt)))
+    .where(
+      and(eq(treeItems.itemType, 'request'), inArray(treeItems.parentFolderId, folderIds), isNull(treeItems.deletedAt))
+    )
     .all()
     .map(row => row.itemId)
 
@@ -219,7 +227,10 @@ export function deleteFolderWithOperation(tx: ReturnType<typeof getDb>, rootFold
   const operation = insertOperation(tx, {
     operationType: 'delete-folder',
     title: `Deleted folder ${rootFolder.name}`,
-    summary: requestIds.length === 0 ? 'Folder deleted.' : `Deleted folder and ${requestIds.length} request${requestIds.length === 1 ? '' : 's'}.`,
+    summary:
+      requestIds.length === 0
+        ? 'Folder deleted.'
+        : `Deleted folder and ${requestIds.length} request${requestIds.length === 1 ? '' : 's'}.`,
     createdAt: now,
     metadata: {
       rootItemType: 'folder',
@@ -291,9 +302,7 @@ export async function getFolderAncestorChain(folderId: string | null): Promise<F
     currentFolderId = folder.parentId
   }
 
-  return Array.from(foldersById.values())
-    .reverse()
-    .map(toFolderRecord)
+  return Array.from(foldersById.values()).reverse().map(toFolderRecord)
 }
 
 function toFolderRecord(folder: FolderRow): FolderRecord {
@@ -303,7 +312,9 @@ function toFolderRecord(folder: FolderRow): FolderRecord {
     description: folder.description,
     headers: folder.headers,
     auth: parseHttpAuth(folder.authJson),
-    tlsVerificationMode: FOLDER_TLS_VERIFICATION_MODES.includes(folder.tlsVerificationMode as RequestTlsVerificationMode)
+    tlsVerificationMode: FOLDER_TLS_VERIFICATION_MODES.includes(
+      folder.tlsVerificationMode as RequestTlsVerificationMode
+    )
       ? (folder.tlsVerificationMode as RequestTlsVerificationMode)
       : 'inherit',
     preRequestScript: folder.preRequestScript,
@@ -330,15 +341,31 @@ export function serializeFolderRequestRunConfig(value: FolderRequestRunConfig): 
 function normalizeFolderRequestRunConfig(value: Partial<FolderRequestRunConfig>): FolderRequestRunConfig {
   const defaults = createDefaultFolderRequestRunConfig()
   return {
-    selectionMode: FOLDER_REQUEST_SELECTION_MODES.includes(value.selectionMode as FolderRequestRunConfig['selectionMode'])
+    selectionMode: FOLDER_REQUEST_SELECTION_MODES.includes(
+      value.selectionMode as FolderRequestRunConfig['selectionMode']
+    )
       ? (value.selectionMode as FolderRequestRunConfig['selectionMode'])
       : defaults.selectionMode,
     selectedRequestIds: Array.isArray(value.selectedRequestIds)
       ? Array.from(new Set(value.selectedRequestIds.filter((id): id is string => typeof id === 'string')))
       : defaults.selectedRequestIds,
-    executionMode: FOLDER_REQUEST_EXECUTION_MODES.includes(value.executionMode as FolderRequestRunConfig['executionMode'])
+    executionMode: FOLDER_REQUEST_EXECUTION_MODES.includes(
+      value.executionMode as FolderRequestRunConfig['executionMode']
+    )
       ? (value.executionMode as FolderRequestRunConfig['executionMode'])
       : defaults.executionMode,
-    continueOnFailure: typeof value.continueOnFailure === 'boolean' ? value.continueOnFailure : defaults.continueOnFailure,
+    continueOnFailure:
+      typeof value.continueOnFailure === 'boolean' ? value.continueOnFailure : defaults.continueOnFailure,
+    runMode: FOLDER_RUN_MODES.includes(value.runMode as FolderRequestRunConfig['runMode'])
+      ? (value.runMode as FolderRequestRunConfig['runMode'])
+      : defaults.runMode,
+    iterationCount:
+      Number.isSafeInteger(value.iterationCount) && (value.iterationCount ?? 0) > 0
+        ? value.iterationCount!
+        : defaults.iterationCount,
+    concurrency:
+      Number.isSafeInteger(value.concurrency) && (value.concurrency ?? 0) > 0
+        ? value.concurrency!
+        : defaults.concurrency,
   }
 }
