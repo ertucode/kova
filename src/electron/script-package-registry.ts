@@ -1,8 +1,8 @@
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, rm, rename, stat, writeFile, readdir } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import * as esbuild from 'esbuild'
 import z from 'zod'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import {
@@ -25,6 +25,8 @@ import { resolveExecutableSpawnConfig } from './utils/executable-command.js'
 
 const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000
 const BROWSER_BUNDLE_FORMAT_VERSION = 3
+const require = createRequire(import.meta.url)
+let esbuildModulePromise: Promise<typeof import('esbuild')> | null = null
 const registryEntrySchema = z.object({
   cacheKey: z.string(),
   packageName: z.string(),
@@ -488,6 +490,7 @@ async function collectTypeFiles(nodeModulesPath: string) {
 
 async function buildBrowserBundle(workingDirectory: string, packageName: string) {
   try {
+    const esbuild = await loadEsbuild()
     const packageManifest = await readInstalledPackageManifest(workingDirectory, packageName)
     const peerDependencies = Object.keys(
       typeof packageManifest.peerDependencies === 'object' && packageManifest.peerDependencies !== null
@@ -523,6 +526,27 @@ async function buildBrowserBundle(workingDirectory: string, packageName: string)
 
     throw error
   }
+}
+
+function loadEsbuild() {
+  esbuildModulePromise ??= importEsbuild()
+  return esbuildModulePromise
+}
+
+async function importEsbuild() {
+  const binaryPath = require.resolve('esbuild/bin/esbuild')
+  const asarPathSegment = `${path.sep}app.asar${path.sep}`
+
+  if (binaryPath.includes(asarPathSegment)) {
+    const unpackedBinaryPath = binaryPath.replace(asarPathSegment, `${path.sep}app.asar.unpacked${path.sep}`)
+    if (!(await pathExists(unpackedBinaryPath))) {
+      throw new Error(`Could not find the unpacked esbuild binary at ${unpackedBinaryPath}`)
+    }
+
+    process.env.ESBUILD_BINARY_PATH = unpackedBinaryPath
+  }
+
+  return import('esbuild')
 }
 
 async function readInstalledPackageManifest(workingDirectory: string, packageName: string) {
