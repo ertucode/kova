@@ -21,6 +21,7 @@ import {
   type SuggestTypesScriptPackageInput,
 } from '../common/ScriptPackages.js'
 import { Result } from '../common/Result.js'
+import { resolveExecutableSpawnConfig } from './utils/executable-command.js'
 
 const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000
 const BROWSER_BUNDLE_FORMAT_VERSION = 3
@@ -431,9 +432,15 @@ function hasBuiltInTypeDeclarations(manifest: Record<string, unknown>) {
 }
 
 async function runNpmInstall(workingDirectory: string, specs: string[]) {
-  await runCommand('npm', ['install', '--ignore-scripts', '--no-save', '--package-lock=false', '--install-links=false', ...specs], {
-    cwd: workingDirectory,
-  })
+  const npmSpawnConfig = await resolveExecutableSpawnConfig('npm')
+  await runCommand(
+    npmSpawnConfig.command,
+    ['install', '--ignore-scripts', '--no-save', '--package-lock=false', '--install-links=false', ...specs],
+    {
+      cwd: workingDirectory,
+      env: npmSpawnConfig.env,
+    }
+  )
 }
 
 async function validateInstalledTree(nodeModulesPath: string) {
@@ -577,13 +584,13 @@ function sanitizeForFileName(value: string) {
   return value.replace(/[^A-Za-z0-9._-]+/g, '_')
 }
 
-async function runCommand(command: string, args: string[], options: { cwd: string }) {
+async function runCommand(command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
       stdio: 'pipe',
       env: {
-        ...process.env,
+        ...options.env,
         npm_config_ignore_scripts: 'true',
       },
     })
