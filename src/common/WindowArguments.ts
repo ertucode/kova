@@ -1,6 +1,7 @@
 import z from 'zod'
 import { fromBase64, toBase64 } from './base64.js'
 import { CommandMetadata } from './Command.js'
+import { DEFAULT_SERVER_LOG_MAX_SIZE_MB } from './ServerLog.js'
 
 export const WindowArguments = z.object({
   initialPath: z.string().optional(),
@@ -8,6 +9,12 @@ export const WindowArguments = z.object({
   homeDir: z.string(),
   commands: CommandMetadata.array().optional(),
   isDev: z.boolean(),
+  serverLogConfig: z
+    .object({
+      filePath: z.string(),
+      maxSizeMb: z.number().int().positive(),
+    })
+    .default({ filePath: '', maxSizeMb: DEFAULT_SERVER_LOG_MAX_SIZE_MB }),
 })
 export type WindowArguments = z.infer<typeof WindowArguments>
 

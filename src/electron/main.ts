@@ -27,6 +27,9 @@ import { configureManagementAgentBaseDirectory, shutdownManagementAgentServer } 
 import type { SaveTextToFileInput } from '../common/TextFileSave.js'
 import { checkForAppUpdates, startAutoUpdater } from './auto-updater.js'
 import type { WindowTheme } from '../common/Contracts.js'
+import { getServerLogConfig, initializeServerLog, updateServerLogConfig } from './server-log.js'
+
+initializeServerLog(app.getPath('userData'), !isDev())
 
 // Handle folders/files opened via "open with" or as default app
 let pendingOpenPath: string | undefined
@@ -52,7 +55,7 @@ app.once('will-quit', () => {
   void shutdownManagementAgentServer()
 })
 
-type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev'>
+type WindowArgsWithoutStatic = Omit<WindowArguments, 'homeDir' | 'asyncStorage' | 'isDev' | 'serverLogConfig'>
 
 const homeDir = os.homedir()
 const scriptPromptRegistry = createScriptPromptRegistry()
@@ -189,6 +192,7 @@ async function createWindow(args?: WindowArgsWithoutStatic) {
     ...args,
     homeDir,
     isDev: process.env.NODE_ENV === 'development',
+    serverLogConfig: getServerLogConfig(),
   }
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
 
@@ -368,6 +372,14 @@ app.on('ready', async () => {
   })
 
   ipcHandle('openFileLocation', async (filePath: string) => {
+    if (!fsSync.existsSync(filePath)) {
+      const errorMessage = await shell.openPath(path.dirname(filePath))
+      if (errorMessage) {
+        return GenericError.Message(errorMessage)
+      }
+      return Result.Success(undefined)
+    }
+
     shell.showItemInFolder(filePath)
     return Result.Success(undefined)
   })
@@ -859,6 +871,10 @@ app.on('ready', async () => {
   ipcHandle('getAppSettings', async () => {
     const { getAppSettings } = await loadAppSettingsDb()
     return getAppSettings()
+  })
+
+  ipcHandle('updateServerLogConfig', async input => {
+    return await updateServerLogConfig(input)
   })
 
   ipcHandle('checkForAppUpdates', async () => {

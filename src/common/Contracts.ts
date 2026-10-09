@@ -254,6 +254,7 @@ import {
 import { type ScriptRequestBridgeResponse } from './ScriptMakeRequest.js'
 import type { SupermavenInlineSuggestion, SupermavenInlineSuggestionRequest, SupermavenStatus } from './Supermaven.js'
 import type { AppUpdateCheckResult } from './AppUpdate.js'
+import type { ServerLogConfig, UpdateServerLogConfigInput } from './ServerLog.js'
 
 export type WindowTheme = 'dark' | 'light'
 
@@ -331,6 +332,7 @@ export type EventResponseMapping = {
   moveWebSocketExample: Promise<GenericResult<void>>
   listEnvironments: Promise<EnvironmentRecord[]>
   getAppSettings: Promise<AppSettingsRecord>
+  updateServerLogConfig: Promise<ServerLogConfig>
   checkForAppUpdates: Promise<AppUpdateCheckResult>
   getSupermavenStatus: Promise<SupermavenStatus>
   createEnvironment: Promise<GenericResult<EnvironmentRecord>>
@@ -502,6 +504,7 @@ export type EventRequestMapping = {
   moveWebSocketExample: MoveWebSocketExampleInput
   listEnvironments: void
   getAppSettings: void
+  updateServerLogConfig: UpdateServerLogConfigInput
   checkForAppUpdates: void
   getSupermavenStatus: void
   createEnvironment: CreateEnvironmentInput
@@ -685,6 +688,7 @@ export type WindowElectron = {
   moveWebSocketExample: (input: MoveWebSocketExampleInput) => Promise<GenericResult<void>>
   listEnvironments: () => Promise<EnvironmentRecord[]>
   getAppSettings: () => Promise<AppSettingsRecord>
+  updateServerLogConfig: (input: UpdateServerLogConfigInput) => Promise<ServerLogConfig>
   checkForAppUpdates: () => Promise<AppUpdateCheckResult>
   getSupermavenStatus: () => Promise<SupermavenStatus>
   createEnvironment: (input: CreateEnvironmentInput) => Promise<GenericResult<EnvironmentRecord>>

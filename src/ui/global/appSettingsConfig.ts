@@ -1,4 +1,5 @@
 import type { AppUpdateCheckResult } from '@common/AppUpdate'
+import { errorResponseToMessage } from '@common/GenericError'
 import {
   APP_SETTINGS_REQUEST_CODE_COPY_BEHAVIORS,
   APP_SETTINGS_RESPONSE_BODY_DISPLAY_MODES,
@@ -10,8 +11,9 @@ import {
   type AppSettingsTlsVerificationMode,
 } from '@common/AppSettings'
 import { Typescript } from '@common/Typescript'
+import { DEFAULT_SERVER_LOG_MAX_SIZE_MB, type ServerLogConfig } from '@common/ServerLog'
 import { formatTlsVerificationModeLabel } from '@/components/tlsVerificationMode'
-import { getWindowElectron } from '@/getWindowElectron'
+import { getWindowElectron, windowArgs } from '@/getWindowElectron'
 import { toast } from '@/lib/components/toast'
 import {
   AppSettingsCoordinator,
@@ -81,6 +83,13 @@ export interface CommandPaletteInputConfig {
   max?: number
   step?: number
   textArea?: boolean
+  actions?: readonly CommandPaletteInputAction[]
+}
+
+export interface CommandPaletteInputAction {
+  id: string
+  label: string
+  run(value: string): void | Promise<void>
 }
 
 export interface CommandPaletteTrigger<Result = unknown> {
@@ -95,6 +104,8 @@ export interface CommandPaletteTrigger<Result = unknown> {
 export type CommandPaletteSelectionConfig = CommandPaletteOptionConfig | CommandPaletteBooleanConfig
 export type CommandPaletteNestedConfig = CommandPaletteSelectionConfig | CommandPaletteInputConfig
 export type CommandPaletteConfig = CommandPaletteNestedConfig | CommandPaletteTrigger
+
+let serverLogConfig: ServerLogConfig = windowArgs.serverLogConfig
 
 export const appearanceSetting: CommandPaletteOptionConfig<AppTheme> = {
   type: 'options',
@@ -301,6 +312,61 @@ export const scriptAiServerPortSetting: CommandPaletteInputConfig = {
   placeholder: String(DEFAULT_SCRIPT_AI_SERVER_PORT),
 }
 
+export const serverLogPathSetting: CommandPaletteInputConfig = {
+  type: 'input',
+  id: 'server-log-path',
+  label: 'Server log path',
+  description: formatServerLogPathDescription(),
+  getValue: () => serverLogConfig.filePath,
+  validate: value => (value.trim() === '' ? 'Enter a log file path.' : null),
+  onChange: async value => {
+    serverLogConfig = await getWindowElectron().updateServerLogConfig({ filePath: value.trim() })
+    serverLogPathSetting.description = formatServerLogPathDescription()
+  },
+  placeholder: 'Path to the server log file',
+  actions: [
+    {
+      id: 'show-in-file-explorer',
+      label: 'Show in file explorer',
+      run: async filePath => {
+        const result = await getWindowElectron().openFileLocation(filePath)
+        if (!result.success) {
+          throw new Error(errorResponseToMessage(result.error))
+        }
+      },
+    },
+  ],
+}
+
+export const serverLogMaxSizeSetting: CommandPaletteInputConfig = {
+  type: 'input',
+  id: 'server-log-max-size',
+  label: 'Server log maximum size',
+  description: formatServerLogMaxSizeDescription(),
+  getValue: () => String(serverLogConfig.maxSizeMb),
+  validate: value => {
+    const size = Number(value)
+    return Number.isInteger(size) && size >= 1 && size <= 10_240 ? null : 'Enter a whole number between 1 and 10240 MB.'
+  },
+  onChange: async value => {
+    serverLogConfig = await getWindowElectron().updateServerLogConfig({ maxSizeMb: Number(value) })
+    serverLogMaxSizeSetting.description = formatServerLogMaxSizeDescription()
+  },
+  inputType: 'number',
+  min: 1,
+  max: 10_240,
+  step: 1,
+  placeholder: String(DEFAULT_SERVER_LOG_MAX_SIZE_MB),
+}
+
+function formatServerLogPathDescription() {
+  return `Production server console output is written to: ${serverLogConfig.filePath}`
+}
+
+function formatServerLogMaxSizeDescription() {
+  return `Maximum size in MB before the oldest logs are removed. Current: ${serverLogConfig.maxSizeMb} MB.`
+}
+
 export const scriptBlockPrettierConfigSetting: CommandPaletteInputConfig = {
   type: 'input',
   id: 'script-block-prettier-config',
@@ -381,6 +447,8 @@ export const commandPaletteConfigs: readonly CommandPaletteConfig[] = [
   supermavenSetting,
   scriptAiModelSetting,
   scriptAiServerPortSetting,
+  serverLogPathSetting,
+  serverLogMaxSizeSetting,
   codeEditorFontSizeSetting,
   responseCodeEditorFontSizeSetting,
   resetCodeEditorFontSizeTrigger,

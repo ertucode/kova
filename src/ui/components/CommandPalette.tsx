@@ -8,6 +8,7 @@ import {
   executeCommandPaletteTrigger,
   getCommandPaletteOptions,
   type CommandPaletteInputConfig,
+  type CommandPaletteInputAction,
   type CommandPaletteNestedConfig,
   type CommandPaletteOption,
   type CommandPaletteSelectionConfig,
@@ -23,6 +24,7 @@ export function CommandPalette() {
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [inputError, setInputError] = useState<string | null>(null)
+  const [runningInputActionId, setRunningInputActionId] = useState<string | null>(null)
   const [optionsByConfigId, setOptionsByConfigId] = useState<
     Record<string, readonly CommandPaletteOption<string | boolean>[]>
   >(() =>
@@ -250,6 +252,21 @@ export function CommandPalette() {
     dialogActions.close()
   }
 
+  const runInputAction = async (action: CommandPaletteInputAction) => {
+    setRunningInputActionId(action.id)
+    try {
+      await action.run(inputValue)
+    } catch (error) {
+      toast.show({
+        severity: 'error',
+        title: `${action.label} failed`,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setRunningInputActionId(null)
+    }
+  }
+
   return (
     <Dialog
       onClose={dialogActions.close}
@@ -383,7 +400,20 @@ export function CommandPalette() {
             />
           )}
           {inputError ? <p className="text-xs text-error">{inputError}</p> : null}
-          <div className="flex justify-end">
+          <div className="flex justify-between gap-2">
+            <div className="flex gap-2">
+              {activeInputConfig.actions?.map(action => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="btn btn-ghost btn-sm rounded-lg"
+                  disabled={runningInputActionId !== null}
+                  onClick={() => void runInputAction(action)}
+                >
+                  {runningInputActionId === action.id ? `${action.label}…` : action.label}
+                </button>
+              ))}
+            </div>
             <button type="submit" className="btn btn-primary btn-sm rounded-lg">
               Apply
             </button>

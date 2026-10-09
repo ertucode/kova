@@ -1,5 +1,6 @@
 import type { WindowElectron } from '@common/Contracts'
 import { deserializeWindowArguments, type WindowArguments } from '@common/WindowArguments'
+import { DEFAULT_SERVER_LOG_MAX_SIZE_MB } from '@common/ServerLog'
 
 type WindowWithElectron = Window & {
   electron?: WindowElectron
@@ -31,6 +32,7 @@ function parseWindowArguments(value: string): WindowArguments {
     return {
       homeDir: '',
       isDev: false,
+      serverLogConfig: { filePath: '', maxSizeMb: DEFAULT_SERVER_LOG_MAX_SIZE_MB },
     }
   }
 
@@ -40,6 +42,7 @@ function parseWindowArguments(value: string): WindowArguments {
     return {
       homeDir: '',
       isDev: false,
+      serverLogConfig: { filePath: '', maxSizeMb: DEFAULT_SERVER_LOG_MAX_SIZE_MB },
     }
   }
 }
