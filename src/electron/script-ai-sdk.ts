@@ -2,18 +2,15 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import {
-  createOpencodeClient,
-  createOpencodeServer,
-  type AssistantMessage,
-  type Event,
-  type GlobalEvent,
-  type Message,
-  type OpencodeClient,
-  type Part,
-  type Session,
+  type OpenCodeClient,
+  type SessionInfo,
+  type SessionMessageAssistant,
+  type SessionMessageAssistantTool,
+  type SessionMessageInfo,
   type SessionStatus,
-  type ToolPart,
-} from '@opencode-ai/sdk'
+  type ToolContent,
+  type V2Event,
+} from '@opencode/client'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import { Result } from '../common/Result.js'
 import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
@@ -41,7 +38,8 @@ import {
 import { emitGenericEvent } from './generic-events.js'
 import { getAppSettings } from './db/app-settings.js'
 import { requireScriptAiDiagnosticsBridge } from './script-ai-diagnostics.js'
-import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
+import { startOpenCodeServer, type OpenCodeServer } from './utils/opencode-v2-server.js'
+import { getPreferredOpenCodeModel } from './utils/opencode-model-selection.js'
 
 type TargetMeta = {
   version: 1
@@ -50,23 +48,7 @@ type TargetMeta = {
   knownSessionIds: string[]
 }
 
-type RawScriptAiSession = Session & {
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache?: {
-      read: number
-      write: number
-    }
-  }
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-}
+type AssistantContent = SessionMessageAssistant['content'][number]
 
 type TargetRuntime = {
   target: ScriptAiTarget
@@ -81,13 +63,8 @@ type TargetRuntime = {
 }
 
 type ServerRuntime = {
-  baseUrl: string
-  ownedServer: {
-    url: string
-    close(): void
-  } | null
-  globalClient: OpencodeClient
-  clientsByDirectory: Map<string, OpencodeClient>
+  ownedServer: OpenCodeServer
+  globalClient: OpenCodeClient
   eventLoopStarted: boolean
   eventLoopPromise: Promise<void> | null
   globalEventAbortController: AbortController
@@ -96,6 +73,7 @@ type ServerRuntime = {
 const SCRIPT_AI_META_FILE_NAME = 'meta.json'
 const targetRuntimes = new Map<string, TargetRuntime>()
 const sessionToTargetKey = new Map<string, string>()
+const eventRefreshTimers = new Map<string, NodeJS.Timeout>()
 
 let scriptAiBaseDirectory: string | null = null
 let serverRuntimePromise: Promise<ServerRuntime> | null = null
@@ -122,10 +100,13 @@ export async function createScriptAiSession(
 ): Promise<GenericResult<ScriptAiWorkspaceState>> {
   try {
     const runtime = await ensureTargetRuntime(input.target, input.currentCode)
-    const client = await getClientForDirectory(runtime.workspacePath)
+    const client = await getOpenCodeClient()
     const title = buildSessionTitle(input.target)
-    const sessionResult = await client.session.create({ body: { title } })
-    const session = requireSdkData(sessionResult.data, 'OpenCode did not return the created session.')
+    const session = await client.session.create({
+      title,
+      location: { directory: runtime.workspacePath },
+      model: await resolveSelectedModel(input.model),
+    })
 
     runtime.knownSessionIds.add(session.id)
     runtime.activeSessionId = session.id
@@ -154,14 +135,15 @@ export async function sendScriptAiMessage(
     runtime.activeSessionId = input.sessionId
     await persistMeta(runtime)
 
-    const client = await getClientForDirectory(runtime.workspacePath)
+    const client = await getOpenCodeClient()
+    const model = await resolveSelectedModel(input.model)
+    if (model) {
+      await client.session.switchModel({ sessionID: input.sessionId, model })
+    }
     await client.session.prompt({
-      path: { id: input.sessionId },
-      body: {
-        model: parseSelectedModel(input.model),
-        system: buildSystemPrompt(input.target, runtime.fileName, input.documentation),
-        parts: [{ type: 'text', text: input.message }],
-      },
+      sessionID: input.sessionId,
+      text: `${buildSystemPrompt(input.target, runtime.fileName, input.documentation)}\n\nUser request:\n${input.message}`,
+      metadata: { kovaDisplayText: input.message },
     })
 
     await refreshTargetRuntime(runtime)
@@ -232,8 +214,8 @@ export async function abortScriptAiSession(
       return GenericError.Message('This OpenCode session does not belong to the current script target.')
     }
 
-    const client = await getClientForDirectory(runtime.workspacePath)
-    await client.session.abort({ path: { id: input.sessionId } })
+    const client = await getOpenCodeClient()
+    await client.session.interrupt({ sessionID: input.sessionId })
     await refreshTargetRuntime(runtime)
 
     const state = toWorkspaceState(runtime, await readWorkspaceCode(runtime))
@@ -253,14 +235,11 @@ export async function loadScriptAiMessagePatchDiff(
       return GenericError.Message('This OpenCode session does not belong to the current script target.')
     }
 
-    const client = await getClientForDirectory(runtime.workspacePath)
-    const diffResult = await client.session.diff({
-      path: { id: input.sessionId },
-      query: { messageID: input.messageId },
-    })
+    const client = await getOpenCodeClient()
+    const diffs = await client.session.diff({ sessionID: input.sessionId, to: input.messageId })
 
     return Result.Success({
-      diffs: requireSdkData(diffResult.data, 'OpenCode did not return the message patch diff.').map(toScriptAiPatchDiff),
+      diffs: diffs.map(toScriptAiPatchDiff),
     })
   } catch (error) {
     return toGenericError(error)
@@ -308,12 +287,14 @@ async function ensureTargetRuntime(target: ScriptAiTarget, initialCode: string) 
 }
 
 async function refreshTargetRuntime(runtime: TargetRuntime) {
-  const client = await getClientForDirectory(runtime.workspacePath)
-  const [sessionsResult, statusesResult] = await Promise.all([client.session.list(), client.session.status()])
-  const sessions = requireSdkData(sessionsResult.data, 'OpenCode did not return the session list.').filter(session =>
+  const client = await getOpenCodeClient()
+  const [allSessions, activeSessions] = await Promise.all([
+    loadOpenCodeSessions(client, runtime.workspacePath),
+    client.session.active(),
+  ])
+  const sessions = allSessions.filter(session =>
     runtime.knownSessionIds.has(session.id)
   )
-  const statuses = requireSdkData(statusesResult.data, 'OpenCode did not return the session statuses.')
 
   runtime.sessions = new Map(
     await Promise.all(
@@ -326,7 +307,7 @@ async function refreshTargetRuntime(runtime: TargetRuntime) {
             session.id,
             toSessionSummary(
               session,
-              statuses[session.id] ?? { type: 'idle' },
+              activeSessions[session.id] ? { type: 'busy' } : { type: 'idle' },
               messages.length,
               getLatestErrorMessage(messages)
             ),
@@ -352,87 +333,46 @@ async function refreshTargetRuntime(runtime: TargetRuntime) {
   await persistMeta(runtime)
 }
 
-async function loadSessionMessages(client: OpencodeClient, sessionId: string) {
-  const messagesResult = await client.session.messages({ path: { id: sessionId } })
-  return requireSdkData(messagesResult.data, 'OpenCode did not return the session messages.').map(message =>
-    toScriptAiMessage(message.info, message.parts)
-  )
+async function loadSessionMessages(client: OpenCodeClient, sessionId: string) {
+  const messages = await loadOpenCodeMessages(client, sessionId)
+  return messages.flatMap(message => {
+    const converted = toScriptAiMessage(message)
+    return converted ? [converted] : []
+  })
 }
 
-function upsertMessage(runtime: TargetRuntime, sessionId: string, message: ScriptAiMessage) {
-  const existingMessages = runtime.messagesBySessionId.get(sessionId)
-  if (!existingMessages) {
-    runtime.messagesBySessionId.set(sessionId, [message])
-    return
-  }
+async function loadOpenCodeSessions(client: OpenCodeClient, directory: string) {
+  const sessions: SessionInfo[] = []
+  let cursor: string | undefined
 
-  const existingIndex = existingMessages.findIndex(existingMessage => existingMessage.id === message.id)
-  if (existingIndex === -1) {
-    existingMessages.push(message)
-  } else {
-    existingMessages[existingIndex] = {
-      ...existingMessages[existingIndex],
-      ...message,
-      parts: existingMessages[existingIndex].parts,
-    }
-  }
-}
-
-function upsertMessagePart(runtime: TargetRuntime, sessionId: string, messageId: string, part: ScriptAiMessagePart) {
-  const messages = runtime.messagesBySessionId.get(sessionId)
-  if (!messages) {
-    runtime.messagesBySessionId.set(sessionId, [
-      {
-        id: messageId,
-        role: 'assistant',
-        createdAt: Date.now(),
-        completedAt: null,
-        errorMessage: null,
-        cost: null,
-        modelId: null,
-        providerId: null,
-        tokens: null,
-        parts: [part],
-      },
-    ])
-    return
-  }
-
-  const messageIndex = messages.findIndex(message => message.id === messageId)
-  if (messageIndex === -1) {
-    messages.push({
-      id: messageId,
-      role: 'assistant',
-      createdAt: Date.now(),
-      completedAt: null,
-      errorMessage: null,
-      cost: null,
-      modelId: null,
-      providerId: null,
-      tokens: null,
-      parts: [part],
+  do {
+    const page = await client.session.list({
+      directory,
+      limit: 200,
+      ...(cursor ? { cursor } : { order: 'asc' }),
     })
-    return
-  }
+    sessions.push(...page.data)
+    cursor = page.cursor.next ?? undefined
+  } while (cursor)
 
-  const message = messages[messageIndex]
-  const partIndex = message.parts.findIndex(existingPart => existingPart.id === part.id)
-  if (partIndex === -1) {
-    message.parts.push(part)
-    return
-  }
-
-  message.parts[partIndex] = part
+  return sessions
 }
 
-function removeMessagePart(runtime: TargetRuntime, sessionId: string, messageId: string, partId: string) {
-  const messages = runtime.messagesBySessionId.get(sessionId)
-  const message = messages?.find(candidate => candidate.id === messageId)
-  if (!message) {
-    return
-  }
+async function loadOpenCodeMessages(client: OpenCodeClient, sessionId: string) {
+  const messages: SessionMessageInfo[] = []
+  let cursor: string | undefined
 
-  message.parts = message.parts.filter(part => part.id !== partId)
+  do {
+    const page = await client.message.list({
+      sessionID: sessionId,
+      limit: 200,
+      ...(cursor ? { cursor } : { order: 'asc' }),
+    })
+    messages.push(...page.data)
+    cursor = page.cursor.next ?? undefined
+  } while (cursor)
+
+  return messages
 }
 
 async function getServerRuntime() {
@@ -455,6 +395,10 @@ export async function shutdownScriptAiServer() {
   }
 
   try {
+    for (const timer of eventRefreshTimers.values()) {
+      clearTimeout(timer)
+    }
+    eventRefreshTimers.clear()
     const runtime = await serverRuntimePromise
     runtime.globalEventAbortController.abort()
     await runtime.eventLoopPromise?.catch(() => undefined)
@@ -465,50 +409,27 @@ export async function shutdownScriptAiServer() {
 }
 
 async function createServerRuntime(): Promise<ServerRuntime> {
-  const spawnConfig = await resolveOpenCodeSpawnConfig()
   const scriptAiServerPort = await getConfiguredScriptAiServerPort()
-  process.env.PATH = spawnConfig.env.PATH
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE = 'true'
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = 'true'
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = 'true'
-
   const startupAbortController = new AbortController()
   serverStartupAbortController = startupAbortController
 
-  const baseUrl = `http://127.0.0.1:${String(scriptAiServerPort)}`
-  let ownedServer: ServerRuntime['ownedServer'] = null
-
   try {
-    ownedServer = await createOpencodeServer({
-      hostname: '127.0.0.1',
-      port: scriptAiServerPort,
-      timeout: 10_000,
-      signal: startupAbortController.signal,
-    })
-  } catch (error) {
-    if (!(await tryReuseExistingServer(baseUrl, scriptAiServerPort, error))) {
-      throw error
+    const ownedServer = await startOpenCodeServer(scriptAiServerPort, startupAbortController.signal)
+    const runtime: ServerRuntime = {
+      ownedServer,
+      globalClient: ownedServer.client,
+      eventLoopStarted: false,
+      eventLoopPromise: null,
+      globalEventAbortController: new AbortController(),
     }
+
+    startGlobalEventLoop(runtime)
+    return runtime
   } finally {
     if (serverStartupAbortController === startupAbortController) {
       serverStartupAbortController = null
     }
   }
-
-  const resolvedBaseUrl = ownedServer?.url ?? baseUrl
-
-  const runtime: ServerRuntime = {
-    baseUrl: resolvedBaseUrl,
-    ownedServer,
-    globalClient: createOpencodeClient({ baseUrl: resolvedBaseUrl }),
-    clientsByDirectory: new Map(),
-    eventLoopStarted: false,
-    eventLoopPromise: null,
-    globalEventAbortController: new AbortController(),
-  }
-
-  startGlobalEventLoop(runtime)
-  return runtime
 }
 
 function startGlobalEventLoop(runtime: ServerRuntime) {
@@ -520,9 +441,7 @@ function startGlobalEventLoop(runtime: ServerRuntime) {
 
   runtime.eventLoopPromise = (async () => {
     try {
-      const events = await runtime.globalClient.global.event({ signal: runtime.globalEventAbortController.signal })
-
-      for await (const event of events.stream) {
+      for await (const event of runtime.globalClient.event.subscribe({ signal: runtime.globalEventAbortController.signal })) {
         if (runtime.globalEventAbortController.signal.aborted) {
           return
         }
@@ -537,9 +456,8 @@ function startGlobalEventLoop(runtime: ServerRuntime) {
   })()
 }
 
-async function handleGlobalEvent(event: GlobalEvent) {
-  const payload = event.payload
-  const sessionId = getEventSessionId(payload)
+async function handleGlobalEvent(event: V2Event) {
+  const sessionId = getEventSessionId(event)
   if (!sessionId) {
     return
   }
@@ -554,27 +472,17 @@ async function handleGlobalEvent(event: GlobalEvent) {
     return
   }
 
-  if (payload.type === 'session.status') {
+  if (event.type === 'session.status') {
     const session = runtime.sessions.get(sessionId)
     if (session) {
-      session.status = toUiSessionStatus(payload.properties.status)
+      session.status = toUiSessionStatus(event.data.status)
     }
-  } else if (payload.type === 'session.idle') {
+  } else if (event.type === 'session.idle') {
     const session = runtime.sessions.get(sessionId)
     if (session) {
       session.status = 'idle'
     }
-  } else if (payload.type === 'session.updated' || payload.type === 'session.created') {
-    const existingMessageCount = runtime.messagesBySessionId.get(sessionId)?.length ?? 0
-    const existingErrorMessage = runtime.sessions.get(sessionId)?.latestErrorMessage ?? null
-    runtime.sessions.set(
-      sessionId,
-      toSessionSummary(payload.properties.info, { type: 'idle' }, existingMessageCount, existingErrorMessage)
-    )
-    runtime.knownSessionIds.add(sessionId)
-    sessionToTargetKey.set(sessionId, targetKey)
-    await persistMeta(runtime)
-  } else if (payload.type === 'session.deleted') {
+  } else if (event.type === 'session.deleted') {
     runtime.knownSessionIds.delete(sessionId)
     runtime.sessions.delete(sessionId)
     runtime.messagesBySessionId.delete(sessionId)
@@ -583,103 +491,36 @@ async function handleGlobalEvent(event: GlobalEvent) {
       runtime.activeSessionId = runtime.sessions.keys().next().value ?? null
     }
     await persistMeta(runtime)
-  } else if (payload.type === 'message.updated') {
-    const sessionMessages = runtime.messagesBySessionId.get(sessionId) ?? []
-    runtime.messagesBySessionId.set(sessionId, sessionMessages)
-    upsertMessage(
-      runtime,
-      sessionId,
-      toScriptAiMessage(
-        payload.properties.info,
-        sessionMessages.find(message => message.id === payload.properties.info.id)?.parts ?? []
-      )
-    )
-    updateSessionSummaryFromMessages(runtime, sessionId)
-  } else if (payload.type === 'message.part.updated') {
-    upsertMessagePart(
-      runtime,
-      sessionId,
-      payload.properties.part.messageID,
-      toScriptAiMessagePart(payload.properties.part)
-    )
-    updateSessionSummaryFromMessages(runtime, sessionId)
-  } else if (payload.type === 'message.part.removed') {
-    removeMessagePart(runtime, sessionId, payload.properties.messageID, payload.properties.partID)
-    updateSessionSummaryFromMessages(runtime, sessionId)
-  } else if (payload.type === 'message.removed') {
-    const messages = runtime.messagesBySessionId.get(sessionId)
-    if (messages) {
-      runtime.messagesBySessionId.set(
-        sessionId,
-        messages.filter(message => message.id !== payload.properties.messageID)
-      )
-      updateSessionSummaryFromMessages(runtime, sessionId)
-    }
-  } else if (payload.type === 'session.error') {
+  } else if (event.type === 'session.execution.failed') {
     const session = runtime.sessions.get(sessionId)
     if (session) {
-      session.latestErrorMessage = getSdkErrorMessage(payload.properties.error) ?? 'OpenCode session failed.'
+      session.latestErrorMessage = event.data.error.message
     }
+  } else {
+    scheduleTargetRefresh(runtime)
+    return
   }
 
   const state = toWorkspaceState(runtime, await readWorkspaceCode(runtime))
   emitScriptAiState(state)
 }
 
-function requireSdkData<T>(value: T | undefined, message: string) {
-  if (value === undefined) {
-    throw new Error(message)
-  }
-
-  return value
-}
-
-function updateSessionSummaryFromMessages(runtime: TargetRuntime, sessionId: string) {
-  const session = runtime.sessions.get(sessionId)
-  if (!session) {
+function scheduleTargetRefresh(runtime: TargetRuntime) {
+  if (eventRefreshTimers.has(runtime.targetKey)) {
     return
   }
-
-  const messages = runtime.messagesBySessionId.get(sessionId) ?? []
-  session.messageCount = messages.length
-  session.updatedAt = messages.at(-1)?.completedAt ?? messages.at(-1)?.createdAt ?? session.updatedAt
-  session.latestErrorMessage = getLatestErrorMessage(messages)
+  const timer = setTimeout(() => {
+    eventRefreshTimers.delete(runtime.targetKey)
+    void refreshTargetRuntime(runtime)
+      .then(async () => emitScriptAiState(toWorkspaceState(runtime, await readWorkspaceCode(runtime))))
+      .catch(error => console.error('Failed to refresh Script AI state from OpenCode', error))
+  }, 75)
+  eventRefreshTimers.set(runtime.targetKey, timer)
 }
 
-async function getClientForDirectory(directory: string) {
+async function getOpenCodeClient() {
   const runtime = await getServerRuntime()
-  const existingClient = runtime.clientsByDirectory.get(directory)
-  if (existingClient) {
-    return existingClient
-  }
-
-  const client = createOpencodeClient({ baseUrl: runtime.baseUrl, directory })
-  runtime.clientsByDirectory.set(directory, client)
-  return client
-}
-
-async function tryReuseExistingServer(baseUrl: string, port: number, error: unknown) {
-  if (!isPortInUseServerError(error, port)) {
-    return null
-  }
-
-  try {
-    const response = await fetch(new URL('/global/health', baseUrl), {
-      signal: AbortSignal.timeout(2_000),
-    })
-    if (!response.ok) {
-      return null
-    }
-
-    const health = (await response.json()) as { healthy?: boolean }
-    return health.healthy === true ? baseUrl : null
-  } catch {
-    return null
-  }
-}
-
-function isPortInUseServerError(error: unknown, port: number) {
-  return error instanceof Error && error.message.includes(`Is port ${String(port)} in use?`)
+  return runtime.globalClient
 }
 
 function isAbortError(error: unknown) {
@@ -796,8 +637,12 @@ function parseSelectedModel(value: string | null) {
 
   return {
     providerID: value.slice(0, separatorIndex),
-    modelID: value.slice(separatorIndex + 1),
+    id: value.slice(separatorIndex + 1),
   }
+}
+
+async function resolveSelectedModel(value: string | null) {
+  return parseSelectedModel(value) ?? await getPreferredOpenCodeModel()
 }
 
 function toWorkspaceState(runtime: TargetRuntime, workspaceCode: string): ScriptAiWorkspaceState {
@@ -813,42 +658,39 @@ function toWorkspaceState(runtime: TargetRuntime, workspaceCode: string): Script
 }
 
 function toSessionSummary(
-  session: Session,
+  session: SessionInfo,
   status: SessionStatus,
   messageCount: number,
   latestErrorMessage: string | null
 ): ScriptAiSessionSummary {
-  const rawSession = session as RawScriptAiSession
-  const inputTokens = rawSession.tokens?.input ?? 0
-  const outputTokens = rawSession.tokens?.output ?? 0
-  const reasoningTokens = rawSession.tokens?.reasoning ?? 0
-  const cacheReadTokens = rawSession.tokens?.cache?.read ?? 0
-  const cacheWriteTokens = rawSession.tokens?.cache?.write ?? 0
+  const inputTokens = session.tokens.input
+  const outputTokens = session.tokens.output
+  const reasoningTokens = session.tokens.reasoning
+  const cacheReadTokens = session.tokens.cache.read
+  const cacheWriteTokens = session.tokens.cache.write
 
   return {
     id: session.id,
-    title: session.title,
+    title: session.title ?? 'Untitled session',
     createdAt: session.time.created,
     updatedAt: session.time.updated,
     status: toUiSessionStatus(status),
     messageCount,
     latestErrorMessage,
-    modelId: getSessionModelId(rawSession),
-    spent: typeof rawSession.cost === 'number' ? rawSession.cost : null,
-    tokens: rawSession.tokens
-      ? {
-          input: inputTokens,
-          output: outputTokens,
-          reasoning: reasoningTokens,
-          cacheRead: cacheReadTokens,
-          cacheWrite: cacheWriteTokens,
-          total: inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens,
-        }
-      : null,
+    modelId: getSessionModelId(session),
+    spent: session.cost,
+    tokens: {
+      input: inputTokens,
+      output: outputTokens,
+      reasoning: reasoningTokens,
+      cacheRead: cacheReadTokens,
+      cacheWrite: cacheWriteTokens,
+      total: inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens,
+    },
   }
 }
 
-function getSessionModelId(session: RawScriptAiSession) {
+function getSessionModelId(session: SessionInfo) {
   if (!session.model?.providerID || !session.model.id) {
     return null
   }
@@ -872,26 +714,53 @@ function getLatestErrorMessage(messages: ScriptAiMessage[]) {
 }
 
 function toScriptAiMessage(
-  message: Message | AssistantMessage,
-  parts: ScriptAiMessagePart[] | Part[]
-): ScriptAiMessage {
-  const usage = message.role === 'assistant' ? getAssistantMessageUsage(message) : null
+  message: SessionMessageInfo
+): ScriptAiMessage | null {
+  if (message.type !== 'user' && message.type !== 'assistant') {
+    return null
+  }
+
+  const usage = message.type === 'assistant' ? getAssistantMessageUsage(message) : null
+  const parts = message.type === 'assistant'
+    ? [
+        ...message.content.map((part, index) => toScriptAiMessagePart(part, `${message.id}-${String(index)}`)),
+        ...(message.error
+          ? [{ id: `${message.id}-error`, type: 'text' as const, text: `OpenCode error: ${message.error.message}` }]
+          : []),
+      ]
+    : [
+        { id: `${message.id}-text`, type: 'text' as const, text: getDisplayText(message) },
+        ...(message.files ?? []).map((file, index) => ({
+          id: `${message.id}-file-${String(index)}`,
+          type: 'file' as const,
+          filename: file.name ?? null,
+          path: file.source.type === 'uri' ? file.source.uri : null,
+        })),
+      ]
 
   return {
     id: message.id,
-    role: message.role,
+    role: message.type,
     createdAt: message.time.created,
-    completedAt: message.role === 'assistant' ? (message.time.completed ?? null) : null,
-    errorMessage: message.role === 'assistant' ? getSdkErrorMessage(message.error) : null,
+    completedAt: message.type === 'assistant' ? (message.time.completed ?? null) : null,
+    errorMessage: message.type === 'assistant' ? (message.error?.message ?? null) : null,
     cost: usage?.cost ?? null,
     modelId: usage?.modelId ?? null,
     providerId: usage?.providerId ?? null,
     tokens: usage?.tokens ?? null,
-    parts: parts.map(part => ('messageID' in part ? toScriptAiMessagePart(part) : part)),
+    parts,
   }
 }
 
-function getAssistantMessageUsage(message: AssistantMessage) {
+function getDisplayText(message: Extract<SessionMessageInfo, { type: 'user' }>) {
+  const displayText = message.metadata?.kovaDisplayText
+  return typeof displayText === 'string' ? displayText : message.text
+}
+
+function getAssistantMessageUsage(message: SessionMessageAssistant) {
+  if (!message.tokens) {
+    return null
+  }
   const inputTokens = message.tokens.input
   const outputTokens = message.tokens.output
   const reasoningTokens = message.tokens.reasoning
@@ -899,9 +768,9 @@ function getAssistantMessageUsage(message: AssistantMessage) {
   const cacheWriteTokens = message.tokens.cache.write
 
   return {
-    cost: message.cost,
-    modelId: message.modelID,
-    providerId: message.providerID,
+    cost: message.cost ?? null,
+    modelId: message.model.id,
+    providerId: message.model.providerID,
     tokens: {
       input: inputTokens,
       output: outputTokens,
@@ -913,43 +782,14 @@ function getAssistantMessageUsage(message: AssistantMessage) {
   }
 }
 
-function toScriptAiMessagePart(part: Part): ScriptAiMessagePart {
+function toScriptAiMessagePart(part: AssistantContent, id: string): ScriptAiMessagePart {
   switch (part.type) {
     case 'text':
-      return { id: part.id, type: 'text', text: part.text }
+      return { id, type: 'text', text: part.text }
     case 'reasoning':
-      return { id: part.id, type: 'reasoning', text: part.text }
+      return { id, type: 'reasoning', text: part.text }
     case 'tool':
       return toScriptAiToolPart(part)
-    case 'file':
-      return {
-        id: part.id,
-        type: 'file',
-        filename: part.filename ?? null,
-        path: part.source?.path ?? null,
-      }
-    case 'step-start':
-      return { id: part.id, type: 'step-start' }
-    case 'step-finish':
-      return { id: part.id, type: 'step-finish' }
-    case 'snapshot':
-      return { id: part.id, type: 'snapshot' }
-    case 'patch':
-      return { id: part.id, type: 'patch', hash: part.hash, files: part.files }
-    case 'agent':
-      return { id: part.id, type: 'agent', name: part.name }
-    case 'subtask':
-      return {
-        id: part.id,
-        type: 'subtask',
-        description: part.description,
-        prompt: part.prompt,
-        agent: part.agent,
-      }
-    case 'retry':
-      return { id: part.id, type: 'retry' }
-    case 'compaction':
-      return { id: part.id, type: 'compaction' }
   }
 }
 
@@ -969,16 +809,16 @@ function toScriptAiPatchDiff(diff: {
   }
 }
 
-function toScriptAiToolPart(part: ToolPart): ScriptAiMessagePart {
+function toScriptAiToolPart(part: SessionMessageAssistantTool): ScriptAiMessagePart {
   switch (part.state.status) {
-    case 'pending':
+    case 'streaming':
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'pending',
         title: null,
-        input: part.state.raw,
+        input: part.state.input,
         output: null,
         errorMessage: null,
       }
@@ -986,9 +826,9 @@ function toScriptAiToolPart(part: ToolPart): ScriptAiMessagePart {
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'running',
-        title: part.state.title ?? null,
+        title: null,
         input: JSON.stringify(part.state.input, null, 2),
         output: null,
         errorMessage: null,
@@ -997,74 +837,36 @@ function toScriptAiToolPart(part: ToolPart): ScriptAiMessagePart {
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'completed',
-        title: part.state.title,
+        title: null,
         input: JSON.stringify(part.state.input, null, 2),
-        output: part.state.output,
+        output: formatToolContent(part.state.content),
         errorMessage: null,
       }
     case 'error':
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'error',
         title: null,
         input: JSON.stringify(part.state.input, null, 2),
         output: null,
-        errorMessage: part.state.error,
+        errorMessage: part.state.error.message,
       }
   }
 }
 
-function getEventSessionId(event: Event) {
-  switch (event.type) {
-    case 'message.updated':
-      return event.properties.info.sessionID
-    case 'message.removed':
-      return event.properties.sessionID
-    case 'message.part.updated':
-      return event.properties.part.sessionID
-    case 'message.part.removed':
-      return event.properties.sessionID
-    case 'session.status':
-      return event.properties.sessionID
-    case 'session.idle':
-      return event.properties.sessionID
-    case 'session.compacted':
-      return event.properties.sessionID
-    case 'session.updated':
-      return event.properties.info.id
-    case 'session.created':
-      return event.properties.info.id
-    case 'session.deleted':
-      return event.properties.info.id
-    case 'session.error':
-      return event.properties.sessionID ?? null
-    default:
-      return null
-  }
+function formatToolContent(content: ReadonlyArray<ToolContent>) {
+  return content.map(item => item.type === 'text' ? item.text : item.uri).join('\n')
 }
 
-function getSdkErrorMessage(error: unknown) {
-  if (!error) {
+function getEventSessionId(event: V2Event) {
+  if (!('data' in event) || typeof event.data !== 'object' || event.data === null || !('sessionID' in event.data)) {
     return null
   }
-
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'data' in error &&
-    typeof error.data === 'object' &&
-    error.data !== null &&
-    'message' in error.data &&
-    typeof error.data.message === 'string'
-  ) {
-    return error.data.message
-  }
-
-  return error instanceof Error ? error.message : null
+  return typeof event.data.sessionID === 'string' ? event.data.sessionID : null
 }
 
 function hashTargetKey(targetKey: string) {

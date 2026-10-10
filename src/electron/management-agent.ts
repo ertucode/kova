@@ -2,17 +2,15 @@ import path from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import {
-  createOpencodeClient,
-  createOpencodeServer,
-  type AssistantMessage,
-  type Event,
-  type GlobalEvent,
-  type Message,
-  type Part,
-  type Session,
+  isSessionNotFoundError,
+  type OpenCodeClient,
+  type SessionMessageAssistant,
+  type SessionMessageAssistantTool,
+  type SessionMessageInfo,
   type SessionStatus,
-  type ToolPart,
-} from '@opencode-ai/sdk'
+  type ToolContent,
+  type V2Event,
+} from '@opencode/client'
 import { DEFAULT_SCRIPT_AI_SERVER_PORT } from '../common/AppSettings.js'
 import { GenericError, type GenericResult } from '../common/GenericError.js'
 import {
@@ -20,7 +18,6 @@ import {
   type ApplyManagementAgentPlanInput,
   type CreateManagementAgentSessionInput,
   type ManagementAgentMessage,
-  type ManagementAgentPlan,
   type ManagementAgentScope,
   type ManagementAgentWorkspaceState,
   type LoadManagementAgentWorkspaceInput,
@@ -42,33 +39,12 @@ import { listEnvironments } from './db/environments.js'
 import { getRequestParentFolderId, listExplorerItems } from './db/explorer.js'
 import { getRequest } from './db/requests.js'
 import { MANAGEMENT_AGENT_MCP_SERVER_NAME, startManagementAgentMcpServer } from './management-agent-mcp-server.js'
-import { resolveOpenCodeSpawnConfig } from './utils/opencode-command.js'
-
-type RawManagementAgentSession = Session & {
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache?: {
-      read: number
-      write: number
-    }
-  }
-  model?: {
-    id: string
-    providerID: string
-  }
-}
+import { startOpenCodeServer, type OpenCodeServer } from './utils/opencode-v2-server.js'
+import { getPreferredOpenCodeModel } from './utils/opencode-model-selection.js'
 
 type ManagementAgentServerRuntime = {
-  baseUrl: string
-  ownedServer: {
-    url: string
-    close(): void
-  } | null
-  globalClient: ReturnType<typeof createOpencodeClient>
-  clientsByDirectory: Map<string, ReturnType<typeof createOpencodeClient>>
+  ownedServer: OpenCodeServer
+  globalClient: OpenCodeClient
   eventLoopStarted: boolean
   eventLoopPromise: Promise<void> | null
   globalEventAbortController: AbortController
@@ -80,6 +56,7 @@ let managementAgentBaseDirectory: string | null = null
 let serverRuntimePromise: Promise<ManagementAgentServerRuntime> | null = null
 let serverStartupAbortController: AbortController | null = null
 const liveMessagesBySessionId = new Map<string, ManagementAgentMessage[]>()
+const eventRefreshTimers = new Map<string, NodeJS.Timeout>()
 
 export function configureManagementAgentBaseDirectory(directory: string) {
   managementAgentBaseDirectory = directory
@@ -94,6 +71,10 @@ export async function shutdownManagementAgentServer() {
   }
 
   try {
+    for (const timer of eventRefreshTimers.values()) {
+      clearTimeout(timer)
+    }
+    eventRefreshTimers.clear()
     const runtime = await serverRuntimePromise
     runtime.globalEventAbortController.abort()
     await runtime.eventLoopPromise?.catch(() => undefined)
@@ -194,7 +175,7 @@ export async function abortManagementAgentSession(
 
     if (session.opencodeSessionId) {
       const client = await getClientForSession(session.id)
-      await client.session.abort({ path: { id: session.opencodeSessionId } })
+      await client.session.interrupt({ sessionID: session.opencodeSessionId })
     }
 
     const messagesBySessionId = await syncManagementAgentSessionFromOpenCode(session.id)
@@ -229,24 +210,32 @@ async function syncManagementAgentSessionFromOpenCode(sessionId: string) {
   }
 
   const client = await getClientForSession(session.id)
-  const [sessionsResult, statusesResult, messagesResult] = await Promise.all([
-    client.session.list(),
-    client.session.status(),
-    client.session.messages({ path: { id: session.opencodeSessionId } }),
-  ])
-
-  const sdkSession = requireSdkData(sessionsResult.data, 'OpenCode did not return the session list.').find(
-    item => item.id === session.opencodeSessionId
-  )
-  const statuses = requireSdkData(statusesResult.data, 'OpenCode did not return the session statuses.')
-  const messages = requireSdkData(messagesResult.data, 'OpenCode did not return the session messages.').map(message =>
-    toManagementAgentMessage(message.info, message.parts)
-  )
+  let sdkSession: Awaited<ReturnType<OpenCodeClient['session']['get']>>
+  let activeSessions: Awaited<ReturnType<OpenCodeClient['session']['active']>>
+  let sdkMessages: SessionMessageInfo[]
+  try {
+    ;[sdkSession, activeSessions, sdkMessages] = await Promise.all([
+      client.session.get({ sessionID: session.opencodeSessionId }),
+      client.session.active(),
+      loadOpenCodeMessages(client, session.opencodeSessionId),
+    ])
+  } catch (error) {
+    if (!isSessionNotFoundError(error)) {
+      throw error
+    }
+    resetMissingOpenCodeSession(session.id)
+    return { [session.id]: [] }
+  }
+  const messages = sdkMessages.flatMap(message => {
+    const converted = toManagementAgentMessage(message)
+    return converted ? [converted] : []
+  })
+  const latestErrorMessage = getLatestErrorMessage(messages)
 
   updateManagementAgentSession(session.id, {
-    title: sdkSession?.title ?? session.title,
-    status: toUiSessionStatus(statuses[session.opencodeSessionId] ?? { type: 'idle' }),
-    latestErrorMessage: getLatestErrorMessage(messages),
+    title: sdkSession.title ?? session.title,
+    status: activeSessions[session.opencodeSessionId] ? 'busy' : latestErrorMessage ? 'error' : 'idle',
+    latestErrorMessage,
   })
   liveMessagesBySessionId.set(session.id, messages)
 
@@ -262,15 +251,29 @@ async function ensureOpencodeSessionId(sessionId: string, selectedModel: string 
   }
 
   if (session.opencodeSessionId) {
-    if (selectedModel !== session.selectedModel) {
-      updateManagementAgentSession(session.id, { selectedModel })
+    const client = await getClientForSession(session.id)
+    try {
+      await client.session.get({ sessionID: session.opencodeSessionId })
+      if (selectedModel !== session.selectedModel) {
+        updateManagementAgentSession(session.id, { selectedModel })
+      }
+      return session.opencodeSessionId
+    } catch (error) {
+      if (!isSessionNotFoundError(error)) {
+        throw error
+      }
+      resetMissingOpenCodeSession(session.id)
     }
-    return session.opencodeSessionId
   }
 
   const client = await getClientForSession(session.id)
-  const result = await client.session.create({ body: { title: session.title } })
-  const opencodeSession = requireSdkData(result.data, 'OpenCode did not return the created session.')
+  const directory = await getSessionWorkspaceDirectory(session.id)
+  const opencodeSession = await client.session.create({
+    title: session.title,
+    location: { directory },
+    model: await resolveSelectedModel(selectedModel),
+    permissions: getManagementAgentPermissions(),
+  })
   updateManagementAgentSession(session.id, {
     opencodeSessionId: opencodeSession.id,
     selectedModel,
@@ -401,16 +404,8 @@ async function buildSyntheticAppliedContext(sessionId: string) {
 async function getClientForSession(sessionId: string) {
   const runtime = await getServerRuntime()
   const directory = await getSessionWorkspaceDirectory(sessionId)
-  const existingClient = runtime.clientsByDirectory.get(directory)
-  if (existingClient) {
-    await ensureManagementAgentMcpRegistration(existingClient, runtime.mcpServer, directory, runtime, sessionId)
-    return existingClient
-  }
-
-  const client = createOpencodeClient({ baseUrl: runtime.baseUrl, directory })
-  await ensureManagementAgentMcpRegistration(client, runtime.mcpServer, directory, runtime, sessionId)
-  runtime.clientsByDirectory.set(directory, client)
-  return client
+  await ensureManagementAgentMcpRegistration(runtime.globalClient, runtime.mcpServer, directory, runtime, sessionId)
+  return runtime.globalClient
 }
 
 async function getServerRuntime(): Promise<ManagementAgentServerRuntime> {
@@ -425,75 +420,37 @@ async function getServerRuntime(): Promise<ManagementAgentServerRuntime> {
 }
 
 async function createServerRuntime(): Promise<ManagementAgentServerRuntime> {
-  const spawnConfig = await resolveOpenCodeSpawnConfig()
   const managementAgentServerPort = await getConfiguredOpenCodeServerPort()
   const mcpServer = await startManagementAgentMcpServer()
-  process.env.PATH = spawnConfig.env.PATH
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE = 'true'
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = 'true'
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = 'true'
-
   const startupAbortController = new AbortController()
   serverStartupAbortController = startupAbortController
-
-  const baseUrl = `http://127.0.0.1:${String(managementAgentServerPort)}`
-  let ownedServer: ManagementAgentServerRuntime['ownedServer'] = null
   try {
-    ownedServer = await createOpencodeServer({
-      hostname: '127.0.0.1',
-      port: managementAgentServerPort,
-      timeout: 10_000,
-      signal: startupAbortController.signal,
-      config: {
-        permission: {
-          edit: 'deny',
-          bash: 'deny',
-          webfetch: 'deny',
-          doom_loop: 'deny',
-          external_directory: 'deny',
-        },
-        tools: {
-          '*': false,
-          [`${MANAGEMENT_AGENT_MCP_SERVER_NAME}_*`]: true,
-        },
-      },
-    })
-  } catch (error) {
-    if (!(await tryReuseExistingServer(baseUrl, managementAgentServerPort, error))) {
-      await mcpServer.close().catch(() => undefined)
-      throw error
+    const ownedServer = await startOpenCodeServer(managementAgentServerPort, startupAbortController.signal)
+    const runtime: ManagementAgentServerRuntime = {
+      ownedServer,
+      globalClient: ownedServer.client,
+      eventLoopStarted: false,
+      eventLoopPromise: null,
+      globalEventAbortController: new AbortController(),
+      mcpServer,
+      mcpRegisteredDirectories: new Set(),
     }
+
+    startGlobalEventLoop(runtime)
+    return runtime
+  } catch (error) {
+    await mcpServer.close().catch(() => undefined)
+    throw error
   } finally {
     if (serverStartupAbortController === startupAbortController) {
       serverStartupAbortController = null
     }
   }
 
-  const runtime: ManagementAgentServerRuntime = {
-    baseUrl: ownedServer?.url ?? baseUrl,
-    ownedServer,
-    globalClient: createOpencodeClient({ baseUrl: ownedServer?.url ?? baseUrl }),
-    clientsByDirectory: new Map(),
-    eventLoopStarted: false,
-    eventLoopPromise: null,
-    globalEventAbortController: new AbortController(),
-    mcpServer,
-    mcpRegisteredDirectories: new Set(),
-  }
-
-  try {
-    startGlobalEventLoop(runtime)
-    return runtime
-  } catch (error) {
-    runtime.globalEventAbortController.abort()
-    runtime.ownedServer?.close()
-    await runtime.mcpServer.close().catch(() => undefined)
-    throw error
-  }
 }
 
 async function ensureManagementAgentMcpRegistration(
-  client: ReturnType<typeof createOpencodeClient>,
+  client: OpenCodeClient,
   mcpServer: Awaited<ReturnType<typeof startManagementAgentMcpServer>>,
   directory?: string,
   runtime?: ManagementAgentServerRuntime,
@@ -505,27 +462,24 @@ async function ensureManagementAgentMcpRegistration(
 
   const mcpServerUrl = sessionId ? `${mcpServer.url}?sessionId=${encodeURIComponent(sessionId)}` : mcpServer.url
 
-  const result = await client.mcp.add({
-    body: {
-      name: MANAGEMENT_AGENT_MCP_SERVER_NAME,
-      config: {
-        type: 'remote',
-        url: mcpServerUrl,
-        headers: {
-          Authorization: `Bearer ${mcpServer.token}`,
-        },
-        enabled: true,
-        oauth: false,
-        timeout: 10_000,
+  await client.mcp.add({
+    server: MANAGEMENT_AGENT_MCP_SERVER_NAME,
+    location: directory ? { directory } : undefined,
+    config: {
+      type: 'remote',
+      url: mcpServerUrl,
+      headers: {
+        Authorization: `Bearer ${mcpServer.token}`,
       },
+      disabled: false,
+      codemode: false,
+      oauth: false,
+      timeout: { startup: 10_000, catalog: 10_000, execution: 10_000 },
     },
-    ...(directory ? { query: { directory } } : {}),
   })
-
-  const status = requireSdkData(result.data, 'OpenCode did not return the MCP server status.')[
-    MANAGEMENT_AGENT_MCP_SERVER_NAME
-  ]
-  if (status?.status === 'connected') {
+  const servers = await client.mcp.list({ location: directory ? { directory } : undefined })
+  const server = servers.data.find(item => item.name === MANAGEMENT_AGENT_MCP_SERVER_NAME)
+  if (server?.status.status === 'connected') {
     if (directory && runtime) {
       runtime.mcpRegisteredDirectories.add(directory)
     }
@@ -533,8 +487,8 @@ async function ensureManagementAgentMcpRegistration(
   }
 
   await client.mcp.connect({
-    path: { name: MANAGEMENT_AGENT_MCP_SERVER_NAME },
-    ...(directory ? { query: { directory } } : {}),
+    server: MANAGEMENT_AGENT_MCP_SERVER_NAME,
+    location: directory ? { directory } : undefined,
   })
 
   if (directory && runtime) {
@@ -550,9 +504,7 @@ function startGlobalEventLoop(runtime: ManagementAgentServerRuntime) {
   runtime.eventLoopStarted = true
   runtime.eventLoopPromise = (async () => {
     try {
-      const events = await runtime.globalClient.global.event({ signal: runtime.globalEventAbortController.signal })
-
-      for await (const event of events.stream) {
+      for await (const event of runtime.globalClient.event.subscribe({ signal: runtime.globalEventAbortController.signal })) {
         if (runtime.globalEventAbortController.signal.aborted) {
           return
         }
@@ -567,32 +519,8 @@ function startGlobalEventLoop(runtime: ManagementAgentServerRuntime) {
   })()
 }
 
-async function tryReuseExistingServer(baseUrl: string, port: number, error: unknown) {
-  if (!isPortInUseServerError(error, port)) {
-    return null
-  }
-
-  try {
-    const response = await fetch(new URL('/global/health', baseUrl), {
-      signal: AbortSignal.timeout(2_000),
-    })
-    if (!response.ok) {
-      return null
-    }
-
-    const health = (await response.json()) as { healthy?: boolean }
-    return health.healthy === true ? baseUrl : null
-  } catch {
-    return null
-  }
-}
-
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError'
-}
-
-function isPortInUseServerError(error: unknown, port: number) {
-  return error instanceof Error && error.message.includes(`Is port ${String(port)} in use?`)
 }
 
 async function getConfiguredOpenCodeServerPort() {
@@ -706,16 +634,30 @@ function parseSelectedModel(value: string | null) {
 
   return {
     providerID: value.slice(0, separatorIndex),
-    modelID: value.slice(separatorIndex + 1),
+    id: value.slice(separatorIndex + 1),
   }
 }
 
-function requireSdkData<T>(value: T | undefined, message: string) {
-  if (value === undefined) {
-    throw new Error(message)
-  }
+async function resolveSelectedModel(value: string | null) {
+  return parseSelectedModel(value) ?? await getPreferredOpenCodeModel()
+}
 
-  return value
+function getManagementAgentPermissions() {
+  return [
+    { action: 'read', resource: '*', effect: 'deny' as const },
+    { action: 'edit', resource: '*', effect: 'deny' as const },
+    { action: 'glob', resource: '*', effect: 'deny' as const },
+    { action: 'grep', resource: '*', effect: 'deny' as const },
+    { action: 'shell', resource: '*', effect: 'deny' as const },
+    { action: 'subagent', resource: '*', effect: 'deny' as const },
+    { action: 'skill', resource: '*', effect: 'deny' as const },
+    { action: 'question', resource: '*', effect: 'deny' as const },
+    { action: 'webfetch', resource: '*', effect: 'deny' as const },
+    { action: 'websearch', resource: '*', effect: 'deny' as const },
+    { action: 'external_directory', resource: '*', effect: 'deny' as const },
+    { action: 'execute', resource: '*', effect: 'deny' as const },
+    { action: `${MANAGEMENT_AGENT_MCP_SERVER_NAME}_*`, resource: '*', effect: 'allow' as const },
+  ]
 }
 
 function toUiSessionStatus(status: SessionStatus): 'idle' | 'busy' | 'error' {
@@ -732,35 +674,26 @@ function getLatestErrorMessage(messages: ManagementAgentMessage[]) {
   return [...messages].reverse().find(message => message.errorMessage)?.errorMessage ?? null
 }
 
-function toManagementAgentMessage(message: Message | AssistantMessage, parts: Part[]): ManagementAgentMessage {
-  const usage = message.role === 'assistant' ? getAssistantMessageUsage(message) : null
-
-  return {
-    id: message.id,
-    role: message.role,
-    createdAt: message.time.created,
-    completedAt: message.role === 'assistant' ? (message.time.completed ?? null) : null,
-    errorMessage: message.role === 'assistant' ? getSdkErrorMessage(message.error) : null,
-    cost: usage?.cost ?? null,
-    modelId: usage?.modelId ?? null,
-    providerId: usage?.providerId ?? null,
-    tokens: usage?.tokens ?? null,
-    parts: parts.map(toManagementAgentMessagePart),
+function toManagementAgentMessage(message: SessionMessageInfo): ManagementAgentMessage | null {
+  if (message.type !== 'user' && message.type !== 'assistant') {
+    return null
   }
-}
-
-function toManagementAgentMessageWithExistingParts(
-  message: Message | AssistantMessage,
-  parts: ManagementAgentMessage['parts']
-): ManagementAgentMessage {
-  const usage = message.role === 'assistant' ? getAssistantMessageUsage(message) : null
+  const usage = message.type === 'assistant' ? getAssistantMessageUsage(message) : null
+  const parts: ManagementAgentMessage['parts'] = message.type === 'assistant'
+    ? [
+        ...message.content.map((part, index) => toManagementAgentMessagePart(part, `${message.id}-${String(index)}`)),
+        ...(message.error
+          ? [{ id: `${message.id}-error`, type: 'text' as const, text: `OpenCode error: ${message.error.message}` }]
+          : []),
+      ]
+    : [{ id: `${message.id}-text`, type: 'text', text: getDisplayText(message) }]
 
   return {
     id: message.id,
-    role: message.role,
+    role: message.type,
     createdAt: message.time.created,
-    completedAt: message.role === 'assistant' ? (message.time.completed ?? null) : null,
-    errorMessage: message.role === 'assistant' ? getSdkErrorMessage(message.error) : null,
+    completedAt: message.type === 'assistant' ? (message.time.completed ?? null) : null,
+    errorMessage: message.type === 'assistant' ? (message.error?.message ?? null) : null,
     cost: usage?.cost ?? null,
     modelId: usage?.modelId ?? null,
     providerId: usage?.providerId ?? null,
@@ -769,7 +702,15 @@ function toManagementAgentMessageWithExistingParts(
   }
 }
 
-function getAssistantMessageUsage(message: AssistantMessage) {
+function getDisplayText(message: Extract<SessionMessageInfo, { type: 'user' }>) {
+  const displayText = message.metadata?.kovaDisplayText
+  return typeof displayText === 'string' ? displayText : message.text
+}
+
+function getAssistantMessageUsage(message: SessionMessageAssistant) {
+  if (!message.tokens) {
+    return null
+  }
   const inputTokens = message.tokens.input
   const outputTokens = message.tokens.output
   const reasoningTokens = message.tokens.reasoning
@@ -777,9 +718,9 @@ function getAssistantMessageUsage(message: AssistantMessage) {
   const cacheWriteTokens = message.tokens.cache.write
 
   return {
-    cost: message.cost,
-    modelId: message.modelID,
-    providerId: message.providerID,
+    cost: message.cost ?? null,
+    modelId: message.model.id,
+    providerId: message.model.providerID,
     tokens: {
       input: inputTokens,
       output: outputTokens,
@@ -791,45 +732,30 @@ function getAssistantMessageUsage(message: AssistantMessage) {
   }
 }
 
-function toManagementAgentMessagePart(part: Part): ManagementAgentMessage['parts'][number] {
+function toManagementAgentMessagePart(
+  part: SessionMessageAssistant['content'][number],
+  id: string
+): ManagementAgentMessage['parts'][number] {
   switch (part.type) {
     case 'text':
-      return { id: part.id, type: 'text', text: part.text }
+      return { id, type: 'text', text: part.text }
     case 'reasoning':
-      return { id: part.id, type: 'reasoning', text: part.text }
+      return { id, type: 'reasoning', text: part.text }
     case 'tool':
       return toManagementAgentToolPart(part)
-    case 'file':
-      return { id: part.id, type: 'file', filename: part.filename ?? null, path: part.source?.path ?? null }
-    case 'step-start':
-      return { id: part.id, type: 'step-start' }
-    case 'step-finish':
-      return { id: part.id, type: 'step-finish' }
-    case 'snapshot':
-      return { id: part.id, type: 'snapshot' }
-    case 'patch':
-      return { id: part.id, type: 'patch', hash: part.hash, files: part.files }
-    case 'agent':
-      return { id: part.id, type: 'agent', name: part.name }
-    case 'subtask':
-      return { id: part.id, type: 'subtask', description: part.description, prompt: part.prompt, agent: part.agent }
-    case 'retry':
-      return { id: part.id, type: 'retry' }
-    case 'compaction':
-      return { id: part.id, type: 'compaction' }
   }
 }
 
-function toManagementAgentToolPart(part: ToolPart): ManagementAgentMessage['parts'][number] {
+function toManagementAgentToolPart(part: SessionMessageAssistantTool): ManagementAgentMessage['parts'][number] {
   switch (part.state.status) {
-    case 'pending':
+    case 'streaming':
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'pending',
         title: null,
-        input: part.state.raw,
+        input: part.state.input,
         output: null,
         errorMessage: null,
       }
@@ -837,9 +763,9 @@ function toManagementAgentToolPart(part: ToolPart): ManagementAgentMessage['part
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'running',
-        title: part.state.title ?? null,
+        title: null,
         input: JSON.stringify(part.state.input, null, 2),
         output: null,
         errorMessage: null,
@@ -848,45 +774,29 @@ function toManagementAgentToolPart(part: ToolPart): ManagementAgentMessage['part
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'completed',
-        title: part.state.title,
+        title: null,
         input: JSON.stringify(part.state.input, null, 2),
-        output: part.state.output,
+        output: formatToolContent(part.state.content),
         errorMessage: null,
       }
     case 'error':
       return {
         id: part.id,
         type: 'tool',
-        toolName: part.tool,
+        toolName: part.name,
         status: 'error',
         title: null,
         input: JSON.stringify(part.state.input, null, 2),
         output: null,
-        errorMessage: part.state.error,
+        errorMessage: part.state.error.message,
       }
   }
 }
 
-function getSdkErrorMessage(error: unknown) {
-  if (!error) {
-    return null
-  }
-
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'data' in error &&
-    typeof error.data === 'object' &&
-    error.data !== null &&
-    'message' in error.data &&
-    typeof error.data.message === 'string'
-  ) {
-    return error.data.message
-  }
-
-  return error instanceof Error ? error.message : null
+function formatToolContent(content: ReadonlyArray<ToolContent>) {
+  return content.map(item => item.type === 'text' ? item.text : item.uri).join('\n')
 }
 
 function toScope(session: {
@@ -936,20 +846,19 @@ async function runPromptInBackground(input: {
   client: Awaited<ReturnType<typeof getClientForSession>>
 }) {
   try {
+    const model = await resolveSelectedModel(input.model)
+    if (model) {
+      await input.client.session.switchModel({ sessionID: input.opencodeSessionId, model })
+    }
+    await input.client.session.update({
+      sessionID: input.opencodeSessionId,
+      permissions: getManagementAgentPermissions(),
+    })
+    const context = [input.systemPrompt, input.syntheticContext].filter(Boolean).join('\n\n')
     await input.client.session.prompt({
-      path: { id: input.opencodeSessionId },
-      body: {
-        model: parseSelectedModel(input.model),
-        system: input.systemPrompt,
-        tools: {
-          '*': false,
-          [`${MANAGEMENT_AGENT_MCP_SERVER_NAME}_*`]: true,
-        },
-        parts: [
-          ...(input.syntheticContext ? [{ type: 'text' as const, text: input.syntheticContext, synthetic: true }] : []),
-          { type: 'text' as const, text: input.message },
-        ],
-      },
+      sessionID: input.opencodeSessionId,
+      text: `${context}\n\nUser request:\n${input.message}`,
+      metadata: { kovaDisplayText: input.message },
     })
   } catch (error) {
     const session = getManagementAgentSession(input.sessionId)
@@ -978,9 +887,8 @@ async function emitLiveSessionState(sessionId: string) {
   return state
 }
 
-async function handleGlobalEvent(event: GlobalEvent) {
-  const payload = event.payload
-  const opencodeSessionId = getEventSessionId(payload)
+async function handleGlobalEvent(event: V2Event) {
+  const opencodeSessionId = getEventSessionId(event)
   if (!opencodeSessionId) {
     return
   }
@@ -990,174 +898,40 @@ async function handleGlobalEvent(event: GlobalEvent) {
     return
   }
 
-  if (payload.type === 'session.status') {
-    updateManagementAgentSession(session.id, { status: toUiSessionStatus(payload.properties.status) })
-  } else if (payload.type === 'session.idle') {
+  if (event.type === 'session.status') {
+    updateManagementAgentSession(session.id, { status: toUiSessionStatus(event.data.status) })
+  } else if (event.type === 'session.idle') {
     updateManagementAgentSession(session.id, { status: 'idle' })
-  } else if (payload.type === 'session.updated' || payload.type === 'session.created') {
-    const existingMessages = liveMessagesBySessionId.get(session.id) ?? []
-    updateManagementAgentSession(session.id, {
-      title: payload.properties.info.title,
-      status: 'idle',
-      latestErrorMessage: getLatestErrorMessage(existingMessages),
-    })
-  } else if (payload.type === 'session.deleted') {
+  } else if (event.type === 'session.deleted') {
     liveMessagesBySessionId.delete(session.id)
-  } else if (payload.type === 'message.updated') {
-    const sessionMessages = liveMessagesBySessionId.get(session.id) ?? []
-    liveMessagesBySessionId.set(session.id, sessionMessages)
-    upsertMessage(
-      session.id,
-      toManagementAgentMessageWithExistingParts(
-        payload.properties.info,
-        sessionMessages.find(message => message.id === payload.properties.info.id)?.parts ?? []
-      )
-    )
-    updateLiveSessionSummary(session.id)
-  } else if (payload.type === 'message.part.updated') {
-    upsertMessagePart(
-      session.id,
-      payload.properties.part.messageID,
-      toManagementAgentMessagePart(payload.properties.part)
-    )
-    updateLiveSessionSummary(session.id)
-  } else if (payload.type === 'message.part.removed') {
-    removeMessagePart(session.id, payload.properties.messageID, payload.properties.partID)
-    updateLiveSessionSummary(session.id)
-  } else if (payload.type === 'message.removed') {
-    const messages = liveMessagesBySessionId.get(session.id)
-    if (messages) {
-      liveMessagesBySessionId.set(
-        session.id,
-        messages.filter(message => message.id !== payload.properties.messageID)
-      )
-      updateLiveSessionSummary(session.id)
-    }
-  } else if (payload.type === 'session.error') {
+  } else if (event.type === 'session.execution.failed') {
     updateManagementAgentSession(session.id, {
       status: 'error',
-      latestErrorMessage: getSdkErrorMessage(payload.properties.error) ?? 'OpenCode session failed.',
+      latestErrorMessage: event.data.error.message,
     })
   }
 
-  await emitLiveSessionState(session.id)
+  scheduleLiveSessionRefresh(session.id)
 }
 
-function upsertMessage(sessionId: string, message: ManagementAgentMessage) {
-  const existingMessages = liveMessagesBySessionId.get(sessionId)
-  if (!existingMessages) {
-    liveMessagesBySessionId.set(sessionId, [message])
+function scheduleLiveSessionRefresh(sessionId: string) {
+  if (eventRefreshTimers.has(sessionId)) {
     return
   }
-
-  const existingIndex = existingMessages.findIndex(existingMessage => existingMessage.id === message.id)
-  if (existingIndex === -1) {
-    existingMessages.push(message)
-  } else {
-    existingMessages[existingIndex] = {
-      ...existingMessages[existingIndex],
-      ...message,
-      parts: existingMessages[existingIndex]?.parts ?? [],
-    }
-  }
+  const timer = setTimeout(() => {
+    eventRefreshTimers.delete(sessionId)
+    void emitLiveSessionState(sessionId).catch(error =>
+      console.error('Failed to refresh management agent state from OpenCode', error)
+    )
+  }, 75)
+  eventRefreshTimers.set(sessionId, timer)
 }
 
-function upsertMessagePart(sessionId: string, messageId: string, part: ManagementAgentMessage['parts'][number]) {
-  const messages = liveMessagesBySessionId.get(sessionId)
-  if (!messages) {
-    liveMessagesBySessionId.set(sessionId, [
-      {
-        id: messageId,
-        role: 'assistant',
-        createdAt: Date.now(),
-        completedAt: null,
-        errorMessage: null,
-        cost: null,
-        modelId: null,
-        providerId: null,
-        tokens: null,
-        parts: [part],
-      },
-    ])
-    return
+function getEventSessionId(event: V2Event) {
+  if (!('data' in event) || typeof event.data !== 'object' || event.data === null || !('sessionID' in event.data)) {
+    return null
   }
-
-  const messageIndex = messages.findIndex(message => message.id === messageId)
-  if (messageIndex === -1) {
-    messages.push({
-      id: messageId,
-      role: 'assistant',
-      createdAt: Date.now(),
-      completedAt: null,
-      errorMessage: null,
-      cost: null,
-      modelId: null,
-      providerId: null,
-      tokens: null,
-      parts: [part],
-    })
-    return
-  }
-
-  const message = messages[messageIndex]
-  const partIndex = message.parts.findIndex(existingPart => existingPart.id === part.id)
-  if (partIndex === -1) {
-    message.parts.push(part)
-    return
-  }
-
-  message.parts[partIndex] = part
-}
-
-function removeMessagePart(sessionId: string, messageId: string, partId: string) {
-  const messages = liveMessagesBySessionId.get(sessionId)
-  const message = messages?.find(candidate => candidate.id === messageId)
-  if (!message) {
-    return
-  }
-
-  message.parts = message.parts.filter(part => part.id !== partId)
-}
-
-function updateLiveSessionSummary(sessionId: string) {
-  const session = getManagementAgentSession(sessionId)
-  if (!session) {
-    return
-  }
-
-  const messages = liveMessagesBySessionId.get(session.id) ?? []
-  updateManagementAgentSession(session.id, {
-    latestErrorMessage: getLatestErrorMessage(messages),
-  })
-}
-
-function getEventSessionId(event: Event) {
-  switch (event.type) {
-    case 'message.updated':
-      return event.properties.info.sessionID
-    case 'message.removed':
-      return event.properties.sessionID
-    case 'message.part.updated':
-      return event.properties.part.sessionID
-    case 'message.part.removed':
-      return event.properties.sessionID
-    case 'session.status':
-      return event.properties.sessionID
-    case 'session.idle':
-      return event.properties.sessionID
-    case 'session.compacted':
-      return event.properties.sessionID
-    case 'session.updated':
-      return event.properties.info.id
-    case 'session.created':
-      return event.properties.info.id
-    case 'session.deleted':
-      return event.properties.info.id
-    case 'session.error':
-      return event.properties.sessionID ?? null
-    default:
-      return null
-  }
+  return typeof event.data.sessionID === 'string' ? event.data.sessionID : null
 }
 
 async function loadManagementAgentWorkspaceStateWithOpenCode(
@@ -1185,16 +959,52 @@ async function loadManagementAgentWorkspaceStateWithOpenCode(
       }
 
       const client = await getClientForSession(session.id)
-      const messagesResult = await client.session.messages({ path: { id: session.opencodeSessionId } })
-      messagesBySessionId[session.id] = requireSdkData(
-        messagesResult.data,
-        'OpenCode did not return the session messages.'
-      ).map(message => toManagementAgentMessage(message.info, message.parts))
+      let sdkMessages: SessionMessageInfo[]
+      try {
+        sdkMessages = await loadOpenCodeMessages(client, session.opencodeSessionId)
+      } catch (error) {
+        if (!isSessionNotFoundError(error)) {
+          throw error
+        }
+        resetMissingOpenCodeSession(session.id)
+        messagesBySessionId[session.id] = []
+        return
+      }
+      messagesBySessionId[session.id] = sdkMessages.flatMap(message => {
+        const converted = toManagementAgentMessage(message)
+        return converted ? [converted] : []
+      })
       liveMessagesBySessionId.set(session.id, messagesBySessionId[session.id] ?? [])
     })
   )
 
   return await loadManagementAgentWorkspaceState(scope, { messagesBySessionId })
+}
+
+async function loadOpenCodeMessages(client: OpenCodeClient, sessionId: string) {
+  const messages: SessionMessageInfo[] = []
+  let cursor: string | undefined
+
+  do {
+    const page = await client.message.list({
+      sessionID: sessionId,
+      limit: 200,
+      ...(cursor ? { cursor } : { order: 'asc' }),
+    })
+    messages.push(...page.data)
+    cursor = page.cursor.next ?? undefined
+  } while (cursor)
+
+  return messages
+}
+
+function resetMissingOpenCodeSession(sessionId: string) {
+  liveMessagesBySessionId.delete(sessionId)
+  updateManagementAgentSession(sessionId, {
+    opencodeSessionId: null,
+    status: 'idle',
+    latestErrorMessage: null,
+  })
 }
 
 function toGenericError(error: unknown): GenericResult<never> {

@@ -62,6 +62,7 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
   const sessions = workspaceState?.sessions ?? []
   const selectedSessionState = sessions.find(sessionState => sessionState.session.id === selectedSessionId) ?? sessions[0] ?? null
   const selectedSession = selectedSessionState?.session ?? null
+  const selectedSessionErrorMessage = selectedSession?.latestErrorMessage ?? null
   const visiblePlan = selectedSessionState?.activePlan ?? selectedSessionState?.appliedPlans[0] ?? null
   const isSelectedSessionBusy = selectedSession?.status === 'busy'
   const canApply = Boolean(
@@ -301,11 +302,17 @@ export function ManagementAgentDialog({ scope }: ManagementAgentDialogProps) {
             rows={1}
           />
 
-          {errorMessage || modelsLoading || modelsError ? (
+          {errorMessage || selectedSessionErrorMessage || modelsLoading || modelsError ? (
             <div className="px-3 py-2 text-sm">
-              {errorMessage ? <p className="text-error">{errorMessage}</p> : null}
-              {!errorMessage && modelsLoading ? <p className="text-base-content/55">Loading available models...</p> : null}
-              {!errorMessage && !modelsLoading && modelsError ? <p className="text-error">{modelsError}</p> : null}
+              {errorMessage || selectedSessionErrorMessage ? (
+                <p className="text-error">{errorMessage ?? selectedSessionErrorMessage}</p>
+              ) : null}
+              {!errorMessage && !selectedSessionErrorMessage && modelsLoading ? (
+                <p className="text-base-content/55">Loading available models...</p>
+              ) : null}
+              {!errorMessage && !selectedSessionErrorMessage && !modelsLoading && modelsError ? (
+                <p className="text-error">{modelsError}</p>
+              ) : null}
             </div>
           ) : null}
         </div>
