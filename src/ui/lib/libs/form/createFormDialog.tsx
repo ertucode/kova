@@ -1,5 +1,5 @@
 import { useForm, UseFormProps, UseFormReturn } from 'react-hook-form'
-import { arktypeResolver } from '@hookform/resolvers/arktype'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { ComponentType, ReactNode, useEffect, useMemo } from 'react'
 import { FormFieldConfig, FormFieldFromConfigWrapper } from '../form/FormFieldFromConfig'
 import { ResultHandlerResult, useDefaultResultHandler } from '@/lib/hooks/useDefaultResultHandler'
@@ -11,7 +11,7 @@ import { useTrigger } from '@/lib/hooks/useTrigger'
 import { dialogActions } from '@/global/dialogStore'
 
 export type CreateFormDialogOpts<TItem, TRequest extends Record<string, any>> = {
-  schema: ZodType<TRequest>
+  schema: ZodType<TRequest, TRequest>
   getFormParams: (item: TItem | undefined) => UseFormProps<TRequest, any>
   translationNamespace?: string[]
   action: (body: TRequest, item: TItem) => Promise<ResultHandlerResult>
@@ -72,7 +72,7 @@ export function FormDialogForm<TItem, TForm extends Record<string, any>>(opts: F
   const formParams = useMemo(() => opts.getFormParams(item), [item, triggerValue])
   const hookForm = useForm<TForm>({
     ...formParams,
-    resolver: arktypeResolver(opts.schema),
+    resolver: zodResolver(opts.schema),
   })
 
   const {
