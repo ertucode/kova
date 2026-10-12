@@ -121,14 +121,7 @@ export function CustomTitleBar() {
       </div>
 
       <div className="flex-1 px-4">
-        <div
-          className="flex justify-center"
-          style={
-            {
-              WebkitAppRegion: 'no-drag',
-            } as React.CSSProperties
-          }
-        >
+        <div className="flex justify-center">
           <div ref={envMenuRef} className="relative">
             <button
               type="button"
@@ -140,6 +133,11 @@ export function CustomTitleBar() {
                 setIsEnvMenuOpen(open => !open)
               }}
               title="Toggle active environments"
+              style={
+                {
+                  WebkitAppRegion: 'no-drag',
+                } as React.CSSProperties
+              }
             >
               <div className="flex max-w-[520px] min-w-0 items-center overflow-hidden rounded-full">
                 {effectiveEnvironments.length > 0 ? (
